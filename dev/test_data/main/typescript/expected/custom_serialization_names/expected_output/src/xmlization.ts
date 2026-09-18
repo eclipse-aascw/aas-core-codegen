@@ -873,7 +873,11 @@ function parseQueryConditionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theEq = parsed.value;
         break;
@@ -885,7 +889,11 @@ function parseQueryConditionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theNotEq = parsed.value;
         break;
@@ -932,8 +940,18 @@ function writeQueryConditionAsSequence(
   parts: Array<string>,
   that: AasTypes.QueryCondition
 ): void {
-  writeOptionalProperty(parts, "eq", that.eq, write_str);
-  writeOptionalProperty(parts, "not-eq", that.notEq, write_str);
+  writeOptionalProperty(
+    parts,
+    "eq",
+    that.eq,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "not-eq",
+    that.notEq,
+    write_str
+  );
 }
 
 const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
@@ -1261,7 +1279,12 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.QueryCondition,
     parts: Array<string>
   ): void {
-    writeElement(parts, "queryCondition", that, writeQueryConditionAsSequence);
+    writeElement(
+      parts,
+      "queryCondition",
+      that,
+      writeQueryConditionAsSequence
+    );
   }
 }
 

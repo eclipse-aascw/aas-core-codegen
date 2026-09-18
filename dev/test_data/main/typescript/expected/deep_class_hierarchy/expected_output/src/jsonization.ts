@@ -183,23 +183,48 @@ function checkIsJsonObject(jsonable: JsonValue): DeserializationError | null {
 }
 
 /**
- * Check that the parsed `modelType` matches `expected`.
+ * Extract the `modelType` property of `jsonObject`.
  *
- * @param modelType - parsed value of the `modelType` property,
- * or `null` if it was missing
+ * @param jsonObject - to be inspected
+ * @returns the model type, or an error
+ */
+function extractModelType(
+  jsonObject: JsonObject
+): AasCommon.Either<string, DeserializationError> {
+  const modelType = jsonObject["modelType"];
+  if (modelType === undefined) {
+    return newDeserializationError<string>(
+      "The required property 'modelType' is missing"
+    );
+  }
+  if (typeof modelType !== "string") {
+    return newDeserializationError<string>(
+      `Expected the property modelType to be a string, ` +
+      `but got: ${typeof modelType}`
+    );
+  }
+
+  return new AasCommon.Either<string, DeserializationError>(modelType, null);
+}
+
+/**
+ * Check that the `modelType` property of `jsonObject` is `expected`.
+ *
+ * @param jsonObject - to be inspected
  * @param expected - expected model type
  * @returns error, if any
  */
 function checkModelType(
-  modelType: string | null,
+  jsonObject: JsonObject,
   expected: string
 ): DeserializationError | null {
-  if (modelType === null) {
-    return new DeserializationError(
-      "The required property 'modelType' is missing"
-    );
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return modelTypeOrError.error;
   }
-  if (modelType != expected) {
+
+  const modelType = modelTypeOrError.mustValue();
+  if (modelType !== expected) {
     return new DeserializationError(
       `Expected model type '${expected}', ` +
       `but got: ${modelType}`
@@ -238,19 +263,29 @@ function checkIsIterable(jsonable: JsonValue): DeserializationError | null {
 }
 
 /**
- * Parse every item of `iterable` with `parseItem`.
+ * Parse `jsonable` as an array, and every one of its items with `parseItem`.
  *
- * @param iterable - to be parsed item-by-item
- * @param parseItem - to parse a single item of `iterable`
+ * @param jsonable - to be parsed item-by-item
+ * @param parseItem - to parse a single item of `jsonable`
  * @returns parsed items, or an error
  * @typeParam T - type of a single parsed item
  */
 function parseArray<T>(
-  iterable: Iterable<JsonValue>,
+  jsonable: JsonValue,
   parseItem: (
     jsonableItem: JsonValue
   ) => AasCommon.Either<T, DeserializationError>
 ): AasCommon.Either<Array<T>, DeserializationError> {
+  const iterableError = checkIsIterable(jsonable);
+  if (iterableError !== null) {
+    return new AasCommon.Either<Array<T>, DeserializationError>(
+      null,
+      iterableError
+    );
+  }
+
+  const iterable = <Iterable<JsonValue>>jsonable;
+
   const items = new Array<T>();
   let i = 0;
   for (const jsonableItem of iterable) {
@@ -436,27 +471,133 @@ export function nodeFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.INode>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.INode,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.INode>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
+  const modelType = modelTypeOrError.mustValue();
+
+  switch (modelType) {
+    case "Branch":
+      return parsePropertiesOfBranch(jsonObject);
+
+    case "Leaf":
+      return parsePropertiesOfLeaf(jsonObject);
+
+    case "Blossom":
+      return parsePropertiesOfBlossom(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.INode>(
+        `Unexpected model type for INode: ${modelType}`
+      );
+  }
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!Branch} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Branch},
+ * or an error if any
+ */
+function parsePropertiesOfBranch(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Branch,
+  DeserializationError
+> {
+  let theIdentifier: string | null = null;
+  let theDescription: string | null = null;
+
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
+
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "identifier": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdentifier = parsed.value;
+        break;
+      }
+
+      case "description": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Branch,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
+    }
+  }
+
+  if (theIdentifier === null) {
+    return newDeserializationError<
+      AasTypes.Branch
+    >(
+      "The required property 'identifier' is missing"
     );
   }
 
-  const dispatch = NODE_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.INode>(
-      `Unexpected model type for INode: ${modelType}`
+  if (theDescription === null) {
+    return newDeserializationError<
+      AasTypes.Branch
+    >(
+      "The required property 'description' is missing"
     );
   }
 
-  return dispatch(jsonable);
+  return new AasCommon.Either<
+    AasTypes.Branch,
+    DeserializationError
+  >(
+    new AasTypes.Branch(
+      theIdentifier,
+      theDescription
+    ),
+    null
+  );
 }
 
 /**
@@ -484,201 +625,149 @@ export function branchFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IBranch>(
-      "The required property modelType is missing"
-    );
-  }
-
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IBranch>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
-
-  const dispatch = BRANCH_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IBranch>(
-      `Unexpected model type for IBranch: ${modelType}`
-    );
-  }
-
-  return dispatch(jsonable);
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!Branch}.
- */
-class SetterForBranch {
-  identifier: string | null = null;
-
-  description: string | null = null;
-
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link identifier}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdentifierFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.identifier = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.description = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-}
-
-/**
- * Parse an instance of {@link types!Branch} from the JSON-able
- * structure `jsonable`.
- *
- * This function performs no dispatch! It is used to parse the properties
- * as-are, and already assumes the exact model type. Usually, this function
- * is called from within a dispatching function, and you never call it
- * directly. If you want to de-serialize an instance of
- * {@link types!Branch}, call
- * {@link branchFromJsonable}.
- *
- * @param jsonable - structure to be parsed
- * @returns parsed instance of {@link types!Branch},
- * or an error if any
- */
-function branchFromJsonableWithoutDispatch(
-  jsonable: JsonValue
-): AasCommon.Either<
-  AasTypes.Branch,
-  DeserializationError
-> {
-  const objectError = checkIsJsonObject(jsonable);
-  if (objectError !== null) {
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
     return new AasCommon.Either<
-      AasTypes.Branch,
+      AasTypes.IBranch,
       DeserializationError
     >(
       null,
-      objectError
+      modelTypeOrError.error
     );
   }
-  const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForBranch();
+  const modelType = modelTypeOrError.mustValue();
+
+  switch (modelType) {
+    case "Leaf":
+      return parsePropertiesOfLeaf(jsonObject);
+
+    case "Blossom":
+      return parsePropertiesOfBlossom(jsonObject);
+
+    case "Branch":
+      return parsePropertiesOfBranch(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IBranch>(
+        `Unexpected model type for IBranch: ${modelType}`
+      );
+  }
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!Leaf} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Leaf},
+ * or an error if any
+ */
+function parsePropertiesOfLeaf(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Leaf,
+  DeserializationError
+> {
+  let theIdentifier: string | null = null;
+  let theDescription: string | null = null;
+  let theValue: number | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_BRANCH.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "identifier": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdentifier = parsed.value;
+        break;
+      }
+
+      case "description": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
+
+      case "value": {
+        const parsed = integerFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.Branch,
+        AasTypes.Leaf,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.identifier === null) {
+  if (theIdentifier === null) {
     return newDeserializationError<
-      AasTypes.Branch
+      AasTypes.Leaf
     >(
       "The required property 'identifier' is missing"
     );
   }
 
-  if (setter.description === null) {
+  if (theDescription === null) {
     return newDeserializationError<
-      AasTypes.Branch
+      AasTypes.Leaf
     >(
       "The required property 'description' is missing"
     );
   }
 
-  const modelTypeError = checkModelType(setter.modelType, "Branch");
-  if (modelTypeError !== null) {
-    return new AasCommon.Either<
-      AasTypes.Branch,
-      DeserializationError
+  if (theValue === null) {
+    return newDeserializationError<
+      AasTypes.Leaf
     >(
-      null,
-      modelTypeError
+      "The required property 'value' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.Branch,
+    AasTypes.Leaf,
     DeserializationError
   >(
-    new AasTypes.Branch(
-      setter.identifier,
-      setter.description
+    new AasTypes.Leaf(
+      theIdentifier,
+      theDescription,
+      theValue
     ),
     null
   );
@@ -709,354 +798,168 @@ export function leafFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.ILeaf>(
-      "The required property modelType is missing"
-    );
-  }
-
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.ILeaf>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
-
-  const dispatch = LEAF_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.ILeaf>(
-      `Unexpected model type for ILeaf: ${modelType}`
-    );
-  }
-
-  return dispatch(jsonable);
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!Leaf}.
- */
-class SetterForLeaf {
-  identifier: string | null = null;
-
-  description: string | null = null;
-
-  value: number | null = null;
-
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link identifier}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdentifierFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.identifier = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.description = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = integerFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-}
-
-/**
- * Parse an instance of {@link types!Leaf} from the JSON-able
- * structure `jsonable`.
- *
- * This function performs no dispatch! It is used to parse the properties
- * as-are, and already assumes the exact model type. Usually, this function
- * is called from within a dispatching function, and you never call it
- * directly. If you want to de-serialize an instance of
- * {@link types!Leaf}, call
- * {@link leafFromJsonable}.
- *
- * @param jsonable - structure to be parsed
- * @returns parsed instance of {@link types!Leaf},
- * or an error if any
- */
-function leafFromJsonableWithoutDispatch(
-  jsonable: JsonValue
-): AasCommon.Either<
-  AasTypes.Leaf,
-  DeserializationError
-> {
-  const objectError = checkIsJsonObject(jsonable);
-  if (objectError !== null) {
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
     return new AasCommon.Either<
-      AasTypes.Leaf,
+      AasTypes.ILeaf,
       DeserializationError
     >(
       null,
-      objectError
+      modelTypeOrError.error
     );
   }
-  const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForLeaf();
+  const modelType = modelTypeOrError.mustValue();
+
+  switch (modelType) {
+    case "Blossom":
+      return parsePropertiesOfBlossom(jsonObject);
+
+    case "Leaf":
+      return parsePropertiesOfLeaf(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.ILeaf>(
+        `Unexpected model type for ILeaf: ${modelType}`
+      );
+  }
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!Blossom} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Blossom},
+ * or an error if any
+ */
+function parsePropertiesOfBlossom(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Blossom,
+  DeserializationError
+> {
+  let theIdentifier: string | null = null;
+  let theDescription: string | null = null;
+  let theValue: number | null = null;
+  let theDetails: string | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_LEAF.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "identifier": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdentifier = parsed.value;
+        break;
+      }
+
+      case "description": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
+
+      case "value": {
+        const parsed = integerFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      case "details": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theDetails = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.Leaf,
+        AasTypes.Blossom,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.identifier === null) {
+  if (theIdentifier === null) {
     return newDeserializationError<
-      AasTypes.Leaf
+      AasTypes.Blossom
     >(
       "The required property 'identifier' is missing"
     );
   }
 
-  if (setter.description === null) {
+  if (theDescription === null) {
     return newDeserializationError<
-      AasTypes.Leaf
+      AasTypes.Blossom
     >(
       "The required property 'description' is missing"
     );
   }
 
-  if (setter.value === null) {
+  if (theValue === null) {
     return newDeserializationError<
-      AasTypes.Leaf
+      AasTypes.Blossom
     >(
       "The required property 'value' is missing"
     );
   }
 
-  const modelTypeError = checkModelType(setter.modelType, "Leaf");
-  if (modelTypeError !== null) {
-    return new AasCommon.Either<
-      AasTypes.Leaf,
-      DeserializationError
+  if (theDetails === null) {
+    return newDeserializationError<
+      AasTypes.Blossom
     >(
-      null,
-      modelTypeError
+      "The required property 'details' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.Leaf,
+    AasTypes.Blossom,
     DeserializationError
   >(
-    new AasTypes.Leaf(
-      setter.identifier,
-      setter.description,
-      setter.value
+    new AasTypes.Blossom(
+      theIdentifier,
+      theDescription,
+      theValue,
+      theDetails
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!Blossom}.
- */
-class SetterForBlossom {
-  identifier: string | null = null;
-
-  description: string | null = null;
-
-  value: number | null = null;
-
-  details: string | null = null;
-
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link identifier}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdentifierFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.identifier = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.description = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = integerFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link details}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDetailsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.details = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -1085,69 +988,7 @@ export function blossomFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForBlossom();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_BLOSSOM.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Blossom,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.identifier === null) {
-    return newDeserializationError<
-      AasTypes.Blossom
-    >(
-      "The required property 'identifier' is missing"
-    );
-  }
-
-  if (setter.description === null) {
-    return newDeserializationError<
-      AasTypes.Blossom
-    >(
-      "The required property 'description' is missing"
-    );
-  }
-
-  if (setter.value === null) {
-    return newDeserializationError<
-      AasTypes.Blossom
-    >(
-      "The required property 'value' is missing"
-    );
-  }
-
-  if (setter.details === null) {
-    return newDeserializationError<
-      AasTypes.Blossom
-    >(
-      "The required property 'details' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "Blossom");
+  const modelTypeError = checkModelType(jsonObject, "Blossom");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.Blossom,
@@ -1158,68 +999,98 @@ export function blossomFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.Blossom,
-    DeserializationError
-  >(
-    new AasTypes.Blossom(
-      setter.identifier,
-      setter.description,
-      setter.value,
-      setter.details
-    ),
-    null
-  );
+  return parsePropertiesOfBlossom(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Something}.
+ * Parse the properties of an instance
+ * of {@link types!Something} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Something},
+ * or an error if any
  */
-class SetterForSomething {
-  someChoice: AasTypes.INode | null = null;
+function parsePropertiesOfSomething(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Something,
+  DeserializationError
+> {
+  let theSomeChoice: AasTypes.INode | null = null;
+  let theSomethingWithoutChoice: AasTypes.Branch | null = null;
 
-  somethingWithoutChoice: AasTypes.Branch | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  /**
-   * Parse `jsonable` as the value of {@link someChoice}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomeChoiceFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = nodeFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.someChoice = parsedOrError.mustValue();
-      return null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "someChoice": {
+        const parsed = nodeFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSomeChoice = parsed.value;
+        break;
+      }
+
+      case "somethingWithoutChoice": {
+        const parsed = branchFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSomethingWithoutChoice = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Something,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link somethingWithoutChoice}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomethingWithoutChoiceFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = branchFromJsonable(
-      jsonable
+  if (theSomeChoice === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'someChoice' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.somethingWithoutChoice = parsedOrError.mustValue();
-      return null;
-    }
   }
+
+  if (theSomethingWithoutChoice === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'somethingWithoutChoice' is missing"
+    );
+  }
+
+  return new AasCommon.Either<
+    AasTypes.Something,
+    DeserializationError
+  >(
+    new AasTypes.Something(
+      theSomeChoice,
+      theSomethingWithoutChoice
+    ),
+    null
+  );
 }
 
 /**
@@ -1248,112 +1119,98 @@ export function somethingFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForSomething();
+  return parsePropertiesOfSomething(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!Container} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Container},
+ * or an error if any
+ */
+function parsePropertiesOfContainer(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Container,
+  DeserializationError
+> {
+  let theNode: AasTypes.INode | null = null;
+  let theSomething: AasTypes.Something | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_SOMETHING.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "node": {
+        const parsed = nodeFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theNode = parsed.value;
+        break;
+      }
+
+      case "something": {
+        const parsed = somethingFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSomething = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.Something,
+        AasTypes.Container,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.someChoice === null) {
+  if (theNode === null) {
     return newDeserializationError<
-      AasTypes.Something
+      AasTypes.Container
     >(
-      "The required property 'someChoice' is missing"
+      "The required property 'node' is missing"
     );
   }
 
-  if (setter.somethingWithoutChoice === null) {
+  if (theSomething === null) {
     return newDeserializationError<
-      AasTypes.Something
+      AasTypes.Container
     >(
-      "The required property 'somethingWithoutChoice' is missing"
+      "The required property 'something' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.Something,
+    AasTypes.Container,
     DeserializationError
   >(
-    new AasTypes.Something(
-      setter.someChoice,
-      setter.somethingWithoutChoice
+    new AasTypes.Container(
+      theNode,
+      theSomething
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!Container}.
- */
-class SetterForContainer {
-  node: AasTypes.INode | null = null;
-
-  something: AasTypes.Something | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link node}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setNodeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = nodeFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.node = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link something}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomethingFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = somethingFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.something = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -1382,253 +1239,8 @@ export function containerFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForContainer();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_CONTAINER.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Container,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.node === null) {
-    return newDeserializationError<
-      AasTypes.Container
-    >(
-      "The required property 'node' is missing"
-    );
-  }
-
-  if (setter.something === null) {
-    return newDeserializationError<
-      AasTypes.Container
-    >(
-      "The required property 'something' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.Container,
-    DeserializationError
-  >(
-    new AasTypes.Container(
-      setter.node,
-      setter.something
-    ),
-    null
-  );
+  return parsePropertiesOfContainer(jsonObject);
 }
-
-const NODE_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.INode,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "Branch",
-        branchFromJsonableWithoutDispatch
-      ],
-      [
-        "Leaf",
-        leafFromJsonableWithoutDispatch
-      ],
-      [
-        "Blossom",
-        blossomFromJsonable
-      ]
-    ]
-  );
-
-const BRANCH_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IBranch,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "Leaf",
-        leafFromJsonableWithoutDispatch
-      ],
-      [
-        "Blossom",
-        blossomFromJsonable
-      ],
-      [
-        "Branch",
-        branchFromJsonableWithoutDispatch
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_BRANCH =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "identifier",
-        SetterForBranch.prototype.setIdentifierFromJsonable
-      ],
-      [
-        "description",
-        SetterForBranch.prototype.setDescriptionFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForBranch.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const LEAF_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.ILeaf,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "Blossom",
-        blossomFromJsonable
-      ],
-      [
-        "Leaf",
-        leafFromJsonableWithoutDispatch
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_LEAF =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "identifier",
-        SetterForLeaf.prototype.setIdentifierFromJsonable
-      ],
-      [
-        "description",
-        SetterForLeaf.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "value",
-        SetterForLeaf.prototype.setValueFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForLeaf.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_BLOSSOM =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "identifier",
-        SetterForBlossom.prototype.setIdentifierFromJsonable
-      ],
-      [
-        "description",
-        SetterForBlossom.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "value",
-        SetterForBlossom.prototype.setValueFromJsonable
-      ],
-      [
-        "details",
-        SetterForBlossom.prototype.setDetailsFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForBlossom.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_SOMETHING =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "someChoice",
-        SetterForSomething.prototype.setSomeChoiceFromJsonable
-      ],
-      [
-        "somethingWithoutChoice",
-        SetterForSomething.prototype.setSomethingWithoutChoiceFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_CONTAINER =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "node",
-        SetterForContainer.prototype.setNodeFromJsonable
-      ],
-      [
-        "something",
-        SetterForContainer.prototype.setSomethingFromJsonable
-      ],
-    ]
-  );
 
 // endregion
 

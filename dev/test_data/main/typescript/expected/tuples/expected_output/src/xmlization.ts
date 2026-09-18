@@ -1090,37 +1090,61 @@ function writeTuple6<T0, T1, T2, T3, T4, T5>(
 function parseAtV1_int(
   cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
-  return parseNamedElement(cursor, "v1", parse_int);
+  return parseNamedElement(
+    cursor,
+    "v1",
+    parse_int
+  );
 }
 
 function parseAtV1_str(
   cursor: XmlCursor
 ): AasCommon.Either<string, DeserializationError> {
-  return parseNamedElement(cursor, "v1", parse_str);
+  return parseNamedElement(
+    cursor,
+    "v1",
+    parse_str
+  );
 }
 
 function parseAtV2_int(
   cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
-  return parseNamedElement(cursor, "v2", parse_int);
+  return parseNamedElement(
+    cursor,
+    "v2",
+    parse_int
+  );
 }
 
 function parseAtV5_int(
   cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
-  return parseNamedElement(cursor, "v5", parse_int);
+  return parseNamedElement(
+    cursor,
+    "v5",
+    parse_int
+  );
 }
 
 function parseAtV6_Result(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Result, DeserializationError> {
-  return parseNamedElement(cursor, "v6", parse_Result);
+  return parseNamedElement(
+    cursor,
+    "v6",
+    parse_Result
+  );
 }
 
 function parseElement_SomeItem(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.SomeItem, DeserializationError> {
-  return parseNamedElement(cursor, "someItem", parseSomeItemFromSequence);
+  return parseNamedElement(
+    cursor,
+    "someItem",
+    parseSomeItemFromSequence
+  );
 }
 
 function parse_TupleOf2_IAbstractItem_IAbstractItem(
@@ -1136,7 +1160,11 @@ function parse_TupleOf2_IAbstractItem_IAbstractItem(
 function parse_TupleOf2_str_int(
   cursor: XmlCursor
 ): AasCommon.Either<[string, number], DeserializationError> {
-  return parseTuple2<string, number>(cursor, parseAtV1_str, parseAtV2_int);
+  return parseTuple2<string, number>(
+    cursor,
+    parseAtV1_str,
+    parseAtV2_int
+  );
 }
 
 function parse_TupleOf6_int_SomeItem_IAbstractItem_SomeItem_int_Result(
@@ -1157,49 +1185,84 @@ function writeAtV1_int(
   parts: Array<string>,
   value: number
 ): void {
-  writeElement(parts, "v1", value, write_int);
+  writeElement(
+    parts,
+    "v1",
+    value,
+    write_int
+  );
 }
 
 function writeAtV1_str(
   parts: Array<string>,
   value: string
 ): void {
-  writeElement(parts, "v1", value, write_str);
+  writeElement(
+    parts,
+    "v1",
+    value,
+    write_str
+  );
 }
 
 function writeAtV2_int(
   parts: Array<string>,
   value: number
 ): void {
-  writeElement(parts, "v2", value, write_int);
+  writeElement(
+    parts,
+    "v2",
+    value,
+    write_int
+  );
 }
 
 function writeAtV5_int(
   parts: Array<string>,
   value: number
 ): void {
-  writeElement(parts, "v5", value, write_int);
+  writeElement(
+    parts,
+    "v5",
+    value,
+    write_int
+  );
 }
 
 function writeAtV6_Result(
   parts: Array<string>,
   value: AasTypes.Result
 ): void {
-  writeElement(parts, "v6", value, write_Result);
+  writeElement(
+    parts,
+    "v6",
+    value,
+    write_Result
+  );
 }
 
 function write_TupleOf2_IAbstractItem_IAbstractItem(
   parts: Array<string>,
   value: [AasTypes.IAbstractItem, AasTypes.IAbstractItem]
 ): void {
-  writeTuple2(parts, value, writeClass, writeClass);
+  writeTuple2(
+    parts,
+    value,
+    writeClass,
+    writeClass
+  );
 }
 
 function write_TupleOf2_str_int(
   parts: Array<string>,
   value: [string, number]
 ): void {
-  writeTuple2(parts, value, writeAtV1_str, writeAtV2_int);
+  writeTuple2(
+    parts,
+    value,
+    writeAtV1_str,
+    writeAtV2_int
+  );
 }
 
 function write_TupleOf6_int_SomeItem_IAbstractItem_SomeItem_int_Result(
@@ -1259,7 +1322,11 @@ function parseSomeItemFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theName = parsed.value;
         break;
@@ -1340,7 +1407,11 @@ function parseAnotherItemFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_int);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_int
+        );
         propertyError = parsed.error;
         theSerialNumber = parsed.value;
         break;
@@ -1423,7 +1494,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_TupleOf2_str_int);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_TupleOf2_str_int
+        );
         propertyError = parsed.error;
         thePair = parsed.value;
         break;
@@ -1519,7 +1594,12 @@ function writeSomeItemAsSequence(
   parts: Array<string>,
   that: AasTypes.SomeItem
 ): void {
-  writeProperty(parts, "name", that.name, write_str);
+  writeProperty(
+    parts,
+    "name",
+    that.name,
+    write_str
+  );
 }
 
 /**
@@ -1532,7 +1612,12 @@ function writeAnotherItemAsSequence(
   parts: Array<string>,
   that: AasTypes.AnotherItem
 ): void {
-  writeProperty(parts, "serialNumber", that.serialNumber, write_int);
+  writeProperty(
+    parts,
+    "serialNumber",
+    that.serialNumber,
+    write_int
+  );
 }
 
 /**
@@ -1545,8 +1630,18 @@ function writeSomethingAsSequence(
   parts: Array<string>,
   that: AasTypes.Something
 ): void {
-  writeProperty(parts, "pair", that.pair, write_TupleOf2_str_int);
-  writeProperty(parts, "items", that.items, write_TupleOf2_IAbstractItem_IAbstractItem);
+  writeProperty(
+    parts,
+    "pair",
+    that.pair,
+    write_TupleOf2_str_int
+  );
+  writeProperty(
+    parts,
+    "items",
+    that.items,
+    write_TupleOf2_IAbstractItem_IAbstractItem
+  );
   writeProperty(
     parts,
     "tricky",
@@ -1574,7 +1669,11 @@ const PARSERS_OF_ABSTRACT_ITEM = new Map<
 function dispatchParseAbstractItemElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IAbstractItem, DeserializationError> {
-  return dispatchParseElement(cursor, "IAbstractItem", PARSERS_OF_ABSTRACT_ITEM);
+  return dispatchParseElement(
+    cursor,
+    "IAbstractItem",
+    PARSERS_OF_ABSTRACT_ITEM
+  );
 }
 
 /**
@@ -1946,21 +2045,36 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.SomeItem,
     parts: Array<string>
   ): void {
-    writeElement(parts, "someItem", that, writeSomeItemAsSequence);
+    writeElement(
+      parts,
+      "someItem",
+      that,
+      writeSomeItemAsSequence
+    );
   }
 
   visitAnotherItemWithContext(
     that: AasTypes.AnotherItem,
     parts: Array<string>
   ): void {
-    writeElement(parts, "anotherItem", that, writeAnotherItemAsSequence);
+    writeElement(
+      parts,
+      "anotherItem",
+      that,
+      writeAnotherItemAsSequence
+    );
   }
 
   visitSomethingWithContext(
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 }
 

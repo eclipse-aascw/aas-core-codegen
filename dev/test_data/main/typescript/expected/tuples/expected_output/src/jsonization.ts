@@ -183,23 +183,48 @@ function checkIsJsonObject(jsonable: JsonValue): DeserializationError | null {
 }
 
 /**
- * Check that the parsed `modelType` matches `expected`.
+ * Extract the `modelType` property of `jsonObject`.
  *
- * @param modelType - parsed value of the `modelType` property,
- * or `null` if it was missing
+ * @param jsonObject - to be inspected
+ * @returns the model type, or an error
+ */
+function extractModelType(
+  jsonObject: JsonObject
+): AasCommon.Either<string, DeserializationError> {
+  const modelType = jsonObject["modelType"];
+  if (modelType === undefined) {
+    return newDeserializationError<string>(
+      "The required property 'modelType' is missing"
+    );
+  }
+  if (typeof modelType !== "string") {
+    return newDeserializationError<string>(
+      `Expected the property modelType to be a string, ` +
+      `but got: ${typeof modelType}`
+    );
+  }
+
+  return new AasCommon.Either<string, DeserializationError>(modelType, null);
+}
+
+/**
+ * Check that the `modelType` property of `jsonObject` is `expected`.
+ *
+ * @param jsonObject - to be inspected
  * @param expected - expected model type
  * @returns error, if any
  */
 function checkModelType(
-  modelType: string | null,
+  jsonObject: JsonObject,
   expected: string
 ): DeserializationError | null {
-  if (modelType === null) {
-    return new DeserializationError(
-      "The required property 'modelType' is missing"
-    );
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return modelTypeOrError.error;
   }
-  if (modelType != expected) {
+
+  const modelType = modelTypeOrError.mustValue();
+  if (modelType !== expected) {
     return new DeserializationError(
       `Expected model type '${expected}', ` +
       `but got: ${modelType}`
@@ -238,19 +263,29 @@ function checkIsIterable(jsonable: JsonValue): DeserializationError | null {
 }
 
 /**
- * Parse every item of `iterable` with `parseItem`.
+ * Parse `jsonable` as an array, and every one of its items with `parseItem`.
  *
- * @param iterable - to be parsed item-by-item
- * @param parseItem - to parse a single item of `iterable`
+ * @param jsonable - to be parsed item-by-item
+ * @param parseItem - to parse a single item of `jsonable`
  * @returns parsed items, or an error
  * @typeParam T - type of a single parsed item
  */
 function parseArray<T>(
-  iterable: Iterable<JsonValue>,
+  jsonable: JsonValue,
   parseItem: (
     jsonableItem: JsonValue
   ) => AasCommon.Either<T, DeserializationError>
 ): AasCommon.Either<Array<T>, DeserializationError> {
+  const iterableError = checkIsIterable(jsonable);
+  if (iterableError !== null) {
+    return new AasCommon.Either<Array<T>, DeserializationError>(
+      null,
+      iterableError
+    );
+  }
+
+  const iterable = <Iterable<JsonValue>>jsonable;
+
   const items = new Array<T>();
   let i = 0;
   for (const jsonableItem of iterable) {
@@ -412,18 +447,18 @@ function bytesFromJsonable(
 }
 
 /**
- * Parse `iterable` into a tuple of 2 item(s) by calling `parseItem0`,
+ * Parse `jsonable` into a tuple of 2 item(s) by calling `parseItem0`,
  * `parseItem1`, *etc.* on the correspondingly positioned item.
  *
- * @param iterable - expected to contain exactly 2 item(s)
- * @param parseItem0 - to parse the item at index 0 of `iterable`
- * @param parseItem1 - to parse the item at index 1 of `iterable`
+ * @param jsonable - expected to be an array of exactly 2 item(s)
+ * @param parseItem0 - to parse the item at index 0 of `jsonable`
+ * @param parseItem1 - to parse the item at index 1 of `jsonable`
  * @returns parsed tuple, or an error
  * @typeParam T0 - type of the item at index 0
  * @typeParam T1 - type of the item at index 1
  */
 function parseTuple2<T0, T1>(
-  iterable: Iterable<JsonValue>,
+  jsonable: JsonValue,
   parseItem0: (
     jsonableItem: JsonValue
   ) => AasCommon.Either<T0, DeserializationError>,
@@ -431,6 +466,16 @@ function parseTuple2<T0, T1>(
     jsonableItem: JsonValue
   ) => AasCommon.Either<T1, DeserializationError>
 ): AasCommon.Either<[T0, T1], DeserializationError> {
+  const iterableError = checkIsIterable(jsonable);
+  if (iterableError !== null) {
+    return new AasCommon.Either<[T0, T1], DeserializationError>(
+      null,
+      iterableError
+    );
+  }
+
+  const iterable = <Iterable<JsonValue>>jsonable;
+
   if (Array.isArray(iterable) && iterable.length !== 2) {
     return newDeserializationError<[T0, T1]>(
       `Expected exactly 2 item(s) in the array, ` +
@@ -489,16 +534,16 @@ function parseTuple2<T0, T1>(
 }
 
 /**
- * Parse `iterable` into a tuple of 6 item(s) by calling `parseItem0`,
+ * Parse `jsonable` into a tuple of 6 item(s) by calling `parseItem0`,
  * `parseItem1`, *etc.* on the correspondingly positioned item.
  *
- * @param iterable - expected to contain exactly 6 item(s)
- * @param parseItem0 - to parse the item at index 0 of `iterable`
- * @param parseItem1 - to parse the item at index 1 of `iterable`
- * @param parseItem2 - to parse the item at index 2 of `iterable`
- * @param parseItem3 - to parse the item at index 3 of `iterable`
- * @param parseItem4 - to parse the item at index 4 of `iterable`
- * @param parseItem5 - to parse the item at index 5 of `iterable`
+ * @param jsonable - expected to be an array of exactly 6 item(s)
+ * @param parseItem0 - to parse the item at index 0 of `jsonable`
+ * @param parseItem1 - to parse the item at index 1 of `jsonable`
+ * @param parseItem2 - to parse the item at index 2 of `jsonable`
+ * @param parseItem3 - to parse the item at index 3 of `jsonable`
+ * @param parseItem4 - to parse the item at index 4 of `jsonable`
+ * @param parseItem5 - to parse the item at index 5 of `jsonable`
  * @returns parsed tuple, or an error
  * @typeParam T0 - type of the item at index 0
  * @typeParam T1 - type of the item at index 1
@@ -508,7 +553,7 @@ function parseTuple2<T0, T1>(
  * @typeParam T5 - type of the item at index 5
  */
 function parseTuple6<T0, T1, T2, T3, T4, T5>(
-  iterable: Iterable<JsonValue>,
+  jsonable: JsonValue,
   parseItem0: (
     jsonableItem: JsonValue
   ) => AasCommon.Either<T0, DeserializationError>,
@@ -528,6 +573,16 @@ function parseTuple6<T0, T1, T2, T3, T4, T5>(
     jsonableItem: JsonValue
   ) => AasCommon.Either<T5, DeserializationError>
 ): AasCommon.Either<[T0, T1, T2, T3, T4, T5], DeserializationError> {
+  const iterableError = checkIsIterable(jsonable);
+  if (iterableError !== null) {
+    return new AasCommon.Either<[T0, T1, T2, T3, T4, T5], DeserializationError>(
+      null,
+      iterableError
+    );
+  }
+
+  const iterable = <Iterable<JsonValue>>jsonable;
+
   if (Array.isArray(iterable) && iterable.length !== 6) {
     return newDeserializationError<[T0, T1, T2, T3, T4, T5]>(
       `Expected exactly 6 item(s) in the array, ` +
@@ -708,80 +763,111 @@ export function abstractItemFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IAbstractItem>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IAbstractItem,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IAbstractItem>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = ABSTRACT_ITEM_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IAbstractItem>(
-      `Unexpected model type for IAbstractItem: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "AnotherItem":
+      return parsePropertiesOfAnotherItem(jsonObject);
 
-  return dispatch(jsonable);
+    case "SomeItem":
+      return parsePropertiesOfSomeItem(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IAbstractItem>(
+        `Unexpected model type for IAbstractItem: ${modelType}`
+      );
+  }
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!SomeItem}.
+ * Parse the properties of an instance
+ * of {@link types!SomeItem} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!SomeItem},
+ * or an error if any
  */
-class SetterForSomeItem {
-  name: string | null = null;
+function parsePropertiesOfSomeItem(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.SomeItem,
+  DeserializationError
+> {
+  let theName: string | null = null;
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  /**
-   * Parse `jsonable` as the value of {@link name}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.name = parsedOrError.mustValue();
-      return null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "name": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theName = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.SomeItem,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
+  if (theName === null) {
+    return newDeserializationError<
+      AasTypes.SomeItem
+    >(
+      "The required property 'name' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
   }
+
+  return new AasCommon.Either<
+    AasTypes.SomeItem,
+    DeserializationError
+  >(
+    new AasTypes.SomeItem(
+      theName
+    ),
+    null
+  );
 }
 
 /**
@@ -810,45 +896,7 @@ export function someItemFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForSomeItem();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_SOME_ITEM.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.SomeItem,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.name === null) {
-    return newDeserializationError<
-      AasTypes.SomeItem
-    >(
-      "The required property 'name' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "SomeItem");
+  const modelTypeError = checkModelType(jsonObject, "SomeItem");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.SomeItem,
@@ -859,68 +907,87 @@ export function someItemFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.SomeItem,
-    DeserializationError
-  >(
-    new AasTypes.SomeItem(
-      setter.name
-    ),
-    null
-  );
+  return parsePropertiesOfSomeItem(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!AnotherItem}.
+ * Parse the properties of an instance
+ * of {@link types!AnotherItem} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!AnotherItem},
+ * or an error if any
  */
-class SetterForAnotherItem {
-  serialNumber: number | null = null;
+function parsePropertiesOfAnotherItem(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.AnotherItem,
+  DeserializationError
+> {
+  let theSerialNumber: number | null = null;
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  /**
-   * Parse `jsonable` as the value of {@link serialNumber}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSerialNumberFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = integerFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.serialNumber = parsedOrError.mustValue();
-      return null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "serialNumber": {
+        const parsed = integerFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSerialNumber = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.AnotherItem,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
+  if (theSerialNumber === null) {
+    return newDeserializationError<
+      AasTypes.AnotherItem
+    >(
+      "The required property 'serialNumber' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
   }
+
+  return new AasCommon.Either<
+    AasTypes.AnotherItem,
+    DeserializationError
+  >(
+    new AasTypes.AnotherItem(
+      theSerialNumber
+    ),
+    null
+  );
 }
 
 /**
@@ -949,45 +1016,7 @@ export function anotherItemFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForAnotherItem();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_ANOTHER_ITEM.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.AnotherItem,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.serialNumber === null) {
-    return newDeserializationError<
-      AasTypes.AnotherItem
-    >(
-      "The required property 'serialNumber' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "AnotherItem");
+  const modelTypeError = checkModelType(jsonObject, "AnotherItem");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.AnotherItem,
@@ -998,118 +1027,127 @@ export function anotherItemFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.AnotherItem,
-    DeserializationError
-  >(
-    new AasTypes.AnotherItem(
-      setter.serialNumber
-    ),
-    null
-  );
+  return parsePropertiesOfAnotherItem(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Something}.
+ * Parse the properties of an instance
+ * of {@link types!Something} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Something},
+ * or an error if any
  */
-class SetterForSomething {
-  pair: [string, number] | null = null;
+function parsePropertiesOfSomething(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Something,
+  DeserializationError
+> {
+  let thePair: [string, number] | null = null;
+  let theItems: [AasTypes.IAbstractItem, AasTypes.IAbstractItem] | null = null;
+  let theTricky: [number, AasTypes.SomeItem, AasTypes.IAbstractItem, AasTypes.SomeItem, number, AasTypes.Result] | null = null;
 
-  items: [AasTypes.IAbstractItem, AasTypes.IAbstractItem] | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  tricky: [number, AasTypes.SomeItem, AasTypes.IAbstractItem, AasTypes.SomeItem, number, AasTypes.Result] | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "pair": {
+        const parsed = parseTuple2<string, number>(
+          jsonableValue,
+          stringFromJsonable,
+          integerFromJsonable
+        );
+        propertyError = parsed.error;
+        thePair = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link pair}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setPairFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "items": {
+        const parsed = parseTuple2<AasTypes.IAbstractItem, AasTypes.IAbstractItem>(
+          jsonableValue,
+          abstractItemFromJsonable,
+          abstractItemFromJsonable
+        );
+        propertyError = parsed.error;
+        theItems = parsed.value;
+        break;
+      }
+
+      case "tricky": {
+        const parsed = parseTuple6<number, AasTypes.SomeItem, AasTypes.IAbstractItem, AasTypes.SomeItem, number, AasTypes.Result>(
+          jsonableValue,
+          integerFromJsonable,
+          someItemFromJsonable,
+          abstractItemFromJsonable,
+          someItemFromJsonable,
+          integerFromJsonable,
+          resultFromJsonable
+        );
+        propertyError = parsed.error;
+        theTricky = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const tupleOrError = parseTuple2<string, number>(
-      iterable,
-      stringFromJsonable,
-      integerFromJsonable
-    );
-    if (tupleOrError.error !== null) {
-      return tupleOrError.error;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Something,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
-
-    this.pair = tupleOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link items}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setItemsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const tupleOrError = parseTuple2<AasTypes.IAbstractItem, AasTypes.IAbstractItem>(
-      iterable,
-      abstractItemFromJsonable,
-      abstractItemFromJsonable
+  if (thePair === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'pair' is missing"
     );
-    if (tupleOrError.error !== null) {
-      return tupleOrError.error;
-    }
-
-    this.items = tupleOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link tricky}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTrickyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const tupleOrError = parseTuple6<number, AasTypes.SomeItem, AasTypes.IAbstractItem, AasTypes.SomeItem, number, AasTypes.Result>(
-      iterable,
-      integerFromJsonable,
-      someItemFromJsonable,
-      abstractItemFromJsonable,
-      someItemFromJsonable,
-      integerFromJsonable,
-      resultFromJsonable
+  if (theItems === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'items' is missing"
     );
-    if (tupleOrError.error !== null) {
-      return tupleOrError.error;
-    }
-
-    this.tricky = tupleOrError.mustValue();
-    return null;
   }
+
+  if (theTricky === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'tricky' is missing"
+    );
+  }
+
+  return new AasCommon.Either<
+    AasTypes.Something,
+    DeserializationError
+  >(
+    new AasTypes.Something(
+      thePair,
+      theItems,
+      theTricky
+    ),
+    null
+  );
 }
 
 /**
@@ -1138,155 +1176,8 @@ export function somethingFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForSomething();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_SOMETHING.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Something,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.pair === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'pair' is missing"
-    );
-  }
-
-  if (setter.items === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'items' is missing"
-    );
-  }
-
-  if (setter.tricky === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'tricky' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.Something,
-    DeserializationError
-  >(
-    new AasTypes.Something(
-      setter.pair,
-      setter.items,
-      setter.tricky
-    ),
-    null
-  );
+  return parsePropertiesOfSomething(jsonObject);
 }
-
-const ABSTRACT_ITEM_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IAbstractItem,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "AnotherItem",
-        anotherItemFromJsonable
-      ],
-      [
-        "SomeItem",
-        someItemFromJsonable
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_SOME_ITEM =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "name",
-        SetterForSomeItem.prototype.setNameFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForSomeItem.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_ANOTHER_ITEM =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "serialNumber",
-        SetterForAnotherItem.prototype.setSerialNumberFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForAnotherItem.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_SOMETHING =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "pair",
-        SetterForSomething.prototype.setPairFromJsonable
-      ],
-      [
-        "items",
-        SetterForSomething.prototype.setItemsFromJsonable
-      ],
-      [
-        "tricky",
-        SetterForSomething.prototype.setTrickyFromJsonable
-      ],
-    ]
-  );
 
 // endregion
 

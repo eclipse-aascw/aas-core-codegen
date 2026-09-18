@@ -183,23 +183,48 @@ function checkIsJsonObject(jsonable: JsonValue): DeserializationError | null {
 }
 
 /**
- * Check that the parsed `modelType` matches `expected`.
+ * Extract the `modelType` property of `jsonObject`.
  *
- * @param modelType - parsed value of the `modelType` property,
- * or `null` if it was missing
+ * @param jsonObject - to be inspected
+ * @returns the model type, or an error
+ */
+function extractModelType(
+  jsonObject: JsonObject
+): AasCommon.Either<string, DeserializationError> {
+  const modelType = jsonObject["modelType"];
+  if (modelType === undefined) {
+    return newDeserializationError<string>(
+      "The required property 'modelType' is missing"
+    );
+  }
+  if (typeof modelType !== "string") {
+    return newDeserializationError<string>(
+      `Expected the property modelType to be a string, ` +
+      `but got: ${typeof modelType}`
+    );
+  }
+
+  return new AasCommon.Either<string, DeserializationError>(modelType, null);
+}
+
+/**
+ * Check that the `modelType` property of `jsonObject` is `expected`.
+ *
+ * @param jsonObject - to be inspected
  * @param expected - expected model type
  * @returns error, if any
  */
 function checkModelType(
-  modelType: string | null,
+  jsonObject: JsonObject,
   expected: string
 ): DeserializationError | null {
-  if (modelType === null) {
-    return new DeserializationError(
-      "The required property 'modelType' is missing"
-    );
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return modelTypeOrError.error;
   }
-  if (modelType != expected) {
+
+  const modelType = modelTypeOrError.mustValue();
+  if (modelType !== expected) {
     return new DeserializationError(
       `Expected model type '${expected}', ` +
       `but got: ${modelType}`
@@ -238,19 +263,29 @@ function checkIsIterable(jsonable: JsonValue): DeserializationError | null {
 }
 
 /**
- * Parse every item of `iterable` with `parseItem`.
+ * Parse `jsonable` as an array, and every one of its items with `parseItem`.
  *
- * @param iterable - to be parsed item-by-item
- * @param parseItem - to parse a single item of `iterable`
+ * @param jsonable - to be parsed item-by-item
+ * @param parseItem - to parse a single item of `jsonable`
  * @returns parsed items, or an error
  * @typeParam T - type of a single parsed item
  */
 function parseArray<T>(
-  iterable: Iterable<JsonValue>,
+  jsonable: JsonValue,
   parseItem: (
     jsonableItem: JsonValue
   ) => AasCommon.Either<T, DeserializationError>
 ): AasCommon.Either<Array<T>, DeserializationError> {
+  const iterableError = checkIsIterable(jsonable);
+  if (iterableError !== null) {
+    return new AasCommon.Either<Array<T>, DeserializationError>(
+      null,
+      iterableError
+    );
+  }
+
+  const iterable = <Iterable<JsonValue>>jsonable;
+
   const items = new Array<T>();
   let i = 0;
   for (const jsonableItem of iterable) {
@@ -412,20 +447,20 @@ function bytesFromJsonable(
 }
 
 /**
- * Parse `iterable` into a tuple of 3 item(s) by calling `parseItem0`,
+ * Parse `jsonable` into a tuple of 3 item(s) by calling `parseItem0`,
  * `parseItem1`, *etc.* on the correspondingly positioned item.
  *
- * @param iterable - expected to contain exactly 3 item(s)
- * @param parseItem0 - to parse the item at index 0 of `iterable`
- * @param parseItem1 - to parse the item at index 1 of `iterable`
- * @param parseItem2 - to parse the item at index 2 of `iterable`
+ * @param jsonable - expected to be an array of exactly 3 item(s)
+ * @param parseItem0 - to parse the item at index 0 of `jsonable`
+ * @param parseItem1 - to parse the item at index 1 of `jsonable`
+ * @param parseItem2 - to parse the item at index 2 of `jsonable`
  * @returns parsed tuple, or an error
  * @typeParam T0 - type of the item at index 0
  * @typeParam T1 - type of the item at index 1
  * @typeParam T2 - type of the item at index 2
  */
 function parseTuple3<T0, T1, T2>(
-  iterable: Iterable<JsonValue>,
+  jsonable: JsonValue,
   parseItem0: (
     jsonableItem: JsonValue
   ) => AasCommon.Either<T0, DeserializationError>,
@@ -436,6 +471,16 @@ function parseTuple3<T0, T1, T2>(
     jsonableItem: JsonValue
   ) => AasCommon.Either<T2, DeserializationError>
 ): AasCommon.Either<[T0, T1, T2], DeserializationError> {
+  const iterableError = checkIsIterable(jsonable);
+  if (iterableError !== null) {
+    return new AasCommon.Either<[T0, T1, T2], DeserializationError>(
+      null,
+      iterableError
+    );
+  }
+
+  const iterable = <Iterable<JsonValue>>jsonable;
+
   if (Array.isArray(iterable) && iterable.length !== 3) {
     return newDeserializationError<[T0, T1, T2]>(
       `Expected exactly 3 item(s) in the array, ` +
@@ -511,31 +556,75 @@ function parseTuple3<T0, T1, T2>(
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!StructuralFirst}.
+ * Parse the properties of an instance
+ * of {@link types!StructuralFirst} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!StructuralFirst},
+ * or an error if any
  */
-class SetterForStructuralFirst {
-  uniqueToFirst: string | null = null;
+function parsePropertiesOfStructuralFirst(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.StructuralFirst,
+  DeserializationError
+> {
+  let theUniqueToFirst: string | null = null;
 
-  /**
-   * Parse `jsonable` as the value of {@link uniqueToFirst}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setUniqueToFirstFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.uniqueToFirst = parsedOrError.mustValue();
-      return null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
+
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "uniqueToFirst": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theUniqueToFirst = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.StructuralFirst,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
+
+  if (theUniqueToFirst === null) {
+    return newDeserializationError<
+      AasTypes.StructuralFirst
+    >(
+      "The required property 'uniqueToFirst' is missing"
+    );
+  }
+
+  return new AasCommon.Either<
+    AasTypes.StructuralFirst,
+    DeserializationError
+  >(
+    new AasTypes.StructuralFirst(
+      theUniqueToFirst
+    ),
+    null
+  );
 }
 
 /**
@@ -564,81 +653,79 @@ export function structuralFirstFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForStructuralFirst();
+  return parsePropertiesOfStructuralFirst(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!StructuralSecond} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!StructuralSecond},
+ * or an error if any
+ */
+function parsePropertiesOfStructuralSecond(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.StructuralSecond,
+  DeserializationError
+> {
+  let theUniqueToSecond: string | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_STRUCTURAL_FIRST.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "uniqueToSecond": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theUniqueToSecond = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.StructuralFirst,
+        AasTypes.StructuralSecond,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.uniqueToFirst === null) {
+  if (theUniqueToSecond === null) {
     return newDeserializationError<
-      AasTypes.StructuralFirst
+      AasTypes.StructuralSecond
     >(
-      "The required property 'uniqueToFirst' is missing"
+      "The required property 'uniqueToSecond' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.StructuralFirst,
+    AasTypes.StructuralSecond,
     DeserializationError
   >(
-    new AasTypes.StructuralFirst(
-      setter.uniqueToFirst
+    new AasTypes.StructuralSecond(
+      theUniqueToSecond
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!StructuralSecond}.
- */
-class SetterForStructuralSecond {
-  uniqueToSecond: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link uniqueToSecond}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setUniqueToSecondFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.uniqueToSecond = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -667,53 +754,7 @@ export function structuralSecondFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForStructuralSecond();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_STRUCTURAL_SECOND.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.StructuralSecond,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.uniqueToSecond === null) {
-    return newDeserializationError<
-      AasTypes.StructuralSecond
-    >(
-      "The required property 'uniqueToSecond' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.StructuralSecond,
-    DeserializationError
-  >(
-    new AasTypes.StructuralSecond(
-      setter.uniqueToSecond
-    ),
-    null
-  );
+  return parsePropertiesOfStructuralSecond(jsonObject);
 }
 
 /**
@@ -749,11 +790,11 @@ function structuralUnionFromJsonable(
   }
 
   if (jsonObject["uniqueToFirst"] !== undefined) {
-    return structuralFirstFromJsonable(jsonable);
+    return parsePropertiesOfStructuralFirst(jsonObject);
   }
 
   if (jsonObject["uniqueToSecond"] !== undefined) {
-    return structuralSecondFromJsonable(jsonable);
+    return parsePropertiesOfStructuralSecond(jsonObject);
   }
 
   return newDeserializationError<AasTypes.StructuralUnion>(
@@ -787,55 +828,103 @@ export function mixedAbstractMemberFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IMixedAbstractMember>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IMixedAbstractMember,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IMixedAbstractMember>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = MIXED_ABSTRACT_MEMBER_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IMixedAbstractMember>(
-      `Unexpected model type for IMixedAbstractMember: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "MixedAbstractDescendantOne":
+      return parsePropertiesOfMixedAbstractDescendantOne(jsonObject);
 
-  return dispatch(jsonable);
+    case "MixedAbstractDescendantTwo":
+      return parsePropertiesOfMixedAbstractDescendantTwo(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IMixedAbstractMember>(
+        `Unexpected model type for IMixedAbstractMember: ${modelType}`
+      );
+  }
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!MixedAbstractDescendantOne}.
+ * Parse the properties of an instance
+ * of {@link types!MixedAbstractDescendantOne} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!MixedAbstractDescendantOne},
+ * or an error if any
  */
-class SetterForMixedAbstractDescendantOne {
-  uniqueToAbstractDescendantOne: string | null = null;
+function parsePropertiesOfMixedAbstractDescendantOne(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.MixedAbstractDescendantOne,
+  DeserializationError
+> {
+  let theUniqueToAbstractDescendantOne: string | null = null;
 
-  /**
-   * Parse `jsonable` as the value of {@link uniqueToAbstractDescendantOne}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setUniqueToAbstractDescendantOneFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.uniqueToAbstractDescendantOne = parsedOrError.mustValue();
-      return null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
+
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "uniqueToAbstractDescendantOne": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theUniqueToAbstractDescendantOne = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.MixedAbstractDescendantOne,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
+
+  if (theUniqueToAbstractDescendantOne === null) {
+    return newDeserializationError<
+      AasTypes.MixedAbstractDescendantOne
+    >(
+      "The required property 'uniqueToAbstractDescendantOne' is missing"
+    );
+  }
+
+  return new AasCommon.Either<
+    AasTypes.MixedAbstractDescendantOne,
+    DeserializationError
+  >(
+    new AasTypes.MixedAbstractDescendantOne(
+      theUniqueToAbstractDescendantOne
+    ),
+    null
+  );
 }
 
 /**
@@ -864,81 +953,79 @@ export function mixedAbstractDescendantOneFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForMixedAbstractDescendantOne();
+  return parsePropertiesOfMixedAbstractDescendantOne(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!MixedAbstractDescendantTwo} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!MixedAbstractDescendantTwo},
+ * or an error if any
+ */
+function parsePropertiesOfMixedAbstractDescendantTwo(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.MixedAbstractDescendantTwo,
+  DeserializationError
+> {
+  let theUniqueToAbstractDescendantTwo: string | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_MIXED_ABSTRACT_DESCENDANT_ONE.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "uniqueToAbstractDescendantTwo": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theUniqueToAbstractDescendantTwo = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.MixedAbstractDescendantOne,
+        AasTypes.MixedAbstractDescendantTwo,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.uniqueToAbstractDescendantOne === null) {
+  if (theUniqueToAbstractDescendantTwo === null) {
     return newDeserializationError<
-      AasTypes.MixedAbstractDescendantOne
+      AasTypes.MixedAbstractDescendantTwo
     >(
-      "The required property 'uniqueToAbstractDescendantOne' is missing"
+      "The required property 'uniqueToAbstractDescendantTwo' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.MixedAbstractDescendantOne,
+    AasTypes.MixedAbstractDescendantTwo,
     DeserializationError
   >(
-    new AasTypes.MixedAbstractDescendantOne(
-      setter.uniqueToAbstractDescendantOne
+    new AasTypes.MixedAbstractDescendantTwo(
+      theUniqueToAbstractDescendantTwo
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!MixedAbstractDescendantTwo}.
- */
-class SetterForMixedAbstractDescendantTwo {
-  uniqueToAbstractDescendantTwo: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link uniqueToAbstractDescendantTwo}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setUniqueToAbstractDescendantTwoFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.uniqueToAbstractDescendantTwo = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -967,50 +1054,84 @@ export function mixedAbstractDescendantTwoFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForMixedAbstractDescendantTwo();
+  return parsePropertiesOfMixedAbstractDescendantTwo(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!MixedConcreteWithDescendants} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!MixedConcreteWithDescendants},
+ * or an error if any
+ */
+function parsePropertiesOfMixedConcreteWithDescendants(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.MixedConcreteWithDescendants,
+  DeserializationError
+> {
+  let theSomeBaseProperty: string | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_MIXED_ABSTRACT_DESCENDANT_TWO.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "someBaseProperty": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSomeBaseProperty = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.MixedAbstractDescendantTwo,
+        AasTypes.MixedConcreteWithDescendants,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.uniqueToAbstractDescendantTwo === null) {
+  if (theSomeBaseProperty === null) {
     return newDeserializationError<
-      AasTypes.MixedAbstractDescendantTwo
+      AasTypes.MixedConcreteWithDescendants
     >(
-      "The required property 'uniqueToAbstractDescendantTwo' is missing"
+      "The required property 'someBaseProperty' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.MixedAbstractDescendantTwo,
+    AasTypes.MixedConcreteWithDescendants,
     DeserializationError
   >(
-    new AasTypes.MixedAbstractDescendantTwo(
-      setter.uniqueToAbstractDescendantTwo
+    new AasTypes.MixedConcreteWithDescendants(
+      theSomeBaseProperty
     ),
     null
   );
@@ -1041,248 +1162,130 @@ export function mixedConcreteWithDescendantsFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IMixedConcreteWithDescendants>(
-      "The required property modelType is missing"
-    );
-  }
-
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IMixedConcreteWithDescendants>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
-
-  const dispatch = MIXED_CONCRETE_WITH_DESCENDANTS_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IMixedConcreteWithDescendants>(
-      `Unexpected model type for IMixedConcreteWithDescendants: ${modelType}`
-    );
-  }
-
-  return dispatch(jsonable);
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!MixedConcreteWithDescendants}.
- */
-class SetterForMixedConcreteWithDescendants {
-  someBaseProperty: string | null = null;
-
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link someBaseProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomeBasePropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.someBaseProperty = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-}
-
-/**
- * Parse an instance of {@link types!MixedConcreteWithDescendants} from the JSON-able
- * structure `jsonable`.
- *
- * This function performs no dispatch! It is used to parse the properties
- * as-are, and already assumes the exact model type. Usually, this function
- * is called from within a dispatching function, and you never call it
- * directly. If you want to de-serialize an instance of
- * {@link types!MixedConcreteWithDescendants}, call
- * {@link mixedConcreteWithDescendantsFromJsonable}.
- *
- * @param jsonable - structure to be parsed
- * @returns parsed instance of {@link types!MixedConcreteWithDescendants},
- * or an error if any
- */
-function mixedConcreteWithDescendantsFromJsonableWithoutDispatch(
-  jsonable: JsonValue
-): AasCommon.Either<
-  AasTypes.MixedConcreteWithDescendants,
-  DeserializationError
-> {
-  const objectError = checkIsJsonObject(jsonable);
-  if (objectError !== null) {
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
     return new AasCommon.Either<
-      AasTypes.MixedConcreteWithDescendants,
+      AasTypes.IMixedConcreteWithDescendants,
       DeserializationError
     >(
       null,
-      objectError
+      modelTypeOrError.error
     );
   }
-  const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForMixedConcreteWithDescendants();
+  const modelType = modelTypeOrError.mustValue();
+
+  switch (modelType) {
+    case "MixedConcreteWithDescendantsChild":
+      return parsePropertiesOfMixedConcreteWithDescendantsChild(jsonObject);
+
+    case "MixedConcreteWithDescendants":
+      return parsePropertiesOfMixedConcreteWithDescendants(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IMixedConcreteWithDescendants>(
+        `Unexpected model type for IMixedConcreteWithDescendants: ${modelType}`
+      );
+  }
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!MixedConcreteWithDescendantsChild} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!MixedConcreteWithDescendantsChild},
+ * or an error if any
+ */
+function parsePropertiesOfMixedConcreteWithDescendantsChild(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.MixedConcreteWithDescendantsChild,
+  DeserializationError
+> {
+  let theSomeBaseProperty: string | null = null;
+  let theSomeChildProperty: string | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_MIXED_CONCRETE_WITH_DESCENDANTS.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "someBaseProperty": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSomeBaseProperty = parsed.value;
+        break;
+      }
+
+      case "someChildProperty": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSomeChildProperty = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.MixedConcreteWithDescendants,
+        AasTypes.MixedConcreteWithDescendantsChild,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.someBaseProperty === null) {
+  if (theSomeBaseProperty === null) {
     return newDeserializationError<
-      AasTypes.MixedConcreteWithDescendants
+      AasTypes.MixedConcreteWithDescendantsChild
     >(
       "The required property 'someBaseProperty' is missing"
     );
   }
 
-  const modelTypeError = checkModelType(setter.modelType, "MixedConcreteWithDescendants");
-  if (modelTypeError !== null) {
-    return new AasCommon.Either<
-      AasTypes.MixedConcreteWithDescendants,
-      DeserializationError
+  if (theSomeChildProperty === null) {
+    return newDeserializationError<
+      AasTypes.MixedConcreteWithDescendantsChild
     >(
-      null,
-      modelTypeError
+      "The required property 'someChildProperty' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.MixedConcreteWithDescendants,
+    AasTypes.MixedConcreteWithDescendantsChild,
     DeserializationError
   >(
-    new AasTypes.MixedConcreteWithDescendants(
-      setter.someBaseProperty
+    new AasTypes.MixedConcreteWithDescendantsChild(
+      theSomeBaseProperty,
+      theSomeChildProperty
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!MixedConcreteWithDescendantsChild}.
- */
-class SetterForMixedConcreteWithDescendantsChild {
-  someBaseProperty: string | null = null;
-
-  someChildProperty: string | null = null;
-
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link someBaseProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomeBasePropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.someBaseProperty = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link someChildProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomeChildPropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.someChildProperty = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -1311,53 +1314,7 @@ export function mixedConcreteWithDescendantsChildFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForMixedConcreteWithDescendantsChild();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_MIXED_CONCRETE_WITH_DESCENDANTS_CHILD.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.MixedConcreteWithDescendantsChild,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.someBaseProperty === null) {
-    return newDeserializationError<
-      AasTypes.MixedConcreteWithDescendantsChild
-    >(
-      "The required property 'someBaseProperty' is missing"
-    );
-  }
-
-  if (setter.someChildProperty === null) {
-    return newDeserializationError<
-      AasTypes.MixedConcreteWithDescendantsChild
-    >(
-      "The required property 'someChildProperty' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "MixedConcreteWithDescendantsChild");
+  const modelTypeError = checkModelType(jsonObject, "MixedConcreteWithDescendantsChild");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.MixedConcreteWithDescendantsChild,
@@ -1368,44 +1325,79 @@ export function mixedConcreteWithDescendantsChildFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.MixedConcreteWithDescendantsChild,
-    DeserializationError
-  >(
-    new AasTypes.MixedConcreteWithDescendantsChild(
-      setter.someBaseProperty,
-      setter.someChildProperty
-    ),
-    null
-  );
+  return parsePropertiesOfMixedConcreteWithDescendantsChild(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!MixedConcreteLeaf}.
+ * Parse the properties of an instance
+ * of {@link types!MixedConcreteLeaf} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!MixedConcreteLeaf},
+ * or an error if any
  */
-class SetterForMixedConcreteLeaf {
-  uniqueToConcreteLeaf: string | null = null;
+function parsePropertiesOfMixedConcreteLeaf(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.MixedConcreteLeaf,
+  DeserializationError
+> {
+  let theUniqueToConcreteLeaf: string | null = null;
 
-  /**
-   * Parse `jsonable` as the value of {@link uniqueToConcreteLeaf}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setUniqueToConcreteLeafFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.uniqueToConcreteLeaf = parsedOrError.mustValue();
-      return null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
+
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "uniqueToConcreteLeaf": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theUniqueToConcreteLeaf = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.MixedConcreteLeaf,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
+
+  if (theUniqueToConcreteLeaf === null) {
+    return newDeserializationError<
+      AasTypes.MixedConcreteLeaf
+    >(
+      "The required property 'uniqueToConcreteLeaf' is missing"
+    );
+  }
+
+  return new AasCommon.Either<
+    AasTypes.MixedConcreteLeaf,
+    DeserializationError
+  >(
+    new AasTypes.MixedConcreteLeaf(
+      theUniqueToConcreteLeaf
+    ),
+    null
+  );
 }
 
 /**
@@ -1434,53 +1426,7 @@ export function mixedConcreteLeafFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForMixedConcreteLeaf();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_MIXED_CONCRETE_LEAF.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.MixedConcreteLeaf,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.uniqueToConcreteLeaf === null) {
-    return newDeserializationError<
-      AasTypes.MixedConcreteLeaf
-    >(
-      "The required property 'uniqueToConcreteLeaf' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.MixedConcreteLeaf,
-    DeserializationError
-  >(
-    new AasTypes.MixedConcreteLeaf(
-      setter.uniqueToConcreteLeaf
-    ),
-    null
-  );
+  return parsePropertiesOfMixedConcreteLeaf(jsonObject);
 }
 
 /**
@@ -1508,34 +1454,44 @@ function mixedUnionFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType !== undefined) {
-    if (typeof modelType !== "string") {
-      return newDeserializationError<AasTypes.MixedUnion>(
-        `Expected the property modelType to be a string, but got: ${typeof modelType}`
+  if (jsonObject["modelType"] !== undefined) {
+    const modelTypeOrError = extractModelType(jsonObject);
+    if (modelTypeOrError.error !== null) {
+      return new AasCommon.Either<
+        AasTypes.MixedUnion,
+        DeserializationError
+      >(
+        null,
+        modelTypeOrError.error
       );
     }
 
-    const dispatch = MIXED_UNION_FROM_JSONABLE_DISPATCH.get(modelType);
-    if (dispatch === undefined) {
-      return newDeserializationError<AasTypes.MixedUnion>(
-        `Unexpected model type for MixedUnion: ${modelType}`
-      );
-    }
+    const modelType = modelTypeOrError.mustValue();
 
-    return dispatch(jsonable);
+    switch (modelType) {
+      case "MixedConcreteWithDescendantsChild":
+        return parsePropertiesOfMixedConcreteWithDescendantsChild(jsonObject);
+
+      case "MixedConcreteWithDescendants":
+        return parsePropertiesOfMixedConcreteWithDescendants(jsonObject);
+
+      default:
+        return newDeserializationError<AasTypes.MixedUnion>(
+          `Unexpected model type for MixedUnion: ${modelType}`
+        );
+    }
   }
 
   if (jsonObject["uniqueToAbstractDescendantOne"] !== undefined) {
-    return mixedAbstractDescendantOneFromJsonable(jsonable);
+    return parsePropertiesOfMixedAbstractDescendantOne(jsonObject);
   }
 
   if (jsonObject["uniqueToAbstractDescendantTwo"] !== undefined) {
-    return mixedAbstractDescendantTwoFromJsonable(jsonable);
+    return parsePropertiesOfMixedAbstractDescendantTwo(jsonObject);
   }
 
   if (jsonObject["uniqueToConcreteLeaf"] !== undefined) {
-    return mixedConcreteLeafFromJsonable(jsonable);
+    return parsePropertiesOfMixedConcreteLeaf(jsonObject);
   }
 
   return newDeserializationError<AasTypes.MixedUnion>(
@@ -1545,56 +1501,83 @@ function mixedUnionFromJsonable(
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!ModelTypedFirst}.
+ * Parse the properties of an instance
+ * of {@link types!ModelTypedFirst} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!ModelTypedFirst},
+ * or an error if any
  */
-class SetterForModelTypedFirst {
-  someProperty: string | null = null;
+function parsePropertiesOfModelTypedFirst(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.ModelTypedFirst,
+  DeserializationError
+> {
+  let theSomeProperty: string | null = null;
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  /**
-   * Parse `jsonable` as the value of {@link someProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomePropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.someProperty = parsedOrError.mustValue();
-      return null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "someProperty": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSomeProperty = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.ModelTypedFirst,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
+  if (theSomeProperty === null) {
+    return newDeserializationError<
+      AasTypes.ModelTypedFirst
+    >(
+      "The required property 'someProperty' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
   }
+
+  return new AasCommon.Either<
+    AasTypes.ModelTypedFirst,
+    DeserializationError
+  >(
+    new AasTypes.ModelTypedFirst(
+      theSomeProperty
+    ),
+    null
+  );
 }
 
 /**
@@ -1623,45 +1606,7 @@ export function modelTypedFirstFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForModelTypedFirst();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_MODEL_TYPED_FIRST.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.ModelTypedFirst,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.someProperty === null) {
-    return newDeserializationError<
-      AasTypes.ModelTypedFirst
-    >(
-      "The required property 'someProperty' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "ModelTypedFirst");
+  const modelTypeError = checkModelType(jsonObject, "ModelTypedFirst");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.ModelTypedFirst,
@@ -1672,68 +1617,87 @@ export function modelTypedFirstFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.ModelTypedFirst,
-    DeserializationError
-  >(
-    new AasTypes.ModelTypedFirst(
-      setter.someProperty
-    ),
-    null
-  );
+  return parsePropertiesOfModelTypedFirst(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!ModelTypedSecond}.
+ * Parse the properties of an instance
+ * of {@link types!ModelTypedSecond} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!ModelTypedSecond},
+ * or an error if any
  */
-class SetterForModelTypedSecond {
-  someProperty: string | null = null;
+function parsePropertiesOfModelTypedSecond(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.ModelTypedSecond,
+  DeserializationError
+> {
+  let theSomeProperty: string | null = null;
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  /**
-   * Parse `jsonable` as the value of {@link someProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomePropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.someProperty = parsedOrError.mustValue();
-      return null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "someProperty": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSomeProperty = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.ModelTypedSecond,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
+  if (theSomeProperty === null) {
+    return newDeserializationError<
+      AasTypes.ModelTypedSecond
+    >(
+      "The required property 'someProperty' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
   }
+
+  return new AasCommon.Either<
+    AasTypes.ModelTypedSecond,
+    DeserializationError
+  >(
+    new AasTypes.ModelTypedSecond(
+      theSomeProperty
+    ),
+    null
+  );
 }
 
 /**
@@ -1762,45 +1726,7 @@ export function modelTypedSecondFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForModelTypedSecond();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_MODEL_TYPED_SECOND.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.ModelTypedSecond,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.someProperty === null) {
-    return newDeserializationError<
-      AasTypes.ModelTypedSecond
-    >(
-      "The required property 'someProperty' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "ModelTypedSecond");
+  const modelTypeError = checkModelType(jsonObject, "ModelTypedSecond");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.ModelTypedSecond,
@@ -1811,15 +1737,7 @@ export function modelTypedSecondFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.ModelTypedSecond,
-    DeserializationError
-  >(
-    new AasTypes.ModelTypedSecond(
-      setter.someProperty
-    ),
-    null
-  );
+  return parsePropertiesOfModelTypedSecond(jsonObject);
 }
 
 /**
@@ -1847,22 +1765,32 @@ function modelTypedUnionFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType !== undefined) {
-    if (typeof modelType !== "string") {
-      return newDeserializationError<AasTypes.ModelTypedUnion>(
-        `Expected the property modelType to be a string, but got: ${typeof modelType}`
+  if (jsonObject["modelType"] !== undefined) {
+    const modelTypeOrError = extractModelType(jsonObject);
+    if (modelTypeOrError.error !== null) {
+      return new AasCommon.Either<
+        AasTypes.ModelTypedUnion,
+        DeserializationError
+      >(
+        null,
+        modelTypeOrError.error
       );
     }
 
-    const dispatch = MODEL_TYPED_UNION_FROM_JSONABLE_DISPATCH.get(modelType);
-    if (dispatch === undefined) {
-      return newDeserializationError<AasTypes.ModelTypedUnion>(
-        `Unexpected model type for ModelTypedUnion: ${modelType}`
-      );
-    }
+    const modelType = modelTypeOrError.mustValue();
 
-    return dispatch(jsonable);
+    switch (modelType) {
+      case "ModelTypedFirst":
+        return parsePropertiesOfModelTypedFirst(jsonObject);
+
+      case "ModelTypedSecond":
+        return parsePropertiesOfModelTypedSecond(jsonObject);
+
+      default:
+        return newDeserializationError<AasTypes.ModelTypedUnion>(
+          `Unexpected model type for ModelTypedUnion: ${modelType}`
+        );
+    }
   }
 
   return newDeserializationError<AasTypes.ModelTypedUnion>(
@@ -1872,263 +1800,228 @@ function modelTypedUnionFromJsonable(
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Something}.
+ * Parse the properties of an instance
+ * of {@link types!Something} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Something},
+ * or an error if any
  */
-class SetterForSomething {
-  structuralProperty: AasTypes.StructuralUnion | null = null;
+function parsePropertiesOfSomething(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Something,
+  DeserializationError
+> {
+  let theStructuralProperty: AasTypes.StructuralUnion | null = null;
+  let theMixedProperty: AasTypes.MixedUnion | null = null;
+  let theModelTypedProperty: AasTypes.ModelTypedUnion | null = null;
+  let theListStructuralProperty: Array<AasTypes.StructuralUnion> | null = null;
+  let theListMixedProperty: Array<AasTypes.MixedUnion> | null = null;
+  let theListModelTypedProperty: Array<AasTypes.ModelTypedUnion> | null = null;
+  let theTupleProperty: [AasTypes.StructuralUnion, AasTypes.MixedUnion, AasTypes.ModelTypedUnion] | null = null;
+  let theOptionalStructuralProperty: AasTypes.StructuralUnion | null = null;
+  let theOptionalMixedProperty: AasTypes.MixedUnion | null = null;
+  let theOptionalModelTypedProperty: AasTypes.ModelTypedUnion | null = null;
 
-  mixedProperty: AasTypes.MixedUnion | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  modelTypedProperty: AasTypes.ModelTypedUnion | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "structuralProperty": {
+        const parsed = structuralUnionFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theStructuralProperty = parsed.value;
+        break;
+      }
 
-  listStructuralProperty: Array<AasTypes.StructuralUnion> | null = null;
+      case "mixedProperty": {
+        const parsed = mixedUnionFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theMixedProperty = parsed.value;
+        break;
+      }
 
-  listMixedProperty: Array<AasTypes.MixedUnion> | null = null;
+      case "modelTypedProperty": {
+        const parsed = modelTypedUnionFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theModelTypedProperty = parsed.value;
+        break;
+      }
 
-  listModelTypedProperty: Array<AasTypes.ModelTypedUnion> | null = null;
+      case "listStructuralProperty": {
+        const parsed = parseArray(
+          jsonableValue,
+          structuralUnionFromJsonable
+        );
+        propertyError = parsed.error;
+        theListStructuralProperty = parsed.value;
+        break;
+      }
 
-  tupleProperty: [AasTypes.StructuralUnion, AasTypes.MixedUnion, AasTypes.ModelTypedUnion] | null = null;
+      case "listMixedProperty": {
+        const parsed = parseArray(
+          jsonableValue,
+          mixedUnionFromJsonable
+        );
+        propertyError = parsed.error;
+        theListMixedProperty = parsed.value;
+        break;
+      }
 
-  optionalStructuralProperty: AasTypes.StructuralUnion | null = null;
+      case "listModelTypedProperty": {
+        const parsed = parseArray(
+          jsonableValue,
+          modelTypedUnionFromJsonable
+        );
+        propertyError = parsed.error;
+        theListModelTypedProperty = parsed.value;
+        break;
+      }
 
-  optionalMixedProperty: AasTypes.MixedUnion | null = null;
+      case "tupleProperty": {
+        const parsed = parseTuple3<AasTypes.StructuralUnion, AasTypes.MixedUnion, AasTypes.ModelTypedUnion>(
+          jsonableValue,
+          structuralUnionFromJsonable,
+          mixedUnionFromJsonable,
+          modelTypedUnionFromJsonable
+        );
+        propertyError = parsed.error;
+        theTupleProperty = parsed.value;
+        break;
+      }
 
-  optionalModelTypedProperty: AasTypes.ModelTypedUnion | null = null;
+      case "optionalStructuralProperty": {
+        const parsed = structuralUnionFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theOptionalStructuralProperty = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link structuralProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setStructuralPropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = structuralUnionFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.structuralProperty = parsedOrError.mustValue();
-      return null;
+      case "optionalMixedProperty": {
+        const parsed = mixedUnionFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theOptionalMixedProperty = parsed.value;
+        break;
+      }
+
+      case "optionalModelTypedProperty": {
+        const parsed = modelTypedUnionFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theOptionalModelTypedProperty = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Something,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link mixedProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setMixedPropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = mixedUnionFromJsonable(
-      jsonable
+  if (theStructuralProperty === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'structuralProperty' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.mixedProperty = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link modelTypedProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypedPropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = modelTypedUnionFromJsonable(
-      jsonable
+  if (theMixedProperty === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'mixedProperty' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelTypedProperty = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link listStructuralProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setListStructuralPropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      structuralUnionFromJsonable
+  if (theModelTypedProperty === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'modelTypedProperty' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.listStructuralProperty = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link listMixedProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setListMixedPropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      mixedUnionFromJsonable
+  if (theListStructuralProperty === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'listStructuralProperty' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.listMixedProperty = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link listModelTypedProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setListModelTypedPropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      modelTypedUnionFromJsonable
+  if (theListMixedProperty === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'listMixedProperty' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.listModelTypedProperty = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link tupleProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTuplePropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const tupleOrError = parseTuple3<AasTypes.StructuralUnion, AasTypes.MixedUnion, AasTypes.ModelTypedUnion>(
-      iterable,
-      structuralUnionFromJsonable,
-      mixedUnionFromJsonable,
-      modelTypedUnionFromJsonable
+  if (theListModelTypedProperty === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'listModelTypedProperty' is missing"
     );
-    if (tupleOrError.error !== null) {
-      return tupleOrError.error;
-    }
-
-    this.tupleProperty = tupleOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link optionalStructuralProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setOptionalStructuralPropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = structuralUnionFromJsonable(
-      jsonable
+  if (theTupleProperty === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'tupleProperty' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.optionalStructuralProperty = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link optionalMixedProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setOptionalMixedPropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = mixedUnionFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.optionalMixedProperty = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link optionalModelTypedProperty}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setOptionalModelTypedPropertyFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = modelTypedUnionFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.optionalModelTypedProperty = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.Something,
+    DeserializationError
+  >(
+    new AasTypes.Something(
+      theStructuralProperty,
+      theMixedProperty,
+      theModelTypedProperty,
+      theListStructuralProperty,
+      theListMixedProperty,
+      theListModelTypedProperty,
+      theTupleProperty,
+      theOptionalStructuralProperty,
+      theOptionalMixedProperty,
+      theOptionalModelTypedProperty
+    ),
+    null
+  );
 }
 
 /**
@@ -2157,401 +2050,8 @@ export function somethingFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForSomething();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_SOMETHING.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Something,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.structuralProperty === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'structuralProperty' is missing"
-    );
-  }
-
-  if (setter.mixedProperty === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'mixedProperty' is missing"
-    );
-  }
-
-  if (setter.modelTypedProperty === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'modelTypedProperty' is missing"
-    );
-  }
-
-  if (setter.listStructuralProperty === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'listStructuralProperty' is missing"
-    );
-  }
-
-  if (setter.listMixedProperty === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'listMixedProperty' is missing"
-    );
-  }
-
-  if (setter.listModelTypedProperty === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'listModelTypedProperty' is missing"
-    );
-  }
-
-  if (setter.tupleProperty === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'tupleProperty' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.Something,
-    DeserializationError
-  >(
-    new AasTypes.Something(
-      setter.structuralProperty,
-      setter.mixedProperty,
-      setter.modelTypedProperty,
-      setter.listStructuralProperty,
-      setter.listMixedProperty,
-      setter.listModelTypedProperty,
-      setter.tupleProperty,
-      setter.optionalStructuralProperty,
-      setter.optionalMixedProperty,
-      setter.optionalModelTypedProperty
-    ),
-    null
-  );
+  return parsePropertiesOfSomething(jsonObject);
 }
-
-const SETTER_MAP_FOR_STRUCTURAL_FIRST =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "uniqueToFirst",
-        SetterForStructuralFirst.prototype.setUniqueToFirstFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_STRUCTURAL_SECOND =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "uniqueToSecond",
-        SetterForStructuralSecond.prototype.setUniqueToSecondFromJsonable
-      ],
-    ]
-  );
-
-const MIXED_ABSTRACT_MEMBER_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IMixedAbstractMember,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "MixedAbstractDescendantOne",
-        mixedAbstractDescendantOneFromJsonable
-      ],
-      [
-        "MixedAbstractDescendantTwo",
-        mixedAbstractDescendantTwoFromJsonable
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_MIXED_ABSTRACT_DESCENDANT_ONE =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "uniqueToAbstractDescendantOne",
-        SetterForMixedAbstractDescendantOne.prototype.setUniqueToAbstractDescendantOneFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_MIXED_ABSTRACT_DESCENDANT_TWO =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "uniqueToAbstractDescendantTwo",
-        SetterForMixedAbstractDescendantTwo.prototype.setUniqueToAbstractDescendantTwoFromJsonable
-      ],
-    ]
-  );
-
-const MIXED_CONCRETE_WITH_DESCENDANTS_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IMixedConcreteWithDescendants,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "MixedConcreteWithDescendantsChild",
-        mixedConcreteWithDescendantsChildFromJsonable
-      ],
-      [
-        "MixedConcreteWithDescendants",
-        mixedConcreteWithDescendantsFromJsonableWithoutDispatch
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_MIXED_CONCRETE_WITH_DESCENDANTS =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "someBaseProperty",
-        SetterForMixedConcreteWithDescendants.prototype.setSomeBasePropertyFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForMixedConcreteWithDescendants.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_MIXED_CONCRETE_WITH_DESCENDANTS_CHILD =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "someBaseProperty",
-        SetterForMixedConcreteWithDescendantsChild.prototype.setSomeBasePropertyFromJsonable
-      ],
-      [
-        "someChildProperty",
-        SetterForMixedConcreteWithDescendantsChild.prototype.setSomeChildPropertyFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForMixedConcreteWithDescendantsChild.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_MIXED_CONCRETE_LEAF =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "uniqueToConcreteLeaf",
-        SetterForMixedConcreteLeaf.prototype.setUniqueToConcreteLeafFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_MODEL_TYPED_FIRST =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "someProperty",
-        SetterForModelTypedFirst.prototype.setSomePropertyFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForModelTypedFirst.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_MODEL_TYPED_SECOND =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "someProperty",
-        SetterForModelTypedSecond.prototype.setSomePropertyFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForModelTypedSecond.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_SOMETHING =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "structuralProperty",
-        SetterForSomething.prototype.setStructuralPropertyFromJsonable
-      ],
-      [
-        "mixedProperty",
-        SetterForSomething.prototype.setMixedPropertyFromJsonable
-      ],
-      [
-        "modelTypedProperty",
-        SetterForSomething.prototype.setModelTypedPropertyFromJsonable
-      ],
-      [
-        "listStructuralProperty",
-        SetterForSomething.prototype.setListStructuralPropertyFromJsonable
-      ],
-      [
-        "listMixedProperty",
-        SetterForSomething.prototype.setListMixedPropertyFromJsonable
-      ],
-      [
-        "listModelTypedProperty",
-        SetterForSomething.prototype.setListModelTypedPropertyFromJsonable
-      ],
-      [
-        "tupleProperty",
-        SetterForSomething.prototype.setTuplePropertyFromJsonable
-      ],
-      [
-        "optionalStructuralProperty",
-        SetterForSomething.prototype.setOptionalStructuralPropertyFromJsonable
-      ],
-      [
-        "optionalMixedProperty",
-        SetterForSomething.prototype.setOptionalMixedPropertyFromJsonable
-      ],
-      [
-        "optionalModelTypedProperty",
-        SetterForSomething.prototype.setOptionalModelTypedPropertyFromJsonable
-      ],
-    ]
-  );
-
-const MIXED_UNION_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.MixedUnion,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "MixedConcreteWithDescendantsChild",
-        mixedConcreteWithDescendantsChildFromJsonable
-      ],
-      [
-        "MixedConcreteWithDescendants",
-        mixedConcreteWithDescendantsFromJsonableWithoutDispatch
-      ]
-    ]
-  );
-
-const MODEL_TYPED_UNION_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.ModelTypedUnion,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "ModelTypedFirst",
-        modelTypedFirstFromJsonable
-      ],
-      [
-        "ModelTypedSecond",
-        modelTypedSecondFromJsonable
-      ]
-    ]
-  );
 
 // endregion
 

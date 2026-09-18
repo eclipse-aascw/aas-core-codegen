@@ -943,19 +943,28 @@ function writeTuple3<T0, T1, T2>(
 function parse_ListOf_MixedUnion(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.MixedUnion>, DeserializationError> {
-  return parseList<AasTypes.MixedUnion>(cursor, dispatchParseMixedUnionElement);
+  return parseList<AasTypes.MixedUnion>(
+    cursor,
+    dispatchParseMixedUnionElement
+  );
 }
 
 function parse_ListOf_ModelTypedUnion(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.ModelTypedUnion>, DeserializationError> {
-  return parseList<AasTypes.ModelTypedUnion>(cursor, dispatchParseModelTypedUnionElement);
+  return parseList<AasTypes.ModelTypedUnion>(
+    cursor,
+    dispatchParseModelTypedUnionElement
+  );
 }
 
 function parse_ListOf_StructuralUnion(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.StructuralUnion>, DeserializationError> {
-  return parseList<AasTypes.StructuralUnion>(cursor, dispatchParseStructuralUnionElement);
+  return parseList<AasTypes.StructuralUnion>(
+    cursor,
+    dispatchParseStructuralUnionElement
+  );
 }
 
 function parse_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
@@ -973,7 +982,13 @@ function write_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
   parts: Array<string>,
   value: [AasTypes.StructuralUnion, AasTypes.MixedUnion, AasTypes.ModelTypedUnion]
 ): void {
-  writeTuple3(parts, value, writeClass, writeClass, writeClass);
+  writeTuple3(
+    parts,
+    value,
+    writeClass,
+    writeClass,
+    writeClass
+  );
 }
 
 /**
@@ -1017,7 +1032,11 @@ function parseStructuralFirstFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theUniqueToFirst = parsed.value;
         break;
@@ -1098,7 +1117,11 @@ function parseStructuralSecondFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theUniqueToSecond = parsed.value;
         break;
@@ -1179,7 +1202,11 @@ function parseMixedAbstractDescendantOneFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theUniqueToAbstractDescendantOne = parsed.value;
         break;
@@ -1260,7 +1287,11 @@ function parseMixedAbstractDescendantTwoFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theUniqueToAbstractDescendantTwo = parsed.value;
         break;
@@ -1341,7 +1372,11 @@ function parseMixedConcreteWithDescendantsFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theSomeBaseProperty = parsed.value;
         break;
@@ -1423,7 +1458,11 @@ function parseMixedConcreteWithDescendantsChildFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theSomeBaseProperty = parsed.value;
         break;
@@ -1435,7 +1474,11 @@ function parseMixedConcreteWithDescendantsChildFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theSomeChildProperty = parsed.value;
         break;
@@ -1523,7 +1566,11 @@ function parseMixedConcreteLeafFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theUniqueToConcreteLeaf = parsed.value;
         break;
@@ -1604,7 +1651,11 @@ function parseModelTypedFirstFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theSomeProperty = parsed.value;
         break;
@@ -1685,7 +1736,11 @@ function parseModelTypedSecondFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theSomeProperty = parsed.value;
         break;
@@ -1823,7 +1878,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_StructuralUnion);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_StructuralUnion
+        );
         propertyError = parsed.error;
         theListStructuralProperty = parsed.value;
         break;
@@ -1835,7 +1894,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_MixedUnion);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_MixedUnion
+        );
         propertyError = parsed.error;
         theListMixedProperty = parsed.value;
         break;
@@ -1847,7 +1910,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_ModelTypedUnion);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_ModelTypedUnion
+        );
         propertyError = parsed.error;
         theListModelTypedProperty = parsed.value;
         break;
@@ -2006,7 +2073,12 @@ function writeStructuralFirstAsSequence(
   parts: Array<string>,
   that: AasTypes.StructuralFirst
 ): void {
-  writeProperty(parts, "uniqueToFirst", that.uniqueToFirst, write_str);
+  writeProperty(
+    parts,
+    "uniqueToFirst",
+    that.uniqueToFirst,
+    write_str
+  );
 }
 
 /**
@@ -2019,7 +2091,12 @@ function writeStructuralSecondAsSequence(
   parts: Array<string>,
   that: AasTypes.StructuralSecond
 ): void {
-  writeProperty(parts, "uniqueToSecond", that.uniqueToSecond, write_str);
+  writeProperty(
+    parts,
+    "uniqueToSecond",
+    that.uniqueToSecond,
+    write_str
+  );
 }
 
 /**
@@ -2068,7 +2145,12 @@ function writeMixedConcreteWithDescendantsAsSequence(
   parts: Array<string>,
   that: AasTypes.MixedConcreteWithDescendants
 ): void {
-  writeProperty(parts, "someBaseProperty", that.someBaseProperty, write_str);
+  writeProperty(
+    parts,
+    "someBaseProperty",
+    that.someBaseProperty,
+    write_str
+  );
 }
 
 /**
@@ -2081,8 +2163,18 @@ function writeMixedConcreteWithDescendantsChildAsSequence(
   parts: Array<string>,
   that: AasTypes.MixedConcreteWithDescendantsChild
 ): void {
-  writeProperty(parts, "someBaseProperty", that.someBaseProperty, write_str);
-  writeProperty(parts, "someChildProperty", that.someChildProperty, write_str);
+  writeProperty(
+    parts,
+    "someBaseProperty",
+    that.someBaseProperty,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "someChildProperty",
+    that.someChildProperty,
+    write_str
+  );
 }
 
 /**
@@ -2095,7 +2187,12 @@ function writeMixedConcreteLeafAsSequence(
   parts: Array<string>,
   that: AasTypes.MixedConcreteLeaf
 ): void {
-  writeProperty(parts, "uniqueToConcreteLeaf", that.uniqueToConcreteLeaf, write_str);
+  writeProperty(
+    parts,
+    "uniqueToConcreteLeaf",
+    that.uniqueToConcreteLeaf,
+    write_str
+  );
 }
 
 /**
@@ -2108,7 +2205,12 @@ function writeModelTypedFirstAsSequence(
   parts: Array<string>,
   that: AasTypes.ModelTypedFirst
 ): void {
-  writeProperty(parts, "someProperty", that.someProperty, write_str);
+  writeProperty(
+    parts,
+    "someProperty",
+    that.someProperty,
+    write_str
+  );
 }
 
 /**
@@ -2121,7 +2223,12 @@ function writeModelTypedSecondAsSequence(
   parts: Array<string>,
   that: AasTypes.ModelTypedSecond
 ): void {
-  writeProperty(parts, "someProperty", that.someProperty, write_str);
+  writeProperty(
+    parts,
+    "someProperty",
+    that.someProperty,
+    write_str
+  );
 }
 
 /**
@@ -2134,12 +2241,42 @@ function writeSomethingAsSequence(
   parts: Array<string>,
   that: AasTypes.Something
 ): void {
-  writeProperty(parts, "structuralProperty", that.structuralProperty, writeClass);
-  writeProperty(parts, "mixedProperty", that.mixedProperty, writeClass);
-  writeProperty(parts, "modelTypedProperty", that.modelTypedProperty, writeClass);
-  writeProperty(parts, "listStructuralProperty", that.listStructuralProperty, writeListOfInstances);
-  writeProperty(parts, "listMixedProperty", that.listMixedProperty, writeListOfInstances);
-  writeProperty(parts, "listModelTypedProperty", that.listModelTypedProperty, writeListOfInstances);
+  writeProperty(
+    parts,
+    "structuralProperty",
+    that.structuralProperty,
+    writeClass
+  );
+  writeProperty(
+    parts,
+    "mixedProperty",
+    that.mixedProperty,
+    writeClass
+  );
+  writeProperty(
+    parts,
+    "modelTypedProperty",
+    that.modelTypedProperty,
+    writeClass
+  );
+  writeProperty(
+    parts,
+    "listStructuralProperty",
+    that.listStructuralProperty,
+    writeListOfInstances
+  );
+  writeProperty(
+    parts,
+    "listMixedProperty",
+    that.listMixedProperty,
+    writeListOfInstances
+  );
+  writeProperty(
+    parts,
+    "listModelTypedProperty",
+    that.listModelTypedProperty,
+    writeListOfInstances
+  );
   writeProperty(
     parts,
     "tupleProperty",
@@ -2152,7 +2289,12 @@ function writeSomethingAsSequence(
     that.optionalStructuralProperty,
     writeClass
   );
-  writeOptionalProperty(parts, "optionalMixedProperty", that.optionalMixedProperty, writeClass);
+  writeOptionalProperty(
+    parts,
+    "optionalMixedProperty",
+    that.optionalMixedProperty,
+    writeClass
+  );
   writeOptionalProperty(
     parts,
     "optionalModelTypedProperty",
@@ -2180,7 +2322,11 @@ const PARSERS_OF_MIXED_ABSTRACT_MEMBER = new Map<
 function dispatchParseMixedAbstractMemberElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IMixedAbstractMember, DeserializationError> {
-  return dispatchParseElement(cursor, "IMixedAbstractMember", PARSERS_OF_MIXED_ABSTRACT_MEMBER);
+  return dispatchParseElement(
+    cursor,
+    "IMixedAbstractMember",
+    PARSERS_OF_MIXED_ABSTRACT_MEMBER
+  );
 }
 
 /**
@@ -2312,7 +2458,11 @@ const PARSERS_OF_STRUCTURAL_UNION = new Map<
 function dispatchParseStructuralUnionElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.StructuralUnion, DeserializationError> {
-  return dispatchParseElement(cursor, "StructuralUnion", PARSERS_OF_STRUCTURAL_UNION);
+  return dispatchParseElement(
+    cursor,
+    "StructuralUnion",
+    PARSERS_OF_STRUCTURAL_UNION
+  );
 }
 
 const PARSERS_OF_MIXED_UNION = new Map<
@@ -2337,7 +2487,11 @@ const PARSERS_OF_MIXED_UNION = new Map<
 function dispatchParseMixedUnionElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.MixedUnion, DeserializationError> {
-  return dispatchParseElement(cursor, "MixedUnion", PARSERS_OF_MIXED_UNION);
+  return dispatchParseElement(
+    cursor,
+    "MixedUnion",
+    PARSERS_OF_MIXED_UNION
+  );
 }
 
 const PARSERS_OF_MODEL_TYPED_UNION = new Map<
@@ -2359,7 +2513,11 @@ const PARSERS_OF_MODEL_TYPED_UNION = new Map<
 function dispatchParseModelTypedUnionElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ModelTypedUnion, DeserializationError> {
-  return dispatchParseElement(cursor, "ModelTypedUnion", PARSERS_OF_MODEL_TYPED_UNION);
+  return dispatchParseElement(
+    cursor,
+    "ModelTypedUnion",
+    PARSERS_OF_MODEL_TYPED_UNION
+  );
 }
 
 const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
@@ -2696,14 +2854,24 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.StructuralFirst,
     parts: Array<string>
   ): void {
-    writeElement(parts, "structuralFirst", that, writeStructuralFirstAsSequence);
+    writeElement(
+      parts,
+      "structuralFirst",
+      that,
+      writeStructuralFirstAsSequence
+    );
   }
 
   visitStructuralSecondWithContext(
     that: AasTypes.StructuralSecond,
     parts: Array<string>
   ): void {
-    writeElement(parts, "structuralSecond", that, writeStructuralSecondAsSequence);
+    writeElement(
+      parts,
+      "structuralSecond",
+      that,
+      writeStructuralSecondAsSequence
+    );
   }
 
   visitMixedAbstractDescendantOneWithContext(
@@ -2758,28 +2926,48 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.MixedConcreteLeaf,
     parts: Array<string>
   ): void {
-    writeElement(parts, "mixedConcreteLeaf", that, writeMixedConcreteLeafAsSequence);
+    writeElement(
+      parts,
+      "mixedConcreteLeaf",
+      that,
+      writeMixedConcreteLeafAsSequence
+    );
   }
 
   visitModelTypedFirstWithContext(
     that: AasTypes.ModelTypedFirst,
     parts: Array<string>
   ): void {
-    writeElement(parts, "modelTypedFirst", that, writeModelTypedFirstAsSequence);
+    writeElement(
+      parts,
+      "modelTypedFirst",
+      that,
+      writeModelTypedFirstAsSequence
+    );
   }
 
   visitModelTypedSecondWithContext(
     that: AasTypes.ModelTypedSecond,
     parts: Array<string>
   ): void {
-    writeElement(parts, "modelTypedSecond", that, writeModelTypedSecondAsSequence);
+    writeElement(
+      parts,
+      "modelTypedSecond",
+      that,
+      writeModelTypedSecondAsSequence
+    );
   }
 
   visitSomethingWithContext(
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 }
 

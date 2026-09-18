@@ -916,7 +916,11 @@ function parseBranchFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdentifier = parsed.value;
         break;
@@ -928,7 +932,11 @@ function parseBranchFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theDescription = parsed.value;
         break;
@@ -1018,7 +1026,11 @@ function parseLeafFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdentifier = parsed.value;
         break;
@@ -1030,7 +1042,11 @@ function parseLeafFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theDescription = parsed.value;
         break;
@@ -1042,7 +1058,11 @@ function parseLeafFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_int);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_int
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -1140,7 +1160,11 @@ function parseBlossomFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdentifier = parsed.value;
         break;
@@ -1152,7 +1176,11 @@ function parseBlossomFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theDescription = parsed.value;
         break;
@@ -1164,7 +1192,11 @@ function parseBlossomFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_int);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_int
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -1176,7 +1208,11 @@ function parseBlossomFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theDetails = parsed.value;
         break;
@@ -1279,7 +1315,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, dispatchParseNodeElement);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          dispatchParseNodeElement
+        );
         propertyError = parsed.error;
         theSomeChoice = parsed.value;
         break;
@@ -1291,7 +1331,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, dispatchParseBranchElement);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          dispatchParseBranchElement
+        );
         propertyError = parsed.error;
         theSomethingWithoutChoice = parsed.value;
         break;
@@ -1380,7 +1424,11 @@ function parseContainerFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, dispatchParseNodeElement);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          dispatchParseNodeElement
+        );
         propertyError = parsed.error;
         theNode = parsed.value;
         break;
@@ -1392,7 +1440,11 @@ function parseContainerFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseSomethingFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseSomethingFromSequence
+        );
         propertyError = parsed.error;
         theSomething = parsed.value;
         break;
@@ -1449,8 +1501,18 @@ function writeBranchAsSequence(
   parts: Array<string>,
   that: AasTypes.Branch
 ): void {
-  writeProperty(parts, "identifier", that.identifier, write_str);
-  writeProperty(parts, "description", that.description, write_str);
+  writeProperty(
+    parts,
+    "identifier",
+    that.identifier,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "description",
+    that.description,
+    write_str
+  );
 }
 
 /**
@@ -1463,9 +1525,24 @@ function writeLeafAsSequence(
   parts: Array<string>,
   that: AasTypes.Leaf
 ): void {
-  writeProperty(parts, "identifier", that.identifier, write_str);
-  writeProperty(parts, "description", that.description, write_str);
-  writeProperty(parts, "value", that.value, write_int);
+  writeProperty(
+    parts,
+    "identifier",
+    that.identifier,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "description",
+    that.description,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "value",
+    that.value,
+    write_int
+  );
 }
 
 /**
@@ -1478,10 +1555,30 @@ function writeBlossomAsSequence(
   parts: Array<string>,
   that: AasTypes.Blossom
 ): void {
-  writeProperty(parts, "identifier", that.identifier, write_str);
-  writeProperty(parts, "description", that.description, write_str);
-  writeProperty(parts, "value", that.value, write_int);
-  writeProperty(parts, "details", that.details, write_str);
+  writeProperty(
+    parts,
+    "identifier",
+    that.identifier,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "description",
+    that.description,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "value",
+    that.value,
+    write_int
+  );
+  writeProperty(
+    parts,
+    "details",
+    that.details,
+    write_str
+  );
 }
 
 /**
@@ -1494,8 +1591,18 @@ function writeSomethingAsSequence(
   parts: Array<string>,
   that: AasTypes.Something
 ): void {
-  writeProperty(parts, "someChoice", that.someChoice, writeClass);
-  writeProperty(parts, "somethingWithoutChoice", that.somethingWithoutChoice, writeClass);
+  writeProperty(
+    parts,
+    "someChoice",
+    that.someChoice,
+    writeClass
+  );
+  writeProperty(
+    parts,
+    "somethingWithoutChoice",
+    that.somethingWithoutChoice,
+    writeClass
+  );
 }
 
 /**
@@ -1508,8 +1615,18 @@ function writeContainerAsSequence(
   parts: Array<string>,
   that: AasTypes.Container
 ): void {
-  writeProperty(parts, "node", that.node, writeClass);
-  writeProperty(parts, "something", that.something, writeSomethingAsSequence);
+  writeProperty(
+    parts,
+    "node",
+    that.node,
+    writeClass
+  );
+  writeProperty(
+    parts,
+    "something",
+    that.something,
+    writeSomethingAsSequence
+  );
 }
 
 const PARSERS_OF_NODE = new Map<
@@ -1532,7 +1649,11 @@ const PARSERS_OF_NODE = new Map<
 function dispatchParseNodeElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.INode, DeserializationError> {
-  return dispatchParseElement(cursor, "INode", PARSERS_OF_NODE);
+  return dispatchParseElement(
+    cursor,
+    "INode",
+    PARSERS_OF_NODE
+  );
 }
 
 /**
@@ -1597,7 +1718,11 @@ const PARSERS_OF_BRANCH = new Map<
 function dispatchParseBranchElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Branch, DeserializationError> {
-  return dispatchParseElement(cursor, "Branch", PARSERS_OF_BRANCH);
+  return dispatchParseElement(
+    cursor,
+    "Branch",
+    PARSERS_OF_BRANCH
+  );
 }
 
 /**
@@ -1661,7 +1786,11 @@ const PARSERS_OF_LEAF = new Map<
 function dispatchParseLeafElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Leaf, DeserializationError> {
-  return dispatchParseElement(cursor, "Leaf", PARSERS_OF_LEAF);
+  return dispatchParseElement(
+    cursor,
+    "Leaf",
+    PARSERS_OF_LEAF
+  );
 }
 
 /**
@@ -2035,35 +2164,60 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Branch,
     parts: Array<string>
   ): void {
-    writeElement(parts, "branch", that, writeBranchAsSequence);
+    writeElement(
+      parts,
+      "branch",
+      that,
+      writeBranchAsSequence
+    );
   }
 
   visitLeafWithContext(
     that: AasTypes.Leaf,
     parts: Array<string>
   ): void {
-    writeElement(parts, "leaf", that, writeLeafAsSequence);
+    writeElement(
+      parts,
+      "leaf",
+      that,
+      writeLeafAsSequence
+    );
   }
 
   visitBlossomWithContext(
     that: AasTypes.Blossom,
     parts: Array<string>
   ): void {
-    writeElement(parts, "blossom", that, writeBlossomAsSequence);
+    writeElement(
+      parts,
+      "blossom",
+      that,
+      writeBlossomAsSequence
+    );
   }
 
   visitSomethingWithContext(
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 
   visitContainerWithContext(
     that: AasTypes.Container,
     parts: Array<string>
   ): void {
-    writeElement(parts, "container", that, writeContainerAsSequence);
+    writeElement(
+      parts,
+      "container",
+      that,
+      writeContainerAsSequence
+    );
   }
 }
 

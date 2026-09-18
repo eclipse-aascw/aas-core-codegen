@@ -2,7 +2,7 @@
 
 import io
 import textwrap
-from typing import Tuple, Optional, List, Set
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from icontract import ensure, require
 
@@ -31,23 +31,39 @@ from aas_core_codegen.typescript.common import (
 
 
 def _generate_parse_array() -> Stripped:
-    """Generate the generic helper to parse a JSON array item-by-item."""
+    """
+    Generate the generic helper to parse a JSON array item-by-item.
+
+    The iterable is checked for here rather than at the point of the call, so that
+    a list-valued property is de-serialized by a single call just as an atomic one
+    is; see :py:func:`_generate_parse_call_for_property`.
+    """
     return Stripped(
         f"""\
 /**
- * Parse every item of `iterable` with `parseItem`.
+ * Parse `jsonable` as an array, and every one of its items with `parseItem`.
  *
- * @param iterable - to be parsed item-by-item
- * @param parseItem - to parse a single item of `iterable`
+ * @param jsonable - to be parsed item-by-item
+ * @param parseItem - to parse a single item of `jsonable`
  * @returns parsed items, or an error
  * @typeParam T - type of a single parsed item
  */
 function parseArray<T>(
-{I}iterable: Iterable<JsonValue>,
+{I}jsonable: JsonValue,
 {I}parseItem: (
 {II}jsonableItem: JsonValue
 {I}) => AasCommon.Either<T, DeserializationError>
 ): AasCommon.Either<Array<T>, DeserializationError> {{
+{I}const iterableError = checkIsIterable(jsonable);
+{I}if (iterableError !== null) {{
+{II}return new AasCommon.Either<Array<T>, DeserializationError>(
+{III}null,
+{III}iterableError
+{II});
+{I}}}
+
+{I}const iterable = <Iterable<JsonValue>>jsonable;
+
 {I}const items = new Array<T>();
 {I}let i = 0;
 {I}for (const jsonableItem of iterable) {{
@@ -67,28 +83,70 @@ function parseArray<T>(
     )
 
 
-def _generate_check_model_type() -> Stripped:
-    """Generate the generic helper to check a parsed ``modelType`` property."""
+def _generate_extract_model_type() -> Stripped:
+    """
+    Generate the generic helper to read the ``modelType`` property of an object.
+
+    This is the single place which knows how the discriminator is spelled and typed
+    on the wire. The dispatching functions and ``checkModelType`` share it.
+    """
     return Stripped(
         f"""\
 /**
- * Check that the parsed `modelType` matches `expected`.
+ * Extract the `modelType` property of `jsonObject`.
  *
- * @param modelType - parsed value of the `modelType` property,
- * or `null` if it was missing
+ * @param jsonObject - to be inspected
+ * @returns the model type, or an error
+ */
+function extractModelType(
+{I}jsonObject: JsonObject
+): AasCommon.Either<string, DeserializationError> {{
+{I}const modelType = jsonObject["modelType"];
+{I}if (modelType === undefined) {{
+{II}return newDeserializationError<string>(
+{III}"The required property 'modelType' is missing"
+{II});
+{I}}}
+{I}if (typeof modelType !== "string") {{
+{II}return newDeserializationError<string>(
+{III}`Expected the property modelType to be a string, ` +
+{III}`but got: ${{typeof modelType}}`
+{II});
+{I}}}
+
+{I}return new AasCommon.Either<string, DeserializationError>(modelType, null);
+}}"""
+    )
+
+
+def _generate_check_model_type() -> Stripped:
+    """
+    Generate the generic helper to verify the ``modelType`` property of an object.
+
+    The helper reads the property itself instead of taking it already parsed, so
+    that it can be called in front of the property loop: a wrong model type is
+    then reported without de-serializing any of the properties first.
+    """
+    return Stripped(
+        f"""\
+/**
+ * Check that the `modelType` property of `jsonObject` is `expected`.
+ *
+ * @param jsonObject - to be inspected
  * @param expected - expected model type
  * @returns error, if any
  */
 function checkModelType(
-{I}modelType: string | null,
+{I}jsonObject: JsonObject,
 {I}expected: string
 ): DeserializationError | null {{
-{I}if (modelType === null) {{
-{II}return new DeserializationError(
-{III}"The required property 'modelType' is missing"
-{II});
+{I}const modelTypeOrError = extractModelType(jsonObject);
+{I}if (modelTypeOrError.error !== null) {{
+{II}return modelTypeOrError.error;
 {I}}}
-{I}if (modelType != expected) {{
+
+{I}const modelType = modelTypeOrError.mustValue();
+{I}if (modelType !== expected) {{
 {II}return new DeserializationError(
 {III}`Expected model type '${{expected}}', ` +
 {III}`but got: ${{modelType}}`
@@ -169,7 +227,7 @@ function checkIsIterable(jsonable: JsonValue): DeserializationError | null {{
 @require(lambda arity: arity > 0)
 def _generate_parse_tuple_helper(arity: int) -> Stripped:
     """
-    Generate the generic helper to parse an iterable into a tuple of `arity`.
+    Generate the generic helper to parse a JSON array into a tuple of `arity`.
 
     Every atomic value parser (see :py:func:`_parse_function_for_atomic_value`)
     already has the uniform signature ``(jsonable: JsonValue) =>
@@ -178,7 +236,10 @@ def _generate_parse_tuple_helper(arity: int) -> Stripped:
     item's parser can be passed on to the generated function as a bare
     reference, with no adapter or closure needed.
 
-    We consume `iterable` through its iterator protocol instead of
+    Just as in :py:func:`_generate_parse_array`, the iterable is checked for here
+    rather than at the point of the call.
+
+    We consume the iterable through its iterator protocol instead of
     materializing it into an ``Array`` first, so that we never pay for a copy
     we do not need. The common case -- a JSON-parsed array -- already exposes
     ``.length``, which we use for an immediate, cheap fail-fast arity check
@@ -191,7 +252,7 @@ def _generate_parse_tuple_helper(arity: int) -> Stripped:
     tuple_type = f"[{', '.join(type_params)}]"
 
     param_docs = "\n".join(
-        f" * @param parseItem{i} - to parse the item at index {i} of `iterable`"
+        f" * @param parseItem{i} - to parse the item at index {i} of `jsonable`"
         for i in range(arity)
     )
     type_param_docs = "\n".join(
@@ -238,18 +299,28 @@ if (item{i}OrError.error !== null) {{
     return Stripped(
         f"""\
 /**
- * Parse `iterable` into a tuple of {arity} item(s) by calling `parseItem0`,
+ * Parse `jsonable` into a tuple of {arity} item(s) by calling `parseItem0`,
  * `parseItem1`, *etc.* on the correspondingly positioned item.
  *
- * @param iterable - expected to contain exactly {arity} item(s)
+ * @param jsonable - expected to be an array of exactly {arity} item(s)
 {param_docs}
  * @returns parsed tuple, or an error
 {type_param_docs}
  */
 function {function_name}<{type_params_joined}>(
-{I}iterable: Iterable<JsonValue>,
+{I}jsonable: JsonValue,
 {I}{indent_but_first_line(params_joined, I)}
 ): AasCommon.Either<{tuple_type}, DeserializationError> {{
+{I}const iterableError = checkIsIterable(jsonable);
+{I}if (iterableError !== null) {{
+{II}return new AasCommon.Either<{tuple_type}, DeserializationError>(
+{III}null,
+{III}iterableError
+{II});
+{I}}}
+
+{I}const iterable = <Iterable<JsonValue>>jsonable;
+
 {I}if (Array.isArray(iterable) && iterable.length !== {arity}) {{
 {II}return newDeserializationError<{tuple_type}>(
 {III}`Expected exactly {arity} item(s) in the array, ` +
@@ -499,74 +570,92 @@ export function {function_name}(
     )
 
 
-def _generate_dispatch_map_for_interface(
-    interface: intermediate.Interface,
+def _parse_properties_function_name(cls: intermediate.ConcreteClass) -> Identifier:
+    """Give out the name of the function parsing the properties of ``cls``."""
+    return typescript_naming.function_name(
+        Identifier(f"parse_properties_of_{cls.name}")
+    )
+
+
+def _generate_dispatch_case(cls: intermediate.ConcreteClass) -> Stripped:
+    """
+    Generate the ``switch`` case dispatching on the model type of ``cls``.
+
+    The case calls the parser of the properties directly, so a dispatched instance
+    is neither cast nor checked for its model type a second time, and no dispatching
+    function can be re-entered.
+
+    An implementation-specific class has no parser of its properties -- its whole
+    function comes from a snippet -- so its own function is called instead. It takes
+    a ``JsonValue``, of which a ``JsonObject`` is one.
+    """
+    model_type_literal = typescript_common.string_literal(
+        naming.json_model_type(cls.name)
+    )
+
+    if cls.is_implementation_specific:
+        callee = typescript_naming.function_name(
+            Identifier(f"{cls.name}_from_jsonable")
+        )
+    else:
+        callee = _parse_properties_function_name(cls)
+
+    return Stripped(
+        f"""\
+case {model_type_literal}:
+{I}return {callee}(jsonObject);"""
+    )
+
+
+def _generate_dispatch_on_model_type(
+    type_name: Identifier,
+    implementers: Sequence[intermediate.ConcreteClass],
 ) -> Stripped:
-    """Generate a mapping model type 🠒 de-serialization function."""
-    assert len(interface.base.concrete_descendants) > 0, (
-        "Expected a class to have concrete descendants. "
-        "Otherwise we do not know how to de-serialize it."
-    )
+    """
+    Generate the body which dispatches on the model type of the JSON object.
 
-    mapping_name = typescript_naming.constant_name(
-        Identifier(f"{interface.name}_from_jsonable_dispatch")
-    )
+    The ``jsonObject`` is expected to be in scope. We branch with a ``switch``
+    rather than with a map of the parsers, for the same reasons as in
+    :py:func:`_generate_parse_properties_of_class`: a string ``switch`` compares
+    interned strings, which is a comparison of pointers, and every case is a call
+    site of its own and hence monomorphic, where a map has to call through a single
+    site shared by every implementer. Measured on V8, the map does not pay off here
+    either -- the ``switch`` takes about two thirds of its time even at
+    38 implementers.
+    """
+    cases = [_generate_dispatch_case(implementer) for implementer in implementers]
 
-    interface_name = typescript_naming.interface_name(interface.name)
-
-    mapping_writer = io.StringIO()
-    mapping_writer.write(
-        f"""\
-const {mapping_name} =
-{I}new Map<
-{II}string,
-{II}(JsonValue) => AasCommon.Either<
-{III}AasTypes.{interface_name},
-{III}DeserializationError
-{II}>
-{I}>(
-{II}[
-"""
-    )
-
-    for i, implementer in enumerate(interface.implementers):
-        if len(implementer.concrete_descendants) == 0:
-            function_name_for_implementer = typescript_naming.function_name(
-                Identifier(f"{implementer.name}_from_jsonable")
-            )
-        else:
-            # NOTE (mristin):
-            # We can not use the public function as it would end in an endless dispatch
-            # loop. Hence, we introduce a function which assumes the type and explicitly
-            # does not dispatch.
-            function_name_for_implementer = typescript_naming.function_name(
-                Identifier(f"{implementer.name}_from_jsonable_without_dispatch")
-            )
-
-        implementer_literal = typescript_common.string_literal(
-            naming.json_model_type(implementer.name)
-        )
-
-        mapping_writer.write(
+    cases.append(
+        Stripped(
             f"""\
-{III}[
-{IIII}{implementer_literal},
-{IIII}{function_name_for_implementer}
-{III}]"""
-        )
-
-        if i < len(interface.implementers) - 1:
-            mapping_writer.write(",\n")
-        else:
-            mapping_writer.write("\n")
-
-    mapping_writer.write(
-        f"""\
-{II}]
+default:
+{I}return newDeserializationError<AasTypes.{type_name}>(
+{II}`Unexpected model type for {type_name}: ${{modelType}}`
 {I});"""
+        )
     )
 
-    return Stripped(mapping_writer.getvalue())
+    cases_joined = "\n\n".join(cases)
+
+    return Stripped(
+        f"""\
+const modelTypeOrError = extractModelType(jsonObject);
+if (modelTypeOrError.error !== null) {{
+{I}return new AasCommon.Either<
+{II}AasTypes.{type_name},
+{II}DeserializationError
+{I}>(
+{II}null,
+{II}modelTypeOrError.error
+{I});
+}}
+
+const modelType = modelTypeOrError.mustValue();
+
+switch (modelType) {{
+{I}{indent_but_first_line(cases_joined, I)}
+}}"""
+    )
 
 
 def _generate_dispatch_from_jsonable(interface: intermediate.Interface) -> Stripped:
@@ -577,8 +666,8 @@ def _generate_dispatch_from_jsonable(interface: intermediate.Interface) -> Strip
 
     interface_name = typescript_naming.interface_name(interface.name)
 
-    mapping_name = typescript_naming.constant_name(
-        Identifier(f"{interface.name}_from_jsonable_dispatch")
+    dispatch = _generate_dispatch_on_model_type(
+        type_name=interface_name, implementers=interface.implementers
     )
 
     return Stripped(
@@ -608,106 +697,9 @@ export function {function_name}(
 {I}}}
 {I}const jsonObject = <JsonObject>jsonable;
 
-{I}const modelType = jsonObject["modelType"];
-{I}if (modelType === undefined) {{
-{II}return newDeserializationError<AasTypes.{interface_name}>(
-{III}"The required property modelType is missing"
-{II});
-{I}}}
-
-{I}if (typeof modelType !== "string") {{
-{II}return newDeserializationError<AasTypes.{interface_name}>(
-{III}`Expected the property modelType to be a string, but got: ${{typeof modelType}}`
-{II});
-{I}}}
-
-{I}const dispatch = {mapping_name}.get(modelType);
-{I}if (dispatch === undefined) {{
-{II}return newDeserializationError<AasTypes.{interface_name}>(
-{III}`Unexpected model type for {interface_name}: ${{modelType}}`
-{II});
-{I}}}
-
-{I}return dispatch(jsonable);
+{I}{indent_but_first_line(dispatch, I)}
 }}"""
     )
-
-
-@require(
-    lambda named_union: any(
-        implementer.serialization.with_model_type
-        for implementer in named_union.implementers
-    )
-)
-def _generate_dispatch_map_for_named_union(
-    named_union: intermediate.NamedUnion,
-) -> Stripped:
-    """Generate a mapping model type 🠒 de-serialization function for ``named_union``."""
-    mapping_name = typescript_naming.constant_name(
-        Identifier(f"{named_union.name}_from_jsonable_dispatch")
-    )
-
-    union_name = typescript_naming.union_name(named_union.name)
-
-    with_model_type = [
-        implementer
-        for implementer in named_union.implementers
-        if implementer.serialization.with_model_type
-    ]
-
-    mapping_writer = io.StringIO()
-    mapping_writer.write(
-        f"""\
-const {mapping_name} =
-{I}new Map<
-{II}string,
-{II}(JsonValue) => AasCommon.Either<
-{III}AasTypes.{union_name},
-{III}DeserializationError
-{II}>
-{I}>(
-{II}[
-"""
-    )
-
-    for i, implementer in enumerate(with_model_type):
-        if len(implementer.concrete_descendants) == 0:
-            function_name_for_implementer = typescript_naming.function_name(
-                Identifier(f"{implementer.name}_from_jsonable")
-            )
-        else:
-            # NOTE (mristin):
-            # We can not use the public function as it would end in an endless dispatch
-            # loop. Hence, we introduce a function which assumes the type and explicitly
-            # does not dispatch.
-            function_name_for_implementer = typescript_naming.function_name(
-                Identifier(f"{implementer.name}_from_jsonable_without_dispatch")
-            )
-
-        implementer_literal = typescript_common.string_literal(
-            naming.json_model_type(implementer.name)
-        )
-
-        mapping_writer.write(
-            f"""\
-{III}[
-{IIII}{implementer_literal},
-{IIII}{function_name_for_implementer}
-{III}]"""
-        )
-
-        if i < len(with_model_type) - 1:
-            mapping_writer.write(",\n")
-        else:
-            mapping_writer.write("\n")
-
-    mapping_writer.write(
-        f"""\
-{II}]
-{I});"""
-    )
-
-    return Stripped(mapping_writer.getvalue())
 
 
 def _generate_named_union_from_jsonable(
@@ -758,29 +750,18 @@ const jsonObject = <JsonObject>jsonable;"""
     ]  # type: List[Stripped]
 
     if len(with_model_type) > 0:
-        mapping_name = typescript_naming.constant_name(
-            Identifier(f"{named_union.name}_from_jsonable_dispatch")
+        # NOTE (mristin):
+        # The model type is optional here, since the remaining implementers are
+        # told apart structurally, so we test for its presence before reading it.
+        dispatch = _generate_dispatch_on_model_type(
+            type_name=union_name, implementers=with_model_type
         )
 
         blocks.append(
             Stripped(
                 f"""\
-const modelType = jsonObject["modelType"];
-if (modelType !== undefined) {{
-{I}if (typeof modelType !== "string") {{
-{II}return newDeserializationError<AasTypes.{union_name}>(
-{III}`Expected the property modelType to be a string, but got: ${{typeof modelType}}`
-{II});
-{I}}}
-
-{I}const dispatch = {mapping_name}.get(modelType);
-{I}if (dispatch === undefined) {{
-{II}return newDeserializationError<AasTypes.{union_name}>(
-{III}`Unexpected model type for {union_name}: ${{modelType}}`
-{II});
-{I}}}
-
-{I}return dispatch(jsonable);
+if (jsonObject["modelType"] !== undefined) {{
+{I}{indent_but_first_line(dispatch, I)}
 }}"""
             )
         )
@@ -815,9 +796,22 @@ if (modelType !== undefined) {{
             f"already been verified in the intermediate representation."
         )
 
-        implementer_function = typescript_naming.function_name(
-            Identifier(f"{implementer.name}_from_jsonable")
-        )
+        # NOTE (mristin):
+        # We call the parser of the properties directly. The implementer has no
+        # model type -- that is why it is told apart structurally in the first
+        # place -- so it has nothing left to dispatch on, and ``jsonObject`` has
+        # already been cast.
+        if implementer.is_implementation_specific:
+            implementer_call = Stripped(
+                f"""\
+{typescript_naming.function_name(
+    Identifier(f"{implementer.name}_from_jsonable")
+)}(jsonObject)"""
+            )
+        else:
+            implementer_call = Stripped(
+                f"{_parse_properties_function_name(implementer)}(jsonObject)"
+            )
 
         conditions = [
             f"jsonObject[{typescript_common.string_literal(json_name)}] "
@@ -841,7 +835,7 @@ if (
             Stripped(
                 f"""\
 {if_stmt}
-{I}return {implementer_function}(jsonable);
+{I}return {implementer_call};
 }}"""
             )
         )
@@ -942,463 +936,303 @@ def _parse_function_for_atomic_value(
     return Stripped(function_name)
 
 
-def _generate_setter(cls: intermediate.ConcreteClass) -> Stripped:
-    """Generate a class which allows us to dispatch de-serialization for properties."""
-    blocks = []  # type: List[Stripped]
+def _generate_parse_call_for_property(prop: intermediate.Property) -> Stripped:
+    """
+    Generate the call which de-serializes the value of ``prop``.
 
-    for i, prop in enumerate(cls.properties):
-        prop_name = typescript_naming.property_name(prop.name)
-        prop_type = typescript_common.generate_type(
+    Every de-serialization has one and the same shape, ``(jsonable: JsonValue) =>
+    AasCommon.Either<T, DeserializationError>``, and ``jsonableValue`` already is
+    the whole value of the property -- unlike in XML, a JSON value is not framed by
+    anything -- so there is nothing to compose at the point of the call. A list and
+    a tuple are the only two which take more than the value, and they take the
+    parsers of their items as bare references, so no closure is allocated here
+    either.
+
+    We deliberately do not give a list a parser of its own named after its item
+    type, as the C#, Java and Python generators do, and as the XML side has to.
+    A ``supplementalSemanticIds`` would then read::
+
+        parse_ListOf_Reference(jsonableValue)
+
+    instead of::
+
+        parseArray(jsonableValue, referenceFromJsonable)
+
+    and the module would carry one such function per *distinct item type* --
+    eighteen of them on the AAS meta-model, between them covering all of its
+    124 list-typed properties. They are named by the moniker of the item type,
+    exactly as on the XML side: ``parse_ListOf_Reference``,
+    ``parse_ListOf_Extension``, ``parse_ListOf_ISubmodelElement``, and so on.
+    Each one would be a copy of the loop of ``parseArray`` with ``parseItem``
+    replaced by the parser of its item::
+
+        function parse_ListOf_Reference(
+          jsonable: JsonValue
+        ): AasCommon.Either<Array<AasTypes.Reference>, DeserializationError> {
+          // ... the very body of ``parseArray``, except that the item is parsed
+          // by ``referenceFromJsonable`` instead of by ``parseItem``
+        }
+
+    That copy is the whole point of the exercise: it would monomorphise the call
+    of the item parser, which is megamorphic in the shared ``parseArray`` -- one
+    call site there serves every item type of the meta-model. A function which
+    merely forwarded to ``parseArray`` would buy nothing, as V8 does not inline
+    it.
+
+    It is not worth it here. An item of a list in a meta-model is a whole class
+    whose parsing dwarfs that one call: on the AAS meta-model the eighteen
+    parsers measured within the noise of the de-serialization of an environment,
+    for some 560 more lines of output.
+
+    The arguments always go one per line. The consuming project runs Prettier over
+    the generated code, which joins back whatever fits on one, so measuring the
+    width here would only make the generator harder to read for no effect on
+    the code which is finally compiled.
+    """
+    type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+    if isinstance(
+        type_anno,
+        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
+    ):
+        parse_function = _parse_function_for_atomic_value(type_anno)
+
+        return Stripped(
+            f"""\
+{parse_function}(
+{I}jsonableValue
+)"""
+        )
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
+            "We chose to implement only a very limited pattern matching; "
+            "see intermediate._translate_._verify_only_simple_type_patterns"
+        )
+
+        parse_item_function = _parse_function_for_atomic_value(type_anno.items)
+
+        return Stripped(
+            f"""\
+parseArray(
+{I}jsonableValue,
+{I}{parse_item_function}
+)"""
+        )
+
+    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        item_types = []  # type: List[Stripped]
+        item_parse_functions = []  # type: List[str]
+        for item_type_anno in type_anno.items:
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, "
+                "constrained primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so no "
+                "nested optionals, lists or tuples are expected here."
+            )
+
+            item_types.append(
+                typescript_common.generate_type(
+                    item_type_anno, types_module=Identifier("AasTypes")
+                )
+            )
+            item_parse_functions.append(
+                _parse_function_for_atomic_value(item_type_anno)
+            )
+
+        item_types_joined = ", ".join(item_types)
+        item_parse_functions_joined = ",\n".join(
+            f"{I}{item_parse_function}" for item_parse_function in item_parse_functions
+        )
+
+        return Stripped(
+            f"""\
+parseTuple{len(type_anno.items)}<{item_types_joined}>(
+{I}jsonableValue,
+{item_parse_functions_joined}
+)"""
+        )
+
+    assert_never(type_anno)
+
+
+def _generate_parse_case(
+    json_name: str, var_name: Identifier, call: Stripped
+) -> Stripped:
+    """
+    Generate the ``switch`` case which de-serializes the property ``json_name``.
+
+    Both halves of the result are taken unconditionally. On a failure the value is
+    ``null``, and the property loop returns as soon as it sees the error, so what we
+    assign to the variable is never read.
+    """
+    return Stripped(
+        f"""\
+case {typescript_common.string_literal(json_name)}: {{
+{I}const parsed = {indent_but_first_line(call, I)};
+{I}propertyError = parsed.error;
+{I}{var_name} = parsed.value;
+{I}break;
+}}"""
+    )
+
+
+def _generate_parse_properties_of_class(cls: intermediate.ConcreteClass) -> Stripped:
+    """
+    Generate the function parsing the properties of a concrete class.
+
+    The ``modelType``, if the class carries one, is expected to have been verified
+    by the caller -- by a dispatcher, which matched it in order to arrive here at
+    all, or by the public function of the class -- so it is only skipped here.
+
+    The properties are de-serialized straight into the locals which the constructor
+    is called with, since the loop is generated per class and a shared one could not
+    write the locals of its caller.
+
+    We branch with a ``switch`` rather than with a map of the parsers. A string
+    ``switch`` is a chain of comparisons on V8 and hence linear in the number of
+    the properties, where a map is not, but the comparisons are of interned strings
+    and thus of pointers, and every case is a call site of its own and hence
+    monomorphic, where a map has to call through a single site shared by every
+    property. Measured on V8, the map does not pay off at any shape: the ``switch``
+    takes a third of the time at six properties and about a half at twenty, and it
+    stays ahead even when the input carries five times more unknown keys than
+    known ones.
+    """
+    # fmt: off
+    assert (
+            sorted(
+                (arg.name, str(arg.type_annotation))
+                for arg in cls.constructor.arguments
+            ) == sorted(
+                (prop.name, str(prop.type_annotation))
+                for prop in cls.properties
+            )
+    ), (
+        "(mristin) We assume that the properties and constructor arguments "
+        "are identical at this point. If this is not the case, we have to re-write the "
+        "logic substantially! Please contact the developers if you see this."
+    )
+    # fmt: on
+
+    cls_name = typescript_naming.class_name(cls.name)
+
+    var_declarations = []  # type: List[Stripped]
+    required_checks = []  # type: List[Stripped]
+    parse_cases = []  # type: List[Stripped]
+
+    var_name_by_property = {}  # type: Dict[Identifier, Identifier]
+
+    for prop in cls.properties:
+        var_name = typescript_naming.variable_name(Identifier(f"the_{prop.name}"))
+        var_name_by_property[prop.name] = var_name
+
+        var_type = typescript_common.generate_type(
             prop.type_annotation, types_module=Identifier("AasTypes")
         )
 
         # NOTE (mristin):
-        # We make all the properties optional since we switch over the properties
-        # during the de-serialization.
+        # We make all the variables optional since the properties can come in any
+        # order, so we can not tell a missing one from one which we have not read yet.
         if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            prop_type = Stripped(f"{prop_type} | null")
+            var_type = Stripped(f"{var_type} | null")
 
-        blocks.append(Stripped(f"{prop_name}: {prop_type} = null;"))
-
-    if cls.serialization.with_model_type:
-        # NOTE (mristin):
-        # If the serialization requires a model type, we consequently parse and set it
-        # in the setter. The model type thus obtained is *not* used for any dispatch. We
-        # only use this value for verification to make sure that the model type
-        # of the instances is consistent with the expected value for its concrete
-        # class. This will be performed even though the code might have had to parse
-        # model type before for the dispatch. We decided to double-check to cover the
-        # case where a dispatch is *unnecessary* (*e.g.*, the caller knows the expected
-        # runtime type), but the model type might still be invalid in the input. Hence,
-        # when the dispatch is *necessary*, the model type JSON property will be parsed
-        # twice, which is a cost we currently find acceptable.
-        prop_name = typescript_naming.property_name(Identifier("model_type"))
-        blocks.append(
-            Stripped(
-                f"""\
-// Used only for verification, not for dispatch!
-{prop_name}: string | null = null;"""
+            message_literal = typescript_common.string_literal(
+                f"The required property {prop.json_name!r} is missing"
             )
-        )
-
-    for i, prop in enumerate(cls.properties):
-        prop_name = typescript_naming.property_name(prop.name)
-
-        type_anno = intermediate.beneath_optional(prop.type_annotation)
-        if isinstance(
-            type_anno,
-            (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-        ):
-            function_name = _parse_function_for_atomic_value(type_anno)
-            body = Stripped(
-                f"""\
-const parsedOrError = {function_name}(
-{I}jsonable
-);
-if (parsedOrError.error !== null) {{
-{I}return parsedOrError.error;
-}} else {{
-{I}this.{prop_name} = parsedOrError.mustValue();
-{I}return null;
-}}"""
-            )
-
-        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-            assert isinstance(
-                type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
-            ), (
-                "We chose to implement only a very limited pattern matching; "
-                "see intermediate._translate_._verify_only_simple_type_patterns"
-            )
-
-            parse_function = _parse_function_for_atomic_value(type_anno.items)
-
-            body = Stripped(
-                f"""\
-const iterableError = checkIsIterable(jsonable);
-if (iterableError !== null) {{
-{I}return iterableError;
-}}
-
-const iterable = <Iterable<JsonValue>>jsonable;
-
-const itemsOrError = parseArray(
-{I}iterable,
-{I}{parse_function}
-);
-if (itemsOrError.error !== null) {{
-{I}return itemsOrError.error;
-}}
-
-this.{prop_name} = itemsOrError.mustValue();
-return null;"""
-            )
-
-        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            item_count = len(type_anno.items)
-
-            item_types = []  # type: List[Stripped]
-            item_parse_functions = []  # type: List[Stripped]
-            for item_type_anno in type_anno.items:
-                assert isinstance(
-                    item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
-                ), (
-                    "Tuple items are restricted to atomic types (primitives, "
-                    "constrained primitives, classes and enumerations) by "
-                    "intermediate._translate._verify_only_simple_type_patterns, so no "
-                    "nested optionals, lists or tuples are expected here."
-                )
-
-                item_types.append(
-                    typescript_common.generate_type(
-                        item_type_anno, types_module=Identifier("AasTypes")
-                    )
-                )
-                item_parse_functions.append(
-                    _parse_function_for_atomic_value(item_type_anno)
-                )
-
-            parse_tuple_function_name = f"parseTuple{item_count}"
-            item_types_joined = ", ".join(item_types)
-            item_parse_functions_joined = ",\n".join(item_parse_functions)
-
-            body = Stripped(
-                f"""\
-const iterableError = checkIsIterable(jsonable);
-if (iterableError !== null) {{
-{I}return iterableError;
-}}
-
-const iterable = <Iterable<JsonValue>>jsonable;
-
-const tupleOrError = {parse_tuple_function_name}<{item_types_joined}>(
-{I}iterable,
-{I}{indent_but_first_line(item_parse_functions_joined, I)}
-);
-if (tupleOrError.error !== null) {{
-{I}return tupleOrError.error;
-}}
-
-this.{prop_name} = tupleOrError.mustValue();
-return null;"""
-            )
-
-        else:
-            assert_never(type_anno)
-
-        method_name = typescript_naming.method_name(
-            Identifier(f"set_{prop.name}_from_jsonable")
-        )
-
-        method_writer = io.StringIO()
-        method_writer.write(
-            f"""\
-/**
- * Parse `jsonable` as the value of {{@link {prop_name}}}.
- *
- * @param jsonable - to be parsed
- * @returns error, if any
- */
-{method_name}(
-{I}jsonable: JsonValue
-): DeserializationError | null {{
-{I}{indent_but_first_line(body, I)}
-}}"""
-        )
-
-        blocks.append(Stripped(method_writer.getvalue()))
-
-    if cls.serialization.with_model_type:
-        method_name = typescript_naming.method_name(
-            Identifier("set_model_type_from_jsonable")
-        )
-        prop_name = typescript_naming.property_name(Identifier("model_type"))
-
-        blocks.append(
-            Stripped(
-                f"""\
-/**
- * Parse `jsonable` as the model type of the concrete instance.
- *
- * This is intended only for verification, and no dispatch is performed.
- *
- * @param jsonable - to be parsed
- * @returns error, if any
- */
-{method_name}(
-{I}jsonable: JsonValue
-): DeserializationError | null {{
-{I}const parsedOrError = stringFromJsonable(
-{II}jsonable
-{I});
-{I}if (parsedOrError.error !== null) {{
-{II}return parsedOrError.error;
-{I}}} else {{
-{II}this.{prop_name} = parsedOrError.mustValue();
-{II}return null;
-{I}}}
-}}"""
-            )
-        )
-
-    cls_name = typescript_naming.class_name(cls.name)
-    setter_cls_name = typescript_naming.class_name(Identifier(f"Setter_for_{cls.name}"))
-
-    writer = io.StringIO()
-    writer.write(
-        f"""\
-/**
- * Provide de-serialize & set methods for properties
- * of {{@link {typescript_common.TYPES_MODULE}!{cls_name}}}.
- */
-class {setter_cls_name} {{
-"""
-    )
-
-    for i, block in enumerate(blocks):
-        if i > 0:
-            writer.write("\n\n")
-
-        writer.write(textwrap.indent(block, I))
-
-    writer.write("\n}")
-
-    return Stripped(writer.getvalue())
-
-
-def _generate_setter_map(cls: intermediate.ConcreteClass) -> Stripped:
-    """Generate a map ``JSON property name`` -> deserialization on a setter."""
-    # fmt: off
-    assert (
-            sorted(
-                (arg.name, str(arg.type_annotation))
-                for arg in cls.constructor.arguments
-            ) == sorted(
-                (prop.name, str(prop.type_annotation))
-                for prop in cls.properties
-            )
-    ), (
-        "(mristin, 2022-11-25) We assume that the properties and constructor arguments "
-        "are identical at this point. If this is not the case, we have to re-write the "
-        "logic substantially! Please contact the developers if you see this."
-    )
-    # fmt: on
-
-    identifiers_expressions = []  # type: List[Tuple[str, Stripped]]
-
-    setter_cls_name = typescript_naming.class_name(Identifier(f"Setter_for_{cls.name}"))
-
-    for prop in cls.properties:
-        json_identifier: str = prop.json_name
-        method_name = typescript_naming.method_name(
-            Identifier(f"set_{prop.name}_from_jsonable")
-        )
-
-        identifiers_expressions.append(
-            (json_identifier, Stripped(f"{setter_cls_name}.prototype.{method_name}"))
-        )
-
-    map_name = typescript_naming.constant_name(Identifier(f"setter_map_for_{cls.name}"))
-
-    writer = io.StringIO()
-    writer.write(
-        f"""\
-const {map_name} =
-{I}new Map<
-{II}string,
-{II}(
-{III}jsonable: JsonValue
-{II}) => DeserializationError | null
-{I}>(
-{II}[
-"""
-    )
-
-    for identifier, expression in identifiers_expressions:
-        writer.write(
-            f"""\
-{III}[
-{IIII}{typescript_common.string_literal(identifier)},
-{IIII}{indent_but_first_line(expression, IIII)}
-{III}],
-"""
-        )
-
-    if cls.serialization.with_model_type:
-        # NOTE (mristin):
-        # If the serialization requires a model type, we consequently parse and set it
-        # in the setter. The model type thus obtained is *not* used for any dispatch. We
-        # only use this value for verification to make sure that the model type
-        # of the instances is consistent with the expected value for its concrete
-        # class. This will be performed even though the code might have had to parse
-        # model type before for the dispatch. We decided to double-check to cover the
-        # case where a dispatch is *unnecessary* (*e.g.*, the caller knows the expected
-        # runtime type), but the model type might still be invalid in the input. Hence,
-        # when the dispatch is *necessary*, the model type JSON property will be parsed
-        # twice, which is a cost we currently find acceptable.
-        json_identifier = naming.json_property(Identifier("model_type"))
-        method_name = typescript_naming.method_name(
-            Identifier("set_model_type_from_jsonable")
-        )
-        expression = Stripped(f"{setter_cls_name}.prototype.{method_name}")
-
-        writer.write(
-            f"""\
-{III}[
-{IIII}// The model type here is used only for verification, not for dispatch.
-{IIII}{typescript_common.string_literal(json_identifier)},
-{IIII}{indent_but_first_line(expression, IIII)}
-{III}],
-"""
-        )
-
-    writer.write(
-        f"""\
-{II}]
-{I});"""
-    )
-
-    return Stripped(writer.getvalue())
-
-
-def _generate_concrete_class_from_jsonable(
-    cls: intermediate.ConcreteClass,
-) -> Stripped:
-    """
-    Generate the deserialization function for a concrete class.
-
-    This function performs no dispatch. If it de-serializes a concrete class with
-    concrete descendants, we have to provide a different name. Otherwise, it would
-    shadow the name for the dispatch function.
-    """
-    # fmt: off
-    assert (
-            sorted(
-                (arg.name, str(arg.type_annotation))
-                for arg in cls.constructor.arguments
-            ) == sorted(
-                (prop.name, str(prop.type_annotation))
-                for prop in cls.properties
-            )
-    ), (
-        "(mristin, 2022-11-30) We assume that the properties and constructor arguments "
-        "are identical at this point. If this is not the case, we have to re-write the "
-        "logic substantially! Please contact the developers if you see this."
-    )
-    # fmt: on
-
-    cls_name = typescript_naming.class_name(cls.name)
-
-    setter_cls_name = typescript_naming.class_name(Identifier(f"Setter_for_{cls.name}"))
-
-    blocks = [
-        Stripped(
-            f"""\
-const objectError = checkIsJsonObject(jsonable);
-if (objectError !== null) {{
-{I}return new AasCommon.Either<
-{II}AasTypes.{cls_name},
-{II}DeserializationError
-{I}>(
-{II}null,
-{II}objectError
-{I});
-}}
-const jsonObject = <JsonObject>jsonable;"""
-        ),
-        Stripped(f"const setter = new {setter_cls_name}();"),
-    ]  # type: List[Stripped]
-
-    # region Switch on property name
-
-    map_name = typescript_naming.constant_name(Identifier(f"setter_map_for_{cls.name}"))
-
-    blocks.append(
-        Stripped(
-            f"""\
-for (const key in jsonObject) {{
-{I}const jsonableValue = jsonObject[key];
-{I}const setterMethod =
-{II}{map_name}.get(key);
-
-{I}// NOTE (mristin):
-{I}// Since we conflate here a JavaScript object with a JSON object, we ignore
-{I}// properties which we do not know how to de-serialize and assume they are
-{I}// related to the *JavaScript* properties of the object or `Object` prototype.
-{I}if (setterMethod === undefined) {{
-{II}continue;
-{I}}}
-
-{I}const error = setterMethod.call(setter, jsonableValue);
-{I}if (error !== null) {{
-{II}error.path.prepend(
-{III}new PropertySegment(jsonObject, key)
-{II});
-{II}return new AasCommon.Either<
-{III}AasTypes.{cls_name},
-{III}DeserializationError
-{II}>(
-{IIII}null,
-{IIII}error
-{III});
-{I}}}
-}}"""
-        )
-    )
-
-    # region Check required properties
-
-    required_checks = []  # type: List[Stripped]
-    for i, prop in enumerate(cls.properties):
-        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            continue
-
-        prop_name = typescript_naming.property_name(prop.name)
-
-        message_literal = typescript_common.string_literal(
-            f"The required property {prop.json_name!r} is missing"
-        )
-        required_checks.append(
-            Stripped(
-                f"""\
-if (setter.{prop_name} === null) {{
+            required_checks.append(
+                Stripped(
+                    f"""\
+if ({var_name} === null) {{
 {I}return newDeserializationError<
 {II}AasTypes.{cls_name}
 {I}>(
 {II}{message_literal}
 {I});
 }}"""
+                )
+            )
+
+        var_declarations.append(Stripped(f"let {var_name}: {var_type} = null;"))
+
+        parse_cases.append(
+            _generate_parse_case(
+                json_name=prop.json_name,
+                var_name=var_name,
+                call=_generate_parse_call_for_property(prop),
+            )
+        )
+
+    if cls.serialization.with_model_type:
+        model_type_literal = typescript_common.string_literal(
+            naming.json_property(Identifier("model_type"))
+        )
+
+        parse_cases.append(
+            Stripped(
+                f"""\
+case {model_type_literal}: {{
+{I}// The model type has already been verified by the caller.
+{I}break;
+}}"""
+            )
+        )
+
+    blocks = []  # type: List[Stripped]
+
+    if len(parse_cases) > 0:
+        blocks.append(Stripped("\n".join(var_declarations)))
+
+        parse_cases.append(
+            Stripped(
+                f"""\
+// NOTE (mristin):
+// Since we conflate here a JavaScript object with a JSON object, we ignore
+// properties which we do not know how to de-serialize and assume they are
+// related to the *JavaScript* properties of the object or `Object` prototype.
+default: {{
+{I}continue;
+}}"""
+            )
+        )
+
+        parse_cases_joined = "\n\n".join(parse_cases)
+
+        # NOTE (mristin):
+        # The property name is marked on the error once, after the ``switch``, since
+        # a case is matched exactly when ``key`` is its literal, so the two are one
+        # and the same name.
+        blocks.append(
+            Stripped(
+                f"""\
+for (const key in jsonObject) {{
+{I}const jsonableValue = jsonObject[key];
+
+{I}let propertyError: DeserializationError | null = null;
+{I}switch (key) {{
+{II}{indent_but_first_line(parse_cases_joined, II)}
+{I}}}
+
+{I}if (propertyError !== null) {{
+{II}propertyError.path.prepend(
+{III}new PropertySegment(jsonObject, key)
+{II});
+{II}return new AasCommon.Either<
+{III}AasTypes.{cls_name},
+{III}DeserializationError
+{II}>(
+{III}null,
+{III}propertyError
+{II});
+{I}}}
+}}"""
             )
         )
 
     if len(required_checks) > 0:
         blocks.append(Stripped("\n\n".join(required_checks)))
-
-    # endregion
-
-    if cls.serialization.with_model_type:
-        model_type = naming.json_model_type(cls.name)
-        prop_name = typescript_naming.property_name(Identifier("model_type"))
-
-        blocks.append(
-            Stripped(
-                f"""\
-const modelTypeError = checkModelType(setter.{prop_name}, "{model_type}");
-if (modelTypeError !== null) {{
-{I}return new AasCommon.Either<
-{II}AasTypes.{cls_name},
-{II}DeserializationError
-{I}>(
-{II}null,
-{II}modelTypeError
-{I});
-}}"""
-            )
-        )
-
-    # region Pass in arguments to the constructor
-
-    cls_name = typescript_naming.class_name(cls.name)
 
     if len(cls.constructor.arguments) == 0:
         blocks.append(
@@ -1426,11 +1260,7 @@ return new AasCommon.Either<
         )
 
         for i, arg in enumerate(cls.constructor.arguments):
-            prop = cls.properties_by_name[arg.name]
-
-            prop_name = typescript_naming.property_name(prop.name)
-
-            init_writer.write(f"{II}setter.{prop_name}")
+            init_writer.write(f"{II}{var_name_by_property[arg.name]}")
 
             if i < len(cls.constructor.arguments) - 1:
                 init_writer.write(",\n")
@@ -1445,67 +1275,143 @@ return new AasCommon.Either<
         )
 
         blocks.append(Stripped(init_writer.getvalue()))
-    # endregion
 
-    writer = io.StringIO()
-
-    if len(cls._concrete_descendants) == 0:
-        function_name = typescript_naming.function_name(
-            Identifier(f"{cls.name}_from_jsonable")
-        )
-    else:
-        function_name = typescript_naming.function_name(
-            Identifier(f"{cls.name}_from_jsonable_without_dispatch")
-        )
+    function_name = _parse_properties_function_name(cls)
 
     description_blocks = [
         Stripped(
             f"""\
-Parse an instance of {{@link {typescript_common.TYPES_MODULE}!{cls_name}}} from the JSON-able
-structure `jsonable`."""
+Parse the properties of an instance
+of {{@link {typescript_common.TYPES_MODULE}!{cls_name}}} from `jsonObject`."""
         )
     ]  # type: List[Stripped]
 
-    if len(cls.concrete_descendants) > 0:
-        function_name_with_dispatch = typescript_naming.function_name(
-            Identifier(f"{cls.name}_from_jsonable")
-        )
-
+    if cls.serialization.with_model_type:
         description_blocks.append(
             Stripped(
-                f"""\
-This function performs no dispatch! It is used to parse the properties
-as-are, and already assumes the exact model type. Usually, this function
-is called from within a dispatching function, and you never call it
-directly. If you want to de-serialize an instance of
-{{@link {typescript_common.TYPES_MODULE}!{cls_name}}}, call
-{{@link {function_name_with_dispatch}}}."""
+                """\
+The `modelType` is expected to have been already verified by the caller,
+and is therefore skipped here."""
             )
         )
 
     description_blocks.append(
         Stripped(
             f"""\
+@param jsonObject - JSON object to be parsed
+@returns parsed instance of {{@link {typescript_common.TYPES_MODULE}!{cls_name}}},
+or an error if any"""
+        )
+    )
+
+    description_comment = typescript_description.documentation_comment(
+        Stripped("\n\n".join(description_blocks))
+    )
+
+    writer = io.StringIO()
+    writer.write(
+        f"""\
+{description_comment}
+function {function_name}(
+{I}jsonObject: JsonObject
+): AasCommon.Either<
+{I}AasTypes.{cls_name},
+{I}DeserializationError
+> {{
+"""
+    )
+
+    for i, block in enumerate(blocks):
+        if i > 0:
+            writer.write("\n\n")
+        writer.write(textwrap.indent(block, I))
+
+    writer.write("\n}")
+
+    return Stripped(writer.getvalue())
+
+
+@require(lambda cls: len(cls.concrete_descendants) == 0)
+def _generate_concrete_class_from_jsonable(
+    cls: intermediate.ConcreteClass,
+) -> Stripped:
+    """
+    Generate the public de-serialization function for a concrete class.
+
+    A class with concrete descendants gets a dispatching function under this very
+    name instead, see :py:func:`_generate_dispatch_from_jsonable`, so there is no
+    dispatch left to perform here.
+    """
+    cls_name = typescript_naming.class_name(cls.name)
+
+    function_name = typescript_naming.function_name(
+        Identifier(f"{cls.name}_from_jsonable")
+    )
+
+    blocks = [
+        Stripped(
+            f"""\
+const objectError = checkIsJsonObject(jsonable);
+if (objectError !== null) {{
+{I}return new AasCommon.Either<
+{II}AasTypes.{cls_name},
+{II}DeserializationError
+{I}>(
+{II}null,
+{II}objectError
+{I});
+}}
+const jsonObject = <JsonObject>jsonable;"""
+        )
+    ]  # type: List[Stripped]
+
+    if cls.serialization.with_model_type:
+        # NOTE (mristin):
+        # The model type is verified in front of the property loop so that we fail
+        # fast: a wrong one is reported without de-serializing any of the properties
+        # first. We verify it even though a dispatcher may have read it already, as
+        # a dispatch is not always necessary -- the caller may know the expected
+        # runtime type -- while the model type can be invalid in the input all
+        # the same.
+        model_type = naming.json_model_type(cls.name)
+
+        blocks.append(
+            Stripped(
+                f"""\
+const modelTypeError = checkModelType(jsonObject, "{model_type}");
+if (modelTypeError !== null) {{
+{I}return new AasCommon.Either<
+{II}AasTypes.{cls_name},
+{II}DeserializationError
+{I}>(
+{II}null,
+{II}modelTypeError
+{I});
+}}"""
+            )
+        )
+
+    blocks.append(
+        Stripped(f"return {_parse_properties_function_name(cls)}(jsonObject);")
+    )
+
+    description_comment = typescript_description.documentation_comment(
+        Stripped(
+            f"""\
+Parse an instance of {{@link {typescript_common.TYPES_MODULE}!{cls_name}}} from the JSON-able
+structure `jsonable`.
+
 @param jsonable - structure to be parsed
 @returns parsed instance of {{@link {typescript_common.TYPES_MODULE}!{cls_name}}},
 or an error if any"""
         )
     )
 
-    description = "\n\n".join(description_blocks)
-    description_comment = typescript_description.documentation_comment(
-        Stripped(description)
-    )
-
-    # NOTE (mristin):
-    # We export it only if the de-serialization of the class is equivalent to
-    # the de-serialization without a dispatch.
-    maybe_export_prefix = "export " if len(cls.concrete_descendants) == 0 else ""
-
+    writer = io.StringIO()
     writer.write(
         f"""\
 {description_comment}
-{maybe_export_prefix}function {function_name}(
+export function {function_name}(
 {I}jsonable: JsonValue
 ): AasCommon.Either<
 {I}AasTypes.{cls_name},
@@ -2274,6 +2180,7 @@ function newDeserializationError<T>(
 }}"""
         ),
         _generate_check_is_json_object(),
+        _generate_extract_model_type(),
         _generate_check_model_type(),
         _generate_check_is_iterable(),
         _generate_parse_array(),
@@ -2299,12 +2206,6 @@ function newDeserializationError<T>(
                 _generate_dispatch_from_jsonable(interface=our_type.interface)
             )
         elif isinstance(our_type, intermediate.ConcreteClass):
-            if len(our_type.concrete_descendants) > 0:
-                assert our_type.interface is not None
-                blocks.append(
-                    _generate_dispatch_from_jsonable(interface=our_type.interface)
-                )
-
             if our_type.is_implementation_specific:
                 implementation_key = specific_implementations.ImplementationKey(
                     f"Jsonization/{our_type.name}_from_jsonable.ts"
@@ -2321,56 +2222,25 @@ function newDeserializationError<T>(
                         )
                     )
                     continue
-            else:
-                # NOTE (mristin):
-                # While TypeScript supports ``switch`` statement, it is not guaranteed
-                # to run in sublinear time. Hence, we have to create a map with set
-                # methods, see:
-                # https://stackoverflow.com/questions/41109196/is-javascript-switch-statement-linear-or-constant-time
-                blocks.append(_generate_setter(cls=our_type))
 
-                blocks.append(_generate_concrete_class_from_jsonable(cls=our_type))
+                blocks.append(implementation)
+            else:
+                blocks.append(_generate_parse_properties_of_class(cls=our_type))
+
+                if len(our_type.concrete_descendants) == 0:
+                    blocks.append(_generate_concrete_class_from_jsonable(cls=our_type))
+
+            if len(our_type.concrete_descendants) > 0:
+                assert our_type.interface is not None
+                blocks.append(
+                    _generate_dispatch_from_jsonable(interface=our_type.interface)
+                )
 
         elif isinstance(our_type, intermediate.NamedUnion):
             blocks.append(_generate_named_union_from_jsonable(named_union=our_type))
 
         else:
             assert_never(our_type)
-
-    # NOTE (mristin):
-    # We add all the dispatch mappings at the end as the functions might not have been
-    # defined yet.
-    for cls in symbol_table.classes:
-        if isinstance(cls, intermediate.AbstractClass):
-            blocks.append(_generate_dispatch_map_for_interface(interface=cls.interface))
-        elif isinstance(cls, intermediate.ConcreteClass):
-            if len(cls.concrete_descendants) > 0:
-                assert (
-                    cls.interface is not None
-                ), "Expected an interface on a class with concrete descendants"
-
-                blocks.append(
-                    _generate_dispatch_map_for_interface(interface=cls.interface)
-                )
-
-            if not cls.is_implementation_specific:
-                blocks.append(_generate_setter_map(cls=cls))
-
-        else:
-            assert_never(cls)
-
-    # NOTE (mristin):
-    # We keep the named unions' own dispatch maps in a loop of their own,
-    # separate from the loop above, since a named union is never a member of
-    # ``symbol_table.classes``.
-    for named_union in symbol_table.named_unions:
-        if any(
-            implementer.serialization.with_model_type
-            for implementer in named_union.implementers
-        ):
-            blocks.append(
-                _generate_dispatch_map_for_named_union(named_union=named_union)
-            )
 
     blocks.append(Stripped("// endregion"))
 

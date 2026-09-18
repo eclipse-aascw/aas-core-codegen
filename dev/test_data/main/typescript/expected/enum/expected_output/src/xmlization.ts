@@ -925,7 +925,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_Result);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_Result
+        );
         propertyError = parsed.error;
         theSomeResult = parsed.value;
         break;
@@ -975,7 +979,12 @@ function writeSomethingAsSequence(
   parts: Array<string>,
   that: AasTypes.Something
 ): void {
-  writeProperty(parts, "someResult", that.someResult, write_Result);
+  writeProperty(
+    parts,
+    "someResult",
+    that.someResult,
+    write_Result
+  );
 }
 
 const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
@@ -1303,7 +1312,12 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 }
 

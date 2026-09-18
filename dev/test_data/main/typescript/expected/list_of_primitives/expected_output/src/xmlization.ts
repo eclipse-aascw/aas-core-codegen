@@ -834,131 +834,211 @@ function parse_bytes(
 function parseAtV_bool(
   cursor: XmlCursor
 ): AasCommon.Either<boolean, DeserializationError> {
-  return parseNamedElement(cursor, "v", parse_bool);
+  return parseNamedElement(
+    cursor,
+    "v",
+    parse_bool
+  );
 }
 
 function parseAtV_bytes(
   cursor: XmlCursor
 ): AasCommon.Either<Uint8Array, DeserializationError> {
-  return parseNamedElement(cursor, "v", parse_bytes);
+  return parseNamedElement(
+    cursor,
+    "v",
+    parse_bytes
+  );
 }
 
 function parseAtV_float(
   cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
-  return parseNamedElement(cursor, "v", parse_float);
+  return parseNamedElement(
+    cursor,
+    "v",
+    parse_float
+  );
 }
 
 function parseAtV_int(
   cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
-  return parseNamedElement(cursor, "v", parse_int);
+  return parseNamedElement(
+    cursor,
+    "v",
+    parse_int
+  );
 }
 
 function parseAtV_str(
   cursor: XmlCursor
 ): AasCommon.Either<string, DeserializationError> {
-  return parseNamedElement(cursor, "v", parse_str);
+  return parseNamedElement(
+    cursor,
+    "v",
+    parse_str
+  );
 }
 
 function parse_ListOf_bool(
   cursor: XmlCursor
 ): AasCommon.Either<Array<boolean>, DeserializationError> {
-  return parseList<boolean>(cursor, parseAtV_bool);
+  return parseList<boolean>(
+    cursor,
+    parseAtV_bool
+  );
 }
 
 function parse_ListOf_bytes(
   cursor: XmlCursor
 ): AasCommon.Either<Array<Uint8Array>, DeserializationError> {
-  return parseList<Uint8Array>(cursor, parseAtV_bytes);
+  return parseList<Uint8Array>(
+    cursor,
+    parseAtV_bytes
+  );
 }
 
 function parse_ListOf_float(
   cursor: XmlCursor
 ): AasCommon.Either<Array<number>, DeserializationError> {
-  return parseList<number>(cursor, parseAtV_float);
+  return parseList<number>(
+    cursor,
+    parseAtV_float
+  );
 }
 
 function parse_ListOf_int(
   cursor: XmlCursor
 ): AasCommon.Either<Array<number>, DeserializationError> {
-  return parseList<number>(cursor, parseAtV_int);
+  return parseList<number>(
+    cursor,
+    parseAtV_int
+  );
 }
 
 function parse_ListOf_str(
   cursor: XmlCursor
 ): AasCommon.Either<Array<string>, DeserializationError> {
-  return parseList<string>(cursor, parseAtV_str);
+  return parseList<string>(
+    cursor,
+    parseAtV_str
+  );
 }
 
 function writeAtV_bool(
   parts: Array<string>,
   value: boolean
 ): void {
-  writeElement(parts, "v", value, write_bool);
+  writeElement(
+    parts,
+    "v",
+    value,
+    write_bool
+  );
 }
 
 function writeAtV_bytes(
   parts: Array<string>,
   value: Uint8Array
 ): void {
-  writeElement(parts, "v", value, write_bytes);
+  writeElement(
+    parts,
+    "v",
+    value,
+    write_bytes
+  );
 }
 
 function writeAtV_float(
   parts: Array<string>,
   value: number
 ): void {
-  writeElement(parts, "v", value, write_float);
+  writeElement(
+    parts,
+    "v",
+    value,
+    write_float
+  );
 }
 
 function writeAtV_int(
   parts: Array<string>,
   value: number
 ): void {
-  writeElement(parts, "v", value, write_int);
+  writeElement(
+    parts,
+    "v",
+    value,
+    write_int
+  );
 }
 
 function writeAtV_str(
   parts: Array<string>,
   value: string
 ): void {
-  writeElement(parts, "v", value, write_str);
+  writeElement(
+    parts,
+    "v",
+    value,
+    write_str
+  );
 }
 
 function write_ListOf_bool(
   parts: Array<string>,
   values: Array<boolean>
 ): void {
-  writeList(parts, values, writeAtV_bool);
+  writeList(
+    parts,
+    values,
+    writeAtV_bool
+  );
 }
 
 function write_ListOf_bytes(
   parts: Array<string>,
   values: Array<Uint8Array>
 ): void {
-  writeList(parts, values, writeAtV_bytes);
+  writeList(
+    parts,
+    values,
+    writeAtV_bytes
+  );
 }
 
 function write_ListOf_float(
   parts: Array<string>,
   values: Array<number>
 ): void {
-  writeList(parts, values, writeAtV_float);
+  writeList(
+    parts,
+    values,
+    writeAtV_float
+  );
 }
 
 function write_ListOf_int(
   parts: Array<string>,
   values: Array<number>
 ): void {
-  writeList(parts, values, writeAtV_int);
+  writeList(
+    parts,
+    values,
+    writeAtV_int
+  );
 }
 
 function write_ListOf_str(
   parts: Array<string>,
   values: Array<string>
 ): void {
-  writeList(parts, values, writeAtV_str);
+  writeList(
+    parts,
+    values,
+    writeAtV_str
+  );
 }
 
 /**
@@ -1006,7 +1086,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_bool);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_bool
+        );
         propertyError = parsed.error;
         theSomeBools = parsed.value;
         break;
@@ -1018,7 +1102,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_int);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_int
+        );
         propertyError = parsed.error;
         theSomeInts = parsed.value;
         break;
@@ -1030,7 +1118,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_float);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_float
+        );
         propertyError = parsed.error;
         theSomeFloats = parsed.value;
         break;
@@ -1042,7 +1134,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_str
+        );
         propertyError = parsed.error;
         theSomeStrings = parsed.value;
         break;
@@ -1054,7 +1150,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_bytes);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_bytes
+        );
         propertyError = parsed.error;
         theSomeBytes = parsed.value;
         break;
@@ -1132,11 +1232,36 @@ function writeSomethingAsSequence(
   parts: Array<string>,
   that: AasTypes.Something
 ): void {
-  writeProperty(parts, "someBools", that.someBools, write_ListOf_bool);
-  writeProperty(parts, "someInts", that.someInts, write_ListOf_int);
-  writeProperty(parts, "someFloats", that.someFloats, write_ListOf_float);
-  writeProperty(parts, "someStrings", that.someStrings, write_ListOf_str);
-  writeProperty(parts, "someBytes", that.someBytes, write_ListOf_bytes);
+  writeProperty(
+    parts,
+    "someBools",
+    that.someBools,
+    write_ListOf_bool
+  );
+  writeProperty(
+    parts,
+    "someInts",
+    that.someInts,
+    write_ListOf_int
+  );
+  writeProperty(
+    parts,
+    "someFloats",
+    that.someFloats,
+    write_ListOf_float
+  );
+  writeProperty(
+    parts,
+    "someStrings",
+    that.someStrings,
+    write_ListOf_str
+  );
+  writeProperty(
+    parts,
+    "someBytes",
+    that.someBytes,
+    write_ListOf_bytes
+  );
 }
 
 const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
@@ -1464,7 +1589,12 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 }
 
