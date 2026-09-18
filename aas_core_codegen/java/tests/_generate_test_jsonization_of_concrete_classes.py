@@ -14,18 +14,6 @@ from aas_core_codegen.java.common import (
 )
 
 
-def _tuple_items(
-    numeric_place: intermediate.NumericPlace,
-) -> "List[intermediate.TypeAnnotationUnion]":
-    """Give out the items of the tuple at the ``numeric_place``."""
-    type_anno = numeric_place.prop.type_annotation
-    assert isinstance(type_anno, intermediate.TupleTypeAnnotation), (
-        f"Expected a tuple at the numeric place of "
-        f"{numeric_place.cls.name}.{numeric_place.prop.name}, but got: {type_anno}"
-    )
-    return list(type_anno.items)
-
-
 def _generate_serialization_failure_tests(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
@@ -70,14 +58,21 @@ def _generate_serialization_failure_tests(
             )
             expected_path = f"{json_name}[{numeric_place.index}]"
         else:
+            type_anno = numeric_place.prop.type_annotation
+            assert isinstance(type_anno, intermediate.TupleTypeAnnotation), (
+                f"Expected a tuple at the numeric place of "
+                f"{numeric_place.cls.name}.{numeric_place.prop.name}, "
+                f"but got: {type_anno}"
+            )
+
             items_joined = ",\n".join(
                 "value"
                 if i == numeric_place.index
                 else f"instance.{getter_name}().item{i + 1}()"
-                for i in range(len(_tuple_items(numeric_place)))
+                for i in range(len(type_anno.items))
             )
 
-            tuple_type = java_common.generate_type(numeric_place.prop.type_annotation)
+            tuple_type = java_common.generate_type(type_anno)
 
             mutation = Stripped(
                 f"""\

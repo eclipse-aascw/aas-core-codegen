@@ -20,18 +20,6 @@ from aas_core_codegen.typescript.common import (
 )
 
 
-def _tuple_items(
-    numeric_place: intermediate.NumericPlace,
-) -> "List[intermediate.TypeAnnotationUnion]":
-    """Give out the items of the tuple at the ``numeric_place``."""
-    type_anno = numeric_place.prop.type_annotation
-    assert isinstance(type_anno, intermediate.TupleTypeAnnotation), (
-        f"Expected a tuple at the numeric place of "
-        f"{numeric_place.cls.name}.{numeric_place.prop.name}, but got: {type_anno}"
-    )
-    return list(type_anno.items)
-
-
 def _generate_serialization_failure_tests(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
@@ -54,6 +42,18 @@ def _generate_serialization_failure_tests(
             mutation = Stripped(f"instance.{prop_name} = value;")
             expected_path = f".{prop_name}"
         else:
+            if numeric_place.in_list:
+                item_count = numeric_place.index + 1
+            else:
+                type_anno = numeric_place.prop.type_annotation
+                assert isinstance(type_anno, intermediate.TupleTypeAnnotation), (
+                    f"Expected a tuple at the numeric place of "
+                    f"{numeric_place.cls.name}.{numeric_place.prop.name}, "
+                    f"but got: {type_anno}"
+                )
+
+                item_count = len(type_anno.items)
+
             # NOTE (mristin):
             # The value goes to the position indicated by the numeric place so
             # that a serializer which always reports the index 0 does not pass.
@@ -67,11 +67,7 @@ def _generate_serialization_failure_tests(
                     if numeric_place.in_list
                     else f"instance.{prop_name}[{i}]"
                 )
-                for i in range(
-                    numeric_place.index + 1
-                    if numeric_place.in_list
-                    else len(_tuple_items(numeric_place))
-                )
+                for i in range(item_count)
             )
 
             mutation = Stripped(
