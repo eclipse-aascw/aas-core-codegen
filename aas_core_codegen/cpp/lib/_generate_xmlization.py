@@ -4809,8 +4809,46 @@ void SelfClosingWriter::SerializeDouble(
 {II}// NOTE (mristin):
 {II}// We have to use a stream to avoid trailing zeros. std::to_string always
 {II}// outputs trailing zeros up to a certain number of decimal places (usually 6).
+{II}//
+{II}// A stream left at its default precision is no good either: that is six
+{II}// *significant* digits, so 1.2345678901234567 would go out as 1.23457, and
+{II}// the value could never be read back. We have to write as many digits as it
+{II}// takes for the text to read back as the very same double, and no more.
+{II}//
+{II}// std::to_chars would give us exactly that in one call, but it is C++17,
+{II}// and the library has to compile as C++11. Seventeen significant digits
+{II}// always suffice, and fewer usually do, so the candidates are tried in
+{II}// turn and the first one which round-trips is kept. The stream strips
+{II}// the trailing zeros of each, so a short value stays short.
+{II}//
+{II}// The classic locale is imposed on both streams: a global locale with
+{II}// a decimal comma would otherwise write 1,2345, which no XML parser reads
+{II}// back as a number.
 {II}std::ostringstream oss;
-{II}oss << value;
+{II}oss.imbue(std::locale::classic());
+
+{II}for (int precision = 15; precision <= 17; ++precision) {{
+{III}oss.str("");
+{III}oss.clear();
+{III}oss << std::setprecision(precision) << value;
+
+{III}std::istringstream iss(oss.str());
+{III}iss.imbue(std::locale::classic());
+{III}double round_tripped = 0.0;
+{III}iss >> round_tripped;
+
+{III}// NOTE (mristin):
+{III}// The failbit has to be consulted, and not only the value. On overflow
+{III}// the stream stores the largest representable double and *fails*, so
+{III}// comparing the value alone would accept a text which every correctly
+{III}// rounding parser reads as an infinity: 15 significant digits of
+{III}// the largest double give 1.79769313486232e+308, which lies above
+{III}// the overflow threshold.
+{III}if (!iss.fail() && round_tripped == value) {{
+{IIII}break;
+{III}}}
+{II}}}
+
 {II}WriteStringWithoutEscapingNorFlushing(
 {III}oss.str()
 {II});
@@ -6779,8 +6817,11 @@ def generate_implementation(
 #include <cmath>
 #include <cstdint>
 #include <deque>
+#include <iomanip>
+#include <locale>
 #include <memory>
 #include <limits>
+#include <sstream>
 #include <unordered_map>
 #include <string>
 #include <vector>

@@ -11,8 +11,11 @@
 #include <cmath>
 #include <cstdint>
 #include <deque>
+#include <iomanip>
+#include <locale>
 #include <memory>
 #include <limits>
+#include <sstream>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -2973,8 +2976,46 @@ void SelfClosingWriter::SerializeDouble(
     // NOTE (mristin):
     // We have to use a stream to avoid trailing zeros. std::to_string always
     // outputs trailing zeros up to a certain number of decimal places (usually 6).
+    //
+    // A stream left at its default precision is no good either: that is six
+    // *significant* digits, so 1.2345678901234567 would go out as 1.23457, and
+    // the value could never be read back. We have to write as many digits as it
+    // takes for the text to read back as the very same double, and no more.
+    //
+    // std::to_chars would give us exactly that in one call, but it is C++17,
+    // and the library has to compile as C++11. Seventeen significant digits
+    // always suffice, and fewer usually do, so the candidates are tried in
+    // turn and the first one which round-trips is kept. The stream strips
+    // the trailing zeros of each, so a short value stays short.
+    //
+    // The classic locale is imposed on both streams: a global locale with
+    // a decimal comma would otherwise write 1,2345, which no XML parser reads
+    // back as a number.
     std::ostringstream oss;
-    oss << value;
+    oss.imbue(std::locale::classic());
+
+    for (int precision = 15; precision <= 17; ++precision) {
+      oss.str("");
+      oss.clear();
+      oss << std::setprecision(precision) << value;
+
+      std::istringstream iss(oss.str());
+      iss.imbue(std::locale::classic());
+      double round_tripped = 0.0;
+      iss >> round_tripped;
+
+      // NOTE (mristin):
+      // The failbit has to be consulted, and not only the value. On overflow
+      // the stream stores the largest representable double and *fails*, so
+      // comparing the value alone would accept a text which every correctly
+      // rounding parser reads as an infinity: 15 significant digits of
+      // the largest double give 1.79769313486232e+308, which lies above
+      // the overflow threshold.
+      if (!iss.fail() && round_tripped == value) {
+        break;
+      }
+    }
+
     WriteStringWithoutEscapingNorFlushing(
       oss.str()
     );
