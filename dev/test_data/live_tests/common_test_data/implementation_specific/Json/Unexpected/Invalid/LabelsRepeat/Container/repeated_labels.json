@@ -1,0 +1,14 @@
+{
+  "names": [],
+  "items": [
+    {
+      "label": "same",
+      "modelType": "Box"
+    },
+    {
+      "label": "same",
+      "tags": [],
+      "modelType": "Bag"
+    }
+  ]
+}

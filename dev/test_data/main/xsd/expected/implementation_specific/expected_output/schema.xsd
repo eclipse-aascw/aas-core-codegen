@@ -1,0 +1,77 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="https://dummy.com" elementFormDefault="qualified" targetNamespace="https://dummy.com">
+  <xs:group name="bag">
+    <xs:sequence>
+      <xs:group ref="item"/>
+      <xs:element name="tags">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="v" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="box">
+    <xs:sequence>
+      <xs:group ref="item"/>
+      <xs:element name="color" type="color_t" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="container">
+    <xs:sequence>
+      <xs:element name="names">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="v" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="items">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="item_choice" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="item">
+    <xs:sequence>
+      <xs:element name="label" type="xs:string"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="item_choice">
+    <xs:choice>
+      <xs:element name="bag" type="bag_t"/>
+      <xs:element name="box" type="box_t"/>
+    </xs:choice>
+  </xs:group>
+  <xs:simpleType name="color_t">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Red"/>
+      <xs:enumeration value="Green"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="bag_t">
+    <xs:sequence>
+      <xs:group ref="bag"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="box_t">
+    <xs:sequence>
+      <xs:group ref="box"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="container_t">
+    <xs:sequence>
+      <xs:group ref="container"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="item_t">
+    <xs:sequence>
+      <xs:group ref="item"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="container" type="container_t"/>
+</xs:schema>

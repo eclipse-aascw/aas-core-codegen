@@ -1,0 +1,20 @@
+{
+  "names": [
+    "first",
+    "second"
+  ],
+  "items": [
+    {
+      "label": "a [labelled] box",
+      "color": "Red",
+      "modelType": "Box"
+    },
+    {
+      "label": "a bag",
+      "tags": [
+        "light"
+      ],
+      "modelType": "Bag"
+    }
+  ]
+}
