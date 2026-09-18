@@ -697,7 +697,18 @@ func readTextAs_double(
 
 {I}var parseErr error
 {I}value, parseErr = strconv.ParseFloat(text, 64)
-{I}if parseErr != nil {{
+{I}// NOTE:
+{I}// A literal too large for a double is not an error in XSD. It rounds to
+{I}// an infinity, which is in the value space of xs:double, and ParseFloat
+{I}// hands us exactly that infinity *together* with [strconv.ErrRange]. So
+{I}// the range is deliberately let through, and only a syntax error is
+{I}// reported -- and the pattern above has already excluded those.
+{I}//
+{I}// A literal too small rounds to zero, which ParseFloat reports without
+{I}// any error at all.
+{I}//
+{I}// See: https://www.w3.org/TR/xmlschema11-2/#double
+{I}if parseErr != nil && !errors.Is(parseErr, strconv.ErrRange) {{
 {II}err = newDeserializationError(
 {III}fmt.Sprintf(
 {IIII}"Expected a value as xs:double, but it could not be parsed: %s: %s",
@@ -3242,6 +3253,7 @@ package xmlization"""
 import (
 {I}b64 "encoding/base64"
 {I}"encoding/xml"
+{I}"errors"
 {I}"fmt"
 {I}"io"
 {I}"math"

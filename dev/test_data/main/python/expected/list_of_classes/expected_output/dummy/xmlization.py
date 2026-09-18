@@ -1846,6 +1846,16 @@ def _read_int_from_element_text(
             f"but got an element with text: {text!r}"
         )
 
+    # NOTE (mristin):
+    # An ``int`` is unbounded in Python, while ``xs:long`` is a 64-bit integer,
+    # so the range has to be checked explicitly. Every other target gets this
+    # for free from a parser which refuses what does not fit.
+    if value < -9223372036854775808 or value > 9223372036854775807:
+        raise DeserializationException(
+            f"Expected a value as xs:long, "
+            f"but got an element with text out of its range: {text!r}"
+        )
+
     return value
 
 
