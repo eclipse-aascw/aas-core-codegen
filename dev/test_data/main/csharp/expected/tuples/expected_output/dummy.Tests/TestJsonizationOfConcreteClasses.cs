@@ -9,6 +9,7 @@ using Directory = System.IO.Directory;
 using Nodes = System.Text.Json.Nodes;
 using Path = System.IO.Path;
 
+using System.Collections.Generic;  // can't alias
 using System.Linq;  // can't alias
 using NUnit.Framework; // can't alias
 
@@ -571,6 +572,141 @@ namespace dummy.Tests
                 }
             }
         }  // public void Test_Something_verification_fail
+
+        /// <summary>
+        /// Read the first recorded example of the <paramref name="modelType" />.
+        /// </summary>
+        private static Nodes.JsonNode LoadTheFirstExpected(string modelType)
+        {
+            var paths = Directory.GetFiles(
+                Path.Combine(
+                    Aas.Tests.Common.TestDataDir,
+                    "Json",
+                    "Expected",
+                    modelType),
+                "*.json",
+                System.IO.SearchOption.AllDirectories).ToList();
+            paths.Sort();
+
+            Assert.IsNotEmpty(
+                paths,
+                $"Expected at least one recorded example of {modelType}, but got none");
+
+            return Aas.Tests.CommonJson.ReadFromFile(paths[0]);
+        }
+
+        [Test]
+        public void TestAnotherItemSerialNumberSerializationOutOfRange()
+        {
+            foreach (var value in new long[] { 9007199254740992L, -9007199254740992L })
+            {
+                var node = LoadTheFirstExpected(
+                    "AnotherItem");
+
+                var instance = Aas.Jsonization.Deserialize.AnotherItemFrom(
+                    node);
+
+                instance.SerialNumber = value;
+
+                Aas.Jsonization.SerializationException? exception = null;
+                try
+                {
+                    var _ = Aas.Jsonization.Serialize.ToJsonObject(instance);
+                }
+                catch (Aas.Jsonization.SerializationException observedException)
+                {
+                    exception = observedException;
+                }
+
+                Assert.IsNotNull(
+                    exception,
+                    "Expected the serialization to fail at " +
+                        "serialNumber" +
+                        ", but it succeeded");
+
+                Assert.AreEqual(
+                    "serialNumber",
+                    exception!.Path);
+            }
+        }  // public void TestAnotherItemSerialNumberSerializationOutOfRange
+
+        [Test]
+        public void TestSomethingPairSerializationOutOfRange()
+        {
+            foreach (var value in new long[] { 9007199254740992L, -9007199254740992L })
+            {
+                var node = LoadTheFirstExpected(
+                    "Something");
+
+                var instance = Aas.Jsonization.Deserialize.SomethingFrom(
+                    node);
+
+                instance.Pair = (
+                    instance.Pair.Item1,
+                    value);
+
+                Aas.Jsonization.SerializationException? exception = null;
+                try
+                {
+                    var _ = Aas.Jsonization.Serialize.ToJsonObject(instance);
+                }
+                catch (Aas.Jsonization.SerializationException observedException)
+                {
+                    exception = observedException;
+                }
+
+                Assert.IsNotNull(
+                    exception,
+                    "Expected the serialization to fail at " +
+                        "pair[1]" +
+                        ", but it succeeded");
+
+                Assert.AreEqual(
+                    "pair[1]",
+                    exception!.Path);
+            }
+        }  // public void TestSomethingPairSerializationOutOfRange
+
+        [Test]
+        public void TestSomethingTrickySerializationOutOfRange()
+        {
+            foreach (var value in new long[] { 9007199254740992L, -9007199254740992L })
+            {
+                var node = LoadTheFirstExpected(
+                    "Something");
+
+                var instance = Aas.Jsonization.Deserialize.SomethingFrom(
+                    node);
+
+                instance.Tricky = (
+                    value,
+                    instance.Tricky.Item2,
+                    instance.Tricky.Item3,
+                    instance.Tricky.Item4,
+                    instance.Tricky.Item5,
+                    instance.Tricky.Item6);
+
+                Aas.Jsonization.SerializationException? exception = null;
+                try
+                {
+                    var _ = Aas.Jsonization.Serialize.ToJsonObject(instance);
+                }
+                catch (Aas.Jsonization.SerializationException observedException)
+                {
+                    exception = observedException;
+                }
+
+                Assert.IsNotNull(
+                    exception,
+                    "Expected the serialization to fail at " +
+                        "tricky[0]" +
+                        ", but it succeeded");
+
+                Assert.AreEqual(
+                    "tricky[0]",
+                    exception!.Path);
+            }
+        }  // public void TestSomethingTrickySerializationOutOfRange
     }  // class TestJsonizationOfConcreteClasses
 }  // namespace dummy.Tests
 
