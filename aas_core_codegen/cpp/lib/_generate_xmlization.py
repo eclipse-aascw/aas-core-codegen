@@ -2926,6 +2926,70 @@ bool MatchesXsDoubleNumeral(const std::string& text) {{
         Stripped(
             f"""\
 /**
+ * \\brief Tell whether \\p text is a lexical form of `xs:base64Binary`.
+ *
+ * The whitespace is expected to be gone already. What is left has to match
+ * `(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=') | (B64 B04 '=='))?`
+ * -- a length which is a multiple of four, the alphabet and nothing else,
+ * an equals sign only at the very end, and, easily missed, a constrained
+ * character *before* the padding, as the bits which the padding drops have to
+ * be zero.
+ *
+ * The decoders do not agree on any of this, so every target does the same
+ * check of its own and refuses the same texts.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+ */
+bool MatchesXsBase64Binary(const std::string& text) {{
+{I}if (text.size() % 4 != 0) {{
+{II}return false;
+{I}}}
+
+{I}if (text.empty()) {{
+{II}return true;
+{I}}}
+
+{I}std::size_t pads = 0;
+{I}if (text[text.size() - 1] == '=') {{
+{II}pads = 1;
+{II}if (text[text.size() - 2] == '=') {{
+{III}pads = 2;
+{II}}}
+{I}}}
+
+{I}for (std::size_t i = 0; i < text.size() - pads; ++i) {{
+{II}const char character = text[i];
+{II}const bool in_alphabet(
+{III}(character >= 'A' && character <= 'Z')
+{IIII}|| (character >= 'a' && character <= 'z')
+{IIII}|| (character >= '0' && character <= '9')
+{IIII}|| character == '+'
+{IIII}|| character == '/'
+{II});
+{II}if (!in_alphabet) {{
+{III}return false;
+{II}}}
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// Only these sixteen characters leave the two dropped bits at zero, and
+{I}// only these four leave the four dropped bits at zero.
+{I}if (pads == 1) {{
+{II}return std::string("AEIMQUYcgkosw048").find(text[text.size() - 2])
+{III}!= std::string::npos;
+{I}}}
+
+{I}if (pads == 2) {{
+{II}return std::string("AQgw").find(text[text.size() - 3])
+{III}!= std::string::npos;
+{I}}}
+
+{I}return true;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
  * \\brief Drop every whitespace character of \\p text.
  *
  * This is what `xs:base64Binary` needs: it allows whitespace between
@@ -3327,6 +3391,17 @@ std::pair<
 {III}>(reader.node()).text
 {II})
 {I});
+
+{I}if (!MatchesXsBase64Binary(text)) {{
+{II}return NoInstanceAndDeserializationErrorWithCause<
+{III}std::vector<std::uint8_t>
+{II}>(
+{III}common::Concat(
+{IIII}L"Expected a text as base64-encoded bytes, but got: ",
+{IIII}common::Utf8ToWstring(text)
+{III})
+{II});
+{I}}}
 
 {I}common::expected<
 {II}std::vector<std::uint8_t>,

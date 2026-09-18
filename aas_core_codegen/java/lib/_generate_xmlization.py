@@ -930,6 +930,11 @@ private static byte[] readContentAsBase64(
 {I}//
 {I}// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
 {I}String encodedData = removeWhitespace(content.toString());
+
+{I}if (!matchesXsBase64Binary(encodedData)) {{
+{II}throw new XMLStreamException(
+{III}"Expected a text as base64-encoded bytes, but got: " + encodedData);
+{I}}}
 {I}final byte[] decodedData;
 {I}Base64.Decoder decoder = Base64.getDecoder();
 
@@ -971,6 +976,70 @@ _COLLAPSE_WHITESPACE = Stripped(
  */
 private static String collapseWhitespace(String text) {{
 {I}return WHITESPACE_RUN.matcher(text).replaceAll(" ").trim();
+}}"""
+)
+
+_MATCHES_XS_BASE64_BINARY = Stripped(
+    f"""\
+/**
+ * Tell whether {{@code text}} is a lexical form of {{@code xs:base64Binary}}.
+ *
+ * <p>The whitespace is expected to be gone already. What is left has to match
+ * {{@code (B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=')
+ * | (B64 B04 '=='))?}} -- a length which is a multiple of four,
+ * the alphabet and nothing else, an equals sign only at the very end, and,
+ * easily missed, a constrained character <i>before</i> the padding, as
+ * the bits which the padding drops have to be zero.
+ *
+ * <p>The decoders do not agree on any of this. Base64.getDecoder() reads
+ * {{@code SGk}} although it is three characters long, where the Go and
+ * the Python SDKs refuse it. Hence this check, so that every target refuses
+ * the same texts.
+ *
+ * <p>See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+ */
+private static boolean matchesXsBase64Binary(String text) {{
+{I}if (text.length() % 4 != 0) {{
+{II}return false;
+{I}}}
+
+{I}if (text.isEmpty()) {{
+{II}return true;
+{I}}}
+
+{I}int pads = 0;
+{I}if (text.charAt(text.length() - 1) == '=') {{
+{II}pads = 1;
+{II}if (text.charAt(text.length() - 2) == '=') {{
+{III}pads = 2;
+{II}}}
+{I}}}
+
+{I}for (int i = 0; i < text.length() - pads; i++) {{
+{II}final char character = text.charAt(i);
+{II}final boolean inAlphabet =
+{III}(character >= 'A' && character <= 'Z')
+{IIII}|| (character >= 'a' && character <= 'z')
+{IIII}|| (character >= '0' && character <= '9')
+{IIII}|| character == '+'
+{IIII}|| character == '/';
+{II}if (!inAlphabet) {{
+{III}return false;
+{II}}}
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// Only these sixteen characters leave the two dropped bits at zero, and
+{I}// only these four leave the four dropped bits at zero.
+{I}if (pads == 1) {{
+{II}return "AEIMQUYcgkosw048".indexOf(text.charAt(text.length() - 2)) >= 0;
+{I}}}
+
+{I}if (pads == 2) {{
+{II}return "AQgw".indexOf(text.charAt(text.length() - 3)) >= 0;
+{I}}}
+
+{I}return true;
 }}"""
 )
 
@@ -1026,7 +1095,9 @@ def _generate_content_converters(
         result.insert(1, _COLLAPSE_WHITESPACE)
 
     if needs_removal:
-        result.insert(2 if needs_collapse else 1, _REMOVE_WHITESPACE)
+        at = 2 if needs_collapse else 1
+        result.insert(at, _REMOVE_WHITESPACE)
+        result.insert(at + 1, _MATCHES_XS_BASE64_BINARY)
 
     return result
 

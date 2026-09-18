@@ -9863,6 +9863,84 @@ def _collapse_whitespace(text: str) -> str:
     return _XS_WHITESPACE_RE.sub(" ", text).strip(" ")
 
 
+def _remove_whitespace(text: str) -> str:
+    """
+    Drop every whitespace character of :paramref:`text`.
+
+    This is what ``xs:base64Binary`` needs: it allows whitespace between
+    the characters and not only around them, so collapsing is not enough.
+
+    :param text: to be stripped of its whitespace
+    :return: text without any whitespace
+    """
+    return _XS_WHITESPACE_RE.sub("", text)
+
+
+_XS_BASE64_CHARACTERS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz"
+    "0123456789+/"
+)
+
+#: Admit the characters which can precede a single ``=``. The two bits which
+#: the padding drops have to be zero, which only these sixteen satisfy.
+_XS_BASE64_BEFORE_ONE_PAD = frozenset("AEIMQUYcgkosw048")
+
+#: Admit the characters which can precede ``==``, by the same argument over
+#: the four bits which are dropped.
+_XS_BASE64_BEFORE_TWO_PADS = frozenset("AQgw")
+
+
+def _matches_xs_base64_binary(text: str) -> bool:
+    """
+    Tell whether :paramref:`text` is a lexical form of ``xs:base64Binary``.
+
+    The whitespace is expected to be gone already. What is left has to match::
+
+            (B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=') | (B64 B04 '=='))?
+
+    which is to say: a length which is a multiple of four, the alphabet and
+    nothing else, an equals sign only at the very end, and -- easily missed --
+    a constrained character *before* the padding, since the bits which
+    the padding drops have to be zero.
+
+    The decoders do not agree on any of this. Some take ``SGk`` although it is
+    three characters long, some quietly discard a character which is not in
+    the alphabet, and some take an equals sign in the middle. Hence the check
+    of our own, so that every target refuses the same texts.
+
+    See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+
+    :param text: to be checked, with the whitespace already removed
+    :return: True if :paramref:`text` is a lexical form of ``xs:base64Binary``
+    """
+    if len(text) % 4 != 0:
+        return False
+
+    if len(text) == 0:
+        return True
+
+    pads = 0
+    if text[-1] == "=":
+        pads = 1
+        if text[-2] == "=":
+            pads = 2
+
+    if any(
+        character not in _XS_BASE64_CHARACTERS
+        for character in text[: len(text) - pads]
+    ):
+        return False
+
+    if pads == 1:
+        return text[-2] in _XS_BASE64_BEFORE_ONE_PAD
+
+    if pads == 2:
+        return text[-3] in _XS_BASE64_BEFORE_TWO_PADS
+
+    return True
+
+
 def _read_text_from_element(
     element: Element,
     iterator: Iterator[Tuple[str, Element]]
@@ -10000,10 +10078,35 @@ def _read_bytes_from_element_text(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed value
     """
-    text = _read_text_from_element(
+    # NOTE (mristin):
+    # We do not use ``_read_text_from_element`` as that function expects
+    # the ``element`` to contain *some* text. An empty ``xs:base64Binary``
+    # is a lexical form of its own, and stands for zero bytes -- its whole
+    # production is optional -- so it is read here just like an empty
+    # ``xs:string`` is.
+    raw_text = element.text
+
+    end_element = _read_end_element(
         element,
         iterator
     )
+
+    if raw_text is None:
+        raw_text = end_element.text
+
+    _raise_if_has_tail_or_attrib(element)
+
+    text = _remove_whitespace(
+        raw_text
+        if raw_text is not None
+        else ""
+    )
+
+    if not _matches_xs_base64_binary(text):
+        raise DeserializationException(
+            f"Expected a text as base64-encoded bytes, "
+            f"but got an element with text: {text!r}"
+        )
 
     try:
         value = base64.b64decode(text)

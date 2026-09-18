@@ -1937,6 +1937,68 @@ bool MatchesXsDoubleNumeral(const std::string& text) {
 }
 
 /**
+ * \brief Tell whether \p text is a lexical form of `xs:base64Binary`.
+ *
+ * The whitespace is expected to be gone already. What is left has to match
+ * `(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=') | (B64 B04 '=='))?`
+ * -- a length which is a multiple of four, the alphabet and nothing else,
+ * an equals sign only at the very end, and, easily missed, a constrained
+ * character *before* the padding, as the bits which the padding drops have to
+ * be zero.
+ *
+ * The decoders do not agree on any of this, so every target does the same
+ * check of its own and refuses the same texts.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+ */
+bool MatchesXsBase64Binary(const std::string& text) {
+  if (text.size() % 4 != 0) {
+    return false;
+  }
+
+  if (text.empty()) {
+    return true;
+  }
+
+  std::size_t pads = 0;
+  if (text[text.size() - 1] == '=') {
+    pads = 1;
+    if (text[text.size() - 2] == '=') {
+      pads = 2;
+    }
+  }
+
+  for (std::size_t i = 0; i < text.size() - pads; ++i) {
+    const char character = text[i];
+    const bool in_alphabet(
+      (character >= 'A' && character <= 'Z')
+        || (character >= 'a' && character <= 'z')
+        || (character >= '0' && character <= '9')
+        || character == '+'
+        || character == '/'
+    );
+    if (!in_alphabet) {
+      return false;
+    }
+  }
+
+  // NOTE (mristin):
+  // Only these sixteen characters leave the two dropped bits at zero, and
+  // only these four leave the four dropped bits at zero.
+  if (pads == 1) {
+    return std::string("AEIMQUYcgkosw048").find(text[text.size() - 2])
+      != std::string::npos;
+  }
+
+  if (pads == 2) {
+    return std::string("AQgw").find(text[text.size() - 3])
+      != std::string::npos;
+  }
+
+  return true;
+}
+
+/**
  * \brief Drop every whitespace character of \p text.
  *
  * This is what `xs:base64Binary` needs: it allows whitespace between
@@ -2326,6 +2388,17 @@ std::pair<
       >(reader.node()).text
     )
   );
+
+  if (!MatchesXsBase64Binary(text)) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::vector<std::uint8_t>
+    >(
+      common::Concat(
+        L"Expected a text as base64-encoded bytes, but got: ",
+        common::Utf8ToWstring(text)
+      )
+    );
+  }
 
   common::expected<
     std::vector<std::uint8_t>,

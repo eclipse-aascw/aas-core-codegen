@@ -472,6 +472,62 @@ func collapseWhitespace(text string) string {{
 {I}return strings.Trim(whitespaceRunRe.ReplaceAllString(text, " "), " ")
 }}
 
+// Tell whether `text` is a lexical form of `xs:base64Binary`.
+//
+// The whitespace is expected to be gone already. What is left has to match
+// `(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 "=") | (B64 B04 "=="))?`
+// -- a length which is a multiple of four, the alphabet and nothing else,
+// an equals sign only at the very end, and, easily missed, a constrained
+// character *before* the padding, as the bits which the padding drops have to
+// be zero.
+//
+// The decoders do not agree on any of this, so every target does the same
+// check of its own and refuses the same texts.
+//
+// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+func matchesXsBase64Binary(text string) bool {{
+{I}if len(text)%4 != 0 {{
+{II}return false
+{I}}}
+
+{I}if len(text) == 0 {{
+{II}return true
+{I}}}
+
+{I}pads := 0
+{I}if text[len(text)-1] == '=' {{
+{II}pads = 1
+{II}if text[len(text)-2] == '=' {{
+{III}pads = 2
+{II}}}
+{I}}}
+
+{I}for i := 0; i < len(text)-pads; i++ {{
+{II}character := text[i]
+{II}inAlphabet := (character >= 'A' && character <= 'Z') ||
+{III}(character >= 'a' && character <= 'z') ||
+{III}(character >= '0' && character <= '9') ||
+{III}character == '+' ||
+{III}character == '/'
+{II}if !inAlphabet {{
+{III}return false
+{II}}}
+{I}}}
+
+{I}// NOTE:
+{I}// Only these sixteen characters leave the two dropped bits at zero, and
+{I}// only these four leave the four dropped bits at zero.
+{I}if pads == 1 {{
+{II}return strings.IndexByte("AEIMQUYcgkosw048", text[len(text)-2]) >= 0
+{I}}}
+
+{I}if pads == 2 {{
+{II}return strings.IndexByte("AQgw", text[len(text)-3]) >= 0
+{I}}}
+
+{I}return true
+}}
+
 // Drop every whitespace character of `text`.
 //
 // This is what `xs:base64Binary` needs: it allows whitespace between
@@ -757,6 +813,16 @@ func readTextAs_bytes(
 {I}//
 {I}// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
 {I}text = removeWhitespace(text)
+
+{I}if !matchesXsBase64Binary(text) {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected a text as base64-encoded bytes, but got: %s",
+{IIII}text,
+{III}),
+{II})
+{II}return
+{I}}}
 
 {I}var decodingErr error
 {I}value, decodingErr = b64.StdEncoding.DecodeString(text)

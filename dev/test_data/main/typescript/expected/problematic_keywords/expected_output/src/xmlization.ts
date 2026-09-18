@@ -598,6 +598,65 @@ function collapseWhitespace(text: string): string {
 }
 
 /**
+ * Tell whether `text` is a lexical form of `xs:base64Binary`.
+ *
+ * The whitespace is expected to be gone already. What is left has to match
+ * `(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 "=") | (B64 B04 "=="))?`
+ * -- a length which is a multiple of four, the alphabet and nothing else,
+ * an equals sign only at the very end, and, easily missed, a constrained
+ * character *before* the padding, as the bits which the padding drops have
+ * to be zero.
+ *
+ * The decoders do not agree on any of this, so every target does the same
+ * check of its own and refuses the same texts.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+ */
+function matchesXsBase64Binary(text: string): boolean {
+  if (text.length % 4 !== 0) {
+    return false;
+  }
+
+  if (text.length === 0) {
+    return true;
+  }
+
+  let pads = 0;
+  if (text[text.length - 1] === "=") {
+    pads = 1;
+    if (text[text.length - 2] === "=") {
+      pads = 2;
+    }
+  }
+
+  for (let i = 0; i < text.length - pads; i++) {
+    const character = text[i];
+    const inAlphabet =
+      (character >= "A" && character <= "Z") ||
+      (character >= "a" && character <= "z") ||
+      (character >= "0" && character <= "9") ||
+      character === "+" ||
+      character === "/";
+    if (!inAlphabet) {
+      return false;
+    }
+  }
+
+  // NOTE (mristin):
+  // Only these sixteen characters leave the two dropped bits at zero, and
+  // only these four leave the four dropped bits at zero.
+  if (pads === 1) {
+    return "AEIMQUYcgkosw048".includes(text[text.length - 2]);
+  }
+
+  if (pads === 2) {
+    return "AQgw".includes(text[text.length - 3]);
+  }
+
+  return true;
+}
+
+/**
  * Drop every whitespace character of `text`.
  *
  * This is what `xs:base64Binary` needs: it allows whitespace between
@@ -747,8 +806,15 @@ function parse_bytes(
   // whitespace character is dropped, and not merely collapsed.
   //
   // See: https://www.w3.org/TR/xmlschema-2/#base64Binary
-  const decodedOrError = AasCommon.base64Decode(
-    removeWhitespace(parseTextContent(cursor)));
+  const text = removeWhitespace(parseTextContent(cursor));
+
+  if (!matchesXsBase64Binary(text)) {
+    return newDeserializationError<Uint8Array>(
+      `Expected a text as base64-encoded bytes, but got: ${text}`
+    );
+  }
+
+  const decodedOrError = AasCommon.base64Decode(text);
   if (decodedOrError.error !== null) {
     return newDeserializationError<Uint8Array>(
       decodedOrError.error
