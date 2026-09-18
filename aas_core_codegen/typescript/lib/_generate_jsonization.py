@@ -2,7 +2,7 @@
 
 import io
 import textwrap
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Set
 
 from icontract import ensure, require
 
@@ -369,6 +369,16 @@ function numberFromJsonable(
 {I}if (typeof jsonable !== "number") {{
 {II}return newDeserializationError<number>(
 {III}`Expected a number, but got: ${{typeof jsonable}}`
+{II});
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// JSON knows neither an infinity nor a not-a-number, so a conformant parser
+{I}// can never give us one. The caller can still hand us a JSON-able which has
+{I}// been constructed programmatically, so we have to check here.
+{I}if (!Number.isFinite(jsonable)) {{
+{II}return newDeserializationError<number>(
+{III}`Expected a finite number, but got: ${{jsonable}}`
 {II});
 {I}}}
 
@@ -1536,11 +1546,15 @@ def _generate_transform_atomic_value(
 
         if (
             a_type is intermediate.PrimitiveType.BOOL
-            or a_type is intermediate.PrimitiveType.INT
-            or a_type is intermediate.PrimitiveType.FLOAT
             or a_type is intermediate.PrimitiveType.STR
         ):
             return Stripped(f"{access_expression}")
+
+        elif a_type is intermediate.PrimitiveType.INT:
+            return Stripped(f"integerToJsonable({access_expression})")
+
+        elif a_type is intermediate.PrimitiveType.FLOAT:
+            return Stripped(f"numberToJsonable({access_expression})")
 
         elif a_type is intermediate.PrimitiveType.BYTEARRAY:
             return Stripped(f"AasCommon.base64Encode({access_expression})")
@@ -1581,7 +1595,9 @@ AasStringification.{must_to_str_name}(
         assert_never(type_anno.our_type)
 
 
-def _generate_transform(cls: intermediate.ConcreteClass) -> Stripped:
+def _generate_transform(
+    cls: intermediate.ConcreteClass, ids_of_types_reaching_a_number: Set[int]
+) -> Stripped:
     """Generate the ``transformX`` method to serialize an instance into a JSON-able."""
     blocks = [Stripped("const jsonable: JsonObject = {};")]  # type: List[Stripped]
 
@@ -1620,7 +1636,29 @@ jsonable[{key_literal}] =
 
             items_primitive_type = intermediate.try_primitive_type(type_anno.items)
 
-            if items_primitive_type is not None and (
+            if items_primitive_type in (
+                intermediate.PrimitiveType.INT,
+                intermediate.PrimitiveType.FLOAT,
+            ):
+                # NOTE (mristin):
+                # A number has to be checked, so the items can not simply be
+                # copied over. ``serializeArray`` records the index of the item
+                # which is refused.
+                item_serializer = (
+                    "integerToJsonable"
+                    if items_primitive_type is intermediate.PrimitiveType.INT
+                    else "numberToJsonable"
+                )
+
+                block = Stripped(
+                    f"""\
+jsonable[{key_literal}] = serializeArray(
+{I}that.{prop_name},
+{I}{item_serializer}
+);"""
+                )
+
+            elif items_primitive_type is not None and (
                 items_primitive_type != intermediate.PrimitiveType.BYTEARRAY
             ):
                 # NOTE (mristin):
@@ -1708,17 +1746,89 @@ jsonable[{key_literal}] = serializeArray(
                     )
                 )
 
-            item_expressions_joined = ",\n".join(item_expressions)
+            item_is_fallible = [
+                intermediate.reaches_a_number(
+                    item_type_anno, ids_of_types_reaching_a_number
+                )
+                for item_type_anno in type_anno.items
+            ]
 
-            block = Stripped(
-                f"""\
+            if not any(item_is_fallible):
+                item_expressions_joined = ",\n".join(item_expressions)
+
+                block = Stripped(
+                    f"""\
 jsonable[{key_literal}] = [
 {I}{indent_but_first_line(item_expressions_joined, I)}
 ];"""
-            )
+                )
+            else:
+                # NOTE (mristin):
+                # An array literal can not record which item was refused, so
+                # the items are pushed one by one, each under its own position.
+                items_var = typescript_naming.variable_name(
+                    Identifier(f"{prop.name}_items")
+                )
+
+                push_statements = []  # type: List[Stripped]
+
+                for i, (item_expression, is_fallible) in enumerate(
+                    zip(item_expressions, item_is_fallible)
+                ):
+                    push_statement = Stripped(
+                        f"""\
+{items_var}.push(
+{I}{indent_but_first_line(item_expression, I)}
+);"""
+                    )
+
+                    if is_fallible:
+                        push_statement = Stripped(
+                            f"""\
+try {{
+{I}{indent_but_first_line(push_statement, I)}
+}} catch (error) {{
+{I}if (error instanceof SerializationError) {{
+{II}error.prependIndex({i});
+{I}}}
+{I}throw error;
+}}"""
+                        )
+
+                    push_statements.append(push_statement)
+
+                push_statements_joined = "\n".join(push_statements)
+
+                block = Stripped(
+                    f"""\
+const {items_var} = new Array<JsonValue>();
+{push_statements_joined}
+jsonable[{key_literal}] = {items_var};"""
+                )
 
         else:
             assert_never(type_anno)
+
+        # NOTE (mristin):
+        # Only a value which can be refused at all is worth guarding. The property
+        # is recorded here, and nowhere below, as nothing below knows through which
+        # property the value was reached.
+        if intermediate.reaches_a_number(
+            prop.type_annotation, ids_of_types_reaching_a_number
+        ):
+            prop_name_literal = typescript_common.string_literal(prop_name)
+
+            block = Stripped(
+                f"""\
+try {{
+{I}{indent_but_first_line(block, I)}
+}} catch (error) {{
+{I}if (error instanceof SerializationError) {{
+{II}error.prependProperty({prop_name_literal});
+{I}}}
+{I}throw error;
+}}"""
+            )
 
         if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
             block = Stripped(
@@ -1782,24 +1892,172 @@ def _generate_serialize_array() -> Stripped:
  * @typeParam T - type of a single item to be serialized
  * @typeParam J - type of a single item once serialized
  */
+/**
+ * Serialize `items` one by one, recording the index of the one which is refused.
+ */
 function serializeArray<T, J extends JsonValue>(
 {I}items: Iterable<T>,
 {I}serializeItem: (item: T) => J
 ): Array<J> {{
 {I}const result = new Array<J>();
+{I}let i = 0;
 {I}for (const item of items) {{
-{II}result.push(serializeItem(item));
+{II}try {{
+{III}result.push(serializeItem(item));
+{II}}} catch (error) {{
+{III}if (error instanceof SerializationError) {{
+{IIII}error.prependIndex(i);
+{III}}}
+{III}throw error;
+{II}}}
+{II}i++;
 {I}}}
 {I}return result;
 }}"""
     )
 
 
-def _generate_transformer(symbol_table: intermediate.SymbolTable) -> Stripped:
+def _generate_serialization_error() -> Stripped:
+    """Generate the error signalling that a value could not be serialized."""
+    return Stripped(
+        f"""\
+/**
+ * Signal that the JSON serialization could not be performed.
+ *
+ * The {{@link SerializationError.path}} points into the instance which was to be
+ * serialized, and *not* into a JSON document -- at the point of the failure,
+ * there is no document yet. For example, `.submodels[0].value` tells you that
+ * the serialization broke on `that.submodels[0].value`.
+ *
+ * Mind that this path is a plain string, unlike the structured
+ * {{@link Path}} of the de-serialization. A segment of the latter carries
+ * the JSON value it was read from, and while serializing there is no such
+ * value to carry.
+ */
+export class SerializationError extends Error {{
+{I}private readonly _segments = new Array<string>();
+
+{I}/**
+{I} * Render the path to the erroneous value as a TypeScript access expression.
+{I} */
+{I}get path(): string {{
+{II}return this._segments.join("");
+{I}}}
+
+{I}/**
+{I} * Insert the access to the property `name` before the {{@link path}}.
+{I} */
+{I}prependProperty(name: string): void {{
+{II}this._segments.unshift(`.${{name}}`);
+{I}}}
+
+{I}/**
+{I} * Insert the access to the item at `index` before the {{@link path}}.
+{I} */
+{I}prependIndex(index: number): void {{
+{II}this._segments.unshift(`[${{index}}]`);
+{I}}}
+}}"""
+    )
+
+
+def _collect_number_types(
+    symbol_table: intermediate.SymbolTable,
+) -> Set[intermediate.PrimitiveType]:
+    """Collect the number types which occur anywhere in the meta-model."""
+    result = set()  # type: Set[intermediate.PrimitiveType]
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            for (
+                type_anno
+            ) in intermediate.over_type_annotation_and_nested_type_annotations(
+                prop.type_annotation
+            ):
+                a_type = intermediate.try_primitive_type(type_anno)
+                if (
+                    a_type is intermediate.PrimitiveType.INT
+                    or a_type is intermediate.PrimitiveType.FLOAT
+                ):
+                    result.add(a_type)
+
+    return result
+
+
+def _generate_number_serializers(
+    number_types: Set[intermediate.PrimitiveType],
+) -> List[Stripped]:
+    """
+    Generate the serializers of the numbers which JSON can not represent.
+
+    Only the serializers which are actually called are generated, as an unused
+    one would trip the linter of the generated code.
+    """
+    blocks = [
+        Stripped(
+            f"""\
+/**
+ * Serialize `that` integer to a JSON-able value.
+ *
+ * Only the integers in the range [-2^53 + 1, 2^53 - 1] are serialized. Outside
+ * of it, an integer can not be exactly represented as a 64-bit floating-point
+ * number, which is what the JSON de-serializers of the other languages read
+ * a number into.
+ *
+ * @param that - integer to be serialized
+ * @returns `that`, unchanged
+ * @throws {{@link SerializationError}} if outside the range
+ */
+function integerToJsonable(that: number): number {{
+{I}if (!Number.isFinite(that) || that < -9007199254740991 || that > 9007199254740991) {{
+{II}throw new SerializationError(
+{III}`The integer can not be serialized to JSON as it is outside ` +
+{IIII}`the range [-2^53 + 1, 2^53 - 1]: ${{that}}`
+{II});
+{I}}}
+{I}return that;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Serialize `that` number to a JSON-able value.
+ *
+ * JSON knows neither an infinity nor a not-a-number, so we refuse to serialize
+ * them instead of leaving it to `JSON.stringify` to write them out as `null`.
+ *
+ * @param that - number to be serialized
+ * @returns `that`, unchanged
+ * @throws {{@link SerializationError}} if not finite
+ */
+function numberToJsonable(that: number): number {{
+{I}if (!Number.isFinite(that)) {{
+{II}throw new SerializationError(
+{III}`JSON knows neither an infinity nor a not-a-number, so the value ` +
+{IIII}`can not be serialized: ${{that}}`
+{II});
+{I}}}
+{I}return that;
+}}"""
+        ),
+    ]
+
+    return [
+        block
+        for a_type, block in zip(
+            (intermediate.PrimitiveType.INT, intermediate.PrimitiveType.FLOAT), blocks
+        )
+        if a_type in number_types
+    ]
+
+
+def _generate_transformer(
+    symbol_table: intermediate.SymbolTable, ids_of_types_reaching_a_number: Set[int]
+) -> Stripped:
     methods = []  # type: List[Stripped]
 
     for cls in symbol_table.concrete_classes:
-        methods.append(_generate_transform(cls))
+        methods.append(_generate_transform(cls, ids_of_types_reaching_a_number))
 
     writer = io.StringIO()
     writer.write(
@@ -1835,6 +2093,12 @@ def generate(
     spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code for JSON de/serialization."""
+    ids_of_types_reaching_a_number = (
+        intermediate.collect_ids_of_types_reaching_a_number(symbol_table)
+    )
+
+    number_types = _collect_number_types(symbol_table)
+
     blocks = [
         typescript_description.documentation_comment(
             Stripped(
@@ -2112,9 +2376,18 @@ function newDeserializationError<T>(
 
     blocks.append(Stripped("// region Serialization"))
 
+    blocks.append(_generate_serialization_error())
+
+    blocks.extend(_generate_number_serializers(number_types))
+
     blocks.append(_generate_serialize_array())
 
-    blocks.append(_generate_transformer(symbol_table=symbol_table))
+    blocks.append(
+        _generate_transformer(
+            symbol_table=symbol_table,
+            ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
+        )
+    )
 
     blocks.append(Stripped("const SERIALIZER = new Serializer();"))
 

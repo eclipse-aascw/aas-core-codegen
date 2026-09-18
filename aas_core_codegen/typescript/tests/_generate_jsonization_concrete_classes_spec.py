@@ -20,6 +20,142 @@ from aas_core_codegen.typescript.common import (
 )
 
 
+def _tuple_items(
+    numeric_place: intermediate.NumericPlace,
+) -> "List[intermediate.TypeAnnotationUnion]":
+    """Give out the items of the tuple at the ``numeric_place``."""
+    type_anno = numeric_place.prop.type_annotation
+    assert isinstance(type_anno, intermediate.TupleTypeAnnotation), (
+        f"Expected a tuple at the numeric place of "
+        f"{numeric_place.cls.name}.{numeric_place.prop.name}, but got: {type_anno}"
+    )
+    return list(type_anno.items)
+
+
+def _generate_serialization_failure_tests(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """Generate the tests that a number unrepresentable in JSON is refused."""
+    result = []  # type: List[Stripped]
+
+    for numeric_place in intermediate.numeric_places(symbol_table):
+        if numeric_place.a_type is intermediate.PrimitiveType.FLOAT:
+            what = "a non-finite number"
+            zero_literal = "0.0"
+            values_literal = "[Infinity, -Infinity, NaN]"
+        else:
+            what = "an integer outside the range representable in JSON"
+            zero_literal = "0"
+            values_literal = "[9007199254740992, -9007199254740992]"
+
+        prop_name = typescript_naming.property_name(numeric_place.prop.name)
+
+        if numeric_place.index is None:
+            mutation = Stripped(f"instance.{prop_name} = value;")
+            expected_path = f".{prop_name}"
+        else:
+            # NOTE (mristin):
+            # The value goes to the position indicated by the numeric place so
+            # that a serializer which always reports the index 0 does not pass.
+            # A tuple is an array in TypeScript, so a list and a tuple are
+            # written the same way.
+            items_joined = ", ".join(
+                "value"
+                if i == numeric_place.index
+                else (
+                    zero_literal
+                    if numeric_place.in_list
+                    else f"instance.{prop_name}[{i}]"
+                )
+                for i in range(
+                    numeric_place.index + 1
+                    if numeric_place.in_list
+                    else len(_tuple_items(numeric_place))
+                )
+            )
+
+            mutation = Stripped(
+                f"instance.{prop_name} = [{items_joined}] as typeof instance."
+                f"{prop_name};"
+            )
+            expected_path = f".{prop_name}[{numeric_place.index}]"
+
+        cls_name_json = naming.json_model_type(numeric_place.cls.name)
+
+        deserialization_function = typescript_naming.function_name(
+            Identifier(f"{numeric_place.cls.name}_from_jsonable")
+        )
+
+        result.append(
+            Stripped(
+                f"""\
+test(
+{I}"{numeric_place.cls.name} serialization fails on {what} "
+{I}+ "at {expected_path}",
+{I}() => {{
+{II}for (const value of {values_literal}) {{
+{III}const instance = AasJsonization.{deserialization_function}(
+{IIII}loadTheFirstExpected({typescript_common.string_literal(cls_name_json)})
+{III}).mustValue();
+
+{III}{mutation}
+
+{III}let caught: unknown = null;
+{III}try {{
+{IIII}AasJsonization.toJsonable(instance);
+{III}}} catch (error) {{
+{IIII}caught = error;
+{III}}}
+
+{III}if (!(caught instanceof AasJsonization.SerializationError)) {{
+{IIII}throw new Error(
+{IIIII}`Expected a SerializationError, but got: ${{caught}}`
+{IIII});
+{III}}}
+
+{III}expect(caught.path).toStrictEqual({typescript_common.string_literal(expected_path)});
+{II}}}
+{I}}}
+);"""
+            )
+        )
+
+    if len(result) > 0:
+        result.insert(
+            0,
+            Stripped(
+                f"""\
+/**
+ * Load the first recorded example of the `modelType`.
+ */
+function loadTheFirstExpected(modelType: string): AasJsonization.JsonValue {{
+{I}const pths = Array.from(
+{II}TestCommon.findFilesBySuffixRecursively(
+{III}path.join(
+{IIII}TestCommon.TEST_DATA_DIR,
+{IIII}"Json",
+{IIII}"Expected",
+{IIII}modelType
+{III}),
+{III}".json"
+{II})
+{I});
+{I}pths.sort();
+
+{I}if (pths.length === 0) {{
+{II}throw new Error(
+{III}`Expected at least one recorded example of ${{modelType}}, but got none`
+{II});
+{I}}}
+
+{I}return TestCommon.readJsonFromFileSync(pths[0]);
+}}"""
+            ),
+        )
+
+    return result
+
+
 # fmt: off
 @ensure(
     lambda result: result.endswith('\n'),
@@ -335,6 +471,8 @@ test("{cls_name_typescript} verification fail", () => {{
                 ),
             ]
         )
+
+    blocks.extend(_generate_serialization_failure_tests(symbol_table))
 
     blocks.append(typescript_common.WARNING)
 
