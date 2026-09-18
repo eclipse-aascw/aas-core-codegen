@@ -272,6 +272,26 @@ class Verifier
         );
         yield error;
       }
+
+      if (that.optionalPair !== null) {
+        for (const error of this.transformWithContext(
+            that.optionalPair[1], context)
+        ) {
+          error.path.prepend(
+            new IndexSegment(
+              that.optionalPair,
+              1
+            )
+          );
+          error.path.prepend(
+            new PropertySegment(
+              that,
+              "optionalPair"
+            )
+          );
+          yield error;
+        }
+      }
     }
   }
 }

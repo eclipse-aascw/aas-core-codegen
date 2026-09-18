@@ -1470,10 +1470,12 @@ func readSomethingAsSequence(
 	var thePair aascommon.Tuple2[string, int64]
 	var theItems aascommon.Tuple2[aastypes.IAbstractItem, aastypes.IAbstractItem]
 	var theTricky aascommon.Tuple6[int64, aastypes.ISomeItem, aastypes.IAbstractItem, aastypes.ISomeItem, int64, aastypes.Result]
+	var theOptionalPair *aascommon.Tuple2[string, aastypes.IAbstractItem]
 
 	foundPair := false
 	foundItems := false
 	foundTricky := false
+	foundOptionalPair := false
 
 	for {
 		var local string
@@ -1525,6 +1527,19 @@ func readSomethingAsSequence(
 				readAtV6_Result,
 			)
 			foundTricky = true
+		case "optionalPair":
+			if foundOptionalPair {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
+			theOptionalPair, current, valueErr = readOptional(
+				readTuple2(
+					decoder, current,
+					readAtV1_string,
+					readAbstractItemDispatched,
+				),
+			)
+			foundOptionalPair = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -1559,6 +1574,7 @@ func readSomethingAsSequence(
 		theItems,
 		theTricky,
 	)
+	instance.SetOptionalPair(theOptionalPair)
 	return
 }
 
@@ -2222,6 +2238,18 @@ func writeTupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
 	)
 }
 
+// Write the items of `that` as a sequence of XML elements.
+//
+// Do not flush.
+func writeTupleOf2_string_IAbstractItem(
+	encoder *xml.Encoder,
+	that aascommon.Tuple2[string, aastypes.IAbstractItem],
+) error {
+	return writeTuple2(
+		encoder, that, writeAtV1_string, writeInstance[aastypes.IAbstractItem],
+	)
+}
+
 // Write the `value` of a property as string representation
 // of [aastypes.Result]
 // in a text element.
@@ -2337,6 +2365,19 @@ func writeSomethingAsSequence(
 			"tricky",
 			that.Tricky(),
 			writeTupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"OptionalPair()",
+		writeOptionalPointer(
+			encoder,
+			"optionalPair",
+			that.OptionalPair(),
+			writeTupleOf2_string_IAbstractItem,
 		),
 	)
 	if err != nil {

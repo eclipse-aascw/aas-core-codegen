@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Tuple
+from typing import Optional, Tuple
 
 from icontract import DBC, invariant
 
@@ -55,15 +55,20 @@ class Something(DBC):
     # literal in a single tuple, to exercise the trickiest tuple shape we support.
     tricky: Tuple[int, Some_item, Abstract_item, Some_item, Positive_int, Result]
 
+    #: Test an optional tuple, mixing a primitive with a polymorphic class
+    optional_pair: Optional[Tuple[str, Abstract_item]]
+
     def __init__(
         self,
         pair: Tuple[str, int],
         items: Tuple[Abstract_item, Abstract_item],
         tricky: Tuple[int, Some_item, Abstract_item, Some_item, Positive_int, Result],
+        optional_pair: Optional[Tuple[str, Abstract_item]] = None,
     ) -> None:
         self.pair = pair
         self.items = items
         self.tricky = tricky
+        self.optional_pair = optional_pair
 
 
 __version__ = "dummy"

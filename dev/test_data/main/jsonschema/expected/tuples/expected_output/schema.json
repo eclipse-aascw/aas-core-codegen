@@ -140,6 +140,20 @@
           "minItems": 6,
           "maxItems": 6,
           "additionalItems": false
+        },
+        "optionalPair": {
+          "type": "array",
+          "items": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/definitions/AbstractItem_choice"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2,
+          "additionalItems": false
         }
       },
       "required": [

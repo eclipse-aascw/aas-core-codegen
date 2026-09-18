@@ -1047,6 +1047,7 @@ function parsePropertiesOfSomething(
   let thePair: [string, number] | null = null;
   let theItems: [AasTypes.IAbstractItem, AasTypes.IAbstractItem] | null = null;
   let theTricky: [number, AasTypes.SomeItem, AasTypes.IAbstractItem, AasTypes.SomeItem, number, AasTypes.Result] | null = null;
+  let theOptionalPair: [string, AasTypes.IAbstractItem] | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
@@ -1087,6 +1088,17 @@ function parsePropertiesOfSomething(
         );
         propertyError = parsed.error;
         theTricky = parsed.value;
+        break;
+      }
+
+      case "optionalPair": {
+        const parsed = parseTuple2<string, AasTypes.IAbstractItem>(
+          jsonableValue,
+          stringFromJsonable,
+          abstractItemFromJsonable
+        );
+        propertyError = parsed.error;
+        theOptionalPair = parsed.value;
         break;
       }
 
@@ -1144,7 +1156,8 @@ function parsePropertiesOfSomething(
     new AasTypes.Something(
       thePair,
       theItems,
-      theTricky
+      theTricky,
+      theOptionalPair
     ),
     null
   );
@@ -1336,6 +1349,12 @@ function serializeSomething(
     prop = "tricky";
     jsonable["tricky"] =
       serialize_TupleOf6_int_SomeItem_IAbstractItem_SomeItem_int_Result(that.tricky);
+
+    if (that.optionalPair !== null) {
+      prop = "optionalPair";
+      jsonable["optionalPair"] =
+        serialize_TupleOf2_str_IAbstractItem(that.optionalPair);
+    }
   } catch (error) {
     if (error instanceof SerializationError) {
       error.prependProperty(prop);
@@ -1438,6 +1457,28 @@ function serialize_TupleOf6_int_SomeItem_IAbstractItem_SomeItem_int_Result(
   } catch (error) {
     if (error instanceof SerializationError) {
       error.prependIndex(5);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - tuple to be serialized
+ * @returns JSON-able array
+ */
+function serialize_TupleOf2_str_IAbstractItem(
+  that: readonly [string, AasTypes.IAbstractItem]
+): Array<JsonValue> {
+  const result = new Array<JsonValue>(2);
+  result[0] = that[0];
+  try {
+    result[1] = serializeClass(that[1]);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(1);
     }
     throw error;
   }

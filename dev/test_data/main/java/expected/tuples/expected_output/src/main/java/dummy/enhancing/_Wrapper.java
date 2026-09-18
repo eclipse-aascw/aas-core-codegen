@@ -137,6 +137,22 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
         tricky.item5(),
         tricky.item6()));
 
+    if (that.getOptionalPair().isPresent()) {
+      Tuple2<String, IAbstractItem> optionalPair = that.getOptionalPair().get();
+      IClass transformedOptionalPair1 = transform(optionalPair.item2());
+      if (!(transformedOptionalPair1 instanceof IAbstractItem)) {
+        throw new UnsupportedOperationException(
+          "Expected the transformed value to be a IAbstractItem " +
+          ", but got: " + transformedOptionalPair1
+        );
+      }
+      IAbstractItem castedOptionalPair1 = (IAbstractItem) transformedOptionalPair1;
+      that.setOptionalPair(
+        new Tuple2<>(
+          optionalPair.item1(),
+          castedOptionalPair1));
+    }
+
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
       ? that

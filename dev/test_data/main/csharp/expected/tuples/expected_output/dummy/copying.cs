@@ -65,7 +65,11 @@ namespace dummy
                 Aas.ISomething that
             )
             {
-                return new Aas.Something(that.Pair, that.Items, that.Tricky);
+                return new Aas.Something(
+                    that.Pair,
+                    that.Items,
+                    that.Tricky,
+                    that.OptionalPair);
             }
         }  // internal class ShallowCopier
 
@@ -109,7 +113,13 @@ namespace dummy
                         Deep(that.Tricky.Item4),
                         that.Tricky.Item5,
                         that.Tricky.Item6
-                    )
+                    ),
+                    (that.OptionalPair.HasValue)
+                        ? (
+                            that.OptionalPair.Value.Item1,
+                            Deep(that.OptionalPair.Value.Item2)
+                        )
+                        : ((string, IAbstractItem)?)null
                 );
             }
         }  // internal class DeepCopier

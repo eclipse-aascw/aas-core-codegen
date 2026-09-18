@@ -163,6 +163,19 @@ public class Verification {
               return error;
             }));
 
+      if (that.getOptionalPair().isPresent()) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(that.getOptionalPair().get().item2())
+            .flatMap(Verification::verifyToErrorStream)
+              .map(error -> {
+                error.prependSegment(
+                  new Reporting.IndexSegment(1));
+                error.prependSegment(
+                  new Reporting.NameSegment("optionalPair"));
+                return error;
+              }));
+      }
+
       return errorStream;
     }
   }

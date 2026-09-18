@@ -708,6 +708,14 @@ namespace dummy
                     AtElement(
                         Read_Result, "v6")));
 
+            private static readonly ContentReader<
+                (string, IAbstractItem)
+            > Read_TupleOf2_string_IAbstractItem = (
+                AsTuple2<string, IAbstractItem>(
+                    AtElement(
+                        Read_string, "v1"),
+                    IAbstractItemFromElement));
+
             /// <summary>
             /// Deserialize an instance of IAbstractItem from an XML element.
             /// </summary>
@@ -948,6 +956,7 @@ namespace dummy
                 (string, long)? thePair = null;
                 (IAbstractItem, IAbstractItem)? theItems = null;
                 (long, ISomeItem, IAbstractItem, ISomeItem, long, Result)? theTricky = null;
+                (string, IAbstractItem)? theOptionalPair = null;
 
                 if (!isEmptySequence)
                 {
@@ -993,6 +1002,15 @@ namespace dummy
                                     break;
                                 }
                                 theTricky = Read_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
+                                    reader, isEmptyProperty, out error);
+                                break;
+                            case "optionalPair":
+                                if (theOptionalPair != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
+                                theOptionalPair = Read_TupleOf2_string_IAbstractItem(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1065,7 +1083,8 @@ namespace dummy
                             "Unexpected null, had to be handled before"),
                     theTricky
                          ?? throw new System.InvalidOperationException(
-                            "Unexpected null, had to be handled before"));
+                            "Unexpected null, had to be handled before"),
+                    theOptionalPair);
             }  // internal static Aas.Something? SomethingFromSequence
         }  // internal static class DeserializeImplementation
 
@@ -1472,6 +1491,14 @@ namespace dummy
                     WrapInElement(
                         Write_Result, "v6")));
 
+            private static readonly ContentWriter<
+                (string, IAbstractItem)
+            > Write_TupleOf2_string_IAbstractItem = (
+                WriteTuple2<string, IAbstractItem>(
+                    WrapInElement(
+                        Write_string, "v1"),
+                    WriteIClass));
+
             private static void SomeItemToSequence(
                 Aas.ISomeItem that,
                 Xml.XmlWriter writer)
@@ -1529,6 +1556,15 @@ namespace dummy
                     that.Tricky,
                     writer,
                     Write_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result);
+
+                if (that.OptionalPair.HasValue)
+                {
+                    WriteElement(
+                        "optionalPair",
+                        that.OptionalPair.Value,
+                        writer,
+                        Write_TupleOf2_string_IAbstractItem);
+                }
             }  // private static void SomethingToSequence
 
             public override void VisitSomething(

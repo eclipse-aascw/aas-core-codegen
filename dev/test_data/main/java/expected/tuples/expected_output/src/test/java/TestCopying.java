@@ -73,7 +73,14 @@ public class TestCopying {
             that.getTricky().item4(),
             casted.getTricky().item4())
           && that.getTricky().item5().equals(casted.getTricky().item5())
-          && that.getTricky().item6().equals(casted.getTricky().item6())));
+          && that.getTricky().item6().equals(casted.getTricky().item6()))
+        && (that.getOptionalPair().isPresent()
+          ? casted.getOptionalPair().isPresent()
+          && (that.getOptionalPair().get().item1().equals(casted.getOptionalPair().get().item1())
+            && transform(
+              that.getOptionalPair().get().item2(),
+              casted.getOptionalPair().get().item2()))
+          : ! casted.getOptionalPair().isPresent()));
     }
   } // class _DeepEqualiser
 
@@ -155,7 +162,8 @@ public class TestCopying {
     return (
       that.getPair().equals(other.getPair())
       && that.getItems().equals(other.getItems())
-      && that.getTricky().equals(other.getTricky()));
+      && that.getTricky().equals(other.getTricky())
+      && that.getOptionalPair().equals(other.getOptionalPair()));
   }
 
   private static Boolean SomeItemDeepEquals(SomeItem that, SomeItem other) {

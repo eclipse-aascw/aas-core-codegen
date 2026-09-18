@@ -26,5 +26,12 @@
     },
     123,
     "not-ok"
+  ],
+  "optionalPair": [
+    "sixth",
+    {
+      "modelType": "AnotherItem",
+      "serialNumber": 7
+    }
   ]
 }

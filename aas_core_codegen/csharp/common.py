@@ -194,6 +194,32 @@ def generate_type(
     raise AssertionError("Should not have gotten here")
 
 
+def is_value_type(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
+    """
+    Check whether ``type_annotation`` is represented as a C# value type.
+
+    An optional of such a type is a ``System.Nullable``, so it is tested with
+    ``HasValue`` and unwrapped with ``Value``, whereas an optional of
+    a reference type is simply compared against ``null``.
+    """
+    primitive_type = intermediate.try_primitive_type(type_annotation)
+    if primitive_type is not None:
+        return primitive_type in (
+            intermediate.PrimitiveType.BOOL,
+            intermediate.PrimitiveType.INT,
+            intermediate.PrimitiveType.FLOAT,
+        )
+
+    if isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
+        type_annotation.our_type, intermediate.Enumeration
+    ):
+        return True
+
+    # NOTE (mristin):
+    # A tuple is a ``System.ValueTuple``.
+    return isinstance(type_annotation, intermediate.TupleTypeAnnotation)
+
+
 INDENT: Final[str] = "    "
 INDENT2: Final[str] = INDENT * 2
 INDENT3: Final[str] = INDENT * 3

@@ -703,6 +703,15 @@ public class Xmlization {
         _DeserializeImplementation::readAtV6_Result);
     }
 
+    private static Reporting.Result<Tuple2<String, IAbstractItem>> readTupleOf2_string_IAbstractItem(
+      XMLEventReader reader, boolean isEmpty) {
+      return readTuple2(
+        reader,
+        isEmpty,
+        _DeserializeImplementation::readAtV1_string,
+        _DeserializeImplementation::readIAbstractItemFromElement);
+    }
+
     private static Reporting.Result<? extends String> readAtV1_string(
       XMLEventReader reader) {
       return readNamedElement(
@@ -940,6 +949,7 @@ public class Xmlization {
         ISomeItem,
         Long,
         Result> theTricky = null;
+      Tuple2<String, IAbstractItem> theOptionalPair = null;
 
       if (!isEmptySequence) {
         while (!atEndOfSequence(reader)) {
@@ -1005,6 +1015,21 @@ public class Xmlization {
               }
               break;
             }
+            case "optionalPair": {
+              if (theOptionalPair != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
+              final Reporting.Result<Tuple2<String, IAbstractItem>> value =
+                readTupleOf2_string_IAbstractItem(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theOptionalPair = value.getResult();
+              }
+              break;
+            }
             default:
               return unexpectedProperty("Something", elementName);
           }
@@ -1038,7 +1063,8 @@ public class Xmlization {
       return Reporting.Result.success(new Something(
         thePair,
         theItems,
-        theTricky));
+        theTricky,
+        theOptionalPair));
     }
 
     /**
@@ -1298,6 +1324,26 @@ public class Xmlization {
     }
 
     /**
+     * Write {@code that} as the XML element of a property called
+     * {@code name} if it has been given, and write nothing at all otherwise.
+     *
+     * <p>The {@link Optional} is taken apart here, once, instead of at every
+     * optional property: asking it and then unwrapping it at the call site
+     * would call the getter twice, and every call allocates an
+     * {@link Optional} of its own.
+     */
+    private static <T> void writeOptionalProperty(
+      String name,
+      Optional<T> that,
+      XMLStreamWriter writer,
+      ContentWriter<? super T> writeContent) {
+      final T value = that.orElse(null);
+      if (value != null) {
+        writeProperty(name, value, writer, writeContent);
+      }
+    }
+
+    /**
      * Write {@code that} as its own, self-describing XML element.
      *
      * <p>Which element that is, is decided by the run-time type of
@@ -1396,6 +1442,21 @@ public class Xmlization {
         writeAtV5_stringified(that.item5(), writer);
         index = 5;
         writeAtV6_IEnum(that.item6(), writer);
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeTupleOf2_stringified_IClass(
+      Tuple2<?, ? extends IClass> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        writeAtV1_stringified(that.item1(), writer);
+        index = 1;
+        writeClass(that.item2(), writer);
       } catch (_SerializeFailure failure) {
         failure.getError().prependSegment(
           new Reporting.IndexSegment(index));
@@ -1507,6 +1568,12 @@ public class Xmlization {
         that.getTricky(),
         writer,
         _VisitorWithWriter::writeTupleOf6_stringified_IClass_IClass_IClass_stringified_IEnum);
+
+      writeOptionalProperty(
+        "optionalPair",
+        that.getOptionalPair(),
+        writer,
+        _VisitorWithWriter::writeTupleOf2_stringified_IClass);
     }
 
     @Override

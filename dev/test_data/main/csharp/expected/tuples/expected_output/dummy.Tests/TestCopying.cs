@@ -88,7 +88,14 @@ namespace dummy.Tests
                             that.Tricky.Item4,
                             casted.Tricky.Item4)
                         && that.Tricky.Item5 == casted.Tricky.Item5
-                        && that.Tricky.Item6 == casted.Tricky.Item6));
+                        && that.Tricky.Item6 == casted.Tricky.Item6)
+                    && ((that.OptionalPair.HasValue && casted.OptionalPair.HasValue)
+                        ? (
+                                that.OptionalPair.Value.Item1 == casted.OptionalPair.Value.Item1
+                                && Transform(
+                                    that.OptionalPair.Value.Item2,
+                                    casted.OptionalPair.Value.Item2))
+                        : !that.OptionalPair.HasValue && !casted.OptionalPair.HasValue));
             }
         }  // internal class DeepEqualiser
 
@@ -115,7 +122,8 @@ namespace dummy.Tests
             return (
                 that.Pair == other.Pair
                 && that.Items == other.Items
-                && that.Tricky == other.Tricky);
+                && that.Tricky == other.Tricky
+                && that.OptionalPair == other.OptionalPair);
         }
 
         private static bool SomeItemDeepEquals(

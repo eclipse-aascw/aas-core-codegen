@@ -1994,6 +1994,21 @@ def _read_tuple2_of__abstract_item__abstract_item(
     )
 
 
+def _read_tuple2_of__str__abstract_item(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> Tuple[str, aas_types.AbstractItem]:
+    """
+    Read the items of :paramref:`element` as a tuple of 2 item(s).
+    """
+    return _tuple2_from_element(
+        element,
+        iterator,
+        _read_str__at_v1,
+        _read_abstract_item_as_element
+    )
+
+
 def _read_tuple2_of__str__int(
     element: Element,
     iterator: Iterator[Tuple[str, Element]]
@@ -2247,6 +2262,9 @@ def _read_something_as_sequence(
     ] = values.get(
         'tricky'
     )
+    the_optional_pair: Optional[Tuple[str, aas_types.AbstractItem]] = values.get(
+        'optionalPair'
+    )
 
     if the_pair is None:
         raise DeserializationException(
@@ -2266,7 +2284,8 @@ def _read_something_as_sequence(
     return aas_types.Something(
         the_pair,
         the_items,
-        the_tricky
+        the_tricky,
+        the_optional_pair
     )
 
 
@@ -2381,6 +2400,7 @@ _READERS_FOR_SOMETHING: Mapping[
     'pair': _read_tuple2_of__str__int,
     'items': _read_tuple2_of__abstract_item__abstract_item,
     'tricky': _read_tuple6_of__int__some_item__abstract_item__some_item__int__result,
+    'optionalPair': _read_tuple2_of__str__abstract_item,
 }
 
 
@@ -2648,6 +2668,42 @@ def _write_tuple2_of__abstract_item__abstract_item(
         _attribute_to_property(exception, prop_name)
 
 
+def _write_tuple2_of__str__abstract_item(
+    name: str,
+    prop_name: Optional[str],
+    value: Tuple[str, aas_types.AbstractItem],
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the 2 item(s) of :paramref:`value` enclosed in
+    the :paramref:`name` element.
+
+    :param name: of the enclosing element
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
+    :param value: to be serialized
+    :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
+    """
+    try:
+        serializer._write_start_element(name)
+
+        try:
+            _write_str_as_element('v1', None, value[0], serializer)
+        except Exception as exception:
+            _attribute_to_item(exception, 0)
+
+        try:
+            serializer.visit(value[1])
+        except Exception as exception:
+            _attribute_to_item(exception, 1)
+
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
+
+
 def _write_tuple2_of__str__int(
     name: str,
     prop_name: Optional[str],
@@ -2825,6 +2881,10 @@ def _write_something_as_element(
         _write_tuple6_of__int__some_item__abstract_item__some_item__int__result(
             'tricky', 'tricky', that.tricky, serializer
         )
+        if that.optional_pair is not None:
+            _write_tuple2_of__str__abstract_item(
+                'optionalPair', 'optional_pair', that.optional_pair, serializer
+            )
         serializer._write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)

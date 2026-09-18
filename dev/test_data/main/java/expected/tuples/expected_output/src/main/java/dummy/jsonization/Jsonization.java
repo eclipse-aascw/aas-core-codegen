@@ -433,6 +433,18 @@ public class Jsonization {
       }
 
       /**
+       * Parse {@code node} as a tuple of 2 item(s).
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<Tuple2<String, IAbstractItem>> parseTupleOf2_string_IAbstractItem(JsonNode node) {
+        return parseTuple2(
+          node,
+          _DeserializeImplementation::tryStringFrom,
+          _DeserializeImplementation::tryIAbstractItemFrom);
+      }
+
+      /**
        * Deserialize the enumeration Result from the {@code node}.
        *
        * @param node JSON node to be parsed
@@ -603,6 +615,7 @@ public class Jsonization {
           ISomeItem,
           Long,
           Result> theTricky = null;
+        Tuple2<String, IAbstractItem> theOptionalPair = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
@@ -643,6 +656,15 @@ public class Jsonization {
               theTricky = parsed.getResult();
               break;
             }
+            case "optionalPair": {
+              final Reporting.Result<Tuple2<String, IAbstractItem>> parsed =
+                parseTupleOf2_string_IAbstractItem(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
+              }
+              theOptionalPair = parsed.getResult();
+              break;
+            }
             default:
               return unexpectedProperty(key);
           }
@@ -663,7 +685,8 @@ public class Jsonization {
         return Reporting.Result.success(new Something(
           thePair,
           theItems,
-          theTricky));
+          theTricky,
+          theOptionalPair));
       }
     }
 
@@ -968,6 +991,25 @@ public class Jsonization {
         return result;
       }
 
+      /**
+       * Serialize each of the 2 items of {@code that} into a JSON array.
+       *
+       * @param that to be serialized
+       */
+      private static ArrayNode serializeTupleOf2_string_IClass(
+        Tuple2<String, ? extends IClass> that) {
+        final ArrayNode result = JsonNodeFactory.instance.arrayNode();
+        result.add(JsonNodeFactory.instance.textNode(that.item1()));
+        try {
+          result.add(transformClass(that.item2()));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.IndexSegment(1));
+          throw failure;
+        }
+        return result;
+      }
+
       @Override
       public JsonNode transformSomeItem(
         ISomeItem that
@@ -1029,6 +1071,16 @@ public class Jsonization {
           failure.getError().prependSegment(
             new Reporting.NameSegment("tricky"));
           throw failure;
+        }
+
+        if (that.getOptionalPair().isPresent()) {
+          try {
+            result.set("optionalPair", serializeTupleOf2_string_IClass(that.getOptionalPair().get()));
+          } catch (_SerializeFailure failure) {
+            failure.getError().prependSegment(
+              new Reporting.NameSegment("optionalPair"));
+            throw failure;
+          }
         }
 
         return result;

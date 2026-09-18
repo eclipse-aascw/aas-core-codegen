@@ -1157,6 +1157,16 @@ function parse_TupleOf2_IAbstractItem_IAbstractItem(
   );
 }
 
+function parse_TupleOf2_str_IAbstractItem(
+  cursor: XmlCursor
+): AasCommon.Either<[string, AasTypes.IAbstractItem], DeserializationError> {
+  return parseTuple2<string, AasTypes.IAbstractItem>(
+    cursor,
+    parseAtV1_str,
+    dispatchParseAbstractItemElement
+  );
+}
+
 function parse_TupleOf2_str_int(
   cursor: XmlCursor
 ): AasCommon.Either<[string, number], DeserializationError> {
@@ -1249,6 +1259,18 @@ function write_TupleOf2_IAbstractItem_IAbstractItem(
     parts,
     value,
     writeClass,
+    writeClass
+  );
+}
+
+function write_TupleOf2_str_IAbstractItem(
+  parts: Array<string>,
+  value: [string, AasTypes.IAbstractItem]
+): void {
+  writeTuple2(
+    parts,
+    value,
+    writeAtV1_str,
     writeClass
   );
 }
@@ -1467,6 +1489,7 @@ function parseSomethingFromSequence(
   let thePair: [string, number] | null = null;
   let theItems: [AasTypes.IAbstractItem, AasTypes.IAbstractItem] | null = null;
   let theTricky: [number, AasTypes.SomeItem, AasTypes.IAbstractItem, AasTypes.SomeItem, number, AasTypes.Result] | null = null;
+  let theOptionalPair: [string, AasTypes.IAbstractItem] | null = null;
 
   const className = AasTypes.Something.name;
 
@@ -1536,6 +1559,22 @@ function parseSomethingFromSequence(
         break;
       }
 
+      case "optionalPair": {
+        if (theOptionalPair !== null) {
+          propertyError = duplicatePropertyError(propertyLocalName);
+          break;
+        }
+
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_TupleOf2_str_IAbstractItem
+        );
+        propertyError = parsed.error;
+        theOptionalPair = parsed.value;
+        break;
+      }
+
       default: {
         propertyError = new DeserializationError(
           `Unexpected XML property: ${propertyLocalName}`
@@ -1576,7 +1615,8 @@ function parseSomethingFromSequence(
   const instance = new AasTypes.Something(
     thePair,
     theItems,
-    theTricky
+    theTricky,
+    theOptionalPair
   );
   return new AasCommon.Either<AasTypes.Something, DeserializationError>(
     instance,
@@ -1647,6 +1687,12 @@ function writeSomethingAsSequence(
     "tricky",
     that.tricky,
     write_TupleOf6_int_SomeItem_IAbstractItem_SomeItem_int_Result
+  );
+  writeOptionalProperty(
+    parts,
+    "optionalPair",
+    that.optionalPair,
+    write_TupleOf2_str_IAbstractItem
   );
 }
 

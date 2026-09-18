@@ -424,8 +424,17 @@ that.{prop_name} = (
             item_exprs = []  # type: List[Stripped]
             any_transformable_item = False
 
+            # NOTE (mristin):
+            # A tuple is a ``System.ValueTuple``, so an optional tuple is
+            # a ``System.Nullable`` which has to be unwrapped before we can access
+            # its items. The assignment back needs no wrapping as the tuple literal
+            # is implicitly converted.
+            access_expr = Stripped(f"that.{prop_name}")
+            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+                access_expr = Stripped(f"that.{prop_name}.Value")
+
             for i, item_type_anno in enumerate(type_anno.items):
-                item_access = Stripped(f"that.{prop_name}.Item{i + 1}")
+                item_access = Stripped(f"{access_expr}.Item{i + 1}")
 
                 if isinstance(
                     item_type_anno, intermediate.OurTypeAnnotation
@@ -496,9 +505,15 @@ that.{prop_name} = {tuple_literal};"""
             assert_never(type_anno)
 
         if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+            condition = (
+                f"that.{prop_name}.HasValue"
+                if csharp_common.is_value_type(type_anno)
+                else f"that.{prop_name} != null"
+            )
+
             wrap_stmt = Stripped(
                 f"""\
-if (that.{prop_name} != null)
+if ({condition})
 {{
 {I}{indent_but_first_line(wrap_stmt, I)}
 }}"""

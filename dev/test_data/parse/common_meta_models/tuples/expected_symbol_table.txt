@@ -215,6 +215,26 @@ UnverifiedSymbolTable(
           description=None,
           json_name=None,
           xml_name=None,
+          node=...),
+        Property(
+          name='optional_pair',
+          type_annotation=SubscriptedTypeAnnotation(
+            identifier='Optional',
+            subscripts=[
+              SubscriptedTypeAnnotation(
+                identifier='Tuple',
+                subscripts=[
+                  AtomicTypeAnnotation(
+                    identifier='str',
+                    node=...),
+                  AtomicTypeAnnotation(
+                    identifier='Abstract_item',
+                    node=...)],
+                node=...)],
+            node=...),
+          description=None,
+          json_name=None,
+          xml_name=None,
           node=...)],
       methods=[
         ConstructorToBeUnderstood(
@@ -279,6 +299,25 @@ UnverifiedSymbolTable(
                     node=...)],
                 node=...),
               default=None,
+              node=...),
+            Argument(
+              name='optional_pair',
+              type_annotation=SubscriptedTypeAnnotation(
+                identifier='Optional',
+                subscripts=[
+                  SubscriptedTypeAnnotation(
+                    identifier='Tuple',
+                    subscripts=[
+                      AtomicTypeAnnotation(
+                        identifier='str',
+                        node=...),
+                      AtomicTypeAnnotation(
+                        identifier='Abstract_item',
+                        node=...)],
+                    node=...)],
+                node=...),
+              default=Default(
+                node=...),
               node=...)],
           returns=None,
           description=None,

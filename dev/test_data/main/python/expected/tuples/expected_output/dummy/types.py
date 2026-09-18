@@ -252,6 +252,8 @@ class Something(Class):
         'Result',
     ]
 
+    optional_pair: Optional[Tuple[str, 'AbstractItem']]
+
     def descend_once(self) -> Iterator[Class]:
         """
         Iterate over the instances referenced from this instance.
@@ -269,6 +271,9 @@ class Something(Class):
         yield self.tricky[2]
 
         yield self.tricky[3]
+
+        if self.optional_pair is not None:
+            yield self.optional_pair[1]
 
     def descend(self) -> Iterator[Class]:
         """
@@ -295,6 +300,11 @@ class Something(Class):
         yield self.tricky[3]
 
         yield from self.tricky[3].descend()
+
+        if self.optional_pair is not None:
+            yield self.optional_pair[1]
+
+            yield from self.optional_pair[1].descend()
 
     def accept(self, visitor: "AbstractVisitor") -> None:
         """Dispatch the :paramref:`visitor` on this instance."""
@@ -337,12 +347,14 @@ class Something(Class):
                 'SomeItem',
                 int,
                 'Result',
-            ]
+            ],
+            optional_pair: Optional[Tuple[str, 'AbstractItem']] = None
     ) -> None:
         """Initialize with the given values."""
         self.pair = pair
         self.items = items
         self.tricky = tricky
+        self.optional_pair = optional_pair
 
 
 class AbstractVisitor:

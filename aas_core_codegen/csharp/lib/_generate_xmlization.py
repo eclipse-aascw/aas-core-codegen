@@ -483,32 +483,6 @@ def _needed_combinators(
     )
 
 
-def _is_value_type(type_anno: intermediate.TypeAnnotationUnion) -> bool:
-    """
-    Check whether ``type_anno`` is represented as a C# value type.
-
-    An optional of such a type is a ``System.Nullable``, so it is tested with
-    ``HasValue`` and unwrapped with ``Value``, whereas an optional of
-    a reference type is simply compared against ``null``.
-    """
-    primitive_type = intermediate.try_primitive_type(type_anno)
-    if primitive_type is not None:
-        return primitive_type in (
-            intermediate.PrimitiveType.BOOL,
-            intermediate.PrimitiveType.INT,
-            intermediate.PrimitiveType.FLOAT,
-        )
-
-    if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.our_type, intermediate.Enumeration
-    ):
-        return True
-
-    # NOTE (mristin):
-    # A tuple is a ``System.ValueTuple``.
-    return isinstance(type_anno, intermediate.TupleTypeAnnotation)
-
-
 def _generate_as_text_combinators(
     needed: _NeededCombinators,
 ) -> List[Stripped]:
@@ -2985,7 +2959,7 @@ def _generate_serialize_property(
     condition = None  # type: Optional[str]
 
     if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        if _is_value_type(type_anno):
+        if csharp_common.is_value_type(type_anno):
             condition = f"that.{prop_name}.HasValue"
             value_expr = f"that.{prop_name}.Value"
         else:

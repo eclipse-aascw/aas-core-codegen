@@ -106,6 +106,24 @@ void PassThroughVisitor::VisitSomething(
       that->mutable_tricky()
     )
   );
+
+  // region mutable_optional_pair
+  const common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<types::IAbstractItem>
+    >
+  >& maybe_optional_pair(
+    that->mutable_optional_pair()
+  );
+  if (maybe_optional_pair.has_value()) {
+    Visit(
+      std::get<1>(
+        maybe_optional_pair.value()
+      )
+    );
+  }
+  // endregion
 }
 
 // endregion

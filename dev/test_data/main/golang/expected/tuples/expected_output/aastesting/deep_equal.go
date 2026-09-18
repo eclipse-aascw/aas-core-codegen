@@ -102,6 +102,25 @@ func deepEqualSomething(
 		return false
 	}
 
+	thatOptionalPair := that.OptionalPair()
+	otherOptionalPair := other.OptionalPair()
+	if
+		(thatOptionalPair == nil && otherOptionalPair != nil) ||
+		(thatOptionalPair != nil && otherOptionalPair == nil) {
+		return false
+	}
+	if thatOptionalPair != nil {
+		if thatOptionalPair.Item1 != otherOptionalPair.Item1 {
+			return false
+		}
+		if !DeepEqual(
+			thatOptionalPair.Item2,
+			otherOptionalPair.Item2,
+		) {
+			return false
+		}
+	}
+
 	return true
 }
 

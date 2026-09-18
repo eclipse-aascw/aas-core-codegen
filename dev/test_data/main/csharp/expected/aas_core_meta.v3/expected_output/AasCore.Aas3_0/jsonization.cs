@@ -7814,10 +7814,10 @@ namespace AasCore.Aas3_0
                         that.EmbeddedDataSpecifications);
                 }
 
-                if (that.OrderRelevant != null)
+                if (that.OrderRelevant.HasValue)
                 {
                     result["orderRelevant"] = Nodes.JsonValue.Create(
-                        that.OrderRelevant);
+                        that.OrderRelevant.Value);
                 }
 
                 if (that.SemanticIdListElement != null)

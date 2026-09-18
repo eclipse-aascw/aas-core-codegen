@@ -810,6 +810,14 @@ def _generate_transform_property(
     else:
         source_expr = Stripped(f"that.{prop_name}")
 
+        # NOTE (mristin):
+        # An optional of a value type, such as a tuple, is a ``System.Nullable``,
+        # so we have to unwrap it before we can descend into it.
+        if isinstance(
+            prop.type_annotation, intermediate.OptionalTypeAnnotation
+        ) and csharp_common.is_value_type(type_anno):
+            source_expr = Stripped(f"that.{prop_name}.Value")
+
     if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
         # There is nothing that we check for primitive types.
         return Stripped(""), None
@@ -958,10 +966,16 @@ if (that.{prop_name} != null)
             )
 
         else:
+            condition = (
+                f"that.{prop_name}.HasValue"
+                if csharp_common.is_value_type(type_anno)
+                else f"that.{prop_name} != null"
+            )
+
             return (
                 Stripped(
                     f"""\
-if (that.{prop_name} != null)
+if ({condition})
 {{
 {I}{indent_but_first_line(verify_block, I)}
 }}"""

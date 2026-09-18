@@ -270,6 +270,30 @@ func VerifySomething(
 		return
 	}
 
+	if that.OptionalPair() != nil {
+		abort = Verify(
+			that.OptionalPair().Item2,
+			func(err *VerificationError) bool {
+				err.Path.PrependIndex(
+					&aasreporting.IndexSegment{
+						Index: 1,
+					},
+				)
+
+				err.Path.PrependName(
+					&aasreporting.NameSegment{
+						Name: "OptionalPair",
+					},
+				)
+
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
+	}
+
 	return
 }
 
