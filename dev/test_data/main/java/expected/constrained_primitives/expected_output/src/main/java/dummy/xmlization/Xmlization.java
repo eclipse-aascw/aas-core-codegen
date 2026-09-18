@@ -15,6 +15,7 @@ import java.util.Base64;
 import java.util.function.Function;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import dummy.common.*;
 import dummy.reporting.Reporting;
 import dummy.stringification.Stringification;
@@ -364,10 +365,25 @@ public class Xmlization {
         }
         reader.nextEvent();
       }
-      if(!("true".equals(content.toString()) || "false".equals(content.toString()))){
-        throw new IllegalStateException("Content cannot be converted to the type Boolean.");
+      final String text = content.toString();
+
+      // NOTE (mristin):
+      // ``xs:boolean`` spells the two values in four ways, not two, so ``1`` and
+      // ``0`` have to be read as well. Boolean.valueOf is of no use here: it
+      // answers ``false`` to anything which is not ``true``, so it would take
+      // ``0`` and ``banana`` alike, and silently.
+      //
+      // See: https://www.w3.org/TR/xmlschema-2/#boolean
+      if (text.equals("true") || text.equals("1")) {
+        return Boolean.TRUE;
       }
-      return Boolean.valueOf(content.toString());
+
+      if (text.equals("false") || text.equals("0")) {
+        return Boolean.FALSE;
+      }
+
+      throw new IllegalStateException(
+        "Expected a value as xs:boolean, but got: " + text);
     }
 
     private static Long readContentAsLong(XMLEventReader reader) throws XMLStreamException {
@@ -383,6 +399,15 @@ public class Xmlization {
       return Long.valueOf(content.toString());
     }
 
+    /**
+     * Match the lexical space of {@code xs:double}.
+     *
+     * <p>See: https://www.w3.org/TR/xmlschema-2/#double
+     */
+    private static final Pattern XS_DOUBLE_PATTERN = Pattern.compile(
+      "^((\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?"
+        + "|-?INF|NaN)$");
+
     private static Double readContentAsDouble(XMLEventReader reader) throws XMLStreamException {
       final StringBuilder content = new StringBuilder();
 
@@ -393,7 +418,32 @@ public class Xmlization {
         reader.nextEvent();
       }
 
-      return Double.valueOf(content.toString());
+      final String text = content.toString();
+
+      // NOTE (mristin):
+      // The two infinities have to be spelled out: Double.valueOf refuses
+      // ``INF`` and ``-INF``, which is exactly what ``xs:double`` calls them.
+      if (text.equals("INF")) {
+        return Double.POSITIVE_INFINITY;
+      }
+
+      if (text.equals("-INF")) {
+        return Double.NEGATIVE_INFINITY;
+      }
+
+      // NOTE (mristin):
+      // Double.valueOf is in the other direction far too permissive: it accepts
+      // ``Infinity``, a trailing type suffix as in ``1.0d``, a hexadecimal
+      // significand as in ``0x1p3``, and surrounding whitespace, none of which
+      // is a valid ``xs:double``. The pattern is therefore checked first.
+      //
+      // See: https://www.w3.org/TR/xmlschema-2/#double
+      if (!XS_DOUBLE_PATTERN.matcher(text).matches()) {
+        throw new NumberFormatException(
+          "Expected a value as xs:double, but got: " + text);
+      }
+
+      return Double.valueOf(text);
     }
 
     private static String readContentAsString(XMLEventReader reader) throws XMLStreamException {
@@ -887,6 +937,34 @@ public class Xmlization {
     }
 
     /**
+     * Write {@code that} as XML content in the lexical form of
+     * {@code xs:double}.
+     *
+     * <p>This is the {@link ContentWriter} of every {@code double}-typed
+     * value, be it a property, a list item or a tuple item. A double can not
+     * share {@link #writeStringifiedContent} with the other primitives:
+     * {@code Double.toString} renders an infinity as {@code Infinity}, where
+     * {@code xs:double} spells it {@code INF}. Only the two infinities differ
+     * -- {@code NaN} is spelled the same way in both, and a finite number is
+     * rendered by {@code Double.toString} in a form which {@code xs:double}
+     * accepts.
+     *
+     * <p>See: https://www.w3.org/TR/xmlschema-2/#double
+     */
+    private static void writeDoubleContent(
+      Double that,
+      XMLStreamWriter writer) throws XMLStreamException {
+      final String text;
+      if (that.isInfinite()) {
+        text = (that > 0) ? "INF" : "-INF";
+      } else {
+        text = that.toString();
+      }
+
+      writer.writeCharacters(text);
+    }
+
+    /**
      * Write {@code that} as base64-encoded XML content.
      *
      * <p>This is the {@link ContentWriter} of every {@code byte[]}-typed
@@ -918,7 +996,7 @@ public class Xmlization {
         "someFloat",
         that.getSomeFloat(),
         writer,
-        _VisitorWithWriter::writeStringifiedContent);
+        _VisitorWithWriter::writeDoubleContent);
 
       writeProperty(
         "someString",
