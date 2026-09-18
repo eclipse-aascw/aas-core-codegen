@@ -275,8 +275,8 @@ def leaf_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
 # the monikers of the items rather than the items themselves, because the two
 # sides of a de/serialization do not agree on what a leaf is: the reading
 # names a leaf by its very type (see :py:func:`leaf_moniker`), whereas
-# the writing names it by the *kind* it is written through, of which there
-# are only a handful. The grammar above the leaves is the same for both, and
+# the writing names it by what it is written *as*, of which there are only
+# a handful. The grammar above the leaves is the same for both, and
 # lives here so that it is spelled exactly once.
 #
 # The arities are fixed, so the notation is self-delimiting and hence
