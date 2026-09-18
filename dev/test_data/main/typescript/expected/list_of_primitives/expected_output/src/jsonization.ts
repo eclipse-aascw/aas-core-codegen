@@ -183,23 +183,48 @@ function checkIsJsonObject(jsonable: JsonValue): DeserializationError | null {
 }
 
 /**
- * Check that the parsed `modelType` matches `expected`.
+ * Extract the `modelType` property of `jsonObject`.
  *
- * @param modelType - parsed value of the `modelType` property,
- * or `null` if it was missing
+ * @param jsonObject - to be inspected
+ * @returns the model type, or an error
+ */
+function extractModelType(
+  jsonObject: JsonObject
+): AasCommon.Either<string, DeserializationError> {
+  const modelType = jsonObject["modelType"];
+  if (modelType === undefined) {
+    return newDeserializationError<string>(
+      "The required property 'modelType' is missing"
+    );
+  }
+  if (typeof modelType !== "string") {
+    return newDeserializationError<string>(
+      `Expected the property modelType to be a string, ` +
+      `but got: ${typeof modelType}`
+    );
+  }
+
+  return new AasCommon.Either<string, DeserializationError>(modelType, null);
+}
+
+/**
+ * Check that the `modelType` property of `jsonObject` is `expected`.
+ *
+ * @param jsonObject - to be inspected
  * @param expected - expected model type
  * @returns error, if any
  */
 function checkModelType(
-  modelType: string | null,
+  jsonObject: JsonObject,
   expected: string
 ): DeserializationError | null {
-  if (modelType === null) {
-    return new DeserializationError(
-      "The required property 'modelType' is missing"
-    );
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return modelTypeOrError.error;
   }
-  if (modelType != expected) {
+
+  const modelType = modelTypeOrError.mustValue();
+  if (modelType !== expected) {
     return new DeserializationError(
       `Expected model type '${expected}', ` +
       `but got: ${modelType}`
@@ -238,19 +263,29 @@ function checkIsIterable(jsonable: JsonValue): DeserializationError | null {
 }
 
 /**
- * Parse every item of `iterable` with `parseItem`.
+ * Parse `jsonable` as an array, and every one of its items with `parseItem`.
  *
- * @param iterable - to be parsed item-by-item
- * @param parseItem - to parse a single item of `iterable`
+ * @param jsonable - to be parsed item-by-item
+ * @param parseItem - to parse a single item of `jsonable`
  * @returns parsed items, or an error
  * @typeParam T - type of a single parsed item
  */
 function parseArray<T>(
-  iterable: Iterable<JsonValue>,
+  jsonable: JsonValue,
   parseItem: (
     jsonableItem: JsonValue
   ) => AasCommon.Either<T, DeserializationError>
 ): AasCommon.Either<Array<T>, DeserializationError> {
+  const iterableError = checkIsIterable(jsonable);
+  if (iterableError !== null) {
+    return new AasCommon.Either<Array<T>, DeserializationError>(
+      null,
+      iterableError
+    );
+  }
+
+  const iterable = <Iterable<JsonValue>>jsonable;
+
   const items = new Array<T>();
   let i = 0;
   for (const jsonableItem of iterable) {
@@ -412,159 +447,156 @@ function bytesFromJsonable(
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Something}.
+ * Parse the properties of an instance
+ * of {@link types!Something} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Something},
+ * or an error if any
  */
-class SetterForSomething {
-  someBools: Array<boolean> | null = null;
+function parsePropertiesOfSomething(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Something,
+  DeserializationError
+> {
+  let theSomeBools: Array<boolean> | null = null;
+  let theSomeInts: Array<number> | null = null;
+  let theSomeFloats: Array<number> | null = null;
+  let theSomeStrings: Array<string> | null = null;
+  let theSomeBytes: Array<Uint8Array> | null = null;
 
-  someInts: Array<number> | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  someFloats: Array<number> | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "someBools": {
+        const parsed = parseArray(
+          jsonableValue,
+          booleanFromJsonable
+        );
+        propertyError = parsed.error;
+        theSomeBools = parsed.value;
+        break;
+      }
 
-  someStrings: Array<string> | null = null;
+      case "someInts": {
+        const parsed = parseArray(
+          jsonableValue,
+          integerFromJsonable
+        );
+        propertyError = parsed.error;
+        theSomeInts = parsed.value;
+        break;
+      }
 
-  someBytes: Array<Uint8Array> | null = null;
+      case "someFloats": {
+        const parsed = parseArray(
+          jsonableValue,
+          numberFromJsonable
+        );
+        propertyError = parsed.error;
+        theSomeFloats = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link someBools}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomeBoolsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "someStrings": {
+        const parsed = parseArray(
+          jsonableValue,
+          stringFromJsonable
+        );
+        propertyError = parsed.error;
+        theSomeStrings = parsed.value;
+        break;
+      }
+
+      case "someBytes": {
+        const parsed = parseArray(
+          jsonableValue,
+          bytesFromJsonable
+        );
+        propertyError = parsed.error;
+        theSomeBytes = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      booleanFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Something,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
-
-    this.someBools = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link someInts}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomeIntsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      integerFromJsonable
+  if (theSomeBools === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'someBools' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.someInts = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link someFloats}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomeFloatsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      numberFromJsonable
+  if (theSomeInts === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'someInts' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.someFloats = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link someStrings}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomeStringsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      stringFromJsonable
+  if (theSomeFloats === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'someFloats' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.someStrings = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link someBytes}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSomeBytesFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      bytesFromJsonable
+  if (theSomeStrings === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'someStrings' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.someBytes = itemsOrError.mustValue();
-    return null;
   }
+
+  if (theSomeBytes === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'someBytes' is missing"
+    );
+  }
+
+  return new AasCommon.Either<
+    AasTypes.Something,
+    DeserializationError
+  >(
+    new AasTypes.Something(
+      theSomeBools,
+      theSomeInts,
+      theSomeFloats,
+      theSomeStrings,
+      theSomeBytes
+    ),
+    null
+  );
 }
 
 /**
@@ -593,121 +625,8 @@ export function somethingFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForSomething();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_SOMETHING.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Something,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.someBools === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'someBools' is missing"
-    );
-  }
-
-  if (setter.someInts === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'someInts' is missing"
-    );
-  }
-
-  if (setter.someFloats === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'someFloats' is missing"
-    );
-  }
-
-  if (setter.someStrings === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'someStrings' is missing"
-    );
-  }
-
-  if (setter.someBytes === null) {
-    return newDeserializationError<
-      AasTypes.Something
-    >(
-      "The required property 'someBytes' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.Something,
-    DeserializationError
-  >(
-    new AasTypes.Something(
-      setter.someBools,
-      setter.someInts,
-      setter.someFloats,
-      setter.someStrings,
-      setter.someBytes
-    ),
-    null
-  );
+  return parsePropertiesOfSomething(jsonObject);
 }
-
-const SETTER_MAP_FOR_SOMETHING =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "someBools",
-        SetterForSomething.prototype.setSomeBoolsFromJsonable
-      ],
-      [
-        "someInts",
-        SetterForSomething.prototype.setSomeIntsFromJsonable
-      ],
-      [
-        "someFloats",
-        SetterForSomething.prototype.setSomeFloatsFromJsonable
-      ],
-      [
-        "someStrings",
-        SetterForSomething.prototype.setSomeStringsFromJsonable
-      ],
-      [
-        "someBytes",
-        SetterForSomething.prototype.setSomeBytesFromJsonable
-      ],
-    ]
-  );
 
 // endregion
 

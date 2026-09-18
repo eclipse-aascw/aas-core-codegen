@@ -183,23 +183,48 @@ function checkIsJsonObject(jsonable: JsonValue): DeserializationError | null {
 }
 
 /**
- * Check that the parsed `modelType` matches `expected`.
+ * Extract the `modelType` property of `jsonObject`.
  *
- * @param modelType - parsed value of the `modelType` property,
- * or `null` if it was missing
+ * @param jsonObject - to be inspected
+ * @returns the model type, or an error
+ */
+function extractModelType(
+  jsonObject: JsonObject
+): AasCommon.Either<string, DeserializationError> {
+  const modelType = jsonObject["modelType"];
+  if (modelType === undefined) {
+    return newDeserializationError<string>(
+      "The required property 'modelType' is missing"
+    );
+  }
+  if (typeof modelType !== "string") {
+    return newDeserializationError<string>(
+      `Expected the property modelType to be a string, ` +
+      `but got: ${typeof modelType}`
+    );
+  }
+
+  return new AasCommon.Either<string, DeserializationError>(modelType, null);
+}
+
+/**
+ * Check that the `modelType` property of `jsonObject` is `expected`.
+ *
+ * @param jsonObject - to be inspected
  * @param expected - expected model type
  * @returns error, if any
  */
 function checkModelType(
-  modelType: string | null,
+  jsonObject: JsonObject,
   expected: string
 ): DeserializationError | null {
-  if (modelType === null) {
-    return new DeserializationError(
-      "The required property 'modelType' is missing"
-    );
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return modelTypeOrError.error;
   }
-  if (modelType != expected) {
+
+  const modelType = modelTypeOrError.mustValue();
+  if (modelType !== expected) {
     return new DeserializationError(
       `Expected model type '${expected}', ` +
       `but got: ${modelType}`
@@ -238,19 +263,29 @@ function checkIsIterable(jsonable: JsonValue): DeserializationError | null {
 }
 
 /**
- * Parse every item of `iterable` with `parseItem`.
+ * Parse `jsonable` as an array, and every one of its items with `parseItem`.
  *
- * @param iterable - to be parsed item-by-item
- * @param parseItem - to parse a single item of `iterable`
+ * @param jsonable - to be parsed item-by-item
+ * @param parseItem - to parse a single item of `jsonable`
  * @returns parsed items, or an error
  * @typeParam T - type of a single parsed item
  */
 function parseArray<T>(
-  iterable: Iterable<JsonValue>,
+  jsonable: JsonValue,
   parseItem: (
     jsonableItem: JsonValue
   ) => AasCommon.Either<T, DeserializationError>
 ): AasCommon.Either<Array<T>, DeserializationError> {
+  const iterableError = checkIsIterable(jsonable);
+  if (iterableError !== null) {
+    return new AasCommon.Either<Array<T>, DeserializationError>(
+      null,
+      iterableError
+    );
+  }
+
+  const iterable = <Iterable<JsonValue>>jsonable;
+
   const items = new Array<T>();
   let i = 0;
   for (const jsonableItem of iterable) {
@@ -436,181 +471,208 @@ export function hasSemanticsFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IHasSemantics>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IHasSemantics,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IHasSemantics>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = HAS_SEMANTICS_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IHasSemantics>(
-      `Unexpected model type for IHasSemantics: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "RelationshipElement":
+      return parsePropertiesOfRelationshipElement(jsonObject);
 
-  return dispatch(jsonable);
+    case "AnnotatedRelationshipElement":
+      return parsePropertiesOfAnnotatedRelationshipElement(jsonObject);
+
+    case "BasicEventElement":
+      return parsePropertiesOfBasicEventElement(jsonObject);
+
+    case "Blob":
+      return parsePropertiesOfBlob(jsonObject);
+
+    case "Capability":
+      return parsePropertiesOfCapability(jsonObject);
+
+    case "Entity":
+      return parsePropertiesOfEntity(jsonObject);
+
+    case "Extension":
+      return parsePropertiesOfExtension(jsonObject);
+
+    case "File":
+      return parsePropertiesOfFile(jsonObject);
+
+    case "MultiLanguageProperty":
+      return parsePropertiesOfMultiLanguageProperty(jsonObject);
+
+    case "Operation":
+      return parsePropertiesOfOperation(jsonObject);
+
+    case "Property":
+      return parsePropertiesOfProperty(jsonObject);
+
+    case "Qualifier":
+      return parsePropertiesOfQualifier(jsonObject);
+
+    case "Range":
+      return parsePropertiesOfRange(jsonObject);
+
+    case "ReferenceElement":
+      return parsePropertiesOfReferenceElement(jsonObject);
+
+    case "SpecificAssetId":
+      return parsePropertiesOfSpecificAssetId(jsonObject);
+
+    case "Submodel":
+      return parsePropertiesOfSubmodel(jsonObject);
+
+    case "SubmodelElementCollection":
+      return parsePropertiesOfSubmodelElementCollection(jsonObject);
+
+    case "SubmodelElementList":
+      return parsePropertiesOfSubmodelElementList(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IHasSemantics>(
+        `Unexpected model type for IHasSemantics: ${modelType}`
+      );
+  }
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Extension}.
+ * Parse the properties of an instance
+ * of {@link types!Extension} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Extension},
+ * or an error if any
  */
-class SetterForExtension {
-  semanticId: AasTypes.Reference | null = null;
+function parsePropertiesOfExtension(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Extension,
+  DeserializationError
+> {
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theName: string | null = null;
+  let theValueType: AasTypes.DataTypeDefXsd | null = null;
+  let theValue: string | null = null;
+  let theRefersTo: Array<AasTypes.Reference> | null = null;
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  name: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  valueType: AasTypes.DataTypeDefXsd | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  value: string | null = null;
+      case "name": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theName = parsed.value;
+        break;
+      }
 
-  refersTo: Array<AasTypes.Reference> | null = null;
+      case "valueType": {
+        const parsed = dataTypeDefXsdFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValueType = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+      case "value": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      case "refersTo": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theRefersTo = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Extension,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
+  if (theName === null) {
+    return newDeserializationError<
+      AasTypes.Extension
+    >(
+      "The required property 'name' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link name}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.name = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link valueType}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = dataTypeDefXsdFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.valueType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link refersTo}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setRefersToFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.refersTo = itemsOrError.mustValue();
-    return null;
-  }
+  return new AasCommon.Either<
+    AasTypes.Extension,
+    DeserializationError
+  >(
+    new AasTypes.Extension(
+      theName,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theValueType,
+      theValue,
+      theRefersTo
+    ),
+    null
+  );
 }
 
 /**
@@ -639,58 +701,7 @@ export function extensionFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForExtension();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_EXTENSION.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Extension,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.name === null) {
-    return newDeserializationError<
-      AasTypes.Extension
-    >(
-      "The required property 'name' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.Extension,
-    DeserializationError
-  >(
-    new AasTypes.Extension(
-      setter.name,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.valueType,
-      setter.value,
-      setter.refersTo
-    ),
-    null
-  );
+  return parsePropertiesOfExtension(jsonObject);
 }
 
 /**
@@ -718,27 +729,76 @@ export function hasExtensionsFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IHasExtensions>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IHasExtensions,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IHasExtensions>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = HAS_EXTENSIONS_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IHasExtensions>(
-      `Unexpected model type for IHasExtensions: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "RelationshipElement":
+      return parsePropertiesOfRelationshipElement(jsonObject);
 
-  return dispatch(jsonable);
+    case "AnnotatedRelationshipElement":
+      return parsePropertiesOfAnnotatedRelationshipElement(jsonObject);
+
+    case "AssetAdministrationShell":
+      return parsePropertiesOfAssetAdministrationShell(jsonObject);
+
+    case "BasicEventElement":
+      return parsePropertiesOfBasicEventElement(jsonObject);
+
+    case "Blob":
+      return parsePropertiesOfBlob(jsonObject);
+
+    case "Capability":
+      return parsePropertiesOfCapability(jsonObject);
+
+    case "ConceptDescription":
+      return parsePropertiesOfConceptDescription(jsonObject);
+
+    case "Entity":
+      return parsePropertiesOfEntity(jsonObject);
+
+    case "File":
+      return parsePropertiesOfFile(jsonObject);
+
+    case "MultiLanguageProperty":
+      return parsePropertiesOfMultiLanguageProperty(jsonObject);
+
+    case "Operation":
+      return parsePropertiesOfOperation(jsonObject);
+
+    case "Property":
+      return parsePropertiesOfProperty(jsonObject);
+
+    case "Range":
+      return parsePropertiesOfRange(jsonObject);
+
+    case "ReferenceElement":
+      return parsePropertiesOfReferenceElement(jsonObject);
+
+    case "Submodel":
+      return parsePropertiesOfSubmodel(jsonObject);
+
+    case "SubmodelElementCollection":
+      return parsePropertiesOfSubmodelElementCollection(jsonObject);
+
+    case "SubmodelElementList":
+      return parsePropertiesOfSubmodelElementList(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IHasExtensions>(
+        `Unexpected model type for IHasExtensions: ${modelType}`
+      );
+  }
 }
 
 /**
@@ -766,27 +826,76 @@ export function referableFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IReferable>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IReferable,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IReferable>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = REFERABLE_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IReferable>(
-      `Unexpected model type for IReferable: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "RelationshipElement":
+      return parsePropertiesOfRelationshipElement(jsonObject);
 
-  return dispatch(jsonable);
+    case "AnnotatedRelationshipElement":
+      return parsePropertiesOfAnnotatedRelationshipElement(jsonObject);
+
+    case "AssetAdministrationShell":
+      return parsePropertiesOfAssetAdministrationShell(jsonObject);
+
+    case "BasicEventElement":
+      return parsePropertiesOfBasicEventElement(jsonObject);
+
+    case "Blob":
+      return parsePropertiesOfBlob(jsonObject);
+
+    case "Capability":
+      return parsePropertiesOfCapability(jsonObject);
+
+    case "ConceptDescription":
+      return parsePropertiesOfConceptDescription(jsonObject);
+
+    case "Entity":
+      return parsePropertiesOfEntity(jsonObject);
+
+    case "File":
+      return parsePropertiesOfFile(jsonObject);
+
+    case "MultiLanguageProperty":
+      return parsePropertiesOfMultiLanguageProperty(jsonObject);
+
+    case "Operation":
+      return parsePropertiesOfOperation(jsonObject);
+
+    case "Property":
+      return parsePropertiesOfProperty(jsonObject);
+
+    case "Range":
+      return parsePropertiesOfRange(jsonObject);
+
+    case "ReferenceElement":
+      return parsePropertiesOfReferenceElement(jsonObject);
+
+    case "Submodel":
+      return parsePropertiesOfSubmodel(jsonObject);
+
+    case "SubmodelElementCollection":
+      return parsePropertiesOfSubmodelElementCollection(jsonObject);
+
+    case "SubmodelElementList":
+      return parsePropertiesOfSubmodelElementList(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IReferable>(
+        `Unexpected model type for IReferable: ${modelType}`
+      );
+  }
 }
 
 /**
@@ -814,27 +923,34 @@ export function identifiableFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IIdentifiable>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IIdentifiable,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IIdentifiable>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = IDENTIFIABLE_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IIdentifiable>(
-      `Unexpected model type for IIdentifiable: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "AssetAdministrationShell":
+      return parsePropertiesOfAssetAdministrationShell(jsonObject);
 
-  return dispatch(jsonable);
+    case "ConceptDescription":
+      return parsePropertiesOfConceptDescription(jsonObject);
+
+    case "Submodel":
+      return parsePropertiesOfSubmodel(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IIdentifiable>(
+        `Unexpected model type for IIdentifiable: ${modelType}`
+      );
+  }
 }
 
 /**
@@ -892,27 +1008,28 @@ export function hasKindFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IHasKind>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IHasKind,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IHasKind>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = HAS_KIND_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IHasKind>(
-      `Unexpected model type for IHasKind: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "Submodel":
+      return parsePropertiesOfSubmodel(jsonObject);
 
-  return dispatch(jsonable);
+    default:
+      return newDeserializationError<AasTypes.IHasKind>(
+        `Unexpected model type for IHasKind: ${modelType}`
+      );
+  }
 }
 
 /**
@@ -940,151 +1057,188 @@ export function hasDataSpecificationFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IHasDataSpecification>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IHasDataSpecification,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IHasDataSpecification>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = HAS_DATA_SPECIFICATION_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IHasDataSpecification>(
-      `Unexpected model type for IHasDataSpecification: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "AdministrativeInformation":
+      return parsePropertiesOfAdministrativeInformation(jsonObject);
 
-  return dispatch(jsonable);
+    case "RelationshipElement":
+      return parsePropertiesOfRelationshipElement(jsonObject);
+
+    case "AnnotatedRelationshipElement":
+      return parsePropertiesOfAnnotatedRelationshipElement(jsonObject);
+
+    case "AssetAdministrationShell":
+      return parsePropertiesOfAssetAdministrationShell(jsonObject);
+
+    case "BasicEventElement":
+      return parsePropertiesOfBasicEventElement(jsonObject);
+
+    case "Blob":
+      return parsePropertiesOfBlob(jsonObject);
+
+    case "Capability":
+      return parsePropertiesOfCapability(jsonObject);
+
+    case "ConceptDescription":
+      return parsePropertiesOfConceptDescription(jsonObject);
+
+    case "Entity":
+      return parsePropertiesOfEntity(jsonObject);
+
+    case "File":
+      return parsePropertiesOfFile(jsonObject);
+
+    case "MultiLanguageProperty":
+      return parsePropertiesOfMultiLanguageProperty(jsonObject);
+
+    case "Operation":
+      return parsePropertiesOfOperation(jsonObject);
+
+    case "Property":
+      return parsePropertiesOfProperty(jsonObject);
+
+    case "Range":
+      return parsePropertiesOfRange(jsonObject);
+
+    case "ReferenceElement":
+      return parsePropertiesOfReferenceElement(jsonObject);
+
+    case "Submodel":
+      return parsePropertiesOfSubmodel(jsonObject);
+
+    case "SubmodelElementCollection":
+      return parsePropertiesOfSubmodelElementCollection(jsonObject);
+
+    case "SubmodelElementList":
+      return parsePropertiesOfSubmodelElementList(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IHasDataSpecification>(
+        `Unexpected model type for IHasDataSpecification: ${modelType}`
+      );
+  }
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!AdministrativeInformation}.
+ * Parse the properties of an instance
+ * of {@link types!AdministrativeInformation} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!AdministrativeInformation},
+ * or an error if any
  */
-class SetterForAdministrativeInformation {
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+function parsePropertiesOfAdministrativeInformation(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.AdministrativeInformation,
+  DeserializationError
+> {
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theVersion: string | null = null;
+  let theRevision: string | null = null;
+  let theCreator: AasTypes.Reference | null = null;
+  let theTemplateId: string | null = null;
 
-  version: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  revision: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  creator: AasTypes.Reference | null = null;
+      case "version": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theVersion = parsed.value;
+        break;
+      }
 
-  templateId: string | null = null;
+      case "revision": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theRevision = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "creator": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCreator = parsed.value;
+        break;
+      }
+
+      case "templateId": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theTemplateId = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link version}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setVersionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.version = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link revision}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setRevisionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.revision = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link creator}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCreatorFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.creator = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.AdministrativeInformation,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link templateId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTemplateIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.templateId = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.AdministrativeInformation,
+    DeserializationError
+  >(
+    new AasTypes.AdministrativeInformation(
+      theEmbeddedDataSpecifications,
+      theVersion,
+      theRevision,
+      theCreator,
+      theTemplateId
+    ),
+    null
+  );
 }
 
 /**
@@ -1113,49 +1267,7 @@ export function administrativeInformationFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForAdministrativeInformation();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_ADMINISTRATIVE_INFORMATION.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.AdministrativeInformation,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  return new AasCommon.Either<
-    AasTypes.AdministrativeInformation,
-    DeserializationError
-  >(
-    new AasTypes.AdministrativeInformation(
-      setter.embeddedDataSpecifications,
-      setter.version,
-      setter.revision,
-      setter.creator,
-      setter.templateId
-    ),
-    null
-  );
+  return parsePropertiesOfAdministrativeInformation(jsonObject);
 }
 
 /**
@@ -1183,27 +1295,70 @@ export function qualifiableFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IQualifiable>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IQualifiable,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IQualifiable>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = QUALIFIABLE_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IQualifiable>(
-      `Unexpected model type for IQualifiable: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "RelationshipElement":
+      return parsePropertiesOfRelationshipElement(jsonObject);
 
-  return dispatch(jsonable);
+    case "AnnotatedRelationshipElement":
+      return parsePropertiesOfAnnotatedRelationshipElement(jsonObject);
+
+    case "BasicEventElement":
+      return parsePropertiesOfBasicEventElement(jsonObject);
+
+    case "Blob":
+      return parsePropertiesOfBlob(jsonObject);
+
+    case "Capability":
+      return parsePropertiesOfCapability(jsonObject);
+
+    case "Entity":
+      return parsePropertiesOfEntity(jsonObject);
+
+    case "File":
+      return parsePropertiesOfFile(jsonObject);
+
+    case "MultiLanguageProperty":
+      return parsePropertiesOfMultiLanguageProperty(jsonObject);
+
+    case "Operation":
+      return parsePropertiesOfOperation(jsonObject);
+
+    case "Property":
+      return parsePropertiesOfProperty(jsonObject);
+
+    case "Range":
+      return parsePropertiesOfRange(jsonObject);
+
+    case "ReferenceElement":
+      return parsePropertiesOfReferenceElement(jsonObject);
+
+    case "Submodel":
+      return parsePropertiesOfSubmodel(jsonObject);
+
+    case "SubmodelElementCollection":
+      return parsePropertiesOfSubmodelElementCollection(jsonObject);
+
+    case "SubmodelElementList":
+      return parsePropertiesOfSubmodelElementList(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IQualifiable>(
+        `Unexpected model type for IQualifiable: ${modelType}`
+      );
+  }
 }
 
 /**
@@ -1237,171 +1392,150 @@ export function qualifierKindFromJsonable(
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Qualifier}.
+ * Parse the properties of an instance
+ * of {@link types!Qualifier} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Qualifier},
+ * or an error if any
  */
-class SetterForQualifier {
-  semanticId: AasTypes.Reference | null = null;
+function parsePropertiesOfQualifier(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Qualifier,
+  DeserializationError
+> {
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theKind: AasTypes.QualifierKind | null = null;
+  let theType: string | null = null;
+  let theValueType: AasTypes.DataTypeDefXsd | null = null;
+  let theValue: string | null = null;
+  let theValueId: AasTypes.Reference | null = null;
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  kind: AasTypes.QualifierKind | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  type: string | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  valueType: AasTypes.DataTypeDefXsd | null = null;
+      case "kind": {
+        const parsed = qualifierKindFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theKind = parsed.value;
+        break;
+      }
 
-  value: string | null = null;
+      case "type": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theType = parsed.value;
+        break;
+      }
 
-  valueId: AasTypes.Reference | null = null;
+      case "valueType": {
+        const parsed = dataTypeDefXsdFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValueType = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+      case "value": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      case "valueId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValueId = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Qualifier,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
+  if (theType === null) {
+    return newDeserializationError<
+      AasTypes.Qualifier
+    >(
+      "The required property 'type' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link kind}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setKindFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = qualifierKindFromJsonable(
-      jsonable
+  if (theValueType === null) {
+    return newDeserializationError<
+      AasTypes.Qualifier
+    >(
+      "The required property 'valueType' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.kind = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link type}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.type = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link valueType}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = dataTypeDefXsdFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.valueType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link valueId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.valueId = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.Qualifier,
+    DeserializationError
+  >(
+    new AasTypes.Qualifier(
+      theType,
+      theValueType,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theKind,
+      theValue,
+      theValueId
+    ),
+    null
+  );
 }
 
 /**
@@ -1430,380 +1564,210 @@ export function qualifierFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForQualifier();
+  return parsePropertiesOfQualifier(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!AssetAdministrationShell} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!AssetAdministrationShell},
+ * or an error if any
+ */
+function parsePropertiesOfAssetAdministrationShell(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.AssetAdministrationShell,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theAdministration: AasTypes.AdministrativeInformation | null = null;
+  let theId: string | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theDerivedFrom: AasTypes.Reference | null = null;
+  let theAssetInformation: AasTypes.AssetInformation | null = null;
+  let theSubmodels: Array<AasTypes.Reference> | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_QUALIFIER.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
+
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
+
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
+
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
+
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
+
+      case "administration": {
+        const parsed = administrativeInformationFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theAdministration = parsed.value;
+        break;
+      }
+
+      case "id": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theId = parsed.value;
+        break;
+      }
+
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
+
+      case "derivedFrom": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theDerivedFrom = parsed.value;
+        break;
+      }
+
+      case "assetInformation": {
+        const parsed = assetInformationFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theAssetInformation = parsed.value;
+        break;
+      }
+
+      case "submodels": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSubmodels = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.Qualifier,
+        AasTypes.AssetAdministrationShell,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.type === null) {
+  if (theId === null) {
     return newDeserializationError<
-      AasTypes.Qualifier
+      AasTypes.AssetAdministrationShell
     >(
-      "The required property 'type' is missing"
+      "The required property 'id' is missing"
     );
   }
 
-  if (setter.valueType === null) {
+  if (theAssetInformation === null) {
     return newDeserializationError<
-      AasTypes.Qualifier
+      AasTypes.AssetAdministrationShell
     >(
-      "The required property 'valueType' is missing"
+      "The required property 'assetInformation' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.Qualifier,
+    AasTypes.AssetAdministrationShell,
     DeserializationError
   >(
-    new AasTypes.Qualifier(
-      setter.type,
-      setter.valueType,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.kind,
-      setter.value,
-      setter.valueId
+    new AasTypes.AssetAdministrationShell(
+      theId,
+      theAssetInformation,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theAdministration,
+      theEmbeddedDataSpecifications,
+      theDerivedFrom,
+      theSubmodels
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!AssetAdministrationShell}.
- */
-class SetterForAssetAdministrationShell {
-  extensions: Array<AasTypes.Extension> | null = null;
-
-  category: string | null = null;
-
-  idShort: string | null = null;
-
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
-
-  description: Array<AasTypes.LangStringTextType> | null = null;
-
-  administration: AasTypes.AdministrativeInformation | null = null;
-
-  id: string | null = null;
-
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
-
-  derivedFrom: AasTypes.Reference | null = null;
-
-  assetInformation: AasTypes.AssetInformation | null = null;
-
-  submodels: Array<AasTypes.Reference> | null = null;
-
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link administration}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setAdministrationFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = administrativeInformationFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.administration = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link id}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.id = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link derivedFrom}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDerivedFromFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.derivedFrom = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link assetInformation}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setAssetInformationFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = assetInformationFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.assetInformation = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link submodels}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSubmodelsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.submodels = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -1832,53 +1796,7 @@ export function assetAdministrationShellFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForAssetAdministrationShell();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_ASSET_ADMINISTRATION_SHELL.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.AssetAdministrationShell,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.id === null) {
-    return newDeserializationError<
-      AasTypes.AssetAdministrationShell
-    >(
-      "The required property 'id' is missing"
-    );
-  }
-
-  if (setter.assetInformation === null) {
-    return newDeserializationError<
-      AasTypes.AssetAdministrationShell
-    >(
-      "The required property 'assetInformation' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "AssetAdministrationShell");
+  const modelTypeError = checkModelType(jsonObject, "AssetAdministrationShell");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.AssetAdministrationShell,
@@ -1889,149 +1807,124 @@ export function assetAdministrationShellFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.AssetAdministrationShell,
-    DeserializationError
-  >(
-    new AasTypes.AssetAdministrationShell(
-      setter.id,
-      setter.assetInformation,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.administration,
-      setter.embeddedDataSpecifications,
-      setter.derivedFrom,
-      setter.submodels
-    ),
-    null
-  );
+  return parsePropertiesOfAssetAdministrationShell(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!AssetInformation}.
+ * Parse the properties of an instance
+ * of {@link types!AssetInformation} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!AssetInformation},
+ * or an error if any
  */
-class SetterForAssetInformation {
-  assetKind: AasTypes.AssetKind | null = null;
+function parsePropertiesOfAssetInformation(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.AssetInformation,
+  DeserializationError
+> {
+  let theAssetKind: AasTypes.AssetKind | null = null;
+  let theGlobalAssetId: string | null = null;
+  let theSpecificAssetIds: Array<AasTypes.SpecificAssetId> | null = null;
+  let theAssetType: string | null = null;
+  let theDefaultThumbnail: AasTypes.Resource | null = null;
 
-  globalAssetId: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  specificAssetIds: Array<AasTypes.SpecificAssetId> | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "assetKind": {
+        const parsed = assetKindFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theAssetKind = parsed.value;
+        break;
+      }
 
-  assetType: string | null = null;
+      case "globalAssetId": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theGlobalAssetId = parsed.value;
+        break;
+      }
 
-  defaultThumbnail: AasTypes.Resource | null = null;
+      case "specificAssetIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          specificAssetIdFromJsonable
+        );
+        propertyError = parsed.error;
+        theSpecificAssetIds = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link assetKind}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setAssetKindFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = assetKindFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.assetKind = parsedOrError.mustValue();
-      return null;
+      case "assetType": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theAssetType = parsed.value;
+        break;
+      }
+
+      case "defaultThumbnail": {
+        const parsed = resourceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theDefaultThumbnail = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.AssetInformation,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link globalAssetId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setGlobalAssetIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
+  if (theAssetKind === null) {
+    return newDeserializationError<
+      AasTypes.AssetInformation
+    >(
+      "The required property 'assetKind' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.globalAssetId = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link specificAssetIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSpecificAssetIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      specificAssetIdFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.specificAssetIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link assetType}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setAssetTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.assetType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link defaultThumbnail}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDefaultThumbnailFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = resourceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.defaultThumbnail = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.AssetInformation,
+    DeserializationError
+  >(
+    new AasTypes.AssetInformation(
+      theAssetKind,
+      theGlobalAssetId,
+      theSpecificAssetIds,
+      theAssetType,
+      theDefaultThumbnail
+    ),
+    null
+  );
 }
 
 /**
@@ -2060,107 +1953,90 @@ export function assetInformationFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForAssetInformation();
+  return parsePropertiesOfAssetInformation(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!Resource} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Resource},
+ * or an error if any
+ */
+function parsePropertiesOfResource(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Resource,
+  DeserializationError
+> {
+  let thePath: string | null = null;
+  let theContentType: string | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_ASSET_INFORMATION.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "path": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        thePath = parsed.value;
+        break;
+      }
+
+      case "contentType": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theContentType = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.AssetInformation,
+        AasTypes.Resource,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.assetKind === null) {
+  if (thePath === null) {
     return newDeserializationError<
-      AasTypes.AssetInformation
+      AasTypes.Resource
     >(
-      "The required property 'assetKind' is missing"
+      "The required property 'path' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.AssetInformation,
+    AasTypes.Resource,
     DeserializationError
   >(
-    new AasTypes.AssetInformation(
-      setter.assetKind,
-      setter.globalAssetId,
-      setter.specificAssetIds,
-      setter.assetType,
-      setter.defaultThumbnail
+    new AasTypes.Resource(
+      thePath,
+      theContentType
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!Resource}.
- */
-class SetterForResource {
-  path: string | null = null;
-
-  contentType: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link path}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setPathFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.path = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link contentType}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setContentTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.contentType = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -2189,54 +2065,7 @@ export function resourceFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForResource();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_RESOURCE.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Resource,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.path === null) {
-    return newDeserializationError<
-      AasTypes.Resource
-    >(
-      "The required property 'path' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.Resource,
-    DeserializationError
-  >(
-    new AasTypes.Resource(
-      setter.path,
-      setter.contentType
-    ),
-    null
-  );
+  return parsePropertiesOfResource(jsonObject);
 }
 
 /**
@@ -2270,127 +2099,128 @@ export function assetKindFromJsonable(
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!SpecificAssetId}.
+ * Parse the properties of an instance
+ * of {@link types!SpecificAssetId} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!SpecificAssetId},
+ * or an error if any
  */
-class SetterForSpecificAssetId {
-  semanticId: AasTypes.Reference | null = null;
+function parsePropertiesOfSpecificAssetId(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.SpecificAssetId,
+  DeserializationError
+> {
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theName: string | null = null;
+  let theValue: string | null = null;
+  let theExternalSubjectId: AasTypes.Reference | null = null;
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  name: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  value: string | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  externalSubjectId: AasTypes.Reference | null = null;
+      case "name": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theName = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+      case "value": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      case "externalSubjectId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theExternalSubjectId = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.SpecificAssetId,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
+  if (theName === null) {
+    return newDeserializationError<
+      AasTypes.SpecificAssetId
+    >(
+      "The required property 'name' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link name}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
+  if (theValue === null) {
+    return newDeserializationError<
+      AasTypes.SpecificAssetId
+    >(
+      "The required property 'value' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.name = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link externalSubjectId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExternalSubjectIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.externalSubjectId = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.SpecificAssetId,
+    DeserializationError
+  >(
+    new AasTypes.SpecificAssetId(
+      theName,
+      theValue,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theExternalSubjectId
+    ),
+    null
+  );
 }
 
 /**
@@ -2419,438 +2249,226 @@ export function specificAssetIdFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForSpecificAssetId();
+  return parsePropertiesOfSpecificAssetId(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!Submodel} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Submodel},
+ * or an error if any
+ */
+function parsePropertiesOfSubmodel(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Submodel,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theAdministration: AasTypes.AdministrativeInformation | null = null;
+  let theId: string | null = null;
+  let theKind: AasTypes.ModellingKind | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theSubmodelElements: Array<AasTypes.ISubmodelElement> | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_SPECIFIC_ASSET_ID.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
+
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
+
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
+
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
+
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
+
+      case "administration": {
+        const parsed = administrativeInformationFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theAdministration = parsed.value;
+        break;
+      }
+
+      case "id": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theId = parsed.value;
+        break;
+      }
+
+      case "kind": {
+        const parsed = modellingKindFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theKind = parsed.value;
+        break;
+      }
+
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
+
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
+
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
+
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
+
+      case "submodelElements": {
+        const parsed = parseArray(
+          jsonableValue,
+          submodelElementFromJsonable
+        );
+        propertyError = parsed.error;
+        theSubmodelElements = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.SpecificAssetId,
+        AasTypes.Submodel,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.name === null) {
+  if (theId === null) {
     return newDeserializationError<
-      AasTypes.SpecificAssetId
+      AasTypes.Submodel
     >(
-      "The required property 'name' is missing"
-    );
-  }
-
-  if (setter.value === null) {
-    return newDeserializationError<
-      AasTypes.SpecificAssetId
-    >(
-      "The required property 'value' is missing"
+      "The required property 'id' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.SpecificAssetId,
+    AasTypes.Submodel,
     DeserializationError
   >(
-    new AasTypes.SpecificAssetId(
-      setter.name,
-      setter.value,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.externalSubjectId
+    new AasTypes.Submodel(
+      theId,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theAdministration,
+      theKind,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theSubmodelElements
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!Submodel}.
- */
-class SetterForSubmodel {
-  extensions: Array<AasTypes.Extension> | null = null;
-
-  category: string | null = null;
-
-  idShort: string | null = null;
-
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
-
-  description: Array<AasTypes.LangStringTextType> | null = null;
-
-  administration: AasTypes.AdministrativeInformation | null = null;
-
-  id: string | null = null;
-
-  kind: AasTypes.ModellingKind | null = null;
-
-  semanticId: AasTypes.Reference | null = null;
-
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
-
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
-
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
-
-  submodelElements: Array<AasTypes.ISubmodelElement> | null = null;
-
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link administration}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setAdministrationFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = administrativeInformationFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.administration = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link id}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.id = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link kind}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setKindFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = modellingKindFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.kind = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link submodelElements}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSubmodelElementsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      submodelElementFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.submodelElements = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -2879,45 +2497,7 @@ export function submodelFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForSubmodel();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_SUBMODEL.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Submodel,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.id === null) {
-    return newDeserializationError<
-      AasTypes.Submodel
-    >(
-      "The required property 'id' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "Submodel");
+  const modelTypeError = checkModelType(jsonObject, "Submodel");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.Submodel,
@@ -2928,27 +2508,7 @@ export function submodelFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.Submodel,
-    DeserializationError
-  >(
-    new AasTypes.Submodel(
-      setter.id,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.administration,
-      setter.kind,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.submodelElements
-    ),
-    null
-  );
+  return parsePropertiesOfSubmodel(jsonObject);
 }
 
 /**
@@ -2976,27 +2536,271 @@ export function submodelElementFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.ISubmodelElement>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.ISubmodelElement,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.ISubmodelElement>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
+  const modelType = modelTypeOrError.mustValue();
+
+  switch (modelType) {
+    case "RelationshipElement":
+      return parsePropertiesOfRelationshipElement(jsonObject);
+
+    case "AnnotatedRelationshipElement":
+      return parsePropertiesOfAnnotatedRelationshipElement(jsonObject);
+
+    case "BasicEventElement":
+      return parsePropertiesOfBasicEventElement(jsonObject);
+
+    case "Blob":
+      return parsePropertiesOfBlob(jsonObject);
+
+    case "Capability":
+      return parsePropertiesOfCapability(jsonObject);
+
+    case "Entity":
+      return parsePropertiesOfEntity(jsonObject);
+
+    case "File":
+      return parsePropertiesOfFile(jsonObject);
+
+    case "MultiLanguageProperty":
+      return parsePropertiesOfMultiLanguageProperty(jsonObject);
+
+    case "Operation":
+      return parsePropertiesOfOperation(jsonObject);
+
+    case "Property":
+      return parsePropertiesOfProperty(jsonObject);
+
+    case "Range":
+      return parsePropertiesOfRange(jsonObject);
+
+    case "ReferenceElement":
+      return parsePropertiesOfReferenceElement(jsonObject);
+
+    case "SubmodelElementCollection":
+      return parsePropertiesOfSubmodelElementCollection(jsonObject);
+
+    case "SubmodelElementList":
+      return parsePropertiesOfSubmodelElementList(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.ISubmodelElement>(
+        `Unexpected model type for ISubmodelElement: ${modelType}`
+      );
+  }
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!RelationshipElement} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!RelationshipElement},
+ * or an error if any
+ */
+function parsePropertiesOfRelationshipElement(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.RelationshipElement,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theFirst: AasTypes.Reference | null = null;
+  let theSecond: AasTypes.Reference | null = null;
+
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
+
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
+
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
+
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
+
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
+
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
+
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
+
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
+
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
+
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
+
+      case "first": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theFirst = parsed.value;
+        break;
+      }
+
+      case "second": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSecond = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.RelationshipElement,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
+    }
+  }
+
+  if (theFirst === null) {
+    return newDeserializationError<
+      AasTypes.RelationshipElement
+    >(
+      "The required property 'first' is missing"
     );
   }
 
-  const dispatch = SUBMODEL_ELEMENT_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.ISubmodelElement>(
-      `Unexpected model type for ISubmodelElement: ${modelType}`
+  if (theSecond === null) {
+    return newDeserializationError<
+      AasTypes.RelationshipElement
+    >(
+      "The required property 'second' is missing"
     );
   }
 
-  return dispatch(jsonable);
+  return new AasCommon.Either<
+    AasTypes.RelationshipElement,
+    DeserializationError
+  >(
+    new AasTypes.RelationshipElement(
+      theFirst,
+      theSecond,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications
+    ),
+    null
+  );
 }
 
 /**
@@ -3024,459 +2828,31 @@ export function relationshipElementFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IRelationshipElement>(
-      "The required property modelType is missing"
-    );
-  }
-
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IRelationshipElement>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
-
-  const dispatch = RELATIONSHIP_ELEMENT_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IRelationshipElement>(
-      `Unexpected model type for IRelationshipElement: ${modelType}`
-    );
-  }
-
-  return dispatch(jsonable);
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!RelationshipElement}.
- */
-class SetterForRelationshipElement {
-  extensions: Array<AasTypes.Extension> | null = null;
-
-  category: string | null = null;
-
-  idShort: string | null = null;
-
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
-
-  description: Array<AasTypes.LangStringTextType> | null = null;
-
-  semanticId: AasTypes.Reference | null = null;
-
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
-
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
-
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
-
-  first: AasTypes.Reference | null = null;
-
-  second: AasTypes.Reference | null = null;
-
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link first}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setFirstFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.first = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link second}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSecondFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.second = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-}
-
-/**
- * Parse an instance of {@link types!RelationshipElement} from the JSON-able
- * structure `jsonable`.
- *
- * This function performs no dispatch! It is used to parse the properties
- * as-are, and already assumes the exact model type. Usually, this function
- * is called from within a dispatching function, and you never call it
- * directly. If you want to de-serialize an instance of
- * {@link types!RelationshipElement}, call
- * {@link relationshipElementFromJsonable}.
- *
- * @param jsonable - structure to be parsed
- * @returns parsed instance of {@link types!RelationshipElement},
- * or an error if any
- */
-function relationshipElementFromJsonableWithoutDispatch(
-  jsonable: JsonValue
-): AasCommon.Either<
-  AasTypes.RelationshipElement,
-  DeserializationError
-> {
-  const objectError = checkIsJsonObject(jsonable);
-  if (objectError !== null) {
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
     return new AasCommon.Either<
-      AasTypes.RelationshipElement,
+      AasTypes.IRelationshipElement,
       DeserializationError
     >(
       null,
-      objectError
+      modelTypeOrError.error
     );
   }
-  const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForRelationshipElement();
+  const modelType = modelTypeOrError.mustValue();
 
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_RELATIONSHIP_ELEMENT.get(key);
+  switch (modelType) {
+    case "AnnotatedRelationshipElement":
+      return parsePropertiesOfAnnotatedRelationshipElement(jsonObject);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
+    case "RelationshipElement":
+      return parsePropertiesOfRelationshipElement(jsonObject);
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
+    default:
+      return newDeserializationError<AasTypes.IRelationshipElement>(
+        `Unexpected model type for IRelationshipElement: ${modelType}`
       );
-      return new AasCommon.Either<
-        AasTypes.RelationshipElement,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
   }
-
-  if (setter.first === null) {
-    return newDeserializationError<
-      AasTypes.RelationshipElement
-    >(
-      "The required property 'first' is missing"
-    );
-  }
-
-  if (setter.second === null) {
-    return newDeserializationError<
-      AasTypes.RelationshipElement
-    >(
-      "The required property 'second' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "RelationshipElement");
-  if (modelTypeError !== null) {
-    return new AasCommon.Either<
-      AasTypes.RelationshipElement,
-      DeserializationError
-    >(
-      null,
-      modelTypeError
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.RelationshipElement,
-    DeserializationError
-  >(
-    new AasTypes.RelationshipElement(
-      setter.first,
-      setter.second,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications
-    ),
-    null
-  );
 }
 
 /**
@@ -3510,398 +2886,233 @@ export function aasSubmodelElementsFromJsonable(
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!SubmodelElementList}.
+ * Parse the properties of an instance
+ * of {@link types!SubmodelElementList} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!SubmodelElementList},
+ * or an error if any
  */
-class SetterForSubmodelElementList {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfSubmodelElementList(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.SubmodelElementList,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theOrderRelevant: boolean | null = null;
+  let theSemanticIdListElement: AasTypes.Reference | null = null;
+  let theTypeValueListElement: AasTypes.AasSubmodelElements | null = null;
+  let theValueTypeListElement: AasTypes.DataTypeDefXsd | null = null;
+  let theValue: Array<AasTypes.ISubmodelElement> | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  orderRelevant: boolean | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  semanticIdListElement: AasTypes.Reference | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  typeValueListElement: AasTypes.AasSubmodelElements | null = null;
+      case "orderRelevant": {
+        const parsed = booleanFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theOrderRelevant = parsed.value;
+        break;
+      }
 
-  valueTypeListElement: AasTypes.DataTypeDefXsd | null = null;
+      case "semanticIdListElement": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticIdListElement = parsed.value;
+        break;
+      }
 
-  value: Array<AasTypes.ISubmodelElement> | null = null;
+      case "typeValueListElement": {
+        const parsed = aasSubmodelElementsFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theTypeValueListElement = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "valueTypeListElement": {
+        const parsed = dataTypeDefXsdFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValueTypeListElement = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "value": {
+        const parsed = parseArray(
+          jsonableValue,
+          submodelElementFromJsonable
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link orderRelevant}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setOrderRelevantFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = booleanFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.orderRelevant = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.SubmodelElementList,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link semanticIdListElement}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdListElementFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
+  if (theTypeValueListElement === null) {
+    return newDeserializationError<
+      AasTypes.SubmodelElementList
+    >(
+      "The required property 'typeValueListElement' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticIdListElement = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link typeValueListElement}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTypeValueListElementFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = aasSubmodelElementsFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.typeValueListElement = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link valueTypeListElement}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueTypeListElementFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = dataTypeDefXsdFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.valueTypeListElement = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      submodelElementFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.value = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.SubmodelElementList,
+    DeserializationError
+  >(
+    new AasTypes.SubmodelElementList(
+      theTypeValueListElement,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theOrderRelevant,
+      theSemanticIdListElement,
+      theValueTypeListElement,
+      theValue
+    ),
+    null
+  );
 }
 
 /**
@@ -3930,45 +3141,7 @@ export function submodelElementListFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForSubmodelElementList();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_SUBMODEL_ELEMENT_LIST.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.SubmodelElementList,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.typeValueListElement === null) {
-    return newDeserializationError<
-      AasTypes.SubmodelElementList
-    >(
-      "The required property 'typeValueListElement' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "SubmodelElementList");
+  const modelTypeError = checkModelType(jsonObject, "SubmodelElementList");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.SubmodelElementList,
@@ -3979,335 +3152,185 @@ export function submodelElementListFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.SubmodelElementList,
-    DeserializationError
-  >(
-    new AasTypes.SubmodelElementList(
-      setter.typeValueListElement,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.orderRelevant,
-      setter.semanticIdListElement,
-      setter.valueTypeListElement,
-      setter.value
-    ),
-    null
-  );
+  return parsePropertiesOfSubmodelElementList(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!SubmodelElementCollection}.
+ * Parse the properties of an instance
+ * of {@link types!SubmodelElementCollection} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!SubmodelElementCollection},
+ * or an error if any
  */
-class SetterForSubmodelElementCollection {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfSubmodelElementCollection(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.SubmodelElementCollection,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theValue: Array<AasTypes.ISubmodelElement> | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  value: Array<AasTypes.ISubmodelElement> | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "value": {
+        const parsed = parseArray(
+          jsonableValue,
+          submodelElementFromJsonable
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.SubmodelElementCollection,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      submodelElementFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.value = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.SubmodelElementCollection,
+    DeserializationError
+  >(
+    new AasTypes.SubmodelElementCollection(
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theValue
+    ),
+    null
+  );
 }
 
 /**
@@ -4336,37 +3359,7 @@ export function submodelElementCollectionFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForSubmodelElementCollection();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_SUBMODEL_ELEMENT_COLLECTION.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.SubmodelElementCollection,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "SubmodelElementCollection");
+  const modelTypeError = checkModelType(jsonObject, "SubmodelElementCollection");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.SubmodelElementCollection,
@@ -4377,24 +3370,7 @@ export function submodelElementCollectionFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.SubmodelElementCollection,
-    DeserializationError
-  >(
-    new AasTypes.SubmodelElementCollection(
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.value
-    ),
-    null
-  );
+  return parsePropertiesOfSubmodelElementCollection(jsonObject);
 }
 
 /**
@@ -4422,370 +3398,250 @@ export function dataElementFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IDataElement>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IDataElement,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IDataElement>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = DATA_ELEMENT_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IDataElement>(
-      `Unexpected model type for IDataElement: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "Blob":
+      return parsePropertiesOfBlob(jsonObject);
 
-  return dispatch(jsonable);
+    case "File":
+      return parsePropertiesOfFile(jsonObject);
+
+    case "MultiLanguageProperty":
+      return parsePropertiesOfMultiLanguageProperty(jsonObject);
+
+    case "Property":
+      return parsePropertiesOfProperty(jsonObject);
+
+    case "Range":
+      return parsePropertiesOfRange(jsonObject);
+
+    case "ReferenceElement":
+      return parsePropertiesOfReferenceElement(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IDataElement>(
+        `Unexpected model type for IDataElement: ${modelType}`
+      );
+  }
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Property}.
+ * Parse the properties of an instance
+ * of {@link types!Property} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Property},
+ * or an error if any
  */
-class SetterForProperty {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfProperty(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Property,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theValueType: AasTypes.DataTypeDefXsd | null = null;
+  let theValue: string | null = null;
+  let theValueId: AasTypes.Reference | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  valueType: AasTypes.DataTypeDefXsd | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  value: string | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  valueId: AasTypes.Reference | null = null;
+      case "valueType": {
+        const parsed = dataTypeDefXsdFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValueType = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "value": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "valueId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValueId = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Property,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
+  if (theValueType === null) {
+    return newDeserializationError<
+      AasTypes.Property
+    >(
+      "The required property 'valueType' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link valueType}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = dataTypeDefXsdFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.valueType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link valueId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.valueId = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.Property,
+    DeserializationError
+  >(
+    new AasTypes.Property(
+      theValueType,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theValue,
+      theValueId
+    ),
+    null
+  );
 }
 
 /**
@@ -4814,45 +3670,7 @@ export function propertyFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForProperty();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_PROPERTY.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Property,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.valueType === null) {
-    return newDeserializationError<
-      AasTypes.Property
-    >(
-      "The required property 'valueType' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "Property");
+  const modelTypeError = checkModelType(jsonObject, "Property");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.Property,
@@ -4863,355 +3681,196 @@ export function propertyFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.Property,
-    DeserializationError
-  >(
-    new AasTypes.Property(
-      setter.valueType,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.value,
-      setter.valueId
-    ),
-    null
-  );
+  return parsePropertiesOfProperty(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!MultiLanguageProperty}.
+ * Parse the properties of an instance
+ * of {@link types!MultiLanguageProperty} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!MultiLanguageProperty},
+ * or an error if any
  */
-class SetterForMultiLanguageProperty {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfMultiLanguageProperty(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.MultiLanguageProperty,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theValue: Array<AasTypes.LangStringTextType> | null = null;
+  let theValueId: AasTypes.Reference | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  value: Array<AasTypes.LangStringTextType> | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  valueId: AasTypes.Reference | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "value": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "valueId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValueId = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.MultiLanguageProperty,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.value = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link valueId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.valueId = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.MultiLanguageProperty,
+    DeserializationError
+  >(
+    new AasTypes.MultiLanguageProperty(
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theValue,
+      theValueId
+    ),
+    null
+  );
 }
 
 /**
@@ -5240,37 +3899,7 @@ export function multiLanguagePropertyFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForMultiLanguageProperty();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_MULTI_LANGUAGE_PROPERTY.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.MultiLanguageProperty,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "MultiLanguageProperty");
+  const modelTypeError = checkModelType(jsonObject, "MultiLanguageProperty");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.MultiLanguageProperty,
@@ -5281,368 +3910,214 @@ export function multiLanguagePropertyFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.MultiLanguageProperty,
-    DeserializationError
-  >(
-    new AasTypes.MultiLanguageProperty(
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.value,
-      setter.valueId
-    ),
-    null
-  );
+  return parsePropertiesOfMultiLanguageProperty(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Range}.
+ * Parse the properties of an instance
+ * of {@link types!Range} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Range},
+ * or an error if any
  */
-class SetterForRange {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfRange(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Range,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theValueType: AasTypes.DataTypeDefXsd | null = null;
+  let theMin: string | null = null;
+  let theMax: string | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  valueType: AasTypes.DataTypeDefXsd | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  min: string | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  max: string | null = null;
+      case "valueType": {
+        const parsed = dataTypeDefXsdFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValueType = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "min": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theMin = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "max": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theMax = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Range,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
+  if (theValueType === null) {
+    return newDeserializationError<
+      AasTypes.Range
+    >(
+      "The required property 'valueType' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link valueType}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = dataTypeDefXsdFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.valueType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link min}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setMinFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.min = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link max}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setMaxFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.max = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.Range,
+    DeserializationError
+  >(
+    new AasTypes.Range(
+      theValueType,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theMin,
+      theMax
+    ),
+    null
+  );
 }
 
 /**
@@ -5671,45 +4146,7 @@ export function rangeFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForRange();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_RANGE.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Range,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.valueType === null) {
-    return newDeserializationError<
-      AasTypes.Range
-    >(
-      "The required property 'valueType' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "Range");
+  const modelTypeError = checkModelType(jsonObject, "Range");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.Range,
@@ -5720,325 +4157,184 @@ export function rangeFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.Range,
-    DeserializationError
-  >(
-    new AasTypes.Range(
-      setter.valueType,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.min,
-      setter.max
-    ),
-    null
-  );
+  return parsePropertiesOfRange(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!ReferenceElement}.
+ * Parse the properties of an instance
+ * of {@link types!ReferenceElement} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!ReferenceElement},
+ * or an error if any
  */
-class SetterForReferenceElement {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfReferenceElement(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.ReferenceElement,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theValue: AasTypes.Reference | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  value: AasTypes.Reference | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "value": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.ReferenceElement,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.ReferenceElement,
+    DeserializationError
+  >(
+    new AasTypes.ReferenceElement(
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theValue
+    ),
+    null
+  );
 }
 
 /**
@@ -6067,37 +4363,7 @@ export function referenceElementFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForReferenceElement();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_REFERENCE_ELEMENT.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.ReferenceElement,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "ReferenceElement");
+  const modelTypeError = checkModelType(jsonObject, "ReferenceElement");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.ReferenceElement,
@@ -6108,345 +4374,203 @@ export function referenceElementFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.ReferenceElement,
-    DeserializationError
-  >(
-    new AasTypes.ReferenceElement(
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.value
-    ),
-    null
-  );
+  return parsePropertiesOfReferenceElement(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Blob}.
+ * Parse the properties of an instance
+ * of {@link types!Blob} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Blob},
+ * or an error if any
  */
-class SetterForBlob {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfBlob(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Blob,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theValue: Uint8Array | null = null;
+  let theContentType: string | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  value: Uint8Array | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  contentType: string | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "value": {
+        const parsed = bytesFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "contentType": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theContentType = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Blob,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
+  if (theContentType === null) {
+    return newDeserializationError<
+      AasTypes.Blob
+    >(
+      "The required property 'contentType' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = bytesFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link contentType}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setContentTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.contentType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.Blob,
+    DeserializationError
+  >(
+    new AasTypes.Blob(
+      theContentType,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theValue
+    ),
+    null
+  );
 }
 
 /**
@@ -6475,45 +4599,7 @@ export function blobFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForBlob();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_BLOB.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Blob,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.contentType === null) {
-    return newDeserializationError<
-      AasTypes.Blob
-    >(
-      "The required property 'contentType' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "Blob");
+  const modelTypeError = checkModelType(jsonObject, "Blob");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.Blob,
@@ -6524,346 +4610,203 @@ export function blobFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.Blob,
-    DeserializationError
-  >(
-    new AasTypes.Blob(
-      setter.contentType,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.value
-    ),
-    null
-  );
+  return parsePropertiesOfBlob(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!File}.
+ * Parse the properties of an instance
+ * of {@link types!File} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!File},
+ * or an error if any
  */
-class SetterForFile {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfFile(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.File,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theValue: string | null = null;
+  let theContentType: string | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  value: string | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  contentType: string | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "value": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "contentType": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theContentType = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.File,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
+  if (theContentType === null) {
+    return newDeserializationError<
+      AasTypes.File
+    >(
+      "The required property 'contentType' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link contentType}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setContentTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.contentType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.File,
+    DeserializationError
+  >(
+    new AasTypes.File(
+      theContentType,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theValue
+    ),
+    null
+  );
 }
 
 /**
@@ -6892,45 +4835,7 @@ export function fileFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForFile();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_FILE.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.File,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.contentType === null) {
-    return newDeserializationError<
-      AasTypes.File
-    >(
-      "The required property 'contentType' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "File");
+  const modelTypeError = checkModelType(jsonObject, "File");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.File,
@@ -6941,376 +4846,223 @@ export function fileFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.File,
-    DeserializationError
-  >(
-    new AasTypes.File(
-      setter.contentType,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.value
-    ),
-    null
-  );
+  return parsePropertiesOfFile(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!AnnotatedRelationshipElement}.
+ * Parse the properties of an instance
+ * of {@link types!AnnotatedRelationshipElement} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!AnnotatedRelationshipElement},
+ * or an error if any
  */
-class SetterForAnnotatedRelationshipElement {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfAnnotatedRelationshipElement(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.AnnotatedRelationshipElement,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theFirst: AasTypes.Reference | null = null;
+  let theSecond: AasTypes.Reference | null = null;
+  let theAnnotations: Array<AasTypes.IDataElement> | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  first: AasTypes.Reference | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  second: AasTypes.Reference | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  annotations: Array<AasTypes.IDataElement> | null = null;
+      case "first": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theFirst = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "second": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSecond = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "annotations": {
+        const parsed = parseArray(
+          jsonableValue,
+          dataElementFromJsonable
+        );
+        propertyError = parsed.error;
+        theAnnotations = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.AnnotatedRelationshipElement,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
+  if (theFirst === null) {
+    return newDeserializationError<
+      AasTypes.AnnotatedRelationshipElement
+    >(
+      "The required property 'first' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
+  if (theSecond === null) {
+    return newDeserializationError<
+      AasTypes.AnnotatedRelationshipElement
+    >(
+      "The required property 'second' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link first}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setFirstFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.first = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link second}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSecondFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.second = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link annotations}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setAnnotationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      dataElementFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.annotations = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.AnnotatedRelationshipElement,
+    DeserializationError
+  >(
+    new AasTypes.AnnotatedRelationshipElement(
+      theFirst,
+      theSecond,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theAnnotations
+    ),
+    null
+  );
 }
 
 /**
@@ -7339,53 +5091,7 @@ export function annotatedRelationshipElementFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForAnnotatedRelationshipElement();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_ANNOTATED_RELATIONSHIP_ELEMENT.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.AnnotatedRelationshipElement,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.first === null) {
-    return newDeserializationError<
-      AasTypes.AnnotatedRelationshipElement
-    >(
-      "The required property 'first' is missing"
-    );
-  }
-
-  if (setter.second === null) {
-    return newDeserializationError<
-      AasTypes.AnnotatedRelationshipElement
-    >(
-      "The required property 'second' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "AnnotatedRelationshipElement");
+  const modelTypeError = checkModelType(jsonObject, "AnnotatedRelationshipElement");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.AnnotatedRelationshipElement,
@@ -7396,407 +5102,227 @@ export function annotatedRelationshipElementFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.AnnotatedRelationshipElement,
-    DeserializationError
-  >(
-    new AasTypes.AnnotatedRelationshipElement(
-      setter.first,
-      setter.second,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.annotations
-    ),
-    null
-  );
+  return parsePropertiesOfAnnotatedRelationshipElement(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Entity}.
+ * Parse the properties of an instance
+ * of {@link types!Entity} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Entity},
+ * or an error if any
  */
-class SetterForEntity {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfEntity(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Entity,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theStatements: Array<AasTypes.ISubmodelElement> | null = null;
+  let theEntityType: AasTypes.EntityType | null = null;
+  let theGlobalAssetId: string | null = null;
+  let theSpecificAssetIds: Array<AasTypes.SpecificAssetId> | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  statements: Array<AasTypes.ISubmodelElement> | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  entityType: AasTypes.EntityType | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  globalAssetId: string | null = null;
+      case "statements": {
+        const parsed = parseArray(
+          jsonableValue,
+          submodelElementFromJsonable
+        );
+        propertyError = parsed.error;
+        theStatements = parsed.value;
+        break;
+      }
 
-  specificAssetIds: Array<AasTypes.SpecificAssetId> | null = null;
+      case "entityType": {
+        const parsed = entityTypeFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theEntityType = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "globalAssetId": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theGlobalAssetId = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "specificAssetIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          specificAssetIdFromJsonable
+        );
+        propertyError = parsed.error;
+        theSpecificAssetIds = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link statements}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setStatementsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      submodelElementFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.statements = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link entityType}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEntityTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = entityTypeFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.entityType = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Entity,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link globalAssetId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setGlobalAssetIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
+  if (theEntityType === null) {
+    return newDeserializationError<
+      AasTypes.Entity
+    >(
+      "The required property 'entityType' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.globalAssetId = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link specificAssetIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSpecificAssetIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      specificAssetIdFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.specificAssetIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.Entity,
+    DeserializationError
+  >(
+    new AasTypes.Entity(
+      theEntityType,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theStatements,
+      theGlobalAssetId,
+      theSpecificAssetIds
+    ),
+    null
+  );
 }
 
 /**
@@ -7825,45 +5351,7 @@ export function entityFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForEntity();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_ENTITY.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Entity,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.entityType === null) {
-    return newDeserializationError<
-      AasTypes.Entity
-    >(
-      "The required property 'entityType' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "Entity");
+  const modelTypeError = checkModelType(jsonObject, "Entity");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.Entity,
@@ -7874,27 +5362,7 @@ export function entityFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.Entity,
-    DeserializationError
-  >(
-    new AasTypes.Entity(
-      setter.entityType,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.statements,
-      setter.globalAssetId,
-      setter.specificAssetIds
-    ),
-    null
-  );
+  return parsePropertiesOfEntity(jsonObject);
 }
 
 /**
@@ -7988,185 +5456,168 @@ export function stateOfEventFromJsonable(
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!EventPayload}.
+ * Parse the properties of an instance
+ * of {@link types!EventPayload} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!EventPayload},
+ * or an error if any
  */
-class SetterForEventPayload {
-  source: AasTypes.Reference | null = null;
+function parsePropertiesOfEventPayload(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.EventPayload,
+  DeserializationError
+> {
+  let theSource: AasTypes.Reference | null = null;
+  let theSourceSemanticId: AasTypes.Reference | null = null;
+  let theObservableReference: AasTypes.Reference | null = null;
+  let theObservableSemanticId: AasTypes.Reference | null = null;
+  let theTopic: string | null = null;
+  let theSubjectId: AasTypes.Reference | null = null;
+  let theTimeStamp: string | null = null;
+  let thePayload: Uint8Array | null = null;
 
-  sourceSemanticId: AasTypes.Reference | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  observableReference: AasTypes.Reference | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "source": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSource = parsed.value;
+        break;
+      }
 
-  observableSemanticId: AasTypes.Reference | null = null;
+      case "sourceSemanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSourceSemanticId = parsed.value;
+        break;
+      }
 
-  topic: string | null = null;
+      case "observableReference": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theObservableReference = parsed.value;
+        break;
+      }
 
-  subjectId: AasTypes.Reference | null = null;
+      case "observableSemanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theObservableSemanticId = parsed.value;
+        break;
+      }
 
-  timeStamp: string | null = null;
+      case "topic": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theTopic = parsed.value;
+        break;
+      }
 
-  payload: Uint8Array | null = null;
+      case "subjectId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSubjectId = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link source}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSourceFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.source = parsedOrError.mustValue();
-      return null;
+      case "timeStamp": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theTimeStamp = parsed.value;
+        break;
+      }
+
+      case "payload": {
+        const parsed = bytesFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        thePayload = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.EventPayload,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link sourceSemanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSourceSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
+  if (theSource === null) {
+    return newDeserializationError<
+      AasTypes.EventPayload
+    >(
+      "The required property 'source' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.sourceSemanticId = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link observableReference}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setObservableReferenceFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
+  if (theObservableReference === null) {
+    return newDeserializationError<
+      AasTypes.EventPayload
+    >(
+      "The required property 'observableReference' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.observableReference = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link observableSemanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setObservableSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
+  if (theTimeStamp === null) {
+    return newDeserializationError<
+      AasTypes.EventPayload
+    >(
+      "The required property 'timeStamp' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.observableSemanticId = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link topic}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTopicFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.topic = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link subjectId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSubjectIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.subjectId = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link timeStamp}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTimeStampFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.timeStamp = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link payload}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setPayloadFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = bytesFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.payload = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.EventPayload,
+    DeserializationError
+  >(
+    new AasTypes.EventPayload(
+      theSource,
+      theObservableReference,
+      theTimeStamp,
+      theSourceSemanticId,
+      theObservableSemanticId,
+      theTopic,
+      theSubjectId,
+      thePayload
+    ),
+    null
+  );
 }
 
 /**
@@ -8195,76 +5646,7 @@ export function eventPayloadFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForEventPayload();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_EVENT_PAYLOAD.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.EventPayload,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.source === null) {
-    return newDeserializationError<
-      AasTypes.EventPayload
-    >(
-      "The required property 'source' is missing"
-    );
-  }
-
-  if (setter.observableReference === null) {
-    return newDeserializationError<
-      AasTypes.EventPayload
-    >(
-      "The required property 'observableReference' is missing"
-    );
-  }
-
-  if (setter.timeStamp === null) {
-    return newDeserializationError<
-      AasTypes.EventPayload
-    >(
-      "The required property 'timeStamp' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.EventPayload,
-    DeserializationError
-  >(
-    new AasTypes.EventPayload(
-      setter.source,
-      setter.observableReference,
-      setter.timeStamp,
-      setter.sourceSemanticId,
-      setter.observableSemanticId,
-      setter.topic,
-      setter.subjectId,
-      setter.payload
-    ),
-    null
-  );
+  return parsePropertiesOfEventPayload(jsonObject);
 }
 
 /**
@@ -8292,480 +5674,306 @@ export function eventElementFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IEventElement>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IEventElement,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IEventElement>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = EVENT_ELEMENT_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IEventElement>(
-      `Unexpected model type for IEventElement: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "BasicEventElement":
+      return parsePropertiesOfBasicEventElement(jsonObject);
 
-  return dispatch(jsonable);
+    default:
+      return newDeserializationError<AasTypes.IEventElement>(
+        `Unexpected model type for IEventElement: ${modelType}`
+      );
+  }
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!BasicEventElement}.
+ * Parse the properties of an instance
+ * of {@link types!BasicEventElement} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!BasicEventElement},
+ * or an error if any
  */
-class SetterForBasicEventElement {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfBasicEventElement(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.BasicEventElement,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theObserved: AasTypes.Reference | null = null;
+  let theDirection: AasTypes.Direction | null = null;
+  let theState: AasTypes.StateOfEvent | null = null;
+  let theMessageTopic: string | null = null;
+  let theMessageBroker: AasTypes.Reference | null = null;
+  let theLastUpdate: string | null = null;
+  let theMinInterval: string | null = null;
+  let theMaxInterval: string | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  observed: AasTypes.Reference | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  direction: AasTypes.Direction | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  state: AasTypes.StateOfEvent | null = null;
+      case "observed": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theObserved = parsed.value;
+        break;
+      }
 
-  messageTopic: string | null = null;
+      case "direction": {
+        const parsed = directionFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theDirection = parsed.value;
+        break;
+      }
 
-  messageBroker: AasTypes.Reference | null = null;
+      case "state": {
+        const parsed = stateOfEventFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theState = parsed.value;
+        break;
+      }
 
-  lastUpdate: string | null = null;
+      case "messageTopic": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theMessageTopic = parsed.value;
+        break;
+      }
 
-  minInterval: string | null = null;
+      case "messageBroker": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theMessageBroker = parsed.value;
+        break;
+      }
 
-  maxInterval: string | null = null;
+      case "lastUpdate": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theLastUpdate = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "minInterval": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theMinInterval = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "maxInterval": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theMaxInterval = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link observed}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setObservedFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.observed = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.BasicEventElement,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link direction}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDirectionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = directionFromJsonable(
-      jsonable
+  if (theObserved === null) {
+    return newDeserializationError<
+      AasTypes.BasicEventElement
+    >(
+      "The required property 'observed' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.direction = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link state}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setStateFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stateOfEventFromJsonable(
-      jsonable
+  if (theDirection === null) {
+    return newDeserializationError<
+      AasTypes.BasicEventElement
+    >(
+      "The required property 'direction' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.state = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link messageTopic}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setMessageTopicFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
+  if (theState === null) {
+    return newDeserializationError<
+      AasTypes.BasicEventElement
+    >(
+      "The required property 'state' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.messageTopic = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link messageBroker}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setMessageBrokerFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.messageBroker = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link lastUpdate}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setLastUpdateFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.lastUpdate = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link minInterval}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setMinIntervalFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.minInterval = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link maxInterval}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setMaxIntervalFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.maxInterval = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.BasicEventElement,
+    DeserializationError
+  >(
+    new AasTypes.BasicEventElement(
+      theObserved,
+      theDirection,
+      theState,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theMessageTopic,
+      theMessageBroker,
+      theLastUpdate,
+      theMinInterval,
+      theMaxInterval
+    ),
+    null
+  );
 }
 
 /**
@@ -8794,61 +6002,7 @@ export function basicEventElementFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForBasicEventElement();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_BASIC_EVENT_ELEMENT.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.BasicEventElement,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.observed === null) {
-    return newDeserializationError<
-      AasTypes.BasicEventElement
-    >(
-      "The required property 'observed' is missing"
-    );
-  }
-
-  if (setter.direction === null) {
-    return newDeserializationError<
-      AasTypes.BasicEventElement
-    >(
-      "The required property 'direction' is missing"
-    );
-  }
-
-  if (setter.state === null) {
-    return newDeserializationError<
-      AasTypes.BasicEventElement
-    >(
-      "The required property 'state' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "BasicEventElement");
+  const modelTypeError = checkModelType(jsonObject, "BasicEventElement");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.BasicEventElement,
@@ -8859,398 +6013,209 @@ export function basicEventElementFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.BasicEventElement,
-    DeserializationError
-  >(
-    new AasTypes.BasicEventElement(
-      setter.observed,
-      setter.direction,
-      setter.state,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.messageTopic,
-      setter.messageBroker,
-      setter.lastUpdate,
-      setter.minInterval,
-      setter.maxInterval
-    ),
-    null
-  );
+  return parsePropertiesOfBasicEventElement(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Operation}.
+ * Parse the properties of an instance
+ * of {@link types!Operation} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Operation},
+ * or an error if any
  */
-class SetterForOperation {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfOperation(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Operation,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theInputVariables: Array<AasTypes.OperationVariable> | null = null;
+  let theOutputVariables: Array<AasTypes.OperationVariable> | null = null;
+  let theInoutputVariables: Array<AasTypes.OperationVariable> | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  inputVariables: Array<AasTypes.OperationVariable> | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  outputVariables: Array<AasTypes.OperationVariable> | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  inoutputVariables: Array<AasTypes.OperationVariable> | null = null;
+      case "inputVariables": {
+        const parsed = parseArray(
+          jsonableValue,
+          operationVariableFromJsonable
+        );
+        propertyError = parsed.error;
+        theInputVariables = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "outputVariables": {
+        const parsed = parseArray(
+          jsonableValue,
+          operationVariableFromJsonable
+        );
+        propertyError = parsed.error;
+        theOutputVariables = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "inoutputVariables": {
+        const parsed = parseArray(
+          jsonableValue,
+          operationVariableFromJsonable
+        );
+        propertyError = parsed.error;
+        theInoutputVariables = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Operation,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link inputVariables}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setInputVariablesFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      operationVariableFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.inputVariables = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link outputVariables}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setOutputVariablesFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      operationVariableFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.outputVariables = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link inoutputVariables}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setInoutputVariablesFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      operationVariableFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.inoutputVariables = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.Operation,
+    DeserializationError
+  >(
+    new AasTypes.Operation(
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications,
+      theInputVariables,
+      theOutputVariables,
+      theInoutputVariables
+    ),
+    null
+  );
 }
 
 /**
@@ -9279,37 +6244,7 @@ export function operationFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForOperation();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_OPERATION.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Operation,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "Operation");
+  const modelTypeError = checkModelType(jsonObject, "Operation");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.Operation,
@@ -9320,54 +6255,79 @@ export function operationFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.Operation,
-    DeserializationError
-  >(
-    new AasTypes.Operation(
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications,
-      setter.inputVariables,
-      setter.outputVariables,
-      setter.inoutputVariables
-    ),
-    null
-  );
+  return parsePropertiesOfOperation(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!OperationVariable}.
+ * Parse the properties of an instance
+ * of {@link types!OperationVariable} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!OperationVariable},
+ * or an error if any
  */
-class SetterForOperationVariable {
-  value: AasTypes.ISubmodelElement | null = null;
+function parsePropertiesOfOperationVariable(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.OperationVariable,
+  DeserializationError
+> {
+  let theValue: AasTypes.ISubmodelElement | null = null;
 
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = submodelElementFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
+
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "value": {
+        const parsed = submodelElementFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.OperationVariable,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
+
+  if (theValue === null) {
+    return newDeserializationError<
+      AasTypes.OperationVariable
+    >(
+      "The required property 'value' is missing"
+    );
+  }
+
+  return new AasCommon.Either<
+    AasTypes.OperationVariable,
+    DeserializationError
+  >(
+    new AasTypes.OperationVariable(
+      theValue
+    ),
+    null
+  );
 }
 
 /**
@@ -9396,330 +6356,173 @@ export function operationVariableFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForOperationVariable();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_OPERATION_VARIABLE.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.OperationVariable,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.value === null) {
-    return newDeserializationError<
-      AasTypes.OperationVariable
-    >(
-      "The required property 'value' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.OperationVariable,
-    DeserializationError
-  >(
-    new AasTypes.OperationVariable(
-      setter.value
-    ),
-    null
-  );
+  return parsePropertiesOfOperationVariable(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Capability}.
+ * Parse the properties of an instance
+ * of {@link types!Capability} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Capability},
+ * or an error if any
  */
-class SetterForCapability {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfCapability(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Capability,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theSemanticId: AasTypes.Reference | null = null;
+  let theSupplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+  let theQualifiers: Array<AasTypes.Qualifier> | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  semanticId: AasTypes.Reference | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  supplementalSemanticIds: Array<AasTypes.Reference> | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  qualifiers: Array<AasTypes.Qualifier> | null = null;
+      case "semanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "supplementalSemanticIds": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "qualifiers": {
+        const parsed = parseArray(
+          jsonableValue,
+          qualifierFromJsonable
+        );
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link semanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.semanticId = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Capability,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link supplementalSemanticIds}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSupplementalSemanticIdsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.supplementalSemanticIds = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link qualifiers}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setQualifiersFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      qualifierFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.qualifiers = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.Capability,
+    DeserializationError
+  >(
+    new AasTypes.Capability(
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theSemanticId,
+      theSupplementalSemanticIds,
+      theQualifiers,
+      theEmbeddedDataSpecifications
+    ),
+    null
+  );
 }
 
 /**
@@ -9748,37 +6551,7 @@ export function capabilityFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForCapability();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_CAPABILITY.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Capability,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "Capability");
+  const modelTypeError = checkModelType(jsonObject, "Capability");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.Capability,
@@ -9789,292 +6562,180 @@ export function capabilityFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.Capability,
-    DeserializationError
-  >(
-    new AasTypes.Capability(
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.semanticId,
-      setter.supplementalSemanticIds,
-      setter.qualifiers,
-      setter.embeddedDataSpecifications
-    ),
-    null
-  );
+  return parsePropertiesOfCapability(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!ConceptDescription}.
+ * Parse the properties of an instance
+ * of {@link types!ConceptDescription} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!ConceptDescription},
+ * or an error if any
  */
-class SetterForConceptDescription {
-  extensions: Array<AasTypes.Extension> | null = null;
+function parsePropertiesOfConceptDescription(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.ConceptDescription,
+  DeserializationError
+> {
+  let theExtensions: Array<AasTypes.Extension> | null = null;
+  let theCategory: string | null = null;
+  let theIdShort: string | null = null;
+  let theDisplayName: Array<AasTypes.LangStringNameType> | null = null;
+  let theDescription: Array<AasTypes.LangStringTextType> | null = null;
+  let theAdministration: AasTypes.AdministrativeInformation | null = null;
+  let theId: string | null = null;
+  let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+  let theIsCaseOf: Array<AasTypes.Reference> | null = null;
 
-  category: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  idShort: string | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "extensions": {
+        const parsed = parseArray(
+          jsonableValue,
+          extensionFromJsonable
+        );
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
+        break;
+      }
 
-  displayName: Array<AasTypes.LangStringNameType> | null = null;
+      case "category": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theCategory = parsed.value;
+        break;
+      }
 
-  description: Array<AasTypes.LangStringTextType> | null = null;
+      case "idShort": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
+        break;
+      }
 
-  administration: AasTypes.AdministrativeInformation | null = null;
+      case "displayName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringNameTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
+        break;
+      }
 
-  id: string | null = null;
+      case "description": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringTextTypeFromJsonable
+        );
+        propertyError = parsed.error;
+        theDescription = parsed.value;
+        break;
+      }
 
-  embeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
+      case "administration": {
+        const parsed = administrativeInformationFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theAdministration = parsed.value;
+        break;
+      }
 
-  isCaseOf: Array<AasTypes.Reference> | null = null;
+      case "id": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theId = parsed.value;
+        break;
+      }
 
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
+      case "embeddedDataSpecifications": {
+        const parsed = parseArray(
+          jsonableValue,
+          embeddedDataSpecificationFromJsonable
+        );
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link extensions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setExtensionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "isCaseOf": {
+        const parsed = parseArray(
+          jsonableValue,
+          referenceFromJsonable
+        );
+        propertyError = parsed.error;
+        theIsCaseOf = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      extensionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.extensions = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link category}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setCategoryFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.category = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link idShort}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdShortFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.idShort = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link displayName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDisplayNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringNameTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.displayName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link description}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDescriptionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringTextTypeFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.description = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link administration}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setAdministrationFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = administrativeInformationFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.administration = parsedOrError.mustValue();
-      return null;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.ConceptDescription,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link id}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
+  if (theId === null) {
+    return newDeserializationError<
+      AasTypes.ConceptDescription
+    >(
+      "The required property 'id' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.id = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link embeddedDataSpecifications}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setEmbeddedDataSpecificationsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      embeddedDataSpecificationFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.embeddedDataSpecifications = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link isCaseOf}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setIsCaseOfFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      referenceFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.isCaseOf = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
+  return new AasCommon.Either<
+    AasTypes.ConceptDescription,
+    DeserializationError
+  >(
+    new AasTypes.ConceptDescription(
+      theId,
+      theExtensions,
+      theCategory,
+      theIdShort,
+      theDisplayName,
+      theDescription,
+      theAdministration,
+      theEmbeddedDataSpecifications,
+      theIsCaseOf
+    ),
+    null
+  );
 }
 
 /**
@@ -10103,45 +6764,7 @@ export function conceptDescriptionFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForConceptDescription();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_CONCEPT_DESCRIPTION.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.ConceptDescription,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.id === null) {
-    return newDeserializationError<
-      AasTypes.ConceptDescription
-    >(
-      "The required property 'id' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "ConceptDescription");
+  const modelTypeError = checkModelType(jsonObject, "ConceptDescription");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.ConceptDescription,
@@ -10152,23 +6775,7 @@ export function conceptDescriptionFromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.ConceptDescription,
-    DeserializationError
-  >(
-    new AasTypes.ConceptDescription(
-      setter.id,
-      setter.extensions,
-      setter.category,
-      setter.idShort,
-      setter.displayName,
-      setter.description,
-      setter.administration,
-      setter.embeddedDataSpecifications,
-      setter.isCaseOf
-    ),
-    null
-  );
+  return parsePropertiesOfConceptDescription(jsonObject);
 }
 
 /**
@@ -10202,83 +6809,106 @@ export function referenceTypesFromJsonable(
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Reference}.
+ * Parse the properties of an instance
+ * of {@link types!Reference} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Reference},
+ * or an error if any
  */
-class SetterForReference {
-  type: AasTypes.ReferenceTypes | null = null;
+function parsePropertiesOfReference(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Reference,
+  DeserializationError
+> {
+  let theType: AasTypes.ReferenceTypes | null = null;
+  let theReferredSemanticId: AasTypes.Reference | null = null;
+  let theKeys: Array<AasTypes.Key> | null = null;
 
-  referredSemanticId: AasTypes.Reference | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  keys: Array<AasTypes.Key> | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "type": {
+        const parsed = referenceTypesFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theType = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link type}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceTypesFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.type = parsedOrError.mustValue();
-      return null;
+      case "referredSemanticId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theReferredSemanticId = parsed.value;
+        break;
+      }
+
+      case "keys": {
+        const parsed = parseArray(
+          jsonableValue,
+          keyFromJsonable
+        );
+        propertyError = parsed.error;
+        theKeys = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Reference,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link referredSemanticId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setReferredSemanticIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
+  if (theType === null) {
+    return newDeserializationError<
+      AasTypes.Reference
+    >(
+      "The required property 'type' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.referredSemanticId = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link keys}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setKeysFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      keyFromJsonable
+  if (theKeys === null) {
+    return newDeserializationError<
+      AasTypes.Reference
+    >(
+      "The required property 'keys' is missing"
     );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.keys = itemsOrError.mustValue();
-    return null;
   }
+
+  return new AasCommon.Either<
+    AasTypes.Reference,
+    DeserializationError
+  >(
+    new AasTypes.Reference(
+      theType,
+      theKeys,
+      theReferredSemanticId
+    ),
+    null
+  );
 }
 
 /**
@@ -10307,113 +6937,98 @@ export function referenceFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForReference();
+  return parsePropertiesOfReference(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!Key} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Key},
+ * or an error if any
+ */
+function parsePropertiesOfKey(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Key,
+  DeserializationError
+> {
+  let theType: AasTypes.KeyTypes | null = null;
+  let theValue: string | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_REFERENCE.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "type": {
+        const parsed = keyTypesFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theType = parsed.value;
+        break;
+      }
+
+      case "value": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.Reference,
+        AasTypes.Key,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.type === null) {
+  if (theType === null) {
     return newDeserializationError<
-      AasTypes.Reference
+      AasTypes.Key
     >(
       "The required property 'type' is missing"
     );
   }
 
-  if (setter.keys === null) {
+  if (theValue === null) {
     return newDeserializationError<
-      AasTypes.Reference
+      AasTypes.Key
     >(
-      "The required property 'keys' is missing"
+      "The required property 'value' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.Reference,
+    AasTypes.Key,
     DeserializationError
   >(
-    new AasTypes.Reference(
-      setter.type,
-      setter.keys,
-      setter.referredSemanticId
+    new AasTypes.Key(
+      theType,
+      theValue
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!Key}.
- */
-class SetterForKey {
-  type: AasTypes.KeyTypes | null = null;
-
-  value: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link type}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = keyTypesFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.type = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -10442,62 +7057,7 @@ export function keyFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForKey();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_KEY.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Key,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.type === null) {
-    return newDeserializationError<
-      AasTypes.Key
-    >(
-      "The required property 'type' is missing"
-    );
-  }
-
-  if (setter.value === null) {
-    return newDeserializationError<
-      AasTypes.Key
-    >(
-      "The required property 'value' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.Key,
-    DeserializationError
-  >(
-    new AasTypes.Key(
-      setter.type,
-      setter.value
-    ),
-    null
-  );
+  return parsePropertiesOfKey(jsonObject);
 }
 
 /**
@@ -10585,77 +7145,131 @@ export function abstractLangStringFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IAbstractLangString>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IAbstractLangString,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IAbstractLangString>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = ABSTRACT_LANG_STRING_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IAbstractLangString>(
-      `Unexpected model type for IAbstractLangString: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "LangStringDefinitionTypeIec61360":
+      return parsePropertiesOfLangStringDefinitionTypeIec61360(jsonObject);
 
-  return dispatch(jsonable);
+    case "LangStringNameType":
+      return parsePropertiesOfLangStringNameType(jsonObject);
+
+    case "LangStringPreferredNameTypeIec61360":
+      return parsePropertiesOfLangStringPreferredNameTypeIec61360(jsonObject);
+
+    case "LangStringShortNameTypeIec61360":
+      return parsePropertiesOfLangStringShortNameTypeIec61360(jsonObject);
+
+    case "LangStringTextType":
+      return parsePropertiesOfLangStringTextType(jsonObject);
+
+    default:
+      return newDeserializationError<AasTypes.IAbstractLangString>(
+        `Unexpected model type for IAbstractLangString: ${modelType}`
+      );
+  }
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!LangStringNameType}.
+ * Parse the properties of an instance
+ * of {@link types!LangStringNameType} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!LangStringNameType},
+ * or an error if any
  */
-class SetterForLangStringNameType {
-  language: string | null = null;
+function parsePropertiesOfLangStringNameType(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.LangStringNameType,
+  DeserializationError
+> {
+  let theLanguage: string | null = null;
+  let theText: string | null = null;
 
-  text: string | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  /**
-   * Parse `jsonable` as the value of {@link language}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setLanguageFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.language = parsedOrError.mustValue();
-      return null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "language": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theLanguage = parsed.value;
+        break;
+      }
+
+      case "text": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theText = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.LangStringNameType,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link text}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTextFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
+  if (theLanguage === null) {
+    return newDeserializationError<
+      AasTypes.LangStringNameType
+    >(
+      "The required property 'language' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.text = parsedOrError.mustValue();
-      return null;
-    }
   }
+
+  if (theText === null) {
+    return newDeserializationError<
+      AasTypes.LangStringNameType
+    >(
+      "The required property 'text' is missing"
+    );
+  }
+
+  return new AasCommon.Either<
+    AasTypes.LangStringNameType,
+    DeserializationError
+  >(
+    new AasTypes.LangStringNameType(
+      theLanguage,
+      theText
+    ),
+    null
+  );
 }
 
 /**
@@ -10684,112 +7298,98 @@ export function langStringNameTypeFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForLangStringNameType();
+  return parsePropertiesOfLangStringNameType(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!LangStringTextType} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!LangStringTextType},
+ * or an error if any
+ */
+function parsePropertiesOfLangStringTextType(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.LangStringTextType,
+  DeserializationError
+> {
+  let theLanguage: string | null = null;
+  let theText: string | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_LANG_STRING_NAME_TYPE.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "language": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theLanguage = parsed.value;
+        break;
+      }
+
+      case "text": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theText = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.LangStringNameType,
+        AasTypes.LangStringTextType,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.language === null) {
+  if (theLanguage === null) {
     return newDeserializationError<
-      AasTypes.LangStringNameType
+      AasTypes.LangStringTextType
     >(
       "The required property 'language' is missing"
     );
   }
 
-  if (setter.text === null) {
+  if (theText === null) {
     return newDeserializationError<
-      AasTypes.LangStringNameType
+      AasTypes.LangStringTextType
     >(
       "The required property 'text' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.LangStringNameType,
+    AasTypes.LangStringTextType,
     DeserializationError
   >(
-    new AasTypes.LangStringNameType(
-      setter.language,
-      setter.text
+    new AasTypes.LangStringTextType(
+      theLanguage,
+      theText
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!LangStringTextType}.
- */
-class SetterForLangStringTextType {
-  language: string | null = null;
-
-  text: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link language}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setLanguageFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.language = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link text}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTextFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.text = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -10818,158 +7418,96 @@ export function langStringTextTypeFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForLangStringTextType();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_LANG_STRING_TEXT_TYPE.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.LangStringTextType,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.language === null) {
-    return newDeserializationError<
-      AasTypes.LangStringTextType
-    >(
-      "The required property 'language' is missing"
-    );
-  }
-
-  if (setter.text === null) {
-    return newDeserializationError<
-      AasTypes.LangStringTextType
-    >(
-      "The required property 'text' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.LangStringTextType,
-    DeserializationError
-  >(
-    new AasTypes.LangStringTextType(
-      setter.language,
-      setter.text
-    ),
-    null
-  );
+  return parsePropertiesOfLangStringTextType(jsonObject);
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!Environment}.
+ * Parse the properties of an instance
+ * of {@link types!Environment} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Environment},
+ * or an error if any
  */
-class SetterForEnvironment {
-  assetAdministrationShells: Array<AasTypes.AssetAdministrationShell> | null = null;
+function parsePropertiesOfEnvironment(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.Environment,
+  DeserializationError
+> {
+  let theAssetAdministrationShells: Array<AasTypes.AssetAdministrationShell> | null = null;
+  let theSubmodels: Array<AasTypes.Submodel> | null = null;
+  let theConceptDescriptions: Array<AasTypes.ConceptDescription> | null = null;
 
-  submodels: Array<AasTypes.Submodel> | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  conceptDescriptions: Array<AasTypes.ConceptDescription> | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "assetAdministrationShells": {
+        const parsed = parseArray(
+          jsonableValue,
+          assetAdministrationShellFromJsonable
+        );
+        propertyError = parsed.error;
+        theAssetAdministrationShells = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link assetAdministrationShells}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setAssetAdministrationShellsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
+      case "submodels": {
+        const parsed = parseArray(
+          jsonableValue,
+          submodelFromJsonable
+        );
+        propertyError = parsed.error;
+        theSubmodels = parsed.value;
+        break;
+      }
+
+      case "conceptDescriptions": {
+        const parsed = parseArray(
+          jsonableValue,
+          conceptDescriptionFromJsonable
+        );
+        propertyError = parsed.error;
+        theConceptDescriptions = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      assetAdministrationShellFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.Environment,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
-
-    this.assetAdministrationShells = itemsOrError.mustValue();
-    return null;
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link submodels}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSubmodelsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      submodelFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.submodels = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link conceptDescriptions}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setConceptDescriptionsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      conceptDescriptionFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.conceptDescriptions = itemsOrError.mustValue();
-    return null;
-  }
+  return new AasCommon.Either<
+    AasTypes.Environment,
+    DeserializationError
+  >(
+    new AasTypes.Environment(
+      theAssetAdministrationShells,
+      theSubmodels,
+      theConceptDescriptions
+    ),
+    null
+  );
 }
 
 /**
@@ -10998,47 +7536,7 @@ export function environmentFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForEnvironment();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_ENVIRONMENT.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.Environment,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  return new AasCommon.Either<
-    AasTypes.Environment,
-    DeserializationError
-  >(
-    new AasTypes.Environment(
-      setter.assetAdministrationShells,
-      setter.submodels,
-      setter.conceptDescriptions
-    ),
-    null
-  );
+  return parsePropertiesOfEnvironment(jsonObject);
 }
 
 /**
@@ -11066,77 +7564,119 @@ export function dataSpecificationContentFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonObject["modelType"];
-  if (modelType === undefined) {
-    return newDeserializationError<AasTypes.IDataSpecificationContent>(
-      "The required property modelType is missing"
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new AasCommon.Either<
+      AasTypes.IDataSpecificationContent,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
     );
   }
 
-  if (typeof modelType !== "string") {
-    return newDeserializationError<AasTypes.IDataSpecificationContent>(
-      `Expected the property modelType to be a string, but got: ${typeof modelType}`
-    );
-  }
+  const modelType = modelTypeOrError.mustValue();
 
-  const dispatch = DATA_SPECIFICATION_CONTENT_FROM_JSONABLE_DISPATCH.get(modelType);
-  if (dispatch === undefined) {
-    return newDeserializationError<AasTypes.IDataSpecificationContent>(
-      `Unexpected model type for IDataSpecificationContent: ${modelType}`
-    );
-  }
+  switch (modelType) {
+    case "DataSpecificationIec61360":
+      return parsePropertiesOfDataSpecificationIec61360(jsonObject);
 
-  return dispatch(jsonable);
+    default:
+      return newDeserializationError<AasTypes.IDataSpecificationContent>(
+        `Unexpected model type for IDataSpecificationContent: ${modelType}`
+      );
+  }
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!EmbeddedDataSpecification}.
+ * Parse the properties of an instance
+ * of {@link types!EmbeddedDataSpecification} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!EmbeddedDataSpecification},
+ * or an error if any
  */
-class SetterForEmbeddedDataSpecification {
-  dataSpecification: AasTypes.Reference | null = null;
+function parsePropertiesOfEmbeddedDataSpecification(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.EmbeddedDataSpecification,
+  DeserializationError
+> {
+  let theDataSpecification: AasTypes.Reference | null = null;
+  let theDataSpecificationContent: AasTypes.IDataSpecificationContent | null = null;
 
-  dataSpecificationContent: AasTypes.IDataSpecificationContent | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  /**
-   * Parse `jsonable` as the value of {@link dataSpecification}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDataSpecificationFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.dataSpecification = parsedOrError.mustValue();
-      return null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "dataSpecification": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theDataSpecification = parsed.value;
+        break;
+      }
+
+      case "dataSpecificationContent": {
+        const parsed = dataSpecificationContentFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theDataSpecificationContent = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.EmbeddedDataSpecification,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link dataSpecificationContent}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDataSpecificationContentFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = dataSpecificationContentFromJsonable(
-      jsonable
+  if (theDataSpecification === null) {
+    return newDeserializationError<
+      AasTypes.EmbeddedDataSpecification
+    >(
+      "The required property 'dataSpecification' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.dataSpecificationContent = parsedOrError.mustValue();
-      return null;
-    }
   }
+
+  if (theDataSpecificationContent === null) {
+    return newDeserializationError<
+      AasTypes.EmbeddedDataSpecification
+    >(
+      "The required property 'dataSpecificationContent' is missing"
+    );
+  }
+
+  return new AasCommon.Either<
+    AasTypes.EmbeddedDataSpecification,
+    DeserializationError
+  >(
+    new AasTypes.EmbeddedDataSpecification(
+      theDataSpecification,
+      theDataSpecificationContent
+    ),
+    null
+  );
 }
 
 /**
@@ -11165,62 +7705,7 @@ export function embeddedDataSpecificationFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForEmbeddedDataSpecification();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_EMBEDDED_DATA_SPECIFICATION.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.EmbeddedDataSpecification,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.dataSpecification === null) {
-    return newDeserializationError<
-      AasTypes.EmbeddedDataSpecification
-    >(
-      "The required property 'dataSpecification' is missing"
-    );
-  }
-
-  if (setter.dataSpecificationContent === null) {
-    return newDeserializationError<
-      AasTypes.EmbeddedDataSpecification
-    >(
-      "The required property 'dataSpecificationContent' is missing"
-    );
-  }
-
-  return new AasCommon.Either<
-    AasTypes.EmbeddedDataSpecification,
-    DeserializationError
-  >(
-    new AasTypes.EmbeddedDataSpecification(
-      setter.dataSpecification,
-      setter.dataSpecificationContent
-    ),
-    null
-  );
+  return parsePropertiesOfEmbeddedDataSpecification(jsonObject);
 }
 
 /**
@@ -11254,97 +7739,132 @@ export function dataTypeIec61360FromJsonable(
 }
 
 /**
- * Provide de-serialize & set methods for properties
- * of {@link types!LevelType}.
+ * Parse the properties of an instance
+ * of {@link types!LevelType} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!LevelType},
+ * or an error if any
  */
-class SetterForLevelType {
-  min: boolean | null = null;
+function parsePropertiesOfLevelType(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.LevelType,
+  DeserializationError
+> {
+  let theMin: boolean | null = null;
+  let theNom: boolean | null = null;
+  let theTyp: boolean | null = null;
+  let theMax: boolean | null = null;
 
-  nom: boolean | null = null;
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
 
-  typ: boolean | null = null;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "min": {
+        const parsed = booleanFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theMin = parsed.value;
+        break;
+      }
 
-  max: boolean | null = null;
+      case "nom": {
+        const parsed = booleanFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theNom = parsed.value;
+        break;
+      }
 
-  /**
-   * Parse `jsonable` as the value of {@link min}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setMinFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = booleanFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.min = parsedOrError.mustValue();
-      return null;
+      case "typ": {
+        const parsed = booleanFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theTyp = parsed.value;
+        break;
+      }
+
+      case "max": {
+        const parsed = booleanFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theMax = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new AasCommon.Either<
+        AasTypes.LevelType,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
     }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link nom}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setNomFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = booleanFromJsonable(
-      jsonable
+  if (theMin === null) {
+    return newDeserializationError<
+      AasTypes.LevelType
+    >(
+      "The required property 'min' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.nom = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link typ}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTypFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = booleanFromJsonable(
-      jsonable
+  if (theNom === null) {
+    return newDeserializationError<
+      AasTypes.LevelType
+    >(
+      "The required property 'nom' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.typ = parsedOrError.mustValue();
-      return null;
-    }
   }
 
-  /**
-   * Parse `jsonable` as the value of {@link max}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setMaxFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = booleanFromJsonable(
-      jsonable
+  if (theTyp === null) {
+    return newDeserializationError<
+      AasTypes.LevelType
+    >(
+      "The required property 'typ' is missing"
     );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.max = parsedOrError.mustValue();
-      return null;
-    }
   }
+
+  if (theMax === null) {
+    return newDeserializationError<
+      AasTypes.LevelType
+    >(
+      "The required property 'max' is missing"
+    );
+  }
+
+  return new AasCommon.Either<
+    AasTypes.LevelType,
+    DeserializationError
+  >(
+    new AasTypes.LevelType(
+      theMin,
+      theNom,
+      theTyp,
+      theMax
+    ),
+    null
+  );
 }
 
 /**
@@ -11373,130 +7893,98 @@ export function levelTypeFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForLevelType();
+  return parsePropertiesOfLevelType(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!ValueReferencePair} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!ValueReferencePair},
+ * or an error if any
+ */
+function parsePropertiesOfValueReferencePair(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.ValueReferencePair,
+  DeserializationError
+> {
+  let theValue: string | null = null;
+  let theValueId: AasTypes.Reference | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_LEVEL_TYPE.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "value": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      case "valueId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValueId = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.LevelType,
+        AasTypes.ValueReferencePair,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.min === null) {
+  if (theValue === null) {
     return newDeserializationError<
-      AasTypes.LevelType
+      AasTypes.ValueReferencePair
     >(
-      "The required property 'min' is missing"
+      "The required property 'value' is missing"
     );
   }
 
-  if (setter.nom === null) {
+  if (theValueId === null) {
     return newDeserializationError<
-      AasTypes.LevelType
+      AasTypes.ValueReferencePair
     >(
-      "The required property 'nom' is missing"
-    );
-  }
-
-  if (setter.typ === null) {
-    return newDeserializationError<
-      AasTypes.LevelType
-    >(
-      "The required property 'typ' is missing"
-    );
-  }
-
-  if (setter.max === null) {
-    return newDeserializationError<
-      AasTypes.LevelType
-    >(
-      "The required property 'max' is missing"
+      "The required property 'valueId' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.LevelType,
+    AasTypes.ValueReferencePair,
     DeserializationError
   >(
-    new AasTypes.LevelType(
-      setter.min,
-      setter.nom,
-      setter.typ,
-      setter.max
+    new AasTypes.ValueReferencePair(
+      theValue,
+      theValueId
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!ValueReferencePair}.
- */
-class SetterForValueReferencePair {
-  value: string | null = null;
-
-  valueId: AasTypes.Reference | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link valueId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.valueId = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -11525,98 +8013,80 @@ export function valueReferencePairFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForValueReferencePair();
+  return parsePropertiesOfValueReferencePair(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!ValueList} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!ValueList},
+ * or an error if any
+ */
+function parsePropertiesOfValueList(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.ValueList,
+  DeserializationError
+> {
+  let theValueReferencePairs: Array<AasTypes.ValueReferencePair> | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_VALUE_REFERENCE_PAIR.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "valueReferencePairs": {
+        const parsed = parseArray(
+          jsonableValue,
+          valueReferencePairFromJsonable
+        );
+        propertyError = parsed.error;
+        theValueReferencePairs = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.ValueReferencePair,
+        AasTypes.ValueList,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.value === null) {
+  if (theValueReferencePairs === null) {
     return newDeserializationError<
-      AasTypes.ValueReferencePair
+      AasTypes.ValueList
     >(
-      "The required property 'value' is missing"
-    );
-  }
-
-  if (setter.valueId === null) {
-    return newDeserializationError<
-      AasTypes.ValueReferencePair
-    >(
-      "The required property 'valueId' is missing"
+      "The required property 'valueReferencePairs' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.ValueReferencePair,
+    AasTypes.ValueList,
     DeserializationError
   >(
-    new AasTypes.ValueReferencePair(
-      setter.value,
-      setter.valueId
+    new AasTypes.ValueList(
+      theValueReferencePairs
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!ValueList}.
- */
-class SetterForValueList {
-  valueReferencePairs: Array<AasTypes.ValueReferencePair> | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link valueReferencePairs}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueReferencePairsFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      valueReferencePairFromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.valueReferencePairs = itemsOrError.mustValue();
-    return null;
-  }
 }
 
 /**
@@ -11645,103 +8115,98 @@ export function valueListFromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForValueList();
+  return parsePropertiesOfValueList(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!LangStringPreferredNameTypeIec61360} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!LangStringPreferredNameTypeIec61360},
+ * or an error if any
+ */
+function parsePropertiesOfLangStringPreferredNameTypeIec61360(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.LangStringPreferredNameTypeIec61360,
+  DeserializationError
+> {
+  let theLanguage: string | null = null;
+  let theText: string | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_VALUE_LIST.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "language": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theLanguage = parsed.value;
+        break;
+      }
+
+      case "text": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theText = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.ValueList,
+        AasTypes.LangStringPreferredNameTypeIec61360,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.valueReferencePairs === null) {
+  if (theLanguage === null) {
     return newDeserializationError<
-      AasTypes.ValueList
+      AasTypes.LangStringPreferredNameTypeIec61360
     >(
-      "The required property 'valueReferencePairs' is missing"
+      "The required property 'language' is missing"
+    );
+  }
+
+  if (theText === null) {
+    return newDeserializationError<
+      AasTypes.LangStringPreferredNameTypeIec61360
+    >(
+      "The required property 'text' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.ValueList,
+    AasTypes.LangStringPreferredNameTypeIec61360,
     DeserializationError
   >(
-    new AasTypes.ValueList(
-      setter.valueReferencePairs
+    new AasTypes.LangStringPreferredNameTypeIec61360(
+      theLanguage,
+      theText
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!LangStringPreferredNameTypeIec61360}.
- */
-class SetterForLangStringPreferredNameTypeIec61360 {
-  language: string | null = null;
-
-  text: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link language}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setLanguageFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.language = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link text}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTextFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.text = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -11770,112 +8235,98 @@ export function langStringPreferredNameTypeIec61360FromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForLangStringPreferredNameTypeIec61360();
+  return parsePropertiesOfLangStringPreferredNameTypeIec61360(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!LangStringShortNameTypeIec61360} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!LangStringShortNameTypeIec61360},
+ * or an error if any
+ */
+function parsePropertiesOfLangStringShortNameTypeIec61360(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.LangStringShortNameTypeIec61360,
+  DeserializationError
+> {
+  let theLanguage: string | null = null;
+  let theText: string | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_LANG_STRING_PREFERRED_NAME_TYPE_IEC_61360.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "language": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theLanguage = parsed.value;
+        break;
+      }
+
+      case "text": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theText = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.LangStringPreferredNameTypeIec61360,
+        AasTypes.LangStringShortNameTypeIec61360,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.language === null) {
+  if (theLanguage === null) {
     return newDeserializationError<
-      AasTypes.LangStringPreferredNameTypeIec61360
+      AasTypes.LangStringShortNameTypeIec61360
     >(
       "The required property 'language' is missing"
     );
   }
 
-  if (setter.text === null) {
+  if (theText === null) {
     return newDeserializationError<
-      AasTypes.LangStringPreferredNameTypeIec61360
+      AasTypes.LangStringShortNameTypeIec61360
     >(
       "The required property 'text' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.LangStringPreferredNameTypeIec61360,
+    AasTypes.LangStringShortNameTypeIec61360,
     DeserializationError
   >(
-    new AasTypes.LangStringPreferredNameTypeIec61360(
-      setter.language,
-      setter.text
+    new AasTypes.LangStringShortNameTypeIec61360(
+      theLanguage,
+      theText
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!LangStringShortNameTypeIec61360}.
- */
-class SetterForLangStringShortNameTypeIec61360 {
-  language: string | null = null;
-
-  text: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link language}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setLanguageFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.language = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link text}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTextFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.text = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -11904,112 +8355,98 @@ export function langStringShortNameTypeIec61360FromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForLangStringShortNameTypeIec61360();
+  return parsePropertiesOfLangStringShortNameTypeIec61360(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!LangStringDefinitionTypeIec61360} from `jsonObject`.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!LangStringDefinitionTypeIec61360},
+ * or an error if any
+ */
+function parsePropertiesOfLangStringDefinitionTypeIec61360(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.LangStringDefinitionTypeIec61360,
+  DeserializationError
+> {
+  let theLanguage: string | null = null;
+  let theText: string | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_LANG_STRING_SHORT_NAME_TYPE_IEC_61360.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "language": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theLanguage = parsed.value;
+        break;
+      }
+
+      case "text": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theText = parsed.value;
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.LangStringShortNameTypeIec61360,
+        AasTypes.LangStringDefinitionTypeIec61360,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.language === null) {
+  if (theLanguage === null) {
     return newDeserializationError<
-      AasTypes.LangStringShortNameTypeIec61360
+      AasTypes.LangStringDefinitionTypeIec61360
     >(
       "The required property 'language' is missing"
     );
   }
 
-  if (setter.text === null) {
+  if (theText === null) {
     return newDeserializationError<
-      AasTypes.LangStringShortNameTypeIec61360
+      AasTypes.LangStringDefinitionTypeIec61360
     >(
       "The required property 'text' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.LangStringShortNameTypeIec61360,
+    AasTypes.LangStringDefinitionTypeIec61360,
     DeserializationError
   >(
-    new AasTypes.LangStringShortNameTypeIec61360(
-      setter.language,
-      setter.text
+    new AasTypes.LangStringDefinitionTypeIec61360(
+      theLanguage,
+      theText
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!LangStringDefinitionTypeIec61360}.
- */
-class SetterForLangStringDefinitionTypeIec61360 {
-  language: string | null = null;
-
-  text: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link language}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setLanguageFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.language = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link text}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setTextFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.text = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -12038,381 +8475,211 @@ export function langStringDefinitionTypeIec61360FromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForLangStringDefinitionTypeIec61360();
+  return parsePropertiesOfLangStringDefinitionTypeIec61360(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!DataSpecificationIec61360} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!DataSpecificationIec61360},
+ * or an error if any
+ */
+function parsePropertiesOfDataSpecificationIec61360(
+  jsonObject: JsonObject
+): AasCommon.Either<
+  AasTypes.DataSpecificationIec61360,
+  DeserializationError
+> {
+  let thePreferredName: Array<AasTypes.LangStringPreferredNameTypeIec61360> | null = null;
+  let theShortName: Array<AasTypes.LangStringShortNameTypeIec61360> | null = null;
+  let theUnit: string | null = null;
+  let theUnitId: AasTypes.Reference | null = null;
+  let theSourceOfDefinition: string | null = null;
+  let theSymbol: string | null = null;
+  let theDataType: AasTypes.DataTypeIec61360 | null = null;
+  let theDefinition: Array<AasTypes.LangStringDefinitionTypeIec61360> | null = null;
+  let theValueFormat: string | null = null;
+  let theValueList: AasTypes.ValueList | null = null;
+  let theValue: string | null = null;
+  let theLevelType: AasTypes.LevelType | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_LANG_STRING_DEFINITION_TYPE_IEC_61360.get(key);
 
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "preferredName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringPreferredNameTypeIec61360FromJsonable
+        );
+        propertyError = parsed.error;
+        thePreferredName = parsed.value;
+        break;
+      }
+
+      case "shortName": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringShortNameTypeIec61360FromJsonable
+        );
+        propertyError = parsed.error;
+        theShortName = parsed.value;
+        break;
+      }
+
+      case "unit": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theUnit = parsed.value;
+        break;
+      }
+
+      case "unitId": {
+        const parsed = referenceFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theUnitId = parsed.value;
+        break;
+      }
+
+      case "sourceOfDefinition": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSourceOfDefinition = parsed.value;
+        break;
+      }
+
+      case "symbol": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theSymbol = parsed.value;
+        break;
+      }
+
+      case "dataType": {
+        const parsed = dataTypeIec61360FromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theDataType = parsed.value;
+        break;
+      }
+
+      case "definition": {
+        const parsed = parseArray(
+          jsonableValue,
+          langStringDefinitionTypeIec61360FromJsonable
+        );
+        propertyError = parsed.error;
+        theDefinition = parsed.value;
+        break;
+      }
+
+      case "valueFormat": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValueFormat = parsed.value;
+        break;
+      }
+
+      case "valueList": {
+        const parsed = valueListFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValueList = parsed.value;
+        break;
+      }
+
+      case "value": {
+        const parsed = stringFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValue = parsed.value;
+        break;
+      }
+
+      case "levelType": {
+        const parsed = levelTypeFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theLevelType = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
     }
 
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
+    if (propertyError !== null) {
+      propertyError.path.prepend(
         new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
-        AasTypes.LangStringDefinitionTypeIec61360,
+        AasTypes.DataSpecificationIec61360,
         DeserializationError
       >(
-          null,
-          error
-        );
+        null,
+        propertyError
+      );
     }
   }
 
-  if (setter.language === null) {
+  if (thePreferredName === null) {
     return newDeserializationError<
-      AasTypes.LangStringDefinitionTypeIec61360
+      AasTypes.DataSpecificationIec61360
     >(
-      "The required property 'language' is missing"
-    );
-  }
-
-  if (setter.text === null) {
-    return newDeserializationError<
-      AasTypes.LangStringDefinitionTypeIec61360
-    >(
-      "The required property 'text' is missing"
+      "The required property 'preferredName' is missing"
     );
   }
 
   return new AasCommon.Either<
-    AasTypes.LangStringDefinitionTypeIec61360,
+    AasTypes.DataSpecificationIec61360,
     DeserializationError
   >(
-    new AasTypes.LangStringDefinitionTypeIec61360(
-      setter.language,
-      setter.text
+    new AasTypes.DataSpecificationIec61360(
+      thePreferredName,
+      theShortName,
+      theUnit,
+      theUnitId,
+      theSourceOfDefinition,
+      theSymbol,
+      theDataType,
+      theDefinition,
+      theValueFormat,
+      theValueList,
+      theValue,
+      theLevelType
     ),
     null
   );
-}
-
-/**
- * Provide de-serialize & set methods for properties
- * of {@link types!DataSpecificationIec61360}.
- */
-class SetterForDataSpecificationIec61360 {
-  preferredName: Array<AasTypes.LangStringPreferredNameTypeIec61360> | null = null;
-
-  shortName: Array<AasTypes.LangStringShortNameTypeIec61360> | null = null;
-
-  unit: string | null = null;
-
-  unitId: AasTypes.Reference | null = null;
-
-  sourceOfDefinition: string | null = null;
-
-  symbol: string | null = null;
-
-  dataType: AasTypes.DataTypeIec61360 | null = null;
-
-  definition: Array<AasTypes.LangStringDefinitionTypeIec61360> | null = null;
-
-  valueFormat: string | null = null;
-
-  valueList: AasTypes.ValueList | null = null;
-
-  value: string | null = null;
-
-  levelType: AasTypes.LevelType | null = null;
-
-  // Used only for verification, not for dispatch!
-  modelType: string | null = null;
-
-  /**
-   * Parse `jsonable` as the value of {@link preferredName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setPreferredNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringPreferredNameTypeIec61360FromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.preferredName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link shortName}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setShortNameFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringShortNameTypeIec61360FromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.shortName = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link unit}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setUnitFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.unit = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link unitId}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setUnitIdFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = referenceFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.unitId = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link sourceOfDefinition}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSourceOfDefinitionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.sourceOfDefinition = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link symbol}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setSymbolFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.symbol = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link dataType}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDataTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = dataTypeIec61360FromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.dataType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link definition}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setDefinitionFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const iterableError = checkIsIterable(jsonable);
-    if (iterableError !== null) {
-      return iterableError;
-    }
-
-    const iterable = <Iterable<JsonValue>>jsonable;
-
-    const itemsOrError = parseArray(
-      iterable,
-      langStringDefinitionTypeIec61360FromJsonable
-    );
-    if (itemsOrError.error !== null) {
-      return itemsOrError.error;
-    }
-
-    this.definition = itemsOrError.mustValue();
-    return null;
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link valueFormat}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFormatFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.valueFormat = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link valueList}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueListFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = valueListFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.valueList = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link value}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setValueFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.value = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the value of {@link levelType}.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setLevelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = levelTypeFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.levelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
-
-  /**
-   * Parse `jsonable` as the model type of the concrete instance.
-   *
-   * This is intended only for verification, and no dispatch is performed.
-   *
-   * @param jsonable - to be parsed
-   * @returns error, if any
-   */
-  setModelTypeFromJsonable(
-    jsonable: JsonValue
-  ): DeserializationError | null {
-    const parsedOrError = stringFromJsonable(
-      jsonable
-    );
-    if (parsedOrError.error !== null) {
-      return parsedOrError.error;
-    } else {
-      this.modelType = parsedOrError.mustValue();
-      return null;
-    }
-  }
 }
 
 /**
@@ -12441,45 +8708,7 @@ export function dataSpecificationIec61360FromJsonable(
   }
   const jsonObject = <JsonObject>jsonable;
 
-  const setter = new SetterForDataSpecificationIec61360();
-
-  for (const key in jsonObject) {
-    const jsonableValue = jsonObject[key];
-    const setterMethod =
-      SETTER_MAP_FOR_DATA_SPECIFICATION_IEC_61360.get(key);
-
-    // NOTE (mristin):
-    // Since we conflate here a JavaScript object with a JSON object, we ignore
-    // properties which we do not know how to de-serialize and assume they are
-    // related to the *JavaScript* properties of the object or `Object` prototype.
-    if (setterMethod === undefined) {
-      continue;
-    }
-
-    const error = setterMethod.call(setter, jsonableValue);
-    if (error !== null) {
-      error.path.prepend(
-        new PropertySegment(jsonObject, key)
-      );
-      return new AasCommon.Either<
-        AasTypes.DataSpecificationIec61360,
-        DeserializationError
-      >(
-          null,
-          error
-        );
-    }
-  }
-
-  if (setter.preferredName === null) {
-    return newDeserializationError<
-      AasTypes.DataSpecificationIec61360
-    >(
-      "The required property 'preferredName' is missing"
-    );
-  }
-
-  const modelTypeError = checkModelType(setter.modelType, "DataSpecificationIec61360");
+  const modelTypeError = checkModelType(jsonObject, "DataSpecificationIec61360");
   if (modelTypeError !== null) {
     return new AasCommon.Either<
       AasTypes.DataSpecificationIec61360,
@@ -12490,2267 +8719,8 @@ export function dataSpecificationIec61360FromJsonable(
     );
   }
 
-  return new AasCommon.Either<
-    AasTypes.DataSpecificationIec61360,
-    DeserializationError
-  >(
-    new AasTypes.DataSpecificationIec61360(
-      setter.preferredName,
-      setter.shortName,
-      setter.unit,
-      setter.unitId,
-      setter.sourceOfDefinition,
-      setter.symbol,
-      setter.dataType,
-      setter.definition,
-      setter.valueFormat,
-      setter.valueList,
-      setter.value,
-      setter.levelType
-    ),
-    null
-  );
+  return parsePropertiesOfDataSpecificationIec61360(jsonObject);
 }
-
-const HAS_SEMANTICS_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IHasSemantics,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "RelationshipElement",
-        relationshipElementFromJsonableWithoutDispatch
-      ],
-      [
-        "AnnotatedRelationshipElement",
-        annotatedRelationshipElementFromJsonable
-      ],
-      [
-        "BasicEventElement",
-        basicEventElementFromJsonable
-      ],
-      [
-        "Blob",
-        blobFromJsonable
-      ],
-      [
-        "Capability",
-        capabilityFromJsonable
-      ],
-      [
-        "Entity",
-        entityFromJsonable
-      ],
-      [
-        "Extension",
-        extensionFromJsonable
-      ],
-      [
-        "File",
-        fileFromJsonable
-      ],
-      [
-        "MultiLanguageProperty",
-        multiLanguagePropertyFromJsonable
-      ],
-      [
-        "Operation",
-        operationFromJsonable
-      ],
-      [
-        "Property",
-        propertyFromJsonable
-      ],
-      [
-        "Qualifier",
-        qualifierFromJsonable
-      ],
-      [
-        "Range",
-        rangeFromJsonable
-      ],
-      [
-        "ReferenceElement",
-        referenceElementFromJsonable
-      ],
-      [
-        "SpecificAssetId",
-        specificAssetIdFromJsonable
-      ],
-      [
-        "Submodel",
-        submodelFromJsonable
-      ],
-      [
-        "SubmodelElementCollection",
-        submodelElementCollectionFromJsonable
-      ],
-      [
-        "SubmodelElementList",
-        submodelElementListFromJsonable
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_EXTENSION =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "semanticId",
-        SetterForExtension.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForExtension.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "name",
-        SetterForExtension.prototype.setNameFromJsonable
-      ],
-      [
-        "valueType",
-        SetterForExtension.prototype.setValueTypeFromJsonable
-      ],
-      [
-        "value",
-        SetterForExtension.prototype.setValueFromJsonable
-      ],
-      [
-        "refersTo",
-        SetterForExtension.prototype.setRefersToFromJsonable
-      ],
-    ]
-  );
-
-const HAS_EXTENSIONS_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IHasExtensions,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "RelationshipElement",
-        relationshipElementFromJsonableWithoutDispatch
-      ],
-      [
-        "AnnotatedRelationshipElement",
-        annotatedRelationshipElementFromJsonable
-      ],
-      [
-        "AssetAdministrationShell",
-        assetAdministrationShellFromJsonable
-      ],
-      [
-        "BasicEventElement",
-        basicEventElementFromJsonable
-      ],
-      [
-        "Blob",
-        blobFromJsonable
-      ],
-      [
-        "Capability",
-        capabilityFromJsonable
-      ],
-      [
-        "ConceptDescription",
-        conceptDescriptionFromJsonable
-      ],
-      [
-        "Entity",
-        entityFromJsonable
-      ],
-      [
-        "File",
-        fileFromJsonable
-      ],
-      [
-        "MultiLanguageProperty",
-        multiLanguagePropertyFromJsonable
-      ],
-      [
-        "Operation",
-        operationFromJsonable
-      ],
-      [
-        "Property",
-        propertyFromJsonable
-      ],
-      [
-        "Range",
-        rangeFromJsonable
-      ],
-      [
-        "ReferenceElement",
-        referenceElementFromJsonable
-      ],
-      [
-        "Submodel",
-        submodelFromJsonable
-      ],
-      [
-        "SubmodelElementCollection",
-        submodelElementCollectionFromJsonable
-      ],
-      [
-        "SubmodelElementList",
-        submodelElementListFromJsonable
-      ]
-    ]
-  );
-
-const REFERABLE_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IReferable,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "RelationshipElement",
-        relationshipElementFromJsonableWithoutDispatch
-      ],
-      [
-        "AnnotatedRelationshipElement",
-        annotatedRelationshipElementFromJsonable
-      ],
-      [
-        "AssetAdministrationShell",
-        assetAdministrationShellFromJsonable
-      ],
-      [
-        "BasicEventElement",
-        basicEventElementFromJsonable
-      ],
-      [
-        "Blob",
-        blobFromJsonable
-      ],
-      [
-        "Capability",
-        capabilityFromJsonable
-      ],
-      [
-        "ConceptDescription",
-        conceptDescriptionFromJsonable
-      ],
-      [
-        "Entity",
-        entityFromJsonable
-      ],
-      [
-        "File",
-        fileFromJsonable
-      ],
-      [
-        "MultiLanguageProperty",
-        multiLanguagePropertyFromJsonable
-      ],
-      [
-        "Operation",
-        operationFromJsonable
-      ],
-      [
-        "Property",
-        propertyFromJsonable
-      ],
-      [
-        "Range",
-        rangeFromJsonable
-      ],
-      [
-        "ReferenceElement",
-        referenceElementFromJsonable
-      ],
-      [
-        "Submodel",
-        submodelFromJsonable
-      ],
-      [
-        "SubmodelElementCollection",
-        submodelElementCollectionFromJsonable
-      ],
-      [
-        "SubmodelElementList",
-        submodelElementListFromJsonable
-      ]
-    ]
-  );
-
-const IDENTIFIABLE_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IIdentifiable,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "AssetAdministrationShell",
-        assetAdministrationShellFromJsonable
-      ],
-      [
-        "ConceptDescription",
-        conceptDescriptionFromJsonable
-      ],
-      [
-        "Submodel",
-        submodelFromJsonable
-      ]
-    ]
-  );
-
-const HAS_KIND_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IHasKind,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "Submodel",
-        submodelFromJsonable
-      ]
-    ]
-  );
-
-const HAS_DATA_SPECIFICATION_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IHasDataSpecification,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "AdministrativeInformation",
-        administrativeInformationFromJsonable
-      ],
-      [
-        "RelationshipElement",
-        relationshipElementFromJsonableWithoutDispatch
-      ],
-      [
-        "AnnotatedRelationshipElement",
-        annotatedRelationshipElementFromJsonable
-      ],
-      [
-        "AssetAdministrationShell",
-        assetAdministrationShellFromJsonable
-      ],
-      [
-        "BasicEventElement",
-        basicEventElementFromJsonable
-      ],
-      [
-        "Blob",
-        blobFromJsonable
-      ],
-      [
-        "Capability",
-        capabilityFromJsonable
-      ],
-      [
-        "ConceptDescription",
-        conceptDescriptionFromJsonable
-      ],
-      [
-        "Entity",
-        entityFromJsonable
-      ],
-      [
-        "File",
-        fileFromJsonable
-      ],
-      [
-        "MultiLanguageProperty",
-        multiLanguagePropertyFromJsonable
-      ],
-      [
-        "Operation",
-        operationFromJsonable
-      ],
-      [
-        "Property",
-        propertyFromJsonable
-      ],
-      [
-        "Range",
-        rangeFromJsonable
-      ],
-      [
-        "ReferenceElement",
-        referenceElementFromJsonable
-      ],
-      [
-        "Submodel",
-        submodelFromJsonable
-      ],
-      [
-        "SubmodelElementCollection",
-        submodelElementCollectionFromJsonable
-      ],
-      [
-        "SubmodelElementList",
-        submodelElementListFromJsonable
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_ADMINISTRATIVE_INFORMATION =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "embeddedDataSpecifications",
-        SetterForAdministrativeInformation.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "version",
-        SetterForAdministrativeInformation.prototype.setVersionFromJsonable
-      ],
-      [
-        "revision",
-        SetterForAdministrativeInformation.prototype.setRevisionFromJsonable
-      ],
-      [
-        "creator",
-        SetterForAdministrativeInformation.prototype.setCreatorFromJsonable
-      ],
-      [
-        "templateId",
-        SetterForAdministrativeInformation.prototype.setTemplateIdFromJsonable
-      ],
-    ]
-  );
-
-const QUALIFIABLE_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IQualifiable,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "RelationshipElement",
-        relationshipElementFromJsonableWithoutDispatch
-      ],
-      [
-        "AnnotatedRelationshipElement",
-        annotatedRelationshipElementFromJsonable
-      ],
-      [
-        "BasicEventElement",
-        basicEventElementFromJsonable
-      ],
-      [
-        "Blob",
-        blobFromJsonable
-      ],
-      [
-        "Capability",
-        capabilityFromJsonable
-      ],
-      [
-        "Entity",
-        entityFromJsonable
-      ],
-      [
-        "File",
-        fileFromJsonable
-      ],
-      [
-        "MultiLanguageProperty",
-        multiLanguagePropertyFromJsonable
-      ],
-      [
-        "Operation",
-        operationFromJsonable
-      ],
-      [
-        "Property",
-        propertyFromJsonable
-      ],
-      [
-        "Range",
-        rangeFromJsonable
-      ],
-      [
-        "ReferenceElement",
-        referenceElementFromJsonable
-      ],
-      [
-        "Submodel",
-        submodelFromJsonable
-      ],
-      [
-        "SubmodelElementCollection",
-        submodelElementCollectionFromJsonable
-      ],
-      [
-        "SubmodelElementList",
-        submodelElementListFromJsonable
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_QUALIFIER =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "semanticId",
-        SetterForQualifier.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForQualifier.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "kind",
-        SetterForQualifier.prototype.setKindFromJsonable
-      ],
-      [
-        "type",
-        SetterForQualifier.prototype.setTypeFromJsonable
-      ],
-      [
-        "valueType",
-        SetterForQualifier.prototype.setValueTypeFromJsonable
-      ],
-      [
-        "value",
-        SetterForQualifier.prototype.setValueFromJsonable
-      ],
-      [
-        "valueId",
-        SetterForQualifier.prototype.setValueIdFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_ASSET_ADMINISTRATION_SHELL =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForAssetAdministrationShell.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForAssetAdministrationShell.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForAssetAdministrationShell.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForAssetAdministrationShell.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForAssetAdministrationShell.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "administration",
-        SetterForAssetAdministrationShell.prototype.setAdministrationFromJsonable
-      ],
-      [
-        "id",
-        SetterForAssetAdministrationShell.prototype.setIdFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForAssetAdministrationShell.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "derivedFrom",
-        SetterForAssetAdministrationShell.prototype.setDerivedFromFromJsonable
-      ],
-      [
-        "assetInformation",
-        SetterForAssetAdministrationShell.prototype.setAssetInformationFromJsonable
-      ],
-      [
-        "submodels",
-        SetterForAssetAdministrationShell.prototype.setSubmodelsFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForAssetAdministrationShell.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_ASSET_INFORMATION =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "assetKind",
-        SetterForAssetInformation.prototype.setAssetKindFromJsonable
-      ],
-      [
-        "globalAssetId",
-        SetterForAssetInformation.prototype.setGlobalAssetIdFromJsonable
-      ],
-      [
-        "specificAssetIds",
-        SetterForAssetInformation.prototype.setSpecificAssetIdsFromJsonable
-      ],
-      [
-        "assetType",
-        SetterForAssetInformation.prototype.setAssetTypeFromJsonable
-      ],
-      [
-        "defaultThumbnail",
-        SetterForAssetInformation.prototype.setDefaultThumbnailFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_RESOURCE =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "path",
-        SetterForResource.prototype.setPathFromJsonable
-      ],
-      [
-        "contentType",
-        SetterForResource.prototype.setContentTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_SPECIFIC_ASSET_ID =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "semanticId",
-        SetterForSpecificAssetId.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForSpecificAssetId.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "name",
-        SetterForSpecificAssetId.prototype.setNameFromJsonable
-      ],
-      [
-        "value",
-        SetterForSpecificAssetId.prototype.setValueFromJsonable
-      ],
-      [
-        "externalSubjectId",
-        SetterForSpecificAssetId.prototype.setExternalSubjectIdFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_SUBMODEL =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForSubmodel.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForSubmodel.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForSubmodel.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForSubmodel.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForSubmodel.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "administration",
-        SetterForSubmodel.prototype.setAdministrationFromJsonable
-      ],
-      [
-        "id",
-        SetterForSubmodel.prototype.setIdFromJsonable
-      ],
-      [
-        "kind",
-        SetterForSubmodel.prototype.setKindFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForSubmodel.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForSubmodel.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForSubmodel.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForSubmodel.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "submodelElements",
-        SetterForSubmodel.prototype.setSubmodelElementsFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForSubmodel.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SUBMODEL_ELEMENT_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.ISubmodelElement,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "RelationshipElement",
-        relationshipElementFromJsonableWithoutDispatch
-      ],
-      [
-        "AnnotatedRelationshipElement",
-        annotatedRelationshipElementFromJsonable
-      ],
-      [
-        "BasicEventElement",
-        basicEventElementFromJsonable
-      ],
-      [
-        "Blob",
-        blobFromJsonable
-      ],
-      [
-        "Capability",
-        capabilityFromJsonable
-      ],
-      [
-        "Entity",
-        entityFromJsonable
-      ],
-      [
-        "File",
-        fileFromJsonable
-      ],
-      [
-        "MultiLanguageProperty",
-        multiLanguagePropertyFromJsonable
-      ],
-      [
-        "Operation",
-        operationFromJsonable
-      ],
-      [
-        "Property",
-        propertyFromJsonable
-      ],
-      [
-        "Range",
-        rangeFromJsonable
-      ],
-      [
-        "ReferenceElement",
-        referenceElementFromJsonable
-      ],
-      [
-        "SubmodelElementCollection",
-        submodelElementCollectionFromJsonable
-      ],
-      [
-        "SubmodelElementList",
-        submodelElementListFromJsonable
-      ]
-    ]
-  );
-
-const RELATIONSHIP_ELEMENT_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IRelationshipElement,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "AnnotatedRelationshipElement",
-        annotatedRelationshipElementFromJsonable
-      ],
-      [
-        "RelationshipElement",
-        relationshipElementFromJsonableWithoutDispatch
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_RELATIONSHIP_ELEMENT =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForRelationshipElement.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForRelationshipElement.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForRelationshipElement.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForRelationshipElement.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForRelationshipElement.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForRelationshipElement.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForRelationshipElement.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForRelationshipElement.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForRelationshipElement.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "first",
-        SetterForRelationshipElement.prototype.setFirstFromJsonable
-      ],
-      [
-        "second",
-        SetterForRelationshipElement.prototype.setSecondFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForRelationshipElement.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_SUBMODEL_ELEMENT_LIST =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForSubmodelElementList.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForSubmodelElementList.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForSubmodelElementList.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForSubmodelElementList.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForSubmodelElementList.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForSubmodelElementList.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForSubmodelElementList.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForSubmodelElementList.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForSubmodelElementList.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "orderRelevant",
-        SetterForSubmodelElementList.prototype.setOrderRelevantFromJsonable
-      ],
-      [
-        "semanticIdListElement",
-        SetterForSubmodelElementList.prototype.setSemanticIdListElementFromJsonable
-      ],
-      [
-        "typeValueListElement",
-        SetterForSubmodelElementList.prototype.setTypeValueListElementFromJsonable
-      ],
-      [
-        "valueTypeListElement",
-        SetterForSubmodelElementList.prototype.setValueTypeListElementFromJsonable
-      ],
-      [
-        "value",
-        SetterForSubmodelElementList.prototype.setValueFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForSubmodelElementList.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_SUBMODEL_ELEMENT_COLLECTION =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForSubmodelElementCollection.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForSubmodelElementCollection.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForSubmodelElementCollection.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForSubmodelElementCollection.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForSubmodelElementCollection.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForSubmodelElementCollection.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForSubmodelElementCollection.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForSubmodelElementCollection.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForSubmodelElementCollection.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "value",
-        SetterForSubmodelElementCollection.prototype.setValueFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForSubmodelElementCollection.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const DATA_ELEMENT_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IDataElement,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "Blob",
-        blobFromJsonable
-      ],
-      [
-        "File",
-        fileFromJsonable
-      ],
-      [
-        "MultiLanguageProperty",
-        multiLanguagePropertyFromJsonable
-      ],
-      [
-        "Property",
-        propertyFromJsonable
-      ],
-      [
-        "Range",
-        rangeFromJsonable
-      ],
-      [
-        "ReferenceElement",
-        referenceElementFromJsonable
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_PROPERTY =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForProperty.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForProperty.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForProperty.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForProperty.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForProperty.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForProperty.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForProperty.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForProperty.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForProperty.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "valueType",
-        SetterForProperty.prototype.setValueTypeFromJsonable
-      ],
-      [
-        "value",
-        SetterForProperty.prototype.setValueFromJsonable
-      ],
-      [
-        "valueId",
-        SetterForProperty.prototype.setValueIdFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForProperty.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_MULTI_LANGUAGE_PROPERTY =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForMultiLanguageProperty.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForMultiLanguageProperty.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForMultiLanguageProperty.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForMultiLanguageProperty.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForMultiLanguageProperty.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForMultiLanguageProperty.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForMultiLanguageProperty.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForMultiLanguageProperty.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForMultiLanguageProperty.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "value",
-        SetterForMultiLanguageProperty.prototype.setValueFromJsonable
-      ],
-      [
-        "valueId",
-        SetterForMultiLanguageProperty.prototype.setValueIdFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForMultiLanguageProperty.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_RANGE =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForRange.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForRange.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForRange.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForRange.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForRange.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForRange.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForRange.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForRange.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForRange.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "valueType",
-        SetterForRange.prototype.setValueTypeFromJsonable
-      ],
-      [
-        "min",
-        SetterForRange.prototype.setMinFromJsonable
-      ],
-      [
-        "max",
-        SetterForRange.prototype.setMaxFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForRange.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_REFERENCE_ELEMENT =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForReferenceElement.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForReferenceElement.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForReferenceElement.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForReferenceElement.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForReferenceElement.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForReferenceElement.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForReferenceElement.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForReferenceElement.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForReferenceElement.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "value",
-        SetterForReferenceElement.prototype.setValueFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForReferenceElement.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_BLOB =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForBlob.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForBlob.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForBlob.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForBlob.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForBlob.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForBlob.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForBlob.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForBlob.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForBlob.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "value",
-        SetterForBlob.prototype.setValueFromJsonable
-      ],
-      [
-        "contentType",
-        SetterForBlob.prototype.setContentTypeFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForBlob.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_FILE =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForFile.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForFile.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForFile.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForFile.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForFile.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForFile.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForFile.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForFile.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForFile.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "value",
-        SetterForFile.prototype.setValueFromJsonable
-      ],
-      [
-        "contentType",
-        SetterForFile.prototype.setContentTypeFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForFile.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_ANNOTATED_RELATIONSHIP_ELEMENT =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForAnnotatedRelationshipElement.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForAnnotatedRelationshipElement.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForAnnotatedRelationshipElement.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForAnnotatedRelationshipElement.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForAnnotatedRelationshipElement.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForAnnotatedRelationshipElement.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForAnnotatedRelationshipElement.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForAnnotatedRelationshipElement.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForAnnotatedRelationshipElement.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "first",
-        SetterForAnnotatedRelationshipElement.prototype.setFirstFromJsonable
-      ],
-      [
-        "second",
-        SetterForAnnotatedRelationshipElement.prototype.setSecondFromJsonable
-      ],
-      [
-        "annotations",
-        SetterForAnnotatedRelationshipElement.prototype.setAnnotationsFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForAnnotatedRelationshipElement.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_ENTITY =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForEntity.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForEntity.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForEntity.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForEntity.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForEntity.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForEntity.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForEntity.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForEntity.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForEntity.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "statements",
-        SetterForEntity.prototype.setStatementsFromJsonable
-      ],
-      [
-        "entityType",
-        SetterForEntity.prototype.setEntityTypeFromJsonable
-      ],
-      [
-        "globalAssetId",
-        SetterForEntity.prototype.setGlobalAssetIdFromJsonable
-      ],
-      [
-        "specificAssetIds",
-        SetterForEntity.prototype.setSpecificAssetIdsFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForEntity.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_EVENT_PAYLOAD =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "source",
-        SetterForEventPayload.prototype.setSourceFromJsonable
-      ],
-      [
-        "sourceSemanticId",
-        SetterForEventPayload.prototype.setSourceSemanticIdFromJsonable
-      ],
-      [
-        "observableReference",
-        SetterForEventPayload.prototype.setObservableReferenceFromJsonable
-      ],
-      [
-        "observableSemanticId",
-        SetterForEventPayload.prototype.setObservableSemanticIdFromJsonable
-      ],
-      [
-        "topic",
-        SetterForEventPayload.prototype.setTopicFromJsonable
-      ],
-      [
-        "subjectId",
-        SetterForEventPayload.prototype.setSubjectIdFromJsonable
-      ],
-      [
-        "timeStamp",
-        SetterForEventPayload.prototype.setTimeStampFromJsonable
-      ],
-      [
-        "payload",
-        SetterForEventPayload.prototype.setPayloadFromJsonable
-      ],
-    ]
-  );
-
-const EVENT_ELEMENT_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IEventElement,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "BasicEventElement",
-        basicEventElementFromJsonable
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_BASIC_EVENT_ELEMENT =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForBasicEventElement.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForBasicEventElement.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForBasicEventElement.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForBasicEventElement.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForBasicEventElement.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForBasicEventElement.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForBasicEventElement.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForBasicEventElement.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForBasicEventElement.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "observed",
-        SetterForBasicEventElement.prototype.setObservedFromJsonable
-      ],
-      [
-        "direction",
-        SetterForBasicEventElement.prototype.setDirectionFromJsonable
-      ],
-      [
-        "state",
-        SetterForBasicEventElement.prototype.setStateFromJsonable
-      ],
-      [
-        "messageTopic",
-        SetterForBasicEventElement.prototype.setMessageTopicFromJsonable
-      ],
-      [
-        "messageBroker",
-        SetterForBasicEventElement.prototype.setMessageBrokerFromJsonable
-      ],
-      [
-        "lastUpdate",
-        SetterForBasicEventElement.prototype.setLastUpdateFromJsonable
-      ],
-      [
-        "minInterval",
-        SetterForBasicEventElement.prototype.setMinIntervalFromJsonable
-      ],
-      [
-        "maxInterval",
-        SetterForBasicEventElement.prototype.setMaxIntervalFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForBasicEventElement.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_OPERATION =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForOperation.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForOperation.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForOperation.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForOperation.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForOperation.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForOperation.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForOperation.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForOperation.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForOperation.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "inputVariables",
-        SetterForOperation.prototype.setInputVariablesFromJsonable
-      ],
-      [
-        "outputVariables",
-        SetterForOperation.prototype.setOutputVariablesFromJsonable
-      ],
-      [
-        "inoutputVariables",
-        SetterForOperation.prototype.setInoutputVariablesFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForOperation.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_OPERATION_VARIABLE =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "value",
-        SetterForOperationVariable.prototype.setValueFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_CAPABILITY =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForCapability.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForCapability.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForCapability.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForCapability.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForCapability.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "semanticId",
-        SetterForCapability.prototype.setSemanticIdFromJsonable
-      ],
-      [
-        "supplementalSemanticIds",
-        SetterForCapability.prototype.setSupplementalSemanticIdsFromJsonable
-      ],
-      [
-        "qualifiers",
-        SetterForCapability.prototype.setQualifiersFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForCapability.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForCapability.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_CONCEPT_DESCRIPTION =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "extensions",
-        SetterForConceptDescription.prototype.setExtensionsFromJsonable
-      ],
-      [
-        "category",
-        SetterForConceptDescription.prototype.setCategoryFromJsonable
-      ],
-      [
-        "idShort",
-        SetterForConceptDescription.prototype.setIdShortFromJsonable
-      ],
-      [
-        "displayName",
-        SetterForConceptDescription.prototype.setDisplayNameFromJsonable
-      ],
-      [
-        "description",
-        SetterForConceptDescription.prototype.setDescriptionFromJsonable
-      ],
-      [
-        "administration",
-        SetterForConceptDescription.prototype.setAdministrationFromJsonable
-      ],
-      [
-        "id",
-        SetterForConceptDescription.prototype.setIdFromJsonable
-      ],
-      [
-        "embeddedDataSpecifications",
-        SetterForConceptDescription.prototype.setEmbeddedDataSpecificationsFromJsonable
-      ],
-      [
-        "isCaseOf",
-        SetterForConceptDescription.prototype.setIsCaseOfFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForConceptDescription.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_REFERENCE =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "type",
-        SetterForReference.prototype.setTypeFromJsonable
-      ],
-      [
-        "referredSemanticId",
-        SetterForReference.prototype.setReferredSemanticIdFromJsonable
-      ],
-      [
-        "keys",
-        SetterForReference.prototype.setKeysFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_KEY =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "type",
-        SetterForKey.prototype.setTypeFromJsonable
-      ],
-      [
-        "value",
-        SetterForKey.prototype.setValueFromJsonable
-      ],
-    ]
-  );
-
-const ABSTRACT_LANG_STRING_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IAbstractLangString,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "LangStringDefinitionTypeIec61360",
-        langStringDefinitionTypeIec61360FromJsonable
-      ],
-      [
-        "LangStringNameType",
-        langStringNameTypeFromJsonable
-      ],
-      [
-        "LangStringPreferredNameTypeIec61360",
-        langStringPreferredNameTypeIec61360FromJsonable
-      ],
-      [
-        "LangStringShortNameTypeIec61360",
-        langStringShortNameTypeIec61360FromJsonable
-      ],
-      [
-        "LangStringTextType",
-        langStringTextTypeFromJsonable
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_LANG_STRING_NAME_TYPE =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "language",
-        SetterForLangStringNameType.prototype.setLanguageFromJsonable
-      ],
-      [
-        "text",
-        SetterForLangStringNameType.prototype.setTextFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_LANG_STRING_TEXT_TYPE =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "language",
-        SetterForLangStringTextType.prototype.setLanguageFromJsonable
-      ],
-      [
-        "text",
-        SetterForLangStringTextType.prototype.setTextFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_ENVIRONMENT =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "assetAdministrationShells",
-        SetterForEnvironment.prototype.setAssetAdministrationShellsFromJsonable
-      ],
-      [
-        "submodels",
-        SetterForEnvironment.prototype.setSubmodelsFromJsonable
-      ],
-      [
-        "conceptDescriptions",
-        SetterForEnvironment.prototype.setConceptDescriptionsFromJsonable
-      ],
-    ]
-  );
-
-const DATA_SPECIFICATION_CONTENT_FROM_JSONABLE_DISPATCH =
-  new Map<
-    string,
-    (JsonValue) => AasCommon.Either<
-      AasTypes.IDataSpecificationContent,
-      DeserializationError
-    >
-  >(
-    [
-      [
-        "DataSpecificationIec61360",
-        dataSpecificationIec61360FromJsonable
-      ]
-    ]
-  );
-
-const SETTER_MAP_FOR_EMBEDDED_DATA_SPECIFICATION =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "dataSpecification",
-        SetterForEmbeddedDataSpecification.prototype.setDataSpecificationFromJsonable
-      ],
-      [
-        "dataSpecificationContent",
-        SetterForEmbeddedDataSpecification.prototype.setDataSpecificationContentFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_LEVEL_TYPE =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "min",
-        SetterForLevelType.prototype.setMinFromJsonable
-      ],
-      [
-        "nom",
-        SetterForLevelType.prototype.setNomFromJsonable
-      ],
-      [
-        "typ",
-        SetterForLevelType.prototype.setTypFromJsonable
-      ],
-      [
-        "max",
-        SetterForLevelType.prototype.setMaxFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_VALUE_REFERENCE_PAIR =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "value",
-        SetterForValueReferencePair.prototype.setValueFromJsonable
-      ],
-      [
-        "valueId",
-        SetterForValueReferencePair.prototype.setValueIdFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_VALUE_LIST =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "valueReferencePairs",
-        SetterForValueList.prototype.setValueReferencePairsFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_LANG_STRING_PREFERRED_NAME_TYPE_IEC_61360 =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "language",
-        SetterForLangStringPreferredNameTypeIec61360.prototype.setLanguageFromJsonable
-      ],
-      [
-        "text",
-        SetterForLangStringPreferredNameTypeIec61360.prototype.setTextFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_LANG_STRING_SHORT_NAME_TYPE_IEC_61360 =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "language",
-        SetterForLangStringShortNameTypeIec61360.prototype.setLanguageFromJsonable
-      ],
-      [
-        "text",
-        SetterForLangStringShortNameTypeIec61360.prototype.setTextFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_LANG_STRING_DEFINITION_TYPE_IEC_61360 =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "language",
-        SetterForLangStringDefinitionTypeIec61360.prototype.setLanguageFromJsonable
-      ],
-      [
-        "text",
-        SetterForLangStringDefinitionTypeIec61360.prototype.setTextFromJsonable
-      ],
-    ]
-  );
-
-const SETTER_MAP_FOR_DATA_SPECIFICATION_IEC_61360 =
-  new Map<
-    string,
-    (
-      jsonable: JsonValue
-    ) => DeserializationError | null
-  >(
-    [
-      [
-        "preferredName",
-        SetterForDataSpecificationIec61360.prototype.setPreferredNameFromJsonable
-      ],
-      [
-        "shortName",
-        SetterForDataSpecificationIec61360.prototype.setShortNameFromJsonable
-      ],
-      [
-        "unit",
-        SetterForDataSpecificationIec61360.prototype.setUnitFromJsonable
-      ],
-      [
-        "unitId",
-        SetterForDataSpecificationIec61360.prototype.setUnitIdFromJsonable
-      ],
-      [
-        "sourceOfDefinition",
-        SetterForDataSpecificationIec61360.prototype.setSourceOfDefinitionFromJsonable
-      ],
-      [
-        "symbol",
-        SetterForDataSpecificationIec61360.prototype.setSymbolFromJsonable
-      ],
-      [
-        "dataType",
-        SetterForDataSpecificationIec61360.prototype.setDataTypeFromJsonable
-      ],
-      [
-        "definition",
-        SetterForDataSpecificationIec61360.prototype.setDefinitionFromJsonable
-      ],
-      [
-        "valueFormat",
-        SetterForDataSpecificationIec61360.prototype.setValueFormatFromJsonable
-      ],
-      [
-        "valueList",
-        SetterForDataSpecificationIec61360.prototype.setValueListFromJsonable
-      ],
-      [
-        "value",
-        SetterForDataSpecificationIec61360.prototype.setValueFromJsonable
-      ],
-      [
-        "levelType",
-        SetterForDataSpecificationIec61360.prototype.setLevelTypeFromJsonable
-      ],
-      [
-        // The model type here is used only for verification, not for dispatch.
-        "modelType",
-        SetterForDataSpecificationIec61360.prototype.setModelTypeFromJsonable
-      ],
-    ]
-  );
 
 // endregion
 

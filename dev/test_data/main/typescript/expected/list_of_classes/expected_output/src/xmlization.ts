@@ -877,19 +877,29 @@ function parse_bytes(
 function parseElement_Simple(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Simple, DeserializationError> {
-  return parseNamedElement(cursor, "simple", parseSimpleFromSequence);
+  return parseNamedElement(
+    cursor,
+    "simple",
+    parseSimpleFromSequence
+  );
 }
 
 function parse_ListOf_IAbstractItem(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.IAbstractItem>, DeserializationError> {
-  return parseList<AasTypes.IAbstractItem>(cursor, dispatchParseAbstractItemElement);
+  return parseList<AasTypes.IAbstractItem>(
+    cursor,
+    dispatchParseAbstractItemElement
+  );
 }
 
 function parse_ListOf_Simple(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.Simple>, DeserializationError> {
-  return parseList<AasTypes.Simple>(cursor, parseElement_Simple);
+  return parseList<AasTypes.Simple>(
+    cursor,
+    parseElement_Simple
+  );
 }
 
 /**
@@ -933,7 +943,11 @@ function parseSomeItemFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theName = parsed.value;
         break;
@@ -1014,7 +1028,11 @@ function parseAnotherItemFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_int);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_int
+        );
         propertyError = parsed.error;
         theSerialNumber = parsed.value;
         break;
@@ -1095,7 +1113,11 @@ function parseSimpleFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theName = parsed.value;
         break;
@@ -1177,7 +1199,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_IAbstractItem);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_IAbstractItem
+        );
         propertyError = parsed.error;
         theSomeItems = parsed.value;
         break;
@@ -1189,7 +1215,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Simple);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Simple
+        );
         propertyError = parsed.error;
         theSomeSimples = parsed.value;
         break;
@@ -1246,7 +1276,12 @@ function writeSomeItemAsSequence(
   parts: Array<string>,
   that: AasTypes.SomeItem
 ): void {
-  writeProperty(parts, "name", that.name, write_str);
+  writeProperty(
+    parts,
+    "name",
+    that.name,
+    write_str
+  );
 }
 
 /**
@@ -1259,7 +1294,12 @@ function writeAnotherItemAsSequence(
   parts: Array<string>,
   that: AasTypes.AnotherItem
 ): void {
-  writeProperty(parts, "serialNumber", that.serialNumber, write_int);
+  writeProperty(
+    parts,
+    "serialNumber",
+    that.serialNumber,
+    write_int
+  );
 }
 
 /**
@@ -1272,7 +1312,12 @@ function writeSimpleAsSequence(
   parts: Array<string>,
   that: AasTypes.Simple
 ): void {
-  writeProperty(parts, "name", that.name, write_str);
+  writeProperty(
+    parts,
+    "name",
+    that.name,
+    write_str
+  );
 }
 
 /**
@@ -1285,8 +1330,18 @@ function writeSomethingAsSequence(
   parts: Array<string>,
   that: AasTypes.Something
 ): void {
-  writeProperty(parts, "someItems", that.someItems, writeListOfInstances);
-  writeProperty(parts, "someSimples", that.someSimples, writeListOfInstances);
+  writeProperty(
+    parts,
+    "someItems",
+    that.someItems,
+    writeListOfInstances
+  );
+  writeProperty(
+    parts,
+    "someSimples",
+    that.someSimples,
+    writeListOfInstances
+  );
 }
 
 const PARSERS_OF_ABSTRACT_ITEM = new Map<
@@ -1308,7 +1363,11 @@ const PARSERS_OF_ABSTRACT_ITEM = new Map<
 function dispatchParseAbstractItemElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IAbstractItem, DeserializationError> {
-  return dispatchParseElement(cursor, "IAbstractItem", PARSERS_OF_ABSTRACT_ITEM);
+  return dispatchParseElement(
+    cursor,
+    "IAbstractItem",
+    PARSERS_OF_ABSTRACT_ITEM
+  );
 }
 
 /**
@@ -1681,28 +1740,48 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.SomeItem,
     parts: Array<string>
   ): void {
-    writeElement(parts, "someItem", that, writeSomeItemAsSequence);
+    writeElement(
+      parts,
+      "someItem",
+      that,
+      writeSomeItemAsSequence
+    );
   }
 
   visitAnotherItemWithContext(
     that: AasTypes.AnotherItem,
     parts: Array<string>
   ): void {
-    writeElement(parts, "anotherItem", that, writeAnotherItemAsSequence);
+    writeElement(
+      parts,
+      "anotherItem",
+      that,
+      writeAnotherItemAsSequence
+    );
   }
 
   visitSimpleWithContext(
     that: AasTypes.Simple,
     parts: Array<string>
   ): void {
-    writeElement(parts, "simple", that, writeSimpleAsSequence);
+    writeElement(
+      parts,
+      "simple",
+      that,
+      writeSimpleAsSequence
+    );
   }
 
   visitSomethingWithContext(
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 }
 

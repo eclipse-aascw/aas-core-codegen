@@ -876,7 +876,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_bool);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_bool
+        );
         propertyError = parsed.error;
         theSomeBool = parsed.value;
         break;
@@ -888,7 +892,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_int);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_int
+        );
         propertyError = parsed.error;
         theSomeInt = parsed.value;
         break;
@@ -900,7 +908,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_float);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_float
+        );
         propertyError = parsed.error;
         theSomeFloat = parsed.value;
         break;
@@ -912,7 +924,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theSomeString = parsed.value;
         break;
@@ -924,7 +940,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_bytes);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_bytes
+        );
         propertyError = parsed.error;
         theSomeBytes = parsed.value;
         break;
@@ -1002,11 +1022,36 @@ function writeSomethingAsSequence(
   parts: Array<string>,
   that: AasTypes.Something
 ): void {
-  writeProperty(parts, "someBool", that.someBool, write_bool);
-  writeProperty(parts, "someInt", that.someInt, write_int);
-  writeProperty(parts, "someFloat", that.someFloat, write_float);
-  writeProperty(parts, "someString", that.someString, write_str);
-  writeProperty(parts, "someBytes", that.someBytes, write_bytes);
+  writeProperty(
+    parts,
+    "someBool",
+    that.someBool,
+    write_bool
+  );
+  writeProperty(
+    parts,
+    "someInt",
+    that.someInt,
+    write_int
+  );
+  writeProperty(
+    parts,
+    "someFloat",
+    that.someFloat,
+    write_float
+  );
+  writeProperty(
+    parts,
+    "someString",
+    that.someString,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "someBytes",
+    that.someBytes,
+    write_bytes
+  );
 }
 
 const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
@@ -1334,7 +1379,12 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 }
 

@@ -43,43 +43,6 @@ _MONIKER_BY_PRIMITIVE_TYPE = {
 }
 
 
-#: Maximum length of a line of the generated code, in columns
-#:
-#: This is deliberately well above the ``printWidth`` of 88 which the Prettier
-#: configuration sets. The consuming project runs Prettier over the generated code,
-#: so neither spelling is the "wrong" one, and this is only about keeping what we
-#: record readable: breaking a call of three short arguments over five lines costs far
-#: more, at the hundreds of property sites, than the long line saves.
-_MAX_LINE_LENGTH = 100
-
-
-def _join_call_arguments(
-    callee: str, arguments: Sequence[str], columns: int
-) -> Stripped:
-    """
-    Render the call to the ``callee`` with the ``arguments``.
-
-    The ``callee`` is the whole expression in front of the parenthesis, so it carries
-    the explicit type arguments of a generic function as well. The ``columns`` are
-    the columns already taken on the line before the call -- the indention plus
-    whatever precedes it, such as ``return ``. The arguments go on the same line as
-    the ``callee`` if the call fits in :py:attr:`_MAX_LINE_LENGTH` columns, and one
-    argument per line otherwise.
-    """
-    joined = ", ".join(arguments)
-
-    if columns + len(callee) + len("(") + len(joined) + len(");") <= _MAX_LINE_LENGTH:
-        return Stripped(f"{callee}({joined})")
-
-    arguments_joined = ",\n".join(f"{I}{argument}" for argument in arguments)
-    return Stripped(
-        f"""\
-{callee}(
-{arguments_joined}
-)"""
-    )
-
-
 def _type_name_of_our_type(our_type: intermediate.OurType) -> Identifier:
     """Give out the TypeScript type which the parser of ``our_type`` gives out."""
     if isinstance(our_type, intermediate.Enumeration):
@@ -582,10 +545,15 @@ class _ParserRegistry:
         else:
             tag_literal = typescript_common.string_literal(f"v{tag_suffix}")
 
-        call = _join_call_arguments(
-            "parseNamedElement",
-            ["cursor", tag_literal, _content_parser_name(type_anno)],
-            columns=len(I) + len("return "),
+        content_parser = _content_parser_name(type_anno)
+
+        call = Stripped(
+            f"""\
+parseNamedElement(
+{I}cursor,
+{I}{tag_literal},
+{I}{content_parser}
+)"""
         )
 
         self._add(
@@ -618,10 +586,14 @@ function {name}(
         item_type = typescript_common.generate_type(
             items_type_anno, types_module=Identifier("AasTypes")
         )
-        call = _join_call_arguments(
-            f"parseList<{item_type}>",
-            ["cursor", _element_parser_name(items_type_anno, tag_suffix="")],
-            columns=len(I) + len("return "),
+        item_parser = _element_parser_name(items_type_anno, tag_suffix="")
+
+        call = Stripped(
+            f"""\
+parseList<{item_type}>(
+{I}cursor,
+{I}{item_parser}
+)"""
         )
 
         self._add(
@@ -672,10 +644,14 @@ function {name}(
 
         item_types_joined = ", ".join(item_types)
 
-        call = _join_call_arguments(
-            f"parseTuple{arity}<{item_types_joined}>",
-            ["cursor"] + parse_items,
-            columns=len(I) + len("return "),
+        arguments_joined = ",\n".join(f"{I}{argument}" for argument in parse_items)
+
+        call = Stripped(
+            f"""\
+parseTuple{arity}<{item_types_joined}>(
+{I}cursor,
+{arguments_joined}
+)"""
         )
 
         self._add(
@@ -783,10 +759,15 @@ def _generate_parse_case_for_property(
     # NOTE (mristin):
     # A case sits two levels below the ``switch``, which the class's parser indents by
     # three, so the body of a case lands on the fourth level.
-    call = _join_call_arguments(
-        "parseElementContent",
-        ["cursor", "propertyLocalName", _content_parser_name(prop.type_annotation)],
-        columns=len(IIII) + len("const parsed = "),
+    content_parser = _content_parser_name(prop.type_annotation)
+
+    call = Stripped(
+        f"""\
+parseElementContent(
+{I}cursor,
+{I}propertyLocalName,
+{I}{content_parser}
+)"""
     )
 
     # NOTE (mristin):
@@ -1017,10 +998,15 @@ def _generate_dispatch_parse_element(
     based on its local name alone, without wastefully parsing its full (possibly
     deeply nested) content only to discover the type mismatch afterwards.
     """
-    call = _join_call_arguments(
-        "dispatchParseElement",
-        ["cursor", typescript_common.string_literal(expected_name), map_name],
-        columns=len(I) + len("return "),
+    expected_name_literal = typescript_common.string_literal(expected_name)
+
+    call = Stripped(
+        f"""\
+dispatchParseElement(
+{I}cursor,
+{I}{expected_name_literal},
+{I}{map_name}
+)"""
     )
 
     return Stripped(
@@ -1456,15 +1442,17 @@ class _WriterRegistry:
             type_anno, types_module=Identifier("AasTypes")
         )
 
-        call = _join_call_arguments(
-            "writeElement",
-            [
-                "parts",
-                typescript_common.string_literal(f"v{tag_suffix}"),
-                "value",
-                _content_writer_name(type_anno),
-            ],
-            columns=len(I),
+        tag_literal = typescript_common.string_literal(f"v{tag_suffix}")
+        content_writer = _content_writer_name(type_anno)
+
+        call = Stripped(
+            f"""\
+writeElement(
+{I}parts,
+{I}{tag_literal},
+{I}value,
+{I}{content_writer}
+)"""
         )
 
         self._add(
@@ -1504,10 +1492,15 @@ function {name}(
         item_type = typescript_common.generate_type(
             items_type_anno, types_module=Identifier("AasTypes")
         )
-        call = _join_call_arguments(
-            "writeList",
-            ["parts", "values", _element_writer_name(items_type_anno, tag_suffix="")],
-            columns=len(I),
+        item_writer = _element_writer_name(items_type_anno, tag_suffix="")
+
+        call = Stripped(
+            f"""\
+writeList(
+{I}parts,
+{I}values,
+{I}{item_writer}
+)"""
         )
 
         self._add(
@@ -1551,10 +1544,15 @@ function {name}(
             type_anno, types_module=Identifier("AasTypes")
         )
 
-        call = _join_call_arguments(
-            f"writeTuple{arity}",
-            ["parts", "value"] + write_items,
-            columns=len(I),
+        arguments_joined = ",\n".join(f"{I}{argument}" for argument in write_items)
+
+        call = Stripped(
+            f"""\
+writeTuple{arity}(
+{I}parts,
+{I}value,
+{arguments_joined}
+)"""
         )
 
         self._add(
@@ -1609,15 +1607,18 @@ def _generate_write_property(
         else "writeProperty"
     )
 
-    call = _join_call_arguments(
-        function_name,
-        [
-            "parts",
-            typescript_common.string_literal(prop.xml_name),
-            f"that.{typescript_naming.property_name(prop.name)}",
-            _content_writer_name(prop.type_annotation),
-        ],
-        columns=len(I),
+    xml_name_literal = typescript_common.string_literal(prop.xml_name)
+    prop_name = typescript_naming.property_name(prop.name)
+    content_writer = _content_writer_name(prop.type_annotation)
+
+    call = Stripped(
+        f"""\
+{function_name}(
+{I}parts,
+{I}{xml_name_literal},
+{I}that.{prop_name},
+{I}{content_writer}
+)"""
     )
 
     return Stripped(f"{call};")
@@ -1669,15 +1670,16 @@ def _generate_serializer(symbol_table: intermediate.SymbolTable) -> Stripped:
             naming.xml_class_name(cls.name)
         )
 
-        call = _join_call_arguments(
-            "writeElement",
-            [
-                "parts",
-                local_name_literal,
-                "that",
-                _write_sequence_function_name_for_concrete_class(cls=cls),
-            ],
-            columns=len(II),
+        write_sequence = _write_sequence_function_name_for_concrete_class(cls=cls)
+
+        call = Stripped(
+            f"""\
+writeElement(
+{I}parts,
+{I}{local_name_literal},
+{I}that,
+{I}{write_sequence}
+)"""
         )
 
         methods.append(

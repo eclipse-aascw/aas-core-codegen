@@ -875,7 +875,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theInterface = parsed.value;
         break;
@@ -887,7 +891,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theType = parsed.value;
         break;
@@ -899,7 +907,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theRange = parsed.value;
         break;
@@ -911,7 +923,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theVoid = parsed.value;
         break;
@@ -982,10 +998,30 @@ function writeSomethingAsSequence(
   parts: Array<string>,
   that: AasTypes.Something
 ): void {
-  writeProperty(parts, "interface", that.interface, write_str);
-  writeProperty(parts, "type", that.type, write_str);
-  writeProperty(parts, "range", that.range, write_str);
-  writeProperty(parts, "void", that.void, write_str);
+  writeProperty(
+    parts,
+    "interface",
+    that.interface,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "type",
+    that.type,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "range",
+    that.range,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "void",
+    that.void,
+    write_str
+  );
 }
 
 const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
@@ -1313,7 +1349,12 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 }
 

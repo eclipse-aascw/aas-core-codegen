@@ -1160,7 +1160,11 @@ function parseElement_AssetAdministrationShell(
 function parseElement_ConceptDescription(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ConceptDescription, DeserializationError> {
-  return parseNamedElement(cursor, "conceptDescription", parseConceptDescriptionFromSequence);
+  return parseNamedElement(
+    cursor,
+    "conceptDescription",
+    parseConceptDescriptionFromSequence
+  );
 }
 
 function parseElement_EmbeddedDataSpecification(
@@ -1176,13 +1180,21 @@ function parseElement_EmbeddedDataSpecification(
 function parseElement_Extension(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Extension, DeserializationError> {
-  return parseNamedElement(cursor, "extension", parseExtensionFromSequence);
+  return parseNamedElement(
+    cursor,
+    "extension",
+    parseExtensionFromSequence
+  );
 }
 
 function parseElement_Key(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Key, DeserializationError> {
-  return parseNamedElement(cursor, "key", parseKeyFromSequence);
+  return parseNamedElement(
+    cursor,
+    "key",
+    parseKeyFromSequence
+  );
 }
 
 function parseElement_LangStringDefinitionTypeIec61360(
@@ -1198,7 +1210,11 @@ function parseElement_LangStringDefinitionTypeIec61360(
 function parseElement_LangStringNameType(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.LangStringNameType, DeserializationError> {
-  return parseNamedElement(cursor, "langStringNameType", parseLangStringNameTypeFromSequence);
+  return parseNamedElement(
+    cursor,
+    "langStringNameType",
+    parseLangStringNameTypeFromSequence
+  );
 }
 
 function parseElement_LangStringPreferredNameTypeIec61360(
@@ -1224,43 +1240,71 @@ function parseElement_LangStringShortNameTypeIec61360(
 function parseElement_LangStringTextType(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.LangStringTextType, DeserializationError> {
-  return parseNamedElement(cursor, "langStringTextType", parseLangStringTextTypeFromSequence);
+  return parseNamedElement(
+    cursor,
+    "langStringTextType",
+    parseLangStringTextTypeFromSequence
+  );
 }
 
 function parseElement_OperationVariable(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.OperationVariable, DeserializationError> {
-  return parseNamedElement(cursor, "operationVariable", parseOperationVariableFromSequence);
+  return parseNamedElement(
+    cursor,
+    "operationVariable",
+    parseOperationVariableFromSequence
+  );
 }
 
 function parseElement_Qualifier(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Qualifier, DeserializationError> {
-  return parseNamedElement(cursor, "qualifier", parseQualifierFromSequence);
+  return parseNamedElement(
+    cursor,
+    "qualifier",
+    parseQualifierFromSequence
+  );
 }
 
 function parseElement_Reference(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Reference, DeserializationError> {
-  return parseNamedElement(cursor, "reference", parseReferenceFromSequence);
+  return parseNamedElement(
+    cursor,
+    "reference",
+    parseReferenceFromSequence
+  );
 }
 
 function parseElement_SpecificAssetId(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.SpecificAssetId, DeserializationError> {
-  return parseNamedElement(cursor, "specificAssetId", parseSpecificAssetIdFromSequence);
+  return parseNamedElement(
+    cursor,
+    "specificAssetId",
+    parseSpecificAssetIdFromSequence
+  );
 }
 
 function parseElement_Submodel(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Submodel, DeserializationError> {
-  return parseNamedElement(cursor, "submodel", parseSubmodelFromSequence);
+  return parseNamedElement(
+    cursor,
+    "submodel",
+    parseSubmodelFromSequence
+  );
 }
 
 function parseElement_ValueReferencePair(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ValueReferencePair, DeserializationError> {
-  return parseNamedElement(cursor, "valueReferencePair", parseValueReferencePairFromSequence);
+  return parseNamedElement(
+    cursor,
+    "valueReferencePair",
+    parseValueReferencePairFromSequence
+  );
 }
 
 function parse_ListOf_AssetAdministrationShell(
@@ -1275,7 +1319,10 @@ function parse_ListOf_AssetAdministrationShell(
 function parse_ListOf_ConceptDescription(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.ConceptDescription>, DeserializationError> {
-  return parseList<AasTypes.ConceptDescription>(cursor, parseElement_ConceptDescription);
+  return parseList<AasTypes.ConceptDescription>(
+    cursor,
+    parseElement_ConceptDescription
+  );
 }
 
 function parse_ListOf_EmbeddedDataSpecification(
@@ -1290,25 +1337,37 @@ function parse_ListOf_EmbeddedDataSpecification(
 function parse_ListOf_Extension(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.Extension>, DeserializationError> {
-  return parseList<AasTypes.Extension>(cursor, parseElement_Extension);
+  return parseList<AasTypes.Extension>(
+    cursor,
+    parseElement_Extension
+  );
 }
 
 function parse_ListOf_IDataElement(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.IDataElement>, DeserializationError> {
-  return parseList<AasTypes.IDataElement>(cursor, dispatchParseDataElementElement);
+  return parseList<AasTypes.IDataElement>(
+    cursor,
+    dispatchParseDataElementElement
+  );
 }
 
 function parse_ListOf_ISubmodelElement(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.ISubmodelElement>, DeserializationError> {
-  return parseList<AasTypes.ISubmodelElement>(cursor, dispatchParseSubmodelElementElement);
+  return parseList<AasTypes.ISubmodelElement>(
+    cursor,
+    dispatchParseSubmodelElementElement
+  );
 }
 
 function parse_ListOf_Key(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.Key>, DeserializationError> {
-  return parseList<AasTypes.Key>(cursor, parseElement_Key);
+  return parseList<AasTypes.Key>(
+    cursor,
+    parseElement_Key
+  );
 }
 
 function parse_ListOf_LangStringDefinitionTypeIec61360(
@@ -1323,7 +1382,10 @@ function parse_ListOf_LangStringDefinitionTypeIec61360(
 function parse_ListOf_LangStringNameType(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.LangStringNameType>, DeserializationError> {
-  return parseList<AasTypes.LangStringNameType>(cursor, parseElement_LangStringNameType);
+  return parseList<AasTypes.LangStringNameType>(
+    cursor,
+    parseElement_LangStringNameType
+  );
 }
 
 function parse_ListOf_LangStringPreferredNameTypeIec61360(
@@ -1347,43 +1409,64 @@ function parse_ListOf_LangStringShortNameTypeIec61360(
 function parse_ListOf_LangStringTextType(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.LangStringTextType>, DeserializationError> {
-  return parseList<AasTypes.LangStringTextType>(cursor, parseElement_LangStringTextType);
+  return parseList<AasTypes.LangStringTextType>(
+    cursor,
+    parseElement_LangStringTextType
+  );
 }
 
 function parse_ListOf_OperationVariable(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.OperationVariable>, DeserializationError> {
-  return parseList<AasTypes.OperationVariable>(cursor, parseElement_OperationVariable);
+  return parseList<AasTypes.OperationVariable>(
+    cursor,
+    parseElement_OperationVariable
+  );
 }
 
 function parse_ListOf_Qualifier(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.Qualifier>, DeserializationError> {
-  return parseList<AasTypes.Qualifier>(cursor, parseElement_Qualifier);
+  return parseList<AasTypes.Qualifier>(
+    cursor,
+    parseElement_Qualifier
+  );
 }
 
 function parse_ListOf_Reference(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.Reference>, DeserializationError> {
-  return parseList<AasTypes.Reference>(cursor, parseElement_Reference);
+  return parseList<AasTypes.Reference>(
+    cursor,
+    parseElement_Reference
+  );
 }
 
 function parse_ListOf_SpecificAssetId(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.SpecificAssetId>, DeserializationError> {
-  return parseList<AasTypes.SpecificAssetId>(cursor, parseElement_SpecificAssetId);
+  return parseList<AasTypes.SpecificAssetId>(
+    cursor,
+    parseElement_SpecificAssetId
+  );
 }
 
 function parse_ListOf_Submodel(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.Submodel>, DeserializationError> {
-  return parseList<AasTypes.Submodel>(cursor, parseElement_Submodel);
+  return parseList<AasTypes.Submodel>(
+    cursor,
+    parseElement_Submodel
+  );
 }
 
 function parse_ListOf_ValueReferencePair(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.ValueReferencePair>, DeserializationError> {
-  return parseList<AasTypes.ValueReferencePair>(cursor, parseElement_ValueReferencePair);
+  return parseList<AasTypes.ValueReferencePair>(
+    cursor,
+    parseElement_ValueReferencePair
+  );
 }
 
 /**
@@ -1432,7 +1515,11 @@ function parseExtensionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -1444,7 +1531,11 @@ function parseExtensionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -1456,7 +1547,11 @@ function parseExtensionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theName = parsed.value;
         break;
@@ -1468,7 +1563,11 @@ function parseExtensionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeDefXsd);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_DataTypeDefXsd
+        );
         propertyError = parsed.error;
         theValueType = parsed.value;
         break;
@@ -1480,7 +1579,11 @@ function parseExtensionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -1492,7 +1595,11 @@ function parseExtensionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theRefersTo = parsed.value;
         break;
@@ -1598,7 +1705,11 @@ function parseAdministrativeInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theVersion = parsed.value;
         break;
@@ -1610,7 +1721,11 @@ function parseAdministrativeInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theRevision = parsed.value;
         break;
@@ -1622,7 +1737,11 @@ function parseAdministrativeInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theCreator = parsed.value;
         break;
@@ -1634,7 +1753,11 @@ function parseAdministrativeInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theTemplateId = parsed.value;
         break;
@@ -1721,7 +1844,11 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -1733,7 +1860,11 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -1745,7 +1876,11 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_QualifierKind);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_QualifierKind
+        );
         propertyError = parsed.error;
         theKind = parsed.value;
         break;
@@ -1757,7 +1892,11 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theType = parsed.value;
         break;
@@ -1769,7 +1908,11 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeDefXsd);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_DataTypeDefXsd
+        );
         propertyError = parsed.error;
         theValueType = parsed.value;
         break;
@@ -1781,7 +1924,11 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -1793,7 +1940,11 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theValueId = parsed.value;
         break;
@@ -1896,7 +2047,11 @@ function parseAssetAdministrationShellFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -1908,7 +2063,11 @@ function parseAssetAdministrationShellFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -1920,7 +2079,11 @@ function parseAssetAdministrationShellFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -1980,7 +2143,11 @@ function parseAssetAdministrationShellFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theId = parsed.value;
         break;
@@ -2008,7 +2175,11 @@ function parseAssetAdministrationShellFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theDerivedFrom = parsed.value;
         break;
@@ -2036,7 +2207,11 @@ function parseAssetAdministrationShellFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSubmodels = parsed.value;
         break;
@@ -2137,7 +2312,11 @@ function parseAssetInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_AssetKind);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_AssetKind
+        );
         propertyError = parsed.error;
         theAssetKind = parsed.value;
         break;
@@ -2149,7 +2328,11 @@ function parseAssetInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theGlobalAssetId = parsed.value;
         break;
@@ -2161,7 +2344,11 @@ function parseAssetInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_SpecificAssetId);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_SpecificAssetId
+        );
         propertyError = parsed.error;
         theSpecificAssetIds = parsed.value;
         break;
@@ -2173,7 +2360,11 @@ function parseAssetInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theAssetType = parsed.value;
         break;
@@ -2185,7 +2376,11 @@ function parseAssetInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseResourceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseResourceFromSequence
+        );
         propertyError = parsed.error;
         theDefaultThumbnail = parsed.value;
         break;
@@ -2271,7 +2466,11 @@ function parseResourceFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         thePath = parsed.value;
         break;
@@ -2283,7 +2482,11 @@ function parseResourceFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theContentType = parsed.value;
         break;
@@ -2369,7 +2572,11 @@ function parseSpecificAssetIdFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -2381,7 +2588,11 @@ function parseSpecificAssetIdFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -2393,7 +2604,11 @@ function parseSpecificAssetIdFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theName = parsed.value;
         break;
@@ -2405,7 +2620,11 @@ function parseSpecificAssetIdFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -2417,7 +2636,11 @@ function parseSpecificAssetIdFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theExternalSubjectId = parsed.value;
         break;
@@ -2520,7 +2743,11 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -2532,7 +2759,11 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -2544,7 +2775,11 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -2604,7 +2839,11 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theId = parsed.value;
         break;
@@ -2616,7 +2855,11 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ModellingKind);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ModellingKind
+        );
         propertyError = parsed.error;
         theKind = parsed.value;
         break;
@@ -2628,7 +2871,11 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -2640,7 +2887,11 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -2652,7 +2903,11 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -2787,7 +3042,11 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -2799,7 +3058,11 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -2811,7 +3074,11 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -2855,7 +3122,11 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -2867,7 +3138,11 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -2879,7 +3154,11 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -2907,7 +3186,11 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theFirst = parsed.value;
         break;
@@ -2919,7 +3202,11 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSecond = parsed.value;
         break;
@@ -3029,7 +3316,11 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -3041,7 +3332,11 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -3053,7 +3348,11 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -3097,7 +3396,11 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -3109,7 +3412,11 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -3121,7 +3428,11 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -3149,7 +3460,11 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_bool);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_bool
+        );
         propertyError = parsed.error;
         theOrderRelevant = parsed.value;
         break;
@@ -3161,7 +3476,11 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticIdListElement = parsed.value;
         break;
@@ -3173,7 +3492,11 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_AasSubmodelElements);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_AasSubmodelElements
+        );
         propertyError = parsed.error;
         theTypeValueListElement = parsed.value;
         break;
@@ -3185,7 +3508,11 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeDefXsd);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_DataTypeDefXsd
+        );
         propertyError = parsed.error;
         theValueTypeListElement = parsed.value;
         break;
@@ -3304,7 +3631,11 @@ function parseSubmodelElementCollectionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -3316,7 +3647,11 @@ function parseSubmodelElementCollectionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -3328,7 +3663,11 @@ function parseSubmodelElementCollectionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -3372,7 +3711,11 @@ function parseSubmodelElementCollectionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -3384,7 +3727,11 @@ function parseSubmodelElementCollectionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -3396,7 +3743,11 @@ function parseSubmodelElementCollectionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -3525,7 +3876,11 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -3537,7 +3892,11 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -3549,7 +3908,11 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -3593,7 +3956,11 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -3605,7 +3972,11 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -3617,7 +3988,11 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -3645,7 +4020,11 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeDefXsd);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_DataTypeDefXsd
+        );
         propertyError = parsed.error;
         theValueType = parsed.value;
         break;
@@ -3657,7 +4036,11 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -3669,7 +4052,11 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theValueId = parsed.value;
         break;
@@ -3771,7 +4158,11 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -3783,7 +4174,11 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -3795,7 +4190,11 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -3839,7 +4238,11 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -3851,7 +4254,11 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -3863,7 +4270,11 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -3907,7 +4318,11 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theValueId = parsed.value;
         break;
@@ -4005,7 +4420,11 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -4017,7 +4436,11 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -4029,7 +4452,11 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -4073,7 +4500,11 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -4085,7 +4516,11 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -4097,7 +4532,11 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -4125,7 +4564,11 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeDefXsd);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_DataTypeDefXsd
+        );
         propertyError = parsed.error;
         theValueType = parsed.value;
         break;
@@ -4137,7 +4580,11 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theMin = parsed.value;
         break;
@@ -4149,7 +4596,11 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theMax = parsed.value;
         break;
@@ -4250,7 +4701,11 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -4262,7 +4717,11 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -4274,7 +4733,11 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -4318,7 +4781,11 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -4330,7 +4797,11 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -4342,7 +4813,11 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -4370,7 +4845,11 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -4466,7 +4945,11 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -4478,7 +4961,11 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -4490,7 +4977,11 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -4534,7 +5025,11 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -4546,7 +5041,11 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -4558,7 +5057,11 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -4586,7 +5089,11 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_bytes);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_bytes
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -4598,7 +5105,11 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theContentType = parsed.value;
         break;
@@ -4699,7 +5210,11 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -4711,7 +5226,11 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -4723,7 +5242,11 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -4767,7 +5290,11 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -4779,7 +5306,11 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -4791,7 +5322,11 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -4819,7 +5354,11 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -4831,7 +5370,11 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theContentType = parsed.value;
         break;
@@ -4933,7 +5476,11 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -4945,7 +5492,11 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -4957,7 +5508,11 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -5001,7 +5556,11 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -5013,7 +5572,11 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -5025,7 +5588,11 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -5053,7 +5620,11 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theFirst = parsed.value;
         break;
@@ -5065,7 +5636,11 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSecond = parsed.value;
         break;
@@ -5077,7 +5652,11 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_IDataElement);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_IDataElement
+        );
         propertyError = parsed.error;
         theAnnotations = parsed.value;
         break;
@@ -5187,7 +5766,11 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -5199,7 +5782,11 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -5211,7 +5798,11 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -5255,7 +5846,11 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -5267,7 +5862,11 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -5279,7 +5878,11 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -5323,7 +5926,11 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_EntityType);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_EntityType
+        );
         propertyError = parsed.error;
         theEntityType = parsed.value;
         break;
@@ -5335,7 +5942,11 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theGlobalAssetId = parsed.value;
         break;
@@ -5347,7 +5958,11 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_SpecificAssetId);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_SpecificAssetId
+        );
         propertyError = parsed.error;
         theSpecificAssetIds = parsed.value;
         break;
@@ -5447,7 +6062,11 @@ function parseEventPayloadFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSource = parsed.value;
         break;
@@ -5459,7 +6078,11 @@ function parseEventPayloadFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSourceSemanticId = parsed.value;
         break;
@@ -5471,7 +6094,11 @@ function parseEventPayloadFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theObservableReference = parsed.value;
         break;
@@ -5483,7 +6110,11 @@ function parseEventPayloadFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theObservableSemanticId = parsed.value;
         break;
@@ -5495,7 +6126,11 @@ function parseEventPayloadFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theTopic = parsed.value;
         break;
@@ -5507,7 +6142,11 @@ function parseEventPayloadFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSubjectId = parsed.value;
         break;
@@ -5519,7 +6158,11 @@ function parseEventPayloadFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theTimeStamp = parsed.value;
         break;
@@ -5531,7 +6174,11 @@ function parseEventPayloadFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_bytes);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_bytes
+        );
         propertyError = parsed.error;
         thePayload = parsed.value;
         break;
@@ -5647,7 +6294,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -5659,7 +6310,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -5671,7 +6326,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -5715,7 +6374,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -5727,7 +6390,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -5739,7 +6406,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -5767,7 +6438,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theObserved = parsed.value;
         break;
@@ -5779,7 +6454,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_Direction);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_Direction
+        );
         propertyError = parsed.error;
         theDirection = parsed.value;
         break;
@@ -5791,7 +6470,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_StateOfEvent);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_StateOfEvent
+        );
         propertyError = parsed.error;
         theState = parsed.value;
         break;
@@ -5803,7 +6486,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theMessageTopic = parsed.value;
         break;
@@ -5815,7 +6502,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theMessageBroker = parsed.value;
         break;
@@ -5827,7 +6518,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theLastUpdate = parsed.value;
         break;
@@ -5839,7 +6534,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theMinInterval = parsed.value;
         break;
@@ -5851,7 +6550,11 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theMaxInterval = parsed.value;
         break;
@@ -5971,7 +6674,11 @@ function parseOperationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -5983,7 +6690,11 @@ function parseOperationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -5995,7 +6706,11 @@ function parseOperationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -6039,7 +6754,11 @@ function parseOperationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -6051,7 +6770,11 @@ function parseOperationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -6063,7 +6786,11 @@ function parseOperationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -6308,7 +7035,11 @@ function parseCapabilityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -6320,7 +7051,11 @@ function parseCapabilityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -6332,7 +7067,11 @@ function parseCapabilityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -6376,7 +7115,11 @@ function parseCapabilityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theSemanticId = parsed.value;
         break;
@@ -6388,7 +7131,11 @@ function parseCapabilityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -6400,7 +7147,11 @@ function parseCapabilityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Qualifier
+        );
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -6509,7 +7260,11 @@ function parseConceptDescriptionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Extension
+        );
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -6521,7 +7276,11 @@ function parseConceptDescriptionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -6533,7 +7292,11 @@ function parseConceptDescriptionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -6593,7 +7356,11 @@ function parseConceptDescriptionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theId = parsed.value;
         break;
@@ -6621,7 +7388,11 @@ function parseConceptDescriptionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Reference
+        );
         propertyError = parsed.error;
         theIsCaseOf = parsed.value;
         break;
@@ -6712,7 +7483,11 @@ function parseReferenceFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ReferenceTypes);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ReferenceTypes
+        );
         propertyError = parsed.error;
         theType = parsed.value;
         break;
@@ -6724,7 +7499,11 @@ function parseReferenceFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theReferredSemanticId = parsed.value;
         break;
@@ -6736,7 +7515,11 @@ function parseReferenceFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Key);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Key
+        );
         propertyError = parsed.error;
         theKeys = parsed.value;
         break;
@@ -6826,7 +7609,11 @@ function parseKeyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_KeyTypes);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_KeyTypes
+        );
         propertyError = parsed.error;
         theType = parsed.value;
         break;
@@ -6838,7 +7625,11 @@ function parseKeyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -6927,7 +7718,11 @@ function parseLangStringNameTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theLanguage = parsed.value;
         break;
@@ -6939,7 +7734,11 @@ function parseLangStringNameTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theText = parsed.value;
         break;
@@ -7028,7 +7827,11 @@ function parseLangStringTextTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theLanguage = parsed.value;
         break;
@@ -7040,7 +7843,11 @@ function parseLangStringTextTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theText = parsed.value;
         break;
@@ -7146,7 +7953,11 @@ function parseEnvironmentFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Submodel);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Submodel
+        );
         propertyError = parsed.error;
         theSubmodels = parsed.value;
         break;
@@ -7242,7 +8053,11 @@ function parseEmbeddedDataSpecificationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theDataSpecification = parsed.value;
         break;
@@ -7349,7 +8164,11 @@ function parseLevelTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_bool);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_bool
+        );
         propertyError = parsed.error;
         theMin = parsed.value;
         break;
@@ -7361,7 +8180,11 @@ function parseLevelTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_bool);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_bool
+        );
         propertyError = parsed.error;
         theNom = parsed.value;
         break;
@@ -7373,7 +8196,11 @@ function parseLevelTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_bool);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_bool
+        );
         propertyError = parsed.error;
         theTyp = parsed.value;
         break;
@@ -7385,7 +8212,11 @@ function parseLevelTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_bool);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_bool
+        );
         propertyError = parsed.error;
         theMax = parsed.value;
         break;
@@ -7488,7 +8319,11 @@ function parseValueReferencePairFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -7500,7 +8335,11 @@ function parseValueReferencePairFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theValueId = parsed.value;
         break;
@@ -7674,7 +8513,11 @@ function parseLangStringPreferredNameTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theLanguage = parsed.value;
         break;
@@ -7686,7 +8529,11 @@ function parseLangStringPreferredNameTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theText = parsed.value;
         break;
@@ -7775,7 +8622,11 @@ function parseLangStringShortNameTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theLanguage = parsed.value;
         break;
@@ -7787,7 +8638,11 @@ function parseLangStringShortNameTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theText = parsed.value;
         break;
@@ -7876,7 +8731,11 @@ function parseLangStringDefinitionTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theLanguage = parsed.value;
         break;
@@ -7888,7 +8747,11 @@ function parseLangStringDefinitionTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theText = parsed.value;
         break;
@@ -8019,7 +8882,11 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theUnit = parsed.value;
         break;
@@ -8031,7 +8898,11 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReferenceFromSequence
+        );
         propertyError = parsed.error;
         theUnitId = parsed.value;
         break;
@@ -8043,7 +8914,11 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theSourceOfDefinition = parsed.value;
         break;
@@ -8055,7 +8930,11 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theSymbol = parsed.value;
         break;
@@ -8067,7 +8946,11 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeIec61360);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_DataTypeIec61360
+        );
         propertyError = parsed.error;
         theDataType = parsed.value;
         break;
@@ -8095,7 +8978,11 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theValueFormat = parsed.value;
         break;
@@ -8107,7 +8994,11 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseValueListFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseValueListFromSequence
+        );
         propertyError = parsed.error;
         theValueList = parsed.value;
         break;
@@ -8119,7 +9010,11 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -8131,7 +9026,11 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseLevelTypeFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseLevelTypeFromSequence
+        );
         propertyError = parsed.error;
         theLevelType = parsed.value;
         break;
@@ -8192,17 +9091,42 @@ function writeExtensionAsSequence(
   parts: Array<string>,
   that: AasTypes.Extension
 ): void {
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeProperty(parts, "name", that.name, write_str);
-  writeOptionalProperty(parts, "valueType", that.valueType, write_DataTypeDefXsd);
-  writeOptionalProperty(parts, "value", that.value, write_str);
-  writeOptionalProperty(parts, "refersTo", that.refersTo, writeListOfInstances);
+  writeProperty(
+    parts,
+    "name",
+    that.name,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "valueType",
+    that.valueType,
+    write_DataTypeDefXsd
+  );
+  writeOptionalProperty(
+    parts,
+    "value",
+    that.value,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "refersTo",
+    that.refersTo,
+    writeListOfInstances
+  );
 }
 
 /**
@@ -8221,10 +9145,30 @@ function writeAdministrativeInformationAsSequence(
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "version", that.version, write_str);
-  writeOptionalProperty(parts, "revision", that.revision, write_str);
-  writeOptionalProperty(parts, "creator", that.creator, writeReferenceAsSequence);
-  writeOptionalProperty(parts, "templateId", that.templateId, write_str);
+  writeOptionalProperty(
+    parts,
+    "version",
+    that.version,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "revision",
+    that.revision,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "creator",
+    that.creator,
+    writeReferenceAsSequence
+  );
+  writeOptionalProperty(
+    parts,
+    "templateId",
+    that.templateId,
+    write_str
+  );
 }
 
 /**
@@ -8237,18 +9181,48 @@ function writeQualifierAsSequence(
   parts: Array<string>,
   that: AasTypes.Qualifier
 ): void {
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "kind", that.kind, write_QualifierKind);
-  writeProperty(parts, "type", that.type, write_str);
-  writeProperty(parts, "valueType", that.valueType, write_DataTypeDefXsd);
-  writeOptionalProperty(parts, "value", that.value, write_str);
-  writeOptionalProperty(parts, "valueId", that.valueId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "kind",
+    that.kind,
+    write_QualifierKind
+  );
+  writeProperty(
+    parts,
+    "type",
+    that.type,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "valueType",
+    that.valueType,
+    write_DataTypeDefXsd
+  );
+  writeOptionalProperty(
+    parts,
+    "value",
+    that.value,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "valueId",
+    that.valueId,
+    writeReferenceAsSequence
+  );
 }
 
 /**
@@ -8261,27 +9235,72 @@ function writeAssetAdministrationShellAsSequence(
   parts: Array<string>,
   that: AasTypes.AssetAdministrationShell
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "administration",
     that.administration,
     writeAdministrativeInformationAsSequence
   );
-  writeProperty(parts, "id", that.id, write_str);
+  writeProperty(
+    parts,
+    "id",
+    that.id,
+    write_str
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "derivedFrom", that.derivedFrom, writeReferenceAsSequence);
-  writeProperty(parts, "assetInformation", that.assetInformation, writeAssetInformationAsSequence);
-  writeOptionalProperty(parts, "submodels", that.submodels, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "derivedFrom",
+    that.derivedFrom,
+    writeReferenceAsSequence
+  );
+  writeProperty(
+    parts,
+    "assetInformation",
+    that.assetInformation,
+    writeAssetInformationAsSequence
+  );
+  writeOptionalProperty(
+    parts,
+    "submodels",
+    that.submodels,
+    writeListOfInstances
+  );
 }
 
 /**
@@ -8294,11 +9313,36 @@ function writeAssetInformationAsSequence(
   parts: Array<string>,
   that: AasTypes.AssetInformation
 ): void {
-  writeProperty(parts, "assetKind", that.assetKind, write_AssetKind);
-  writeOptionalProperty(parts, "globalAssetId", that.globalAssetId, write_str);
-  writeOptionalProperty(parts, "specificAssetIds", that.specificAssetIds, writeListOfInstances);
-  writeOptionalProperty(parts, "assetType", that.assetType, write_str);
-  writeOptionalProperty(parts, "defaultThumbnail", that.defaultThumbnail, writeResourceAsSequence);
+  writeProperty(
+    parts,
+    "assetKind",
+    that.assetKind,
+    write_AssetKind
+  );
+  writeOptionalProperty(
+    parts,
+    "globalAssetId",
+    that.globalAssetId,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "specificAssetIds",
+    that.specificAssetIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "assetType",
+    that.assetType,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "defaultThumbnail",
+    that.defaultThumbnail,
+    writeResourceAsSequence
+  );
 }
 
 /**
@@ -8311,8 +9355,18 @@ function writeResourceAsSequence(
   parts: Array<string>,
   that: AasTypes.Resource
 ): void {
-  writeProperty(parts, "path", that.path, write_str);
-  writeOptionalProperty(parts, "contentType", that.contentType, write_str);
+  writeProperty(
+    parts,
+    "path",
+    that.path,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "contentType",
+    that.contentType,
+    write_str
+  );
 }
 
 /**
@@ -8325,15 +9379,30 @@ function writeSpecificAssetIdAsSequence(
   parts: Array<string>,
   that: AasTypes.SpecificAssetId
 ): void {
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeProperty(parts, "name", that.name, write_str);
-  writeProperty(parts, "value", that.value, write_str);
+  writeProperty(
+    parts,
+    "name",
+    that.name,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "value",
+    that.value,
+    write_str
+  );
   writeOptionalProperty(
     parts,
     "externalSubjectId",
@@ -8352,34 +9421,84 @@ function writeSubmodelAsSequence(
   parts: Array<string>,
   that: AasTypes.Submodel
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "administration",
     that.administration,
     writeAdministrativeInformationAsSequence
   );
-  writeProperty(parts, "id", that.id, write_str);
-  writeOptionalProperty(parts, "kind", that.kind, write_ModellingKind);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeProperty(
+    parts,
+    "id",
+    that.id,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "kind",
+    that.kind,
+    write_ModellingKind
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "submodelElements", that.submodelElements, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "submodelElements",
+    that.submodelElements,
+    writeListOfInstances
+  );
 }
 
 /**
@@ -8392,27 +9511,72 @@ function writeRelationshipElementAsSequence(
   parts: Array<string>,
   that: AasTypes.RelationshipElement
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeProperty(parts, "first", that.first, writeReferenceAsSequence);
-  writeProperty(parts, "second", that.second, writeReferenceAsSequence);
+  writeProperty(
+    parts,
+    "first",
+    that.first,
+    writeReferenceAsSequence
+  );
+  writeProperty(
+    parts,
+    "second",
+    that.second,
+    writeReferenceAsSequence
+  );
 }
 
 /**
@@ -8425,26 +9589,66 @@ function writeSubmodelElementListAsSequence(
   parts: Array<string>,
   that: AasTypes.SubmodelElementList
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "orderRelevant", that.orderRelevant, write_bool);
+  writeOptionalProperty(
+    parts,
+    "orderRelevant",
+    that.orderRelevant,
+    write_bool
+  );
   writeOptionalProperty(
     parts,
     "semanticIdListElement",
@@ -8463,7 +9667,12 @@ function writeSubmodelElementListAsSequence(
     that.valueTypeListElement,
     write_DataTypeDefXsd
   );
-  writeOptionalProperty(parts, "value", that.value, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "value",
+    that.value,
+    writeListOfInstances
+  );
 }
 
 /**
@@ -8476,26 +9685,66 @@ function writeSubmodelElementCollectionAsSequence(
   parts: Array<string>,
   that: AasTypes.SubmodelElementCollection
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "value", that.value, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "value",
+    that.value,
+    writeListOfInstances
+  );
 }
 
 /**
@@ -8508,28 +9757,78 @@ function writePropertyAsSequence(
   parts: Array<string>,
   that: AasTypes.Property
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeProperty(parts, "valueType", that.valueType, write_DataTypeDefXsd);
-  writeOptionalProperty(parts, "value", that.value, write_str);
-  writeOptionalProperty(parts, "valueId", that.valueId, writeReferenceAsSequence);
+  writeProperty(
+    parts,
+    "valueType",
+    that.valueType,
+    write_DataTypeDefXsd
+  );
+  writeOptionalProperty(
+    parts,
+    "value",
+    that.value,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "valueId",
+    that.valueId,
+    writeReferenceAsSequence
+  );
 }
 
 /**
@@ -8542,27 +9841,72 @@ function writeMultiLanguagePropertyAsSequence(
   parts: Array<string>,
   that: AasTypes.MultiLanguageProperty
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "value", that.value, writeListOfInstances);
-  writeOptionalProperty(parts, "valueId", that.valueId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "value",
+    that.value,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "valueId",
+    that.valueId,
+    writeReferenceAsSequence
+  );
 }
 
 /**
@@ -8575,28 +9919,78 @@ function writeRangeAsSequence(
   parts: Array<string>,
   that: AasTypes.Range
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeProperty(parts, "valueType", that.valueType, write_DataTypeDefXsd);
-  writeOptionalProperty(parts, "min", that.min, write_str);
-  writeOptionalProperty(parts, "max", that.max, write_str);
+  writeProperty(
+    parts,
+    "valueType",
+    that.valueType,
+    write_DataTypeDefXsd
+  );
+  writeOptionalProperty(
+    parts,
+    "min",
+    that.min,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "max",
+    that.max,
+    write_str
+  );
 }
 
 /**
@@ -8609,26 +10003,66 @@ function writeReferenceElementAsSequence(
   parts: Array<string>,
   that: AasTypes.ReferenceElement
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "value", that.value, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "value",
+    that.value,
+    writeReferenceAsSequence
+  );
 }
 
 /**
@@ -8641,27 +10075,72 @@ function writeBlobAsSequence(
   parts: Array<string>,
   that: AasTypes.Blob
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "value", that.value, write_bytes);
-  writeProperty(parts, "contentType", that.contentType, write_str);
+  writeOptionalProperty(
+    parts,
+    "value",
+    that.value,
+    write_bytes
+  );
+  writeProperty(
+    parts,
+    "contentType",
+    that.contentType,
+    write_str
+  );
 }
 
 /**
@@ -8674,27 +10153,72 @@ function writeFileAsSequence(
   parts: Array<string>,
   that: AasTypes.File
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "value", that.value, write_str);
-  writeProperty(parts, "contentType", that.contentType, write_str);
+  writeOptionalProperty(
+    parts,
+    "value",
+    that.value,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "contentType",
+    that.contentType,
+    write_str
+  );
 }
 
 /**
@@ -8707,28 +10231,78 @@ function writeAnnotatedRelationshipElementAsSequence(
   parts: Array<string>,
   that: AasTypes.AnnotatedRelationshipElement
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeProperty(parts, "first", that.first, writeReferenceAsSequence);
-  writeProperty(parts, "second", that.second, writeReferenceAsSequence);
-  writeOptionalProperty(parts, "annotations", that.annotations, writeListOfInstances);
+  writeProperty(
+    parts,
+    "first",
+    that.first,
+    writeReferenceAsSequence
+  );
+  writeProperty(
+    parts,
+    "second",
+    that.second,
+    writeReferenceAsSequence
+  );
+  writeOptionalProperty(
+    parts,
+    "annotations",
+    that.annotations,
+    writeListOfInstances
+  );
 }
 
 /**
@@ -8741,29 +10315,84 @@ function writeEntityAsSequence(
   parts: Array<string>,
   that: AasTypes.Entity
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "statements", that.statements, writeListOfInstances);
-  writeProperty(parts, "entityType", that.entityType, write_EntityType);
-  writeOptionalProperty(parts, "globalAssetId", that.globalAssetId, write_str);
-  writeOptionalProperty(parts, "specificAssetIds", that.specificAssetIds, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "statements",
+    that.statements,
+    writeListOfInstances
+  );
+  writeProperty(
+    parts,
+    "entityType",
+    that.entityType,
+    write_EntityType
+  );
+  writeOptionalProperty(
+    parts,
+    "globalAssetId",
+    that.globalAssetId,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "specificAssetIds",
+    that.specificAssetIds,
+    writeListOfInstances
+  );
 }
 
 /**
@@ -8776,19 +10405,54 @@ function writeEventPayloadAsSequence(
   parts: Array<string>,
   that: AasTypes.EventPayload
 ): void {
-  writeProperty(parts, "source", that.source, writeReferenceAsSequence);
-  writeOptionalProperty(parts, "sourceSemanticId", that.sourceSemanticId, writeReferenceAsSequence);
-  writeProperty(parts, "observableReference", that.observableReference, writeReferenceAsSequence);
+  writeProperty(
+    parts,
+    "source",
+    that.source,
+    writeReferenceAsSequence
+  );
+  writeOptionalProperty(
+    parts,
+    "sourceSemanticId",
+    that.sourceSemanticId,
+    writeReferenceAsSequence
+  );
+  writeProperty(
+    parts,
+    "observableReference",
+    that.observableReference,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "observableSemanticId",
     that.observableSemanticId,
     writeReferenceAsSequence
   );
-  writeOptionalProperty(parts, "topic", that.topic, write_str);
-  writeOptionalProperty(parts, "subjectId", that.subjectId, writeReferenceAsSequence);
-  writeProperty(parts, "timeStamp", that.timeStamp, write_str);
-  writeOptionalProperty(parts, "payload", that.payload, write_bytes);
+  writeOptionalProperty(
+    parts,
+    "topic",
+    that.topic,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "subjectId",
+    that.subjectId,
+    writeReferenceAsSequence
+  );
+  writeProperty(
+    parts,
+    "timeStamp",
+    that.timeStamp,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "payload",
+    that.payload,
+    write_bytes
+  );
 }
 
 /**
@@ -8801,33 +10465,108 @@ function writeBasicEventElementAsSequence(
   parts: Array<string>,
   that: AasTypes.BasicEventElement
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeProperty(parts, "observed", that.observed, writeReferenceAsSequence);
-  writeProperty(parts, "direction", that.direction, write_Direction);
-  writeProperty(parts, "state", that.state, write_StateOfEvent);
-  writeOptionalProperty(parts, "messageTopic", that.messageTopic, write_str);
-  writeOptionalProperty(parts, "messageBroker", that.messageBroker, writeReferenceAsSequence);
-  writeOptionalProperty(parts, "lastUpdate", that.lastUpdate, write_str);
-  writeOptionalProperty(parts, "minInterval", that.minInterval, write_str);
-  writeOptionalProperty(parts, "maxInterval", that.maxInterval, write_str);
+  writeProperty(
+    parts,
+    "observed",
+    that.observed,
+    writeReferenceAsSequence
+  );
+  writeProperty(
+    parts,
+    "direction",
+    that.direction,
+    write_Direction
+  );
+  writeProperty(
+    parts,
+    "state",
+    that.state,
+    write_StateOfEvent
+  );
+  writeOptionalProperty(
+    parts,
+    "messageTopic",
+    that.messageTopic,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "messageBroker",
+    that.messageBroker,
+    writeReferenceAsSequence
+  );
+  writeOptionalProperty(
+    parts,
+    "lastUpdate",
+    that.lastUpdate,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "minInterval",
+    that.minInterval,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "maxInterval",
+    that.maxInterval,
+    write_str
+  );
 }
 
 /**
@@ -8840,28 +10579,78 @@ function writeOperationAsSequence(
   parts: Array<string>,
   that: AasTypes.Operation
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "inputVariables", that.inputVariables, writeListOfInstances);
-  writeOptionalProperty(parts, "outputVariables", that.outputVariables, writeListOfInstances);
-  writeOptionalProperty(parts, "inoutputVariables", that.inoutputVariables, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "inputVariables",
+    that.inputVariables,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "outputVariables",
+    that.outputVariables,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "inoutputVariables",
+    that.inoutputVariables,
+    writeListOfInstances
+  );
 }
 
 /**
@@ -8874,7 +10663,12 @@ function writeOperationVariableAsSequence(
   parts: Array<string>,
   that: AasTypes.OperationVariable
 ): void {
-  writeProperty(parts, "value", that.value, writeClass);
+  writeProperty(
+    parts,
+    "value",
+    that.value,
+    writeClass
+  );
 }
 
 /**
@@ -8887,19 +10681,54 @@ function writeCapabilityAsSequence(
   parts: Array<string>,
   that: AasTypes.Capability
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
-  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "semanticId",
+    that.semanticId,
+    writeReferenceAsSequence
+  );
   writeOptionalProperty(
     parts,
     "supplementalSemanticIds",
     that.supplementalSemanticIds,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "qualifiers",
+    that.qualifiers,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
@@ -8918,25 +10747,60 @@ function writeConceptDescriptionAsSequence(
   parts: Array<string>,
   that: AasTypes.ConceptDescription
 ): void {
-  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
-  writeOptionalProperty(parts, "category", that.category, write_str);
-  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
-  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
-  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "extensions",
+    that.extensions,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "category",
+    that.category,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "idShort",
+    that.idShort,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "displayName",
+    that.displayName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "description",
+    that.description,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "administration",
     that.administration,
     writeAdministrativeInformationAsSequence
   );
-  writeProperty(parts, "id", that.id, write_str);
+  writeProperty(
+    parts,
+    "id",
+    that.id,
+    write_str
+  );
   writeOptionalProperty(
     parts,
     "embeddedDataSpecifications",
     that.embeddedDataSpecifications,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "isCaseOf", that.isCaseOf, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "isCaseOf",
+    that.isCaseOf,
+    writeListOfInstances
+  );
 }
 
 /**
@@ -8949,14 +10813,24 @@ function writeReferenceAsSequence(
   parts: Array<string>,
   that: AasTypes.Reference
 ): void {
-  writeProperty(parts, "type", that.type, write_ReferenceTypes);
+  writeProperty(
+    parts,
+    "type",
+    that.type,
+    write_ReferenceTypes
+  );
   writeOptionalProperty(
     parts,
     "referredSemanticId",
     that.referredSemanticId,
     writeReferenceAsSequence
   );
-  writeProperty(parts, "keys", that.keys, writeListOfInstances);
+  writeProperty(
+    parts,
+    "keys",
+    that.keys,
+    writeListOfInstances
+  );
 }
 
 /**
@@ -8969,8 +10843,18 @@ function writeKeyAsSequence(
   parts: Array<string>,
   that: AasTypes.Key
 ): void {
-  writeProperty(parts, "type", that.type, write_KeyTypes);
-  writeProperty(parts, "value", that.value, write_str);
+  writeProperty(
+    parts,
+    "type",
+    that.type,
+    write_KeyTypes
+  );
+  writeProperty(
+    parts,
+    "value",
+    that.value,
+    write_str
+  );
 }
 
 /**
@@ -8983,8 +10867,18 @@ function writeLangStringNameTypeAsSequence(
   parts: Array<string>,
   that: AasTypes.LangStringNameType
 ): void {
-  writeProperty(parts, "language", that.language, write_str);
-  writeProperty(parts, "text", that.text, write_str);
+  writeProperty(
+    parts,
+    "language",
+    that.language,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "text",
+    that.text,
+    write_str
+  );
 }
 
 /**
@@ -8997,8 +10891,18 @@ function writeLangStringTextTypeAsSequence(
   parts: Array<string>,
   that: AasTypes.LangStringTextType
 ): void {
-  writeProperty(parts, "language", that.language, write_str);
-  writeProperty(parts, "text", that.text, write_str);
+  writeProperty(
+    parts,
+    "language",
+    that.language,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "text",
+    that.text,
+    write_str
+  );
 }
 
 /**
@@ -9017,7 +10921,12 @@ function writeEnvironmentAsSequence(
     that.assetAdministrationShells,
     writeListOfInstances
   );
-  writeOptionalProperty(parts, "submodels", that.submodels, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "submodels",
+    that.submodels,
+    writeListOfInstances
+  );
   writeOptionalProperty(
     parts,
     "conceptDescriptions",
@@ -9036,8 +10945,18 @@ function writeEmbeddedDataSpecificationAsSequence(
   parts: Array<string>,
   that: AasTypes.EmbeddedDataSpecification
 ): void {
-  writeProperty(parts, "dataSpecification", that.dataSpecification, writeReferenceAsSequence);
-  writeProperty(parts, "dataSpecificationContent", that.dataSpecificationContent, writeClass);
+  writeProperty(
+    parts,
+    "dataSpecification",
+    that.dataSpecification,
+    writeReferenceAsSequence
+  );
+  writeProperty(
+    parts,
+    "dataSpecificationContent",
+    that.dataSpecificationContent,
+    writeClass
+  );
 }
 
 /**
@@ -9050,10 +10969,30 @@ function writeLevelTypeAsSequence(
   parts: Array<string>,
   that: AasTypes.LevelType
 ): void {
-  writeProperty(parts, "min", that.min, write_bool);
-  writeProperty(parts, "nom", that.nom, write_bool);
-  writeProperty(parts, "typ", that.typ, write_bool);
-  writeProperty(parts, "max", that.max, write_bool);
+  writeProperty(
+    parts,
+    "min",
+    that.min,
+    write_bool
+  );
+  writeProperty(
+    parts,
+    "nom",
+    that.nom,
+    write_bool
+  );
+  writeProperty(
+    parts,
+    "typ",
+    that.typ,
+    write_bool
+  );
+  writeProperty(
+    parts,
+    "max",
+    that.max,
+    write_bool
+  );
 }
 
 /**
@@ -9066,8 +11005,18 @@ function writeValueReferencePairAsSequence(
   parts: Array<string>,
   that: AasTypes.ValueReferencePair
 ): void {
-  writeProperty(parts, "value", that.value, write_str);
-  writeProperty(parts, "valueId", that.valueId, writeReferenceAsSequence);
+  writeProperty(
+    parts,
+    "value",
+    that.value,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "valueId",
+    that.valueId,
+    writeReferenceAsSequence
+  );
 }
 
 /**
@@ -9080,7 +11029,12 @@ function writeValueListAsSequence(
   parts: Array<string>,
   that: AasTypes.ValueList
 ): void {
-  writeProperty(parts, "valueReferencePairs", that.valueReferencePairs, writeListOfInstances);
+  writeProperty(
+    parts,
+    "valueReferencePairs",
+    that.valueReferencePairs,
+    writeListOfInstances
+  );
 }
 
 /**
@@ -9093,8 +11047,18 @@ function writeLangStringPreferredNameTypeIec61360AsSequence(
   parts: Array<string>,
   that: AasTypes.LangStringPreferredNameTypeIec61360
 ): void {
-  writeProperty(parts, "language", that.language, write_str);
-  writeProperty(parts, "text", that.text, write_str);
+  writeProperty(
+    parts,
+    "language",
+    that.language,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "text",
+    that.text,
+    write_str
+  );
 }
 
 /**
@@ -9107,8 +11071,18 @@ function writeLangStringShortNameTypeIec61360AsSequence(
   parts: Array<string>,
   that: AasTypes.LangStringShortNameTypeIec61360
 ): void {
-  writeProperty(parts, "language", that.language, write_str);
-  writeProperty(parts, "text", that.text, write_str);
+  writeProperty(
+    parts,
+    "language",
+    that.language,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "text",
+    that.text,
+    write_str
+  );
 }
 
 /**
@@ -9121,8 +11095,18 @@ function writeLangStringDefinitionTypeIec61360AsSequence(
   parts: Array<string>,
   that: AasTypes.LangStringDefinitionTypeIec61360
 ): void {
-  writeProperty(parts, "language", that.language, write_str);
-  writeProperty(parts, "text", that.text, write_str);
+  writeProperty(
+    parts,
+    "language",
+    that.language,
+    write_str
+  );
+  writeProperty(
+    parts,
+    "text",
+    that.text,
+    write_str
+  );
 }
 
 /**
@@ -9135,18 +11119,78 @@ function writeDataSpecificationIec61360AsSequence(
   parts: Array<string>,
   that: AasTypes.DataSpecificationIec61360
 ): void {
-  writeProperty(parts, "preferredName", that.preferredName, writeListOfInstances);
-  writeOptionalProperty(parts, "shortName", that.shortName, writeListOfInstances);
-  writeOptionalProperty(parts, "unit", that.unit, write_str);
-  writeOptionalProperty(parts, "unitId", that.unitId, writeReferenceAsSequence);
-  writeOptionalProperty(parts, "sourceOfDefinition", that.sourceOfDefinition, write_str);
-  writeOptionalProperty(parts, "symbol", that.symbol, write_str);
-  writeOptionalProperty(parts, "dataType", that.dataType, write_DataTypeIec61360);
-  writeOptionalProperty(parts, "definition", that.definition, writeListOfInstances);
-  writeOptionalProperty(parts, "valueFormat", that.valueFormat, write_str);
-  writeOptionalProperty(parts, "valueList", that.valueList, writeValueListAsSequence);
-  writeOptionalProperty(parts, "value", that.value, write_str);
-  writeOptionalProperty(parts, "levelType", that.levelType, writeLevelTypeAsSequence);
+  writeProperty(
+    parts,
+    "preferredName",
+    that.preferredName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "shortName",
+    that.shortName,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "unit",
+    that.unit,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "unitId",
+    that.unitId,
+    writeReferenceAsSequence
+  );
+  writeOptionalProperty(
+    parts,
+    "sourceOfDefinition",
+    that.sourceOfDefinition,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "symbol",
+    that.symbol,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "dataType",
+    that.dataType,
+    write_DataTypeIec61360
+  );
+  writeOptionalProperty(
+    parts,
+    "definition",
+    that.definition,
+    writeListOfInstances
+  );
+  writeOptionalProperty(
+    parts,
+    "valueFormat",
+    that.valueFormat,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "valueList",
+    that.valueList,
+    writeValueListAsSequence
+  );
+  writeOptionalProperty(
+    parts,
+    "value",
+    that.value,
+    write_str
+  );
+  writeOptionalProperty(
+    parts,
+    "levelType",
+    that.levelType,
+    writeLevelTypeAsSequence
+  );
 }
 
 const PARSERS_OF_HAS_SEMANTICS = new Map<
@@ -9184,7 +11228,11 @@ const PARSERS_OF_HAS_SEMANTICS = new Map<
 function dispatchParseHasSemanticsElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IHasSemantics, DeserializationError> {
-  return dispatchParseElement(cursor, "IHasSemantics", PARSERS_OF_HAS_SEMANTICS);
+  return dispatchParseElement(
+    cursor,
+    "IHasSemantics",
+    PARSERS_OF_HAS_SEMANTICS
+  );
 }
 
 /**
@@ -9263,7 +11311,11 @@ const PARSERS_OF_HAS_EXTENSIONS = new Map<
 function dispatchParseHasExtensionsElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IHasExtensions, DeserializationError> {
-  return dispatchParseElement(cursor, "IHasExtensions", PARSERS_OF_HAS_EXTENSIONS);
+  return dispatchParseElement(
+    cursor,
+    "IHasExtensions",
+    PARSERS_OF_HAS_EXTENSIONS
+  );
 }
 
 /**
@@ -9342,7 +11394,11 @@ const PARSERS_OF_REFERABLE = new Map<
 function dispatchParseReferableElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IReferable, DeserializationError> {
-  return dispatchParseElement(cursor, "IReferable", PARSERS_OF_REFERABLE);
+  return dispatchParseElement(
+    cursor,
+    "IReferable",
+    PARSERS_OF_REFERABLE
+  );
 }
 
 /**
@@ -9407,7 +11463,11 @@ const PARSERS_OF_IDENTIFIABLE = new Map<
 function dispatchParseIdentifiableElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IIdentifiable, DeserializationError> {
-  return dispatchParseElement(cursor, "IIdentifiable", PARSERS_OF_IDENTIFIABLE);
+  return dispatchParseElement(
+    cursor,
+    "IIdentifiable",
+    PARSERS_OF_IDENTIFIABLE
+  );
 }
 
 /**
@@ -9470,7 +11530,11 @@ const PARSERS_OF_HAS_KIND = new Map<
 function dispatchParseHasKindElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IHasKind, DeserializationError> {
-  return dispatchParseElement(cursor, "IHasKind", PARSERS_OF_HAS_KIND);
+  return dispatchParseElement(
+    cursor,
+    "IHasKind",
+    PARSERS_OF_HAS_KIND
+  );
 }
 
 /**
@@ -9550,7 +11614,11 @@ const PARSERS_OF_HAS_DATA_SPECIFICATION = new Map<
 function dispatchParseHasDataSpecificationElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IHasDataSpecification, DeserializationError> {
-  return dispatchParseElement(cursor, "IHasDataSpecification", PARSERS_OF_HAS_DATA_SPECIFICATION);
+  return dispatchParseElement(
+    cursor,
+    "IHasDataSpecification",
+    PARSERS_OF_HAS_DATA_SPECIFICATION
+  );
 }
 
 /**
@@ -9627,7 +11695,11 @@ const PARSERS_OF_QUALIFIABLE = new Map<
 function dispatchParseQualifiableElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IQualifiable, DeserializationError> {
-  return dispatchParseElement(cursor, "IQualifiable", PARSERS_OF_QUALIFIABLE);
+  return dispatchParseElement(
+    cursor,
+    "IQualifiable",
+    PARSERS_OF_QUALIFIABLE
+  );
 }
 
 /**
@@ -9703,7 +11775,11 @@ const PARSERS_OF_SUBMODEL_ELEMENT = new Map<
 function dispatchParseSubmodelElementElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ISubmodelElement, DeserializationError> {
-  return dispatchParseElement(cursor, "ISubmodelElement", PARSERS_OF_SUBMODEL_ELEMENT);
+  return dispatchParseElement(
+    cursor,
+    "ISubmodelElement",
+    PARSERS_OF_SUBMODEL_ELEMENT
+  );
 }
 
 /**
@@ -9767,7 +11843,11 @@ const PARSERS_OF_RELATIONSHIP_ELEMENT = new Map<
 function dispatchParseRelationshipElementElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.RelationshipElement, DeserializationError> {
-  return dispatchParseElement(cursor, "RelationshipElement", PARSERS_OF_RELATIONSHIP_ELEMENT);
+  return dispatchParseElement(
+    cursor,
+    "RelationshipElement",
+    PARSERS_OF_RELATIONSHIP_ELEMENT
+  );
 }
 
 /**
@@ -9835,7 +11915,11 @@ const PARSERS_OF_DATA_ELEMENT = new Map<
 function dispatchParseDataElementElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IDataElement, DeserializationError> {
-  return dispatchParseElement(cursor, "IDataElement", PARSERS_OF_DATA_ELEMENT);
+  return dispatchParseElement(
+    cursor,
+    "IDataElement",
+    PARSERS_OF_DATA_ELEMENT
+  );
 }
 
 /**
@@ -9898,7 +11982,11 @@ const PARSERS_OF_EVENT_ELEMENT = new Map<
 function dispatchParseEventElementElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IEventElement, DeserializationError> {
-  return dispatchParseElement(cursor, "IEventElement", PARSERS_OF_EVENT_ELEMENT);
+  return dispatchParseElement(
+    cursor,
+    "IEventElement",
+    PARSERS_OF_EVENT_ELEMENT
+  );
 }
 
 /**
@@ -9965,7 +12053,11 @@ const PARSERS_OF_ABSTRACT_LANG_STRING = new Map<
 function dispatchParseAbstractLangStringElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IAbstractLangString, DeserializationError> {
-  return dispatchParseElement(cursor, "IAbstractLangString", PARSERS_OF_ABSTRACT_LANG_STRING);
+  return dispatchParseElement(
+    cursor,
+    "IAbstractLangString",
+    PARSERS_OF_ABSTRACT_LANG_STRING
+  );
 }
 
 /**
@@ -10439,7 +12531,12 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Extension,
     parts: Array<string>
   ): void {
-    writeElement(parts, "extension", that, writeExtensionAsSequence);
+    writeElement(
+      parts,
+      "extension",
+      that,
+      writeExtensionAsSequence
+    );
   }
 
   visitAdministrativeInformationWithContext(
@@ -10458,56 +12555,96 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Qualifier,
     parts: Array<string>
   ): void {
-    writeElement(parts, "qualifier", that, writeQualifierAsSequence);
+    writeElement(
+      parts,
+      "qualifier",
+      that,
+      writeQualifierAsSequence
+    );
   }
 
   visitAssetAdministrationShellWithContext(
     that: AasTypes.AssetAdministrationShell,
     parts: Array<string>
   ): void {
-    writeElement(parts, "assetAdministrationShell", that, writeAssetAdministrationShellAsSequence);
+    writeElement(
+      parts,
+      "assetAdministrationShell",
+      that,
+      writeAssetAdministrationShellAsSequence
+    );
   }
 
   visitAssetInformationWithContext(
     that: AasTypes.AssetInformation,
     parts: Array<string>
   ): void {
-    writeElement(parts, "assetInformation", that, writeAssetInformationAsSequence);
+    writeElement(
+      parts,
+      "assetInformation",
+      that,
+      writeAssetInformationAsSequence
+    );
   }
 
   visitResourceWithContext(
     that: AasTypes.Resource,
     parts: Array<string>
   ): void {
-    writeElement(parts, "resource", that, writeResourceAsSequence);
+    writeElement(
+      parts,
+      "resource",
+      that,
+      writeResourceAsSequence
+    );
   }
 
   visitSpecificAssetIdWithContext(
     that: AasTypes.SpecificAssetId,
     parts: Array<string>
   ): void {
-    writeElement(parts, "specificAssetId", that, writeSpecificAssetIdAsSequence);
+    writeElement(
+      parts,
+      "specificAssetId",
+      that,
+      writeSpecificAssetIdAsSequence
+    );
   }
 
   visitSubmodelWithContext(
     that: AasTypes.Submodel,
     parts: Array<string>
   ): void {
-    writeElement(parts, "submodel", that, writeSubmodelAsSequence);
+    writeElement(
+      parts,
+      "submodel",
+      that,
+      writeSubmodelAsSequence
+    );
   }
 
   visitRelationshipElementWithContext(
     that: AasTypes.RelationshipElement,
     parts: Array<string>
   ): void {
-    writeElement(parts, "relationshipElement", that, writeRelationshipElementAsSequence);
+    writeElement(
+      parts,
+      "relationshipElement",
+      that,
+      writeRelationshipElementAsSequence
+    );
   }
 
   visitSubmodelElementListWithContext(
     that: AasTypes.SubmodelElementList,
     parts: Array<string>
   ): void {
-    writeElement(parts, "submodelElementList", that, writeSubmodelElementListAsSequence);
+    writeElement(
+      parts,
+      "submodelElementList",
+      that,
+      writeSubmodelElementListAsSequence
+    );
   }
 
   visitSubmodelElementCollectionWithContext(
@@ -10526,42 +12663,72 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Property,
     parts: Array<string>
   ): void {
-    writeElement(parts, "property", that, writePropertyAsSequence);
+    writeElement(
+      parts,
+      "property",
+      that,
+      writePropertyAsSequence
+    );
   }
 
   visitMultiLanguagePropertyWithContext(
     that: AasTypes.MultiLanguageProperty,
     parts: Array<string>
   ): void {
-    writeElement(parts, "multiLanguageProperty", that, writeMultiLanguagePropertyAsSequence);
+    writeElement(
+      parts,
+      "multiLanguageProperty",
+      that,
+      writeMultiLanguagePropertyAsSequence
+    );
   }
 
   visitRangeWithContext(
     that: AasTypes.Range,
     parts: Array<string>
   ): void {
-    writeElement(parts, "range", that, writeRangeAsSequence);
+    writeElement(
+      parts,
+      "range",
+      that,
+      writeRangeAsSequence
+    );
   }
 
   visitReferenceElementWithContext(
     that: AasTypes.ReferenceElement,
     parts: Array<string>
   ): void {
-    writeElement(parts, "referenceElement", that, writeReferenceElementAsSequence);
+    writeElement(
+      parts,
+      "referenceElement",
+      that,
+      writeReferenceElementAsSequence
+    );
   }
 
   visitBlobWithContext(
     that: AasTypes.Blob,
     parts: Array<string>
   ): void {
-    writeElement(parts, "blob", that, writeBlobAsSequence);
+    writeElement(
+      parts,
+      "blob",
+      that,
+      writeBlobAsSequence
+    );
   }
 
   visitFileWithContext(
     that: AasTypes.File,
     parts: Array<string>
   ): void {
-    writeElement(parts, "file", that, writeFileAsSequence);
+    writeElement(
+      parts,
+      "file",
+      that,
+      writeFileAsSequence
+    );
   }
 
   visitAnnotatedRelationshipElementWithContext(
@@ -10580,84 +12747,144 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Entity,
     parts: Array<string>
   ): void {
-    writeElement(parts, "entity", that, writeEntityAsSequence);
+    writeElement(
+      parts,
+      "entity",
+      that,
+      writeEntityAsSequence
+    );
   }
 
   visitEventPayloadWithContext(
     that: AasTypes.EventPayload,
     parts: Array<string>
   ): void {
-    writeElement(parts, "eventPayload", that, writeEventPayloadAsSequence);
+    writeElement(
+      parts,
+      "eventPayload",
+      that,
+      writeEventPayloadAsSequence
+    );
   }
 
   visitBasicEventElementWithContext(
     that: AasTypes.BasicEventElement,
     parts: Array<string>
   ): void {
-    writeElement(parts, "basicEventElement", that, writeBasicEventElementAsSequence);
+    writeElement(
+      parts,
+      "basicEventElement",
+      that,
+      writeBasicEventElementAsSequence
+    );
   }
 
   visitOperationWithContext(
     that: AasTypes.Operation,
     parts: Array<string>
   ): void {
-    writeElement(parts, "operation", that, writeOperationAsSequence);
+    writeElement(
+      parts,
+      "operation",
+      that,
+      writeOperationAsSequence
+    );
   }
 
   visitOperationVariableWithContext(
     that: AasTypes.OperationVariable,
     parts: Array<string>
   ): void {
-    writeElement(parts, "operationVariable", that, writeOperationVariableAsSequence);
+    writeElement(
+      parts,
+      "operationVariable",
+      that,
+      writeOperationVariableAsSequence
+    );
   }
 
   visitCapabilityWithContext(
     that: AasTypes.Capability,
     parts: Array<string>
   ): void {
-    writeElement(parts, "capability", that, writeCapabilityAsSequence);
+    writeElement(
+      parts,
+      "capability",
+      that,
+      writeCapabilityAsSequence
+    );
   }
 
   visitConceptDescriptionWithContext(
     that: AasTypes.ConceptDescription,
     parts: Array<string>
   ): void {
-    writeElement(parts, "conceptDescription", that, writeConceptDescriptionAsSequence);
+    writeElement(
+      parts,
+      "conceptDescription",
+      that,
+      writeConceptDescriptionAsSequence
+    );
   }
 
   visitReferenceWithContext(
     that: AasTypes.Reference,
     parts: Array<string>
   ): void {
-    writeElement(parts, "reference", that, writeReferenceAsSequence);
+    writeElement(
+      parts,
+      "reference",
+      that,
+      writeReferenceAsSequence
+    );
   }
 
   visitKeyWithContext(
     that: AasTypes.Key,
     parts: Array<string>
   ): void {
-    writeElement(parts, "key", that, writeKeyAsSequence);
+    writeElement(
+      parts,
+      "key",
+      that,
+      writeKeyAsSequence
+    );
   }
 
   visitLangStringNameTypeWithContext(
     that: AasTypes.LangStringNameType,
     parts: Array<string>
   ): void {
-    writeElement(parts, "langStringNameType", that, writeLangStringNameTypeAsSequence);
+    writeElement(
+      parts,
+      "langStringNameType",
+      that,
+      writeLangStringNameTypeAsSequence
+    );
   }
 
   visitLangStringTextTypeWithContext(
     that: AasTypes.LangStringTextType,
     parts: Array<string>
   ): void {
-    writeElement(parts, "langStringTextType", that, writeLangStringTextTypeAsSequence);
+    writeElement(
+      parts,
+      "langStringTextType",
+      that,
+      writeLangStringTextTypeAsSequence
+    );
   }
 
   visitEnvironmentWithContext(
     that: AasTypes.Environment,
     parts: Array<string>
   ): void {
-    writeElement(parts, "environment", that, writeEnvironmentAsSequence);
+    writeElement(
+      parts,
+      "environment",
+      that,
+      writeEnvironmentAsSequence
+    );
   }
 
   visitEmbeddedDataSpecificationWithContext(
@@ -10676,21 +12903,36 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.LevelType,
     parts: Array<string>
   ): void {
-    writeElement(parts, "levelType", that, writeLevelTypeAsSequence);
+    writeElement(
+      parts,
+      "levelType",
+      that,
+      writeLevelTypeAsSequence
+    );
   }
 
   visitValueReferencePairWithContext(
     that: AasTypes.ValueReferencePair,
     parts: Array<string>
   ): void {
-    writeElement(parts, "valueReferencePair", that, writeValueReferencePairAsSequence);
+    writeElement(
+      parts,
+      "valueReferencePair",
+      that,
+      writeValueReferencePairAsSequence
+    );
   }
 
   visitValueListWithContext(
     that: AasTypes.ValueList,
     parts: Array<string>
   ): void {
-    writeElement(parts, "valueList", that, writeValueListAsSequence);
+    writeElement(
+      parts,
+      "valueList",
+      that,
+      writeValueListAsSequence
+    );
   }
 
   visitLangStringPreferredNameTypeIec61360WithContext(

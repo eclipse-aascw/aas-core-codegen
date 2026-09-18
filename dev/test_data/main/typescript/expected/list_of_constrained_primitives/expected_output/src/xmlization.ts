@@ -834,27 +834,43 @@ function parse_bytes(
 function parseAtV_str(
   cursor: XmlCursor
 ): AasCommon.Either<string, DeserializationError> {
-  return parseNamedElement(cursor, "v", parse_str);
+  return parseNamedElement(
+    cursor,
+    "v",
+    parse_str
+  );
 }
 
 function parse_ListOf_str(
   cursor: XmlCursor
 ): AasCommon.Either<Array<string>, DeserializationError> {
-  return parseList<string>(cursor, parseAtV_str);
+  return parseList<string>(
+    cursor,
+    parseAtV_str
+  );
 }
 
 function writeAtV_str(
   parts: Array<string>,
   value: string
 ): void {
-  writeElement(parts, "v", value, write_str);
+  writeElement(
+    parts,
+    "v",
+    value,
+    write_str
+  );
 }
 
 function write_ListOf_str(
   parts: Array<string>,
   values: Array<string>
 ): void {
-  writeList(parts, values, writeAtV_str);
+  writeList(
+    parts,
+    values,
+    writeAtV_str
+  );
 }
 
 /**
@@ -898,7 +914,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_str
+        );
         propertyError = parsed.error;
         theSomeNames = parsed.value;
         break;
@@ -948,7 +968,12 @@ function writeSomethingAsSequence(
   parts: Array<string>,
   that: AasTypes.Something
 ): void {
-  writeProperty(parts, "someNames", that.someNames, write_ListOf_str);
+  writeProperty(
+    parts,
+    "someNames",
+    that.someNames,
+    write_ListOf_str
+  );
 }
 
 const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
@@ -1276,7 +1301,12 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 }
 

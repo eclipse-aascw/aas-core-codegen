@@ -1218,7 +1218,12 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 }
 

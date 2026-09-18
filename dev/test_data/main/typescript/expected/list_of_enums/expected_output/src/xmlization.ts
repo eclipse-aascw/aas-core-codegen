@@ -887,27 +887,43 @@ function write_Result(
 function parseAtV_Result(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Result, DeserializationError> {
-  return parseNamedElement(cursor, "v", parse_Result);
+  return parseNamedElement(
+    cursor,
+    "v",
+    parse_Result
+  );
 }
 
 function parse_ListOf_Result(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.Result>, DeserializationError> {
-  return parseList<AasTypes.Result>(cursor, parseAtV_Result);
+  return parseList<AasTypes.Result>(
+    cursor,
+    parseAtV_Result
+  );
 }
 
 function writeAtV_Result(
   parts: Array<string>,
   value: AasTypes.Result
 ): void {
-  writeElement(parts, "v", value, write_Result);
+  writeElement(
+    parts,
+    "v",
+    value,
+    write_Result
+  );
 }
 
 function write_ListOf_Result(
   parts: Array<string>,
   values: Array<AasTypes.Result>
 ): void {
-  writeList(parts, values, writeAtV_Result);
+  writeList(
+    parts,
+    values,
+    writeAtV_Result
+  );
 }
 
 /**
@@ -951,7 +967,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Result);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_Result
+        );
         propertyError = parsed.error;
         theSomeResults = parsed.value;
         break;
@@ -1001,7 +1021,12 @@ function writeSomethingAsSequence(
   parts: Array<string>,
   that: AasTypes.Something
 ): void {
-  writeProperty(parts, "someResults", that.someResults, write_ListOf_Result);
+  writeProperty(
+    parts,
+    "someResults",
+    that.someResults,
+    write_ListOf_Result
+  );
 }
 
 const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
@@ -1329,7 +1354,12 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 }
 

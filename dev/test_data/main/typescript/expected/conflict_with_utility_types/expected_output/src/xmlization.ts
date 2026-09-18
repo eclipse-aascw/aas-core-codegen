@@ -925,7 +925,11 @@ function parseReadonlyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_str
+        );
         propertyError = parsed.error;
         theSomething = parsed.value;
         break;
@@ -1007,7 +1011,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReadonlyFromSequence);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseReadonlyFromSequence
+        );
         propertyError = parsed.error;
         theAReadonly = parsed.value;
         break;
@@ -1019,7 +1027,11 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parse_RecorD);
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_RecorD
+        );
         propertyError = parsed.error;
         theARecord = parsed.value;
         break;
@@ -1076,7 +1088,12 @@ function writeReadonlYAsSequence(
   parts: Array<string>,
   that: AasTypes.ReadonlY
 ): void {
-  writeProperty(parts, "something", that.something, write_str);
+  writeProperty(
+    parts,
+    "something",
+    that.something,
+    write_str
+  );
 }
 
 /**
@@ -1089,8 +1106,18 @@ function writeSomethingAsSequence(
   parts: Array<string>,
   that: AasTypes.Something
 ): void {
-  writeProperty(parts, "aReadonly", that.aReadonly, writeReadonlYAsSequence);
-  writeProperty(parts, "aRecord", that.aRecord, write_RecorD);
+  writeProperty(
+    parts,
+    "aReadonly",
+    that.aReadonly,
+    writeReadonlYAsSequence
+  );
+  writeProperty(
+    parts,
+    "aRecord",
+    that.aRecord,
+    write_RecorD
+  );
 }
 
 const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
@@ -1419,14 +1446,24 @@ class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
     that: AasTypes.ReadonlY,
     parts: Array<string>
   ): void {
-    writeElement(parts, "readonly", that, writeReadonlYAsSequence);
+    writeElement(
+      parts,
+      "readonly",
+      that,
+      writeReadonlYAsSequence
+    );
   }
 
   visitSomethingWithContext(
     that: AasTypes.Something,
     parts: Array<string>
   ): void {
-    writeElement(parts, "something", that, writeSomethingAsSequence);
+    writeElement(
+      parts,
+      "something",
+      that,
+      writeSomethingAsSequence
+    );
   }
 }
 
