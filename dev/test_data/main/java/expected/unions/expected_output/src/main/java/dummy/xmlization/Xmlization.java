@@ -578,6 +578,14 @@ public class Xmlization {
     }
 
     /**
+     * Report a property which the sequence of the properties gave more than once.
+     */
+    private static Reporting.Error duplicatePropertyError(String elementName) {
+      return new Reporting.Error(
+        "Property " + elementName + " occurred more than once");
+    }
+
+    /**
      * Report a required property of the class {@code className} which the
      * sequence of the properties did not give.
      */
@@ -652,6 +660,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "uniqueToFirst": {
+              if (theUniqueToFirst != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -724,6 +737,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "uniqueToSecond": {
+              if (theUniqueToSecond != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -820,6 +838,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "uniqueToAbstractDescendantOne": {
+              if (theUniqueToAbstractDescendantOne != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -892,6 +915,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "uniqueToAbstractDescendantTwo": {
+              if (theUniqueToAbstractDescendantTwo != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -964,6 +992,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "someBaseProperty": {
+              if (theSomeBaseProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1061,6 +1094,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "someBaseProperty": {
+              if (theSomeBaseProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1071,6 +1109,11 @@ public class Xmlization {
               break;
             }
             case "someChildProperty": {
+              if (theSomeChildProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1148,6 +1191,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "uniqueToConcreteLeaf": {
+              if (theUniqueToConcreteLeaf != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1220,6 +1268,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "someProperty": {
+              if (theSomeProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1292,6 +1345,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "someProperty": {
+              if (theSomeProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1373,6 +1431,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "structuralProperty": {
+              if (theStructuralProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<? extends StructuralUnion> value =
                 readNestedElement(
                   reader,
@@ -1386,6 +1449,11 @@ public class Xmlization {
               break;
             }
             case "mixedProperty": {
+              if (theMixedProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<? extends MixedUnion> value =
                 readNestedElement(
                   reader,
@@ -1399,6 +1467,11 @@ public class Xmlization {
               break;
             }
             case "modelTypedProperty": {
+              if (theModelTypedProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<? extends ModelTypedUnion> value =
                 readNestedElement(
                   reader,
@@ -1412,6 +1485,11 @@ public class Xmlization {
               break;
             }
             case "listStructuralProperty": {
+              if (theListStructuralProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<StructuralUnion>> value =
                 readListOf_StructuralUnion(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1422,6 +1500,11 @@ public class Xmlization {
               break;
             }
             case "listMixedProperty": {
+              if (theListMixedProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<MixedUnion>> value =
                 readListOf_MixedUnion(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1432,6 +1515,11 @@ public class Xmlization {
               break;
             }
             case "listModelTypedProperty": {
+              if (theListModelTypedProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ModelTypedUnion>> value =
                 readListOf_ModelTypedUnion(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1442,6 +1530,11 @@ public class Xmlization {
               break;
             }
             case "tupleProperty": {
+              if (theTupleProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Tuple3<StructuralUnion, MixedUnion, ModelTypedUnion>> value =
                 readTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1452,6 +1545,11 @@ public class Xmlization {
               break;
             }
             case "optionalStructuralProperty": {
+              if (theOptionalStructuralProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<? extends StructuralUnion> value =
                 readNestedElement(
                   reader,
@@ -1465,6 +1563,11 @@ public class Xmlization {
               break;
             }
             case "optionalMixedProperty": {
+              if (theOptionalMixedProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<? extends MixedUnion> value =
                 readNestedElement(
                   reader,
@@ -1478,6 +1581,11 @@ public class Xmlization {
               break;
             }
             case "optionalModelTypedProperty": {
+              if (theOptionalModelTypedProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<? extends ModelTypedUnion> value =
                 readNestedElement(
                   reader,

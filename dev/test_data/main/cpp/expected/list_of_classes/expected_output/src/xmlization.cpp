@@ -1450,6 +1450,18 @@ template <
   );
 }
 
+DeserializationError DuplicatePropertyError(
+  const std::string& name
+) {
+  return DeserializationError(
+    common::Concat(
+      L"Property ",
+      common::Utf8ToWstring(name),
+      L" occurred more than once"
+    )
+  );
+}
+
 DeserializationError DeserializationErrorFromReader(
   ReaderMergingText& reader
 ) {
@@ -2979,6 +2991,11 @@ std::pair<
 
     switch (property) {
       case properties::OfSomeItem::kName: {
+        if (the_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_name,
           error
@@ -3208,6 +3225,11 @@ std::pair<
 
     switch (property) {
       case properties::OfAnotherItem::kSerialNumber: {
+        if (the_serial_number.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_serial_number,
           error
@@ -3437,6 +3459,11 @@ std::pair<
 
     switch (property) {
       case properties::OfSimple::kName: {
+        if (the_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_name,
           error
@@ -3676,6 +3703,11 @@ std::pair<
 
     switch (property) {
       case properties::OfSomething::kSomeItems: {
+        if (the_some_items.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_some_items,
           error
@@ -3688,6 +3720,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kSomeSimples: {
+        if (the_some_simples.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_some_simples,
           error

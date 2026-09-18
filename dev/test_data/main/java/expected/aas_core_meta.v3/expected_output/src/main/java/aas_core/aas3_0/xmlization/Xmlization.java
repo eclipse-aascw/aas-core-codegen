@@ -723,6 +723,14 @@ public class Xmlization {
     }
 
     /**
+     * Report a property which the sequence of the properties gave more than once.
+     */
+    private static Reporting.Error duplicatePropertyError(String elementName) {
+      return new Reporting.Error(
+        "Property " + elementName + " occurred more than once");
+    }
+
+    /**
      * Report a required property of the class {@code className} which the
      * sequence of the properties did not give.
      */
@@ -1056,6 +1064,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1066,6 +1079,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1076,6 +1094,11 @@ public class Xmlization {
               break;
             }
             case "name": {
+              if (theName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1086,6 +1109,11 @@ public class Xmlization {
               break;
             }
             case "valueType": {
+              if (theValueType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<DataTypeDefXsd> value =
                 readTextAs_DataTypeDefXsd(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1096,6 +1124,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1106,6 +1139,11 @@ public class Xmlization {
               break;
             }
             case "refersTo": {
+              if (theRefersTo != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1399,6 +1437,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1409,6 +1452,11 @@ public class Xmlization {
               break;
             }
             case "version": {
+              if (theVersion != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1419,6 +1467,11 @@ public class Xmlization {
               break;
             }
             case "revision": {
+              if (theRevision != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1429,6 +1482,11 @@ public class Xmlization {
               break;
             }
             case "creator": {
+              if (theCreator != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1439,6 +1497,11 @@ public class Xmlization {
               break;
             }
             case "templateId": {
+              if (theTemplateId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1567,6 +1630,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1577,6 +1645,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1587,6 +1660,11 @@ public class Xmlization {
               break;
             }
             case "kind": {
+              if (theKind != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<QualifierKind> value =
                 readTextAs_QualifierKind(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1597,6 +1675,11 @@ public class Xmlization {
               break;
             }
             case "type": {
+              if (theType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1607,6 +1690,11 @@ public class Xmlization {
               break;
             }
             case "valueType": {
+              if (theValueType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<DataTypeDefXsd> value =
                 readTextAs_DataTypeDefXsd(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1617,6 +1705,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1627,6 +1720,11 @@ public class Xmlization {
               break;
             }
             case "valueId": {
+              if (theValueId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1719,6 +1817,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1729,6 +1832,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1739,6 +1847,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1749,6 +1862,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1759,6 +1877,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1769,6 +1892,11 @@ public class Xmlization {
               break;
             }
             case "administration": {
+              if (theAdministration != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<AdministrativeInformation> value =
                 readAdministrativeInformationFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1779,6 +1907,11 @@ public class Xmlization {
               break;
             }
             case "id": {
+              if (theId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1789,6 +1922,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1799,6 +1937,11 @@ public class Xmlization {
               break;
             }
             case "derivedFrom": {
+              if (theDerivedFrom != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1809,6 +1952,11 @@ public class Xmlization {
               break;
             }
             case "assetInformation": {
+              if (theAssetInformation != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<AssetInformation> value =
                 readAssetInformationFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1819,6 +1967,11 @@ public class Xmlization {
               break;
             }
             case "submodels": {
+              if (theSubmodels != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1909,6 +2062,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "assetKind": {
+              if (theAssetKind != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<AssetKind> value =
                 readTextAs_AssetKind(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1919,6 +2077,11 @@ public class Xmlization {
               break;
             }
             case "globalAssetId": {
+              if (theGlobalAssetId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1929,6 +2092,11 @@ public class Xmlization {
               break;
             }
             case "specificAssetIds": {
+              if (theSpecificAssetIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ISpecificAssetId>> value =
                 readListOf_ISpecificAssetId(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1939,6 +2107,11 @@ public class Xmlization {
               break;
             }
             case "assetType": {
+              if (theAssetType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -1949,6 +2122,11 @@ public class Xmlization {
               break;
             }
             case "defaultThumbnail": {
+              if (theDefaultThumbnail != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Resource> value =
                 readResourceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2026,6 +2204,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "path": {
+              if (thePath != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2036,6 +2219,11 @@ public class Xmlization {
               break;
             }
             case "contentType": {
+              if (theContentType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2113,6 +2301,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2123,6 +2316,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2133,6 +2331,11 @@ public class Xmlization {
               break;
             }
             case "name": {
+              if (theName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2143,6 +2346,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2153,6 +2361,11 @@ public class Xmlization {
               break;
             }
             case "externalSubjectId": {
+              if (theExternalSubjectId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2245,6 +2458,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2255,6 +2473,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2265,6 +2488,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2275,6 +2503,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2285,6 +2518,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2295,6 +2533,11 @@ public class Xmlization {
               break;
             }
             case "administration": {
+              if (theAdministration != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<AdministrativeInformation> value =
                 readAdministrativeInformationFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2305,6 +2548,11 @@ public class Xmlization {
               break;
             }
             case "id": {
+              if (theId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2315,6 +2563,11 @@ public class Xmlization {
               break;
             }
             case "kind": {
+              if (theKind != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<ModellingKind> value =
                 readTextAs_ModellingKind(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2325,6 +2578,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2335,6 +2593,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2345,6 +2608,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2355,6 +2623,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2365,6 +2638,11 @@ public class Xmlization {
               break;
             }
             case "submodelElements": {
+              if (theSubmodelElements != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ISubmodelElement>> value =
                 readListOf_ISubmodelElement(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2507,6 +2785,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2517,6 +2800,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2527,6 +2815,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2537,6 +2830,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2547,6 +2845,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2557,6 +2860,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2567,6 +2875,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2577,6 +2890,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2587,6 +2905,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2597,6 +2920,11 @@ public class Xmlization {
               break;
             }
             case "first": {
+              if (theFirst != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2607,6 +2935,11 @@ public class Xmlization {
               break;
             }
             case "second": {
+              if (theSecond != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2730,6 +3063,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2740,6 +3078,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2750,6 +3093,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2760,6 +3108,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2770,6 +3123,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2780,6 +3138,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2790,6 +3153,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2800,6 +3168,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2810,6 +3183,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2820,6 +3198,11 @@ public class Xmlization {
               break;
             }
             case "orderRelevant": {
+              if (theOrderRelevant != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Boolean> value =
                 readTextAs_bool(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2830,6 +3213,11 @@ public class Xmlization {
               break;
             }
             case "semanticIdListElement": {
+              if (theSemanticIdListElement != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2840,6 +3228,11 @@ public class Xmlization {
               break;
             }
             case "typeValueListElement": {
+              if (theTypeValueListElement != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<AasSubmodelElements> value =
                 readTextAs_AasSubmodelElements(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2850,6 +3243,11 @@ public class Xmlization {
               break;
             }
             case "valueTypeListElement": {
+              if (theValueTypeListElement != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<DataTypeDefXsd> value =
                 readTextAs_DataTypeDefXsd(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2860,6 +3258,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ISubmodelElement>> value =
                 readListOf_ISubmodelElement(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2954,6 +3357,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2964,6 +3372,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2974,6 +3387,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2984,6 +3402,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -2994,6 +3417,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3004,6 +3432,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3014,6 +3447,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3024,6 +3462,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3034,6 +3477,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3044,6 +3492,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ISubmodelElement>> value =
                 readListOf_ISubmodelElement(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3164,6 +3617,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3174,6 +3632,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3184,6 +3647,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3194,6 +3662,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3204,6 +3677,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3214,6 +3692,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3224,6 +3707,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3234,6 +3722,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3244,6 +3737,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3254,6 +3752,11 @@ public class Xmlization {
               break;
             }
             case "valueType": {
+              if (theValueType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<DataTypeDefXsd> value =
                 readTextAs_DataTypeDefXsd(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3264,6 +3767,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3274,6 +3782,11 @@ public class Xmlization {
               break;
             }
             case "valueId": {
+              if (theValueId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3367,6 +3880,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3377,6 +3895,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3387,6 +3910,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3397,6 +3925,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3407,6 +3940,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3417,6 +3955,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3427,6 +3970,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3437,6 +3985,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3447,6 +4000,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3457,6 +4015,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3467,6 +4030,11 @@ public class Xmlization {
               break;
             }
             case "valueId": {
+              if (theValueId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3556,6 +4124,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3566,6 +4139,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3576,6 +4154,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3586,6 +4169,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3596,6 +4184,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3606,6 +4199,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3616,6 +4214,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3626,6 +4229,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3636,6 +4244,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3646,6 +4259,11 @@ public class Xmlization {
               break;
             }
             case "valueType": {
+              if (theValueType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<DataTypeDefXsd> value =
                 readTextAs_DataTypeDefXsd(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3656,6 +4274,11 @@ public class Xmlization {
               break;
             }
             case "min": {
+              if (theMin != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3666,6 +4289,11 @@ public class Xmlization {
               break;
             }
             case "max": {
+              if (theMax != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3758,6 +4386,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3768,6 +4401,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3778,6 +4416,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3788,6 +4431,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3798,6 +4446,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3808,6 +4461,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3818,6 +4476,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3828,6 +4491,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3838,6 +4506,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3848,6 +4521,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3935,6 +4613,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3945,6 +4628,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3955,6 +4643,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3965,6 +4658,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3975,6 +4673,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3985,6 +4688,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -3995,6 +4703,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4005,6 +4718,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4015,6 +4733,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4025,6 +4748,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<byte[]> value =
                 readTextAs_bytes(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4035,6 +4763,11 @@ public class Xmlization {
               break;
             }
             case "contentType": {
+              if (theContentType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4127,6 +4860,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4137,6 +4875,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4147,6 +4890,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4157,6 +4905,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4167,6 +4920,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4177,6 +4935,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4187,6 +4950,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4197,6 +4965,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4207,6 +4980,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4217,6 +4995,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4227,6 +5010,11 @@ public class Xmlization {
               break;
             }
             case "contentType": {
+              if (theContentType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4320,6 +5108,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4330,6 +5123,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4340,6 +5138,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4350,6 +5153,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4360,6 +5168,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4370,6 +5183,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4380,6 +5198,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4390,6 +5213,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4400,6 +5228,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4410,6 +5243,11 @@ public class Xmlization {
               break;
             }
             case "first": {
+              if (theFirst != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4420,6 +5258,11 @@ public class Xmlization {
               break;
             }
             case "second": {
+              if (theSecond != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4430,6 +5273,11 @@ public class Xmlization {
               break;
             }
             case "annotations": {
+              if (theAnnotations != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IDataElement>> value =
                 readListOf_IDataElement(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4529,6 +5377,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4539,6 +5392,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4549,6 +5407,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4559,6 +5422,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4569,6 +5437,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4579,6 +5452,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4589,6 +5467,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4599,6 +5482,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4609,6 +5497,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4619,6 +5512,11 @@ public class Xmlization {
               break;
             }
             case "statements": {
+              if (theStatements != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ISubmodelElement>> value =
                 readListOf_ISubmodelElement(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4629,6 +5527,11 @@ public class Xmlization {
               break;
             }
             case "entityType": {
+              if (theEntityType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<EntityType> value =
                 readTextAs_EntityType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4639,6 +5542,11 @@ public class Xmlization {
               break;
             }
             case "globalAssetId": {
+              if (theGlobalAssetId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4649,6 +5557,11 @@ public class Xmlization {
               break;
             }
             case "specificAssetIds": {
+              if (theSpecificAssetIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ISpecificAssetId>> value =
                 readListOf_ISpecificAssetId(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4740,6 +5653,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "source": {
+              if (theSource != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4750,6 +5668,11 @@ public class Xmlization {
               break;
             }
             case "sourceSemanticId": {
+              if (theSourceSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4760,6 +5683,11 @@ public class Xmlization {
               break;
             }
             case "observableReference": {
+              if (theObservableReference != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4770,6 +5698,11 @@ public class Xmlization {
               break;
             }
             case "observableSemanticId": {
+              if (theObservableSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4780,6 +5713,11 @@ public class Xmlization {
               break;
             }
             case "topic": {
+              if (theTopic != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4790,6 +5728,11 @@ public class Xmlization {
               break;
             }
             case "subjectId": {
+              if (theSubjectId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4800,6 +5743,11 @@ public class Xmlization {
               break;
             }
             case "timeStamp": {
+              if (theTimeStamp != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4810,6 +5758,11 @@ public class Xmlization {
               break;
             }
             case "payload": {
+              if (thePayload != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<byte[]> value =
                 readTextAs_bytes(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4935,6 +5888,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4945,6 +5903,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4955,6 +5918,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4965,6 +5933,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4975,6 +5948,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4985,6 +5963,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -4995,6 +5978,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5005,6 +5993,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5015,6 +6008,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5025,6 +6023,11 @@ public class Xmlization {
               break;
             }
             case "observed": {
+              if (theObserved != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5035,6 +6038,11 @@ public class Xmlization {
               break;
             }
             case "direction": {
+              if (theDirection != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Direction> value =
                 readTextAs_Direction(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5045,6 +6053,11 @@ public class Xmlization {
               break;
             }
             case "state": {
+              if (theState != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<StateOfEvent> value =
                 readTextAs_StateOfEvent(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5055,6 +6068,11 @@ public class Xmlization {
               break;
             }
             case "messageTopic": {
+              if (theMessageTopic != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5065,6 +6083,11 @@ public class Xmlization {
               break;
             }
             case "messageBroker": {
+              if (theMessageBroker != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5075,6 +6098,11 @@ public class Xmlization {
               break;
             }
             case "lastUpdate": {
+              if (theLastUpdate != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5085,6 +6113,11 @@ public class Xmlization {
               break;
             }
             case "minInterval": {
+              if (theMinInterval != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5095,6 +6128,11 @@ public class Xmlization {
               break;
             }
             case "maxInterval": {
+              if (theMaxInterval != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5202,6 +6240,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5212,6 +6255,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5222,6 +6270,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5232,6 +6285,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5242,6 +6300,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5252,6 +6315,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5262,6 +6330,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5272,6 +6345,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5282,6 +6360,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5292,6 +6375,11 @@ public class Xmlization {
               break;
             }
             case "inputVariables": {
+              if (theInputVariables != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IOperationVariable>> value =
                 readListOf_IOperationVariable(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5302,6 +6390,11 @@ public class Xmlization {
               break;
             }
             case "outputVariables": {
+              if (theOutputVariables != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IOperationVariable>> value =
                 readListOf_IOperationVariable(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5312,6 +6405,11 @@ public class Xmlization {
               break;
             }
             case "inoutputVariables": {
+              if (theInoutputVariables != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IOperationVariable>> value =
                 readListOf_IOperationVariable(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5391,6 +6489,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<? extends ISubmodelElement> value =
                 readNestedElement(
                   reader,
@@ -5474,6 +6577,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5484,6 +6592,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5494,6 +6607,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5504,6 +6622,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5514,6 +6637,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5524,6 +6652,11 @@ public class Xmlization {
               break;
             }
             case "semanticId": {
+              if (theSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5534,6 +6667,11 @@ public class Xmlization {
               break;
             }
             case "supplementalSemanticIds": {
+              if (theSupplementalSemanticIds != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5544,6 +6682,11 @@ public class Xmlization {
               break;
             }
             case "qualifiers": {
+              if (theQualifiers != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IQualifier>> value =
                 readListOf_IQualifier(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5554,6 +6697,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5638,6 +6786,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "extensions": {
+              if (theExtensions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IExtension>> value =
                 readListOf_IExtension(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5648,6 +6801,11 @@ public class Xmlization {
               break;
             }
             case "category": {
+              if (theCategory != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5658,6 +6816,11 @@ public class Xmlization {
               break;
             }
             case "idShort": {
+              if (theIdShort != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5668,6 +6831,11 @@ public class Xmlization {
               break;
             }
             case "displayName": {
+              if (theDisplayName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringNameType>> value =
                 readListOf_ILangStringNameType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5678,6 +6846,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringTextType>> value =
                 readListOf_ILangStringTextType(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5688,6 +6861,11 @@ public class Xmlization {
               break;
             }
             case "administration": {
+              if (theAdministration != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<AdministrativeInformation> value =
                 readAdministrativeInformationFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5698,6 +6876,11 @@ public class Xmlization {
               break;
             }
             case "id": {
+              if (theId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5708,6 +6891,11 @@ public class Xmlization {
               break;
             }
             case "embeddedDataSpecifications": {
+              if (theEmbeddedDataSpecifications != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IEmbeddedDataSpecification>> value =
                 readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5718,6 +6906,11 @@ public class Xmlization {
               break;
             }
             case "isCaseOf": {
+              if (theIsCaseOf != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IReference>> value =
                 readListOf_IReference(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5800,6 +6993,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "type": {
+              if (theType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<ReferenceTypes> value =
                 readTextAs_ReferenceTypes(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5810,6 +7008,11 @@ public class Xmlization {
               break;
             }
             case "referredSemanticId": {
+              if (theReferredSemanticId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5820,6 +7023,11 @@ public class Xmlization {
               break;
             }
             case "keys": {
+              if (theKeys != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IKey>> value =
                 readListOf_IKey(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5899,6 +7107,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "type": {
+              if (theType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<KeyTypes> value =
                 readTextAs_KeyTypes(reader, isEmptyProperty);
               if (value.isError()) {
@@ -5909,6 +7122,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6017,6 +7235,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "language": {
+              if (theLanguage != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6027,6 +7250,11 @@ public class Xmlization {
               break;
             }
             case "text": {
+              if (theText != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6105,6 +7333,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "language": {
+              if (theLanguage != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6115,6 +7348,11 @@ public class Xmlization {
               break;
             }
             case "text": {
+              if (theText != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6194,6 +7432,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "assetAdministrationShells": {
+              if (theAssetAdministrationShells != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IAssetAdministrationShell>> value =
                 readListOf_IAssetAdministrationShell(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6204,6 +7447,11 @@ public class Xmlization {
               break;
             }
             case "submodels": {
+              if (theSubmodels != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ISubmodel>> value =
                 readListOf_ISubmodel(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6214,6 +7462,11 @@ public class Xmlization {
               break;
             }
             case "conceptDescriptions": {
+              if (theConceptDescriptions != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IConceptDescription>> value =
                 readListOf_IConceptDescription(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6307,6 +7560,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "dataSpecification": {
+              if (theDataSpecification != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6317,6 +7575,11 @@ public class Xmlization {
               break;
             }
             case "dataSpecificationContent": {
+              if (theDataSpecificationContent != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<? extends IDataSpecificationContent> value =
                 readNestedElement(
                   reader,
@@ -6400,6 +7663,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "min": {
+              if (theMin != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Boolean> value =
                 readTextAs_bool(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6410,6 +7678,11 @@ public class Xmlization {
               break;
             }
             case "nom": {
+              if (theNom != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Boolean> value =
                 readTextAs_bool(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6420,6 +7693,11 @@ public class Xmlization {
               break;
             }
             case "typ": {
+              if (theTyp != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Boolean> value =
                 readTextAs_bool(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6430,6 +7708,11 @@ public class Xmlization {
               break;
             }
             case "max": {
+              if (theMax != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Boolean> value =
                 readTextAs_bool(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6518,6 +7801,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6528,6 +7816,11 @@ public class Xmlization {
               break;
             }
             case "valueId": {
+              if (theValueId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6605,6 +7898,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "valueReferencePairs": {
+              if (theValueReferencePairs != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IValueReferencePair>> value =
                 readListOf_IValueReferencePair(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6678,6 +7976,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "language": {
+              if (theLanguage != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6688,6 +7991,11 @@ public class Xmlization {
               break;
             }
             case "text": {
+              if (theText != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6766,6 +8074,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "language": {
+              if (theLanguage != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6776,6 +8089,11 @@ public class Xmlization {
               break;
             }
             case "text": {
+              if (theText != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6854,6 +8172,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "language": {
+              if (theLanguage != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6864,6 +8187,11 @@ public class Xmlization {
               break;
             }
             case "text": {
+              if (theText != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6952,6 +8280,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "preferredName": {
+              if (thePreferredName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringPreferredNameTypeIec61360>> value =
                 readListOf_ILangStringPreferredNameTypeIec61360(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6962,6 +8295,11 @@ public class Xmlization {
               break;
             }
             case "shortName": {
+              if (theShortName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringShortNameTypeIec61360>> value =
                 readListOf_ILangStringShortNameTypeIec61360(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6972,6 +8310,11 @@ public class Xmlization {
               break;
             }
             case "unit": {
+              if (theUnit != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6982,6 +8325,11 @@ public class Xmlization {
               break;
             }
             case "unitId": {
+              if (theUnitId != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Reference> value =
                 readReferenceFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -6992,6 +8340,11 @@ public class Xmlization {
               break;
             }
             case "sourceOfDefinition": {
+              if (theSourceOfDefinition != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -7002,6 +8355,11 @@ public class Xmlization {
               break;
             }
             case "symbol": {
+              if (theSymbol != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -7012,6 +8370,11 @@ public class Xmlization {
               break;
             }
             case "dataType": {
+              if (theDataType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<DataTypeIec61360> value =
                 readTextAs_DataTypeIec61360(reader, isEmptyProperty);
               if (value.isError()) {
@@ -7022,6 +8385,11 @@ public class Xmlization {
               break;
             }
             case "definition": {
+              if (theDefinition != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ILangStringDefinitionTypeIec61360>> value =
                 readListOf_ILangStringDefinitionTypeIec61360(reader, isEmptyProperty);
               if (value.isError()) {
@@ -7032,6 +8400,11 @@ public class Xmlization {
               break;
             }
             case "valueFormat": {
+              if (theValueFormat != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -7042,6 +8415,11 @@ public class Xmlization {
               break;
             }
             case "valueList": {
+              if (theValueList != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<ValueList> value =
                 readValueListFromSequence(reader, isEmptyProperty);
               if (value.isError()) {
@@ -7052,6 +8430,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -7062,6 +8445,11 @@ public class Xmlization {
               break;
             }
             case "levelType": {
+              if (theLevelType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<LevelType> value =
                 readLevelTypeFromSequence(reader, isEmptyProperty);
               if (value.isError()) {

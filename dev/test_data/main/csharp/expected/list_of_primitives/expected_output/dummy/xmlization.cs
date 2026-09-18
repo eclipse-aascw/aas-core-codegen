@@ -639,6 +639,15 @@ namespace dummy
             }
 
             /// <summary>
+            /// Report a property which the sequence of the properties gave more than once.
+            /// </summary>
+            private static Reporting.Error DuplicatePropertyError(string elementName)
+            {
+                return new Reporting.Error(
+                    $"Property {elementName} occurred more than once");
+            }
+
+            /// <summary>
             /// Read a sequence of list items with <paramref name="readItem" />,
             /// stopping (without consuming) at the first non-element node.
             /// </summary>
@@ -798,22 +807,47 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someBools":
+                                if (theSomeBools != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeBools = Read_ListOf_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someInts":
+                                if (theSomeInts != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeInts = Read_ListOf_long(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someFloats":
+                                if (theSomeFloats != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeFloats = Read_ListOf_double(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someStrings":
+                                if (theSomeStrings != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeStrings = Read_ListOf_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someBytes":
+                                if (theSomeBytes != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeBytes = Read_ListOf_bytes(
                                     reader, isEmptyProperty, out error);
                                 break;

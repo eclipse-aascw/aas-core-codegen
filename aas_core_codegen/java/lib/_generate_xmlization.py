@@ -1559,6 +1559,20 @@ private static <T> Reporting.Result<T> unexpectedProperty(
     )
 
 
+def _generate_duplicate_property_error() -> Stripped:
+    """Generate the error for a property which the sequence gave more than once."""
+    return Stripped(
+        f"""\
+/**
+ * Report a property which the sequence of the properties gave more than once.
+ */
+private static Reporting.Error duplicatePropertyError(String elementName) {{
+{I}return new Reporting.Error(
+{II}"Property " + elementName + " occurred more than once");
+}}"""
+    )
+
+
 def _generate_missing_required_property() -> Stripped:
     """Generate the error for a required property which the sequence omitted."""
     return Stripped(
@@ -1738,8 +1752,18 @@ readNestedElement(
             f"{_content_reader_name(type_anno)}(reader, isEmptyProperty)"
         )
 
+    # NOTE (mristin):
+    # A variable which is not null can only have been set by an earlier turn of
+    # the property loop, so it tells us that the property comes a second time.
+    # The check precedes the read, so the duplicate is refused without its
+    # content ever being looked at.
     return Stripped(
         f"""\
+if ({target_var} != null) {{
+{I}valueError = duplicatePropertyError(elementName);
+{I}break;
+}}
+
 final Reporting.Result<{result_type}> value =
 {I}{indent_but_first_line(read_expr, I)};
 if (value.isError()) {{
@@ -2158,6 +2182,7 @@ def _generate_deserialize_impl(
     if any(len(cls.constructor.arguments) > 0 for cls in symbol_table.concrete_classes):
         blocks.append(_generate_at_end_of_sequence())
         blocks.append(_generate_unexpected_property())
+        blocks.append(_generate_duplicate_property_error())
 
     if any(
         not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)

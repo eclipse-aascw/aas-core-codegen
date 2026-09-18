@@ -1627,6 +1627,18 @@ template <
   );
 }
 
+DeserializationError DuplicatePropertyError(
+  const std::string& name
+) {
+  return DeserializationError(
+    common::Concat(
+      L"Property ",
+      common::Utf8ToWstring(name),
+      L" occurred more than once"
+    )
+  );
+}
+
 DeserializationError DeserializationErrorFromReader(
   ReaderMergingText& reader
 ) {
@@ -4018,6 +4030,11 @@ std::pair<
 
     switch (property) {
       case properties::OfStructuralFirst::kUniqueToFirst: {
+        if (the_unique_to_first.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_unique_to_first,
           error
@@ -4247,6 +4264,11 @@ std::pair<
 
     switch (property) {
       case properties::OfStructuralSecond::kUniqueToSecond: {
+        if (the_unique_to_second.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_unique_to_second,
           error
@@ -4476,6 +4498,11 @@ std::pair<
 
     switch (property) {
       case properties::OfMixedAbstractDescendantOne::kUniqueToAbstractDescendantOne: {
+        if (the_unique_to_abstract_descendant_one.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_unique_to_abstract_descendant_one,
           error
@@ -4705,6 +4732,11 @@ std::pair<
 
     switch (property) {
       case properties::OfMixedAbstractDescendantTwo::kUniqueToAbstractDescendantTwo: {
+        if (the_unique_to_abstract_descendant_two.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_unique_to_abstract_descendant_two,
           error
@@ -4934,6 +4966,11 @@ std::pair<
 
     switch (property) {
       case properties::OfMixedConcreteWithDescendants::kSomeBaseProperty: {
+        if (the_some_base_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_some_base_property,
           error
@@ -5165,6 +5202,11 @@ std::pair<
 
     switch (property) {
       case properties::OfMixedConcreteWithDescendantsChild::kSomeBaseProperty: {
+        if (the_some_base_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_some_base_property,
           error
@@ -5172,6 +5214,11 @@ std::pair<
         break;
       }
       case properties::OfMixedConcreteWithDescendantsChild::kSomeChildProperty: {
+        if (the_some_child_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_some_child_property,
           error
@@ -5410,6 +5457,11 @@ std::pair<
 
     switch (property) {
       case properties::OfMixedConcreteLeaf::kUniqueToConcreteLeaf: {
+        if (the_unique_to_concrete_leaf.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_unique_to_concrete_leaf,
           error
@@ -5639,6 +5691,11 @@ std::pair<
 
     switch (property) {
       case properties::OfModelTypedFirst::kSomeProperty: {
+        if (the_some_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_some_property,
           error
@@ -5868,6 +5925,11 @@ std::pair<
 
     switch (property) {
       case properties::OfModelTypedSecond::kSomeProperty: {
+        if (the_some_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_some_property,
           error
@@ -6121,6 +6183,11 @@ std::pair<
 
     switch (property) {
       case properties::OfSomething::kStructuralProperty: {
+        if (the_structural_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_structural_property,
           error
@@ -6128,6 +6195,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kMixedProperty: {
+        if (the_mixed_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_mixed_property,
           error
@@ -6135,6 +6207,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kModelTypedProperty: {
+        if (the_model_typed_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_model_typed_property,
           error
@@ -6142,6 +6219,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kListStructuralProperty: {
+        if (the_list_structural_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_list_structural_property,
           error
@@ -6154,6 +6236,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kListMixedProperty: {
+        if (the_list_mixed_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_list_mixed_property,
           error
@@ -6166,6 +6253,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kListModelTypedProperty: {
+        if (the_list_model_typed_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_list_model_typed_property,
           error
@@ -6178,6 +6270,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kTupleProperty: {
+        if (the_tuple_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_tuple_property,
           error
@@ -6194,6 +6291,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kOptionalStructuralProperty: {
+        if (the_optional_structural_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_optional_structural_property,
           error
@@ -6201,6 +6303,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kOptionalMixedProperty: {
+        if (the_optional_mixed_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_optional_mixed_property,
           error
@@ -6208,6 +6315,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kOptionalModelTypedProperty: {
+        if (the_optional_model_typed_property.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_optional_model_typed_property,
           error

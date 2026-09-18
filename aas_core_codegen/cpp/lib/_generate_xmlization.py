@@ -1963,6 +1963,20 @@ template <
         ),
         Stripped(
             f"""\
+DeserializationError DuplicatePropertyError(
+{I}const std::string& name
+) {{
+{I}return DeserializationError(
+{II}common::Concat(
+{III}L"Property ",
+{III}common::Utf8ToWstring(name),
+{III}L" occurred more than once"
+{II})
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
 DeserializationError DeserializationErrorFromReader(
 {I}ReaderMergingText& reader
 ) {{
@@ -4331,10 +4345,22 @@ common::optional<
 
         prop_literal = cpp_naming.enum_literal_name(prop.name)
 
+        var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
+
+        # NOTE (mristin):
+        # An engaged optional can only have been set by an earlier turn of
+        # the property loop, so it tells us that the property comes a second time.
+        # The check precedes the read, so the duplicate is refused without its
+        # content ever being looked at.
         case_blocks.append(
             Stripped(
                 f"""\
 case properties::{prop_enum_name}::{prop_literal}: {{
+{I}if ({var_name}.has_value()) {{
+{II}error = DuplicatePropertyError(name);
+{II}break;
+{I}}}
+
 {I}{indent_but_first_line(code, I)}
 {I}break;
 }}"""

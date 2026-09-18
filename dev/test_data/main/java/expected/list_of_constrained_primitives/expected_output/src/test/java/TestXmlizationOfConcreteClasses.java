@@ -293,6 +293,65 @@ public class TestXmlizationOfConcreteClasses {
       }
     }
   } // public void testSomethingVerificationFail
+
+  @Test
+  public void testDuplicatePropertyFails() throws IOException, XMLStreamException {
+    final Path path =
+      Paths.get(
+        Common.TEST_DATA_DIR,
+        "Xml",
+        "Expected",
+        "something",
+        "minimal.xml");
+
+    final String text =
+      new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+
+    // We cut the element of the property out of the recorded example and put it
+    // in a second time, just before the closing tag of the instance.
+    final int start = text.indexOf("<someNames>");
+
+    final String property;
+    if (start >= 0) {
+      final int end = text.indexOf("</someNames>", start);
+      property = text.substring(start, end + 12);
+    } else {
+      // The element is written self-closing in the example, an empty list being
+      // the usual reason. We write that very element out ourselves.
+      property = "<someNames/>";
+    }
+
+    final int insertionIndex =
+      text.lastIndexOf("</something>");
+
+    if (insertionIndex < 0) {
+      throw new IllegalStateException(
+        "We expect the recorded example to contain the closing tag "
+          + "</something>" + ", but it does not: " + path);
+    }
+
+    final String brokenText =
+      text.substring(0, insertionIndex) + property + text.substring(insertionIndex);
+
+    final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+    final XMLEventReader xmlReader =
+      xmlInputFactory.createXMLEventReader(new StringReader(brokenText));
+
+    Xmlization.DeserializeException exception = null;
+
+    try {
+      Xmlization.Deserialize.deserializeSomething(xmlReader);
+    } catch (Xmlization.DeserializeException observedException) {
+      exception = observedException;
+    }
+
+    if (exception == null) {
+      fail(
+        "Expected an exception when the property "
+          + "someNames"
+          + " is given twice, but got none");
+    }
+  } // public void testDuplicatePropertyFails
 } // class TestXmlizationOfConcreteClasses
 
 // package dummy.tests

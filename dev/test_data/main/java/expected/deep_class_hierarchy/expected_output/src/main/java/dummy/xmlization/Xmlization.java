@@ -529,6 +529,14 @@ public class Xmlization {
     }
 
     /**
+     * Report a property which the sequence of the properties gave more than once.
+     */
+    private static Reporting.Error duplicatePropertyError(String elementName) {
+      return new Reporting.Error(
+        "Property " + elementName + " occurred more than once");
+    }
+
+    /**
      * Report a required property of the class {@code className} which the
      * sequence of the properties did not give.
      */
@@ -611,6 +619,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "identifier": {
+              if (theIdentifier != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -621,6 +634,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -726,6 +744,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "identifier": {
+              if (theIdentifier != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -736,6 +759,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -746,6 +774,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Long> value =
                 readTextAs_long(reader, isEmptyProperty);
               if (value.isError()) {
@@ -855,6 +888,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "identifier": {
+              if (theIdentifier != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -865,6 +903,11 @@ public class Xmlization {
               break;
             }
             case "description": {
+              if (theDescription != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -875,6 +918,11 @@ public class Xmlization {
               break;
             }
             case "value": {
+              if (theValue != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Long> value =
                 readTextAs_long(reader, isEmptyProperty);
               if (value.isError()) {
@@ -885,6 +933,11 @@ public class Xmlization {
               break;
             }
             case "details": {
+              if (theDetails != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -973,6 +1026,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "someChoice": {
+              if (theSomeChoice != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<? extends INode> value =
                 readNestedElement(
                   reader,
@@ -986,6 +1044,11 @@ public class Xmlization {
               break;
             }
             case "somethingWithoutChoice": {
+              if (theSomethingWithoutChoice != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<? extends IBranch> value =
                 readNestedElement(
                   reader,
@@ -1067,6 +1130,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "node": {
+              if (theNode != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<? extends INode> value =
                 readNestedElement(
                   reader,
@@ -1080,6 +1148,11 @@ public class Xmlization {
               break;
             }
             case "something": {
+              if (theSomething != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Something> value =
                 readSomethingFromSequence(reader, isEmptyProperty);
               if (value.isError()) {

@@ -245,10 +245,12 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
     atomic_list_candidate = _first_atomic_list_property_candidate(symbol_table)
     nested_dispatch_candidate = _first_nested_class_dispatch_candidate(symbol_table)
 
-    has_required_property = any(
-        not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
-        for concrete_cls in symbol_table.concrete_classes
-        for prop in concrete_cls.properties
+    # NOTE (mristin):
+    # The other targets pick the class and the property of the duplicate-property
+    # test with this very same function, so that all of them break the same shape
+    # of a document.
+    duplicate_candidate = intermediate.first_class_with_a_required_property(
+        symbol_table
     )
 
     # NOTE (mristin):
@@ -257,10 +259,9 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
     # a suitable candidate class/property exists in the meta-model. We have to
     # determine that upfront so that we do not import ``XMLSerializer`` in vain and
     # trigger an unused-import lint error on meta-models which do not provide such
-    # a candidate (*e.g.*, a meta-model with only optional, atomic properties, or
-    # even a class with no properties at all).
+    # a candidate (*e.g.*, a class with no properties at all).
     xml_serializer_needed = (
-        has_required_property
+        duplicate_candidate is not None
         or atomic_list_candidate is not None
         or nested_dispatch_candidate is not None
     )
@@ -396,31 +397,14 @@ test("XML wrong root closing element fails", () => {{
 
         # region Check duplicate properties
 
-        for concrete_cls in symbol_table.concrete_classes:
-            # NOTE (mristin):
-            # We just look for a class with a required property so that we can load
-            # the minimal instance. Otherwise, we do not generate the test.
-
-            required_property = next(
-                (
-                    prop
-                    for prop in concrete_cls.properties
-                    if not isinstance(
-                        prop.type_annotation, intermediate.OptionalTypeAnnotation
-                    )
-                ),
-                None,
-            )
-
-            if required_property is None:
-                continue
+        if duplicate_candidate is not None:
+            duplicate_cls, duplicate_prop = duplicate_candidate
 
             blocks.append(
                 _generate_duplicate_property_test(
-                    cls=concrete_cls, prop=required_property
+                    cls=duplicate_cls, prop=duplicate_prop
                 )
             )
-            break
 
     # endregion Check duplicate properties
 

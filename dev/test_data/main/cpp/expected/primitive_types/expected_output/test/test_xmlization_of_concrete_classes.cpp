@@ -139,6 +139,58 @@ TEST_CASE("Test the de-serialization failure on an unexpected Something") {
   }
 }
 
+TEST_CASE("Test the de-serialization failure on a duplicate property") {
+  const std::filesystem::path path(
+    DetermineXmlDir()
+      / "Expected"
+      / "something"
+      / "minimal.xml"
+  );
+
+  const std::string original(test::common::MustReadString(path));
+
+  // We cut the element of the property out of the recorded example and put it
+  // in a second time, just before the closing tag of the instance.
+  const std::size_t start(
+    original.find("<someBool>")
+  );
+
+  std::string property;
+  if (start != std::string::npos) {
+    const std::size_t end(
+      original.find("</someBool>", start)
+    );
+    property = original.substr(start, end + 11 - start);
+  } else {
+    // The element is written self-closing in the example, an empty list being
+    // the usual reason. We write that very element out ourselves.
+    property = "<someBool/>";
+  }
+
+  const std::size_t insertion_index(
+    original.rfind("</something>")
+  );
+
+  INFO(aas::common::Concat("Looking for </something> in ", path.string()))
+  REQUIRE(insertion_index != std::string::npos);
+
+  const std::string broken(
+    original.substr(0, insertion_index)
+      + property
+      + original.substr(insertion_index)
+  );
+
+  std::istringstream iss(broken);
+
+  aas::common::expected<
+    std::shared_ptr<aas::types::IClass>,
+    aas::xmlization::DeserializationError
+  > deserialized = aas::xmlization::From(iss);
+
+  INFO(aas::common::Concat("De-serializing: ", broken))
+  REQUIRE(!deserialized.has_value());
+}
+
 /**
  * \brief Read the first recorded example of ISomething with the content
  * of the element \p xml_name replaced by \p text.

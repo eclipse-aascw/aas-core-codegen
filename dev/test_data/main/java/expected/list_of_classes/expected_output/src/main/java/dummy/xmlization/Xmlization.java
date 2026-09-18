@@ -521,6 +521,14 @@ public class Xmlization {
     }
 
     /**
+     * Report a property which the sequence of the properties gave more than once.
+     */
+    private static Reporting.Error duplicatePropertyError(String elementName) {
+      return new Reporting.Error(
+        "Property " + elementName + " occurred more than once");
+    }
+
+    /**
      * Report a required property of the class {@code className} which the
      * sequence of the properties did not give.
      */
@@ -612,6 +620,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "name": {
+              if (theName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -684,6 +697,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "serialNumber": {
+              if (theSerialNumber != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Long> value =
                 readTextAs_long(reader, isEmptyProperty);
               if (value.isError()) {
@@ -756,6 +774,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "name": {
+              if (theName != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -829,6 +852,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "someItems": {
+              if (theSomeItems != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<IAbstractItem>> value =
                 readListOf_IAbstractItem(reader, isEmptyProperty);
               if (value.isError()) {
@@ -839,6 +867,11 @@ public class Xmlization {
               break;
             }
             case "someSimples": {
+              if (theSomeSimples != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<ISimple>> value =
                 readListOf_ISimple(reader, isEmptyProperty);
               if (value.isError()) {

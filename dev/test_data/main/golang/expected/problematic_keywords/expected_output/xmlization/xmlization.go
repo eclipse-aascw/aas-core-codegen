@@ -680,6 +680,17 @@ func missingProperty(name string) error {
 	)
 }
 
+// Report that the property with the given `local` name has been observed more
+// than once.
+func duplicatePropertyError(local string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Property %s occurred more than once",
+			local,
+		),
+	)
+}
+
 // Report that we got a start element with the `local` name, but expected a start
 // element with the `expectedLocal` name.
 func unexpectedStartElement(local string, expectedLocal string) error {
@@ -985,21 +996,37 @@ func readSomethingAsSequence(
 		var valueErr error
 		switch local {
 		case "interface":
+			if foundInterface {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theInterface, current, valueErr = readText(
 				decoder, current,
 			)
 			foundInterface = true
 		case "type":
+			if foundType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theType, current, valueErr = readText(
 				decoder, current,
 			)
 			foundType = true
 		case "range":
+			if foundRange {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theRange, current, valueErr = readText(
 				decoder, current,
 			)
 			foundRange = true
 		case "void":
+			if foundVoid {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theVoid, current, valueErr = readText(
 				decoder, current,
 			)

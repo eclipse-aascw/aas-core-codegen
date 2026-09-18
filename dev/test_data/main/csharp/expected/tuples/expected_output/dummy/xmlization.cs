@@ -55,29 +55,6 @@ namespace dummy
             }
 
             /// <summary>
-            /// Read the whole content of an element into memory.
-            /// </summary>
-            private static byte[] ReadWholeContentAsBase64(
-                Xml.XmlReader reader)
-            {
-                // NOTE (mristin):
-                // The content is read as a text and only then decoded, instead of
-                // streaming it through XmlReader.ReadContentAsBase64. That decoder is
-                // lenient in ways XSD is not -- it reads "SGk" although it is three
-                // characters long -- and it gives us nothing to check before it has
-                // already decoded.
-                string text = WhitespaceRunRegex.Replace(reader.ReadContentAsString(), "");
-
-                if (!MatchesXsBase64Binary(text))
-                {
-                    throw new System.FormatException(
-                        $"Expected a text as base64-encoded bytes, but got: {text}");
-                }
-
-                return System.Convert.FromBase64String(text);
-            }
-
-            /// <summary>
             /// Check the namespace and extract the element's name.
             /// </summary>
             private static string TryElementName(
@@ -457,6 +434,15 @@ namespace dummy
             }
 
             /// <summary>
+            /// Report a property which the sequence of the properties gave more than once.
+            /// </summary>
+            private static Reporting.Error DuplicatePropertyError(string elementName)
+            {
+                return new Reporting.Error(
+                    $"Property {elementName} occurred more than once");
+            }
+
+            /// <summary>
             /// Parse the text of a literal of <typeparamref name="T" />.
             /// </summary>
             /// <remarks>
@@ -789,6 +775,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "name":
+                                if (theName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theName = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -880,6 +871,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "serialNumber":
+                                if (theSerialNumber != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSerialNumber = Read_long(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -973,14 +969,29 @@ namespace dummy
                         switch (elementName)
                         {
                             case "pair":
+                                if (thePair != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 thePair = Read_TupleOf2_string_long(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "items":
+                                if (theItems != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theItems = Read_TupleOf2_IAbstractItem_IAbstractItem(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "tricky":
+                                if (theTricky != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theTricky = Read_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
                                     reader, isEmptyProperty, out error);
                                 break;

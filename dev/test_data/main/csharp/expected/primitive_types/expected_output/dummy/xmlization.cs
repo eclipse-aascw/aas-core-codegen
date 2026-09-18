@@ -639,6 +639,15 @@ namespace dummy
             }
 
             /// <summary>
+            /// Report a property which the sequence of the properties gave more than once.
+            /// </summary>
+            private static Reporting.Error DuplicatePropertyError(string elementName)
+            {
+                return new Reporting.Error(
+                    $"Property {elementName} occurred more than once");
+            }
+
+            /// <summary>
             /// Read an instance of class Something from its XML element.
             /// </summary>
             internal static readonly ElementReader<Aas.Something> SomethingFromElement = (
@@ -701,22 +710,47 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someBool":
+                                if (theSomeBool != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeBool = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someInt":
+                                if (theSomeInt != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeInt = Read_long(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someFloat":
+                                if (theSomeFloat != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeFloat = Read_double(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someString":
+                                if (theSomeString != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeString = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someBytes":
+                                if (theSomeBytes != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeBytes = Read_bytes(
                                     reader, isEmptyProperty, out error);
                                 break;
