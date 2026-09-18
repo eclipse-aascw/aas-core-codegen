@@ -346,6 +346,16 @@ function numberFromJsonable(
     );
   }
 
+  // NOTE (mristin):
+  // JSON knows neither an infinity nor a not-a-number, so a conformant parser
+  // can never give us one. The caller can still hand us a JSON-able which has
+  // been constructed programmatically, so we have to check here.
+  if (!Number.isFinite(jsonable)) {
+    return newDeserializationError<number>(
+      `Expected a finite number, but got: ${jsonable}`
+    );
+  }
+
   return new AasCommon.Either<number, DeserializationError>(jsonable, null);
 }
 
@@ -2548,6 +2558,44 @@ const MODEL_TYPED_UNION_FROM_JSONABLE_DISPATCH =
 // region Serialization
 
 /**
+ * Signal that the JSON serialization could not be performed.
+ *
+ * The {@link SerializationError.path} points into the instance which was to be
+ * serialized, and *not* into a JSON document -- at the point of the failure,
+ * there is no document yet. For example, `.submodels[0].value` tells you that
+ * the serialization broke on `that.submodels[0].value`.
+ *
+ * Mind that this path is a plain string, unlike the structured
+ * {@link Path} of the de-serialization. A segment of the latter carries
+ * the JSON value it was read from, and while serializing there is no such
+ * value to carry.
+ */
+export class SerializationError extends Error {
+  private readonly _segments = new Array<string>();
+
+  /**
+   * Render the path to the erroneous value as a TypeScript access expression.
+   */
+  get path(): string {
+    return this._segments.join("");
+  }
+
+  /**
+   * Insert the access to the property `name` before the {@link path}.
+   */
+  prependProperty(name: string): void {
+    this._segments.unshift(`.${name}`);
+  }
+
+  /**
+   * Insert the access to the item at `index` before the {@link path}.
+   */
+  prependIndex(index: number): void {
+    this._segments.unshift(`[${index}]`);
+  }
+}
+
+/**
  * Serialize every item of `items` with `serializeItem` into a JSON-able
  * array.
  *
@@ -2557,13 +2605,25 @@ const MODEL_TYPED_UNION_FROM_JSONABLE_DISPATCH =
  * @typeParam T - type of a single item to be serialized
  * @typeParam J - type of a single item once serialized
  */
+/**
+ * Serialize `items` one by one, recording the index of the one which is refused.
+ */
 function serializeArray<T, J extends JsonValue>(
   items: Iterable<T>,
   serializeItem: (item: T) => J
 ): Array<J> {
   const result = new Array<J>();
+  let i = 0;
   for (const item of items) {
-    result.push(serializeItem(item));
+    try {
+      result.push(serializeItem(item));
+    } catch (error) {
+      if (error instanceof SerializationError) {
+        error.prependIndex(i);
+      }
+      throw error;
+    }
+    i++;
   }
   return result;
 }

@@ -346,6 +346,16 @@ function numberFromJsonable(
     );
   }
 
+  // NOTE (mristin):
+  // JSON knows neither an infinity nor a not-a-number, so a conformant parser
+  // can never give us one. The caller can still hand us a JSON-able which has
+  // been constructed programmatically, so we have to check here.
+  if (!Number.isFinite(jsonable)) {
+    return newDeserializationError<number>(
+      `Expected a finite number, but got: ${jsonable}`
+    );
+  }
+
   return new AasCommon.Either<number, DeserializationError>(jsonable, null);
 }
 
@@ -1079,6 +1089,66 @@ const SETTER_MAP_FOR_SOMETHING =
 // region Serialization
 
 /**
+ * Signal that the JSON serialization could not be performed.
+ *
+ * The {@link SerializationError.path} points into the instance which was to be
+ * serialized, and *not* into a JSON document -- at the point of the failure,
+ * there is no document yet. For example, `.submodels[0].value` tells you that
+ * the serialization broke on `that.submodels[0].value`.
+ *
+ * Mind that this path is a plain string, unlike the structured
+ * {@link Path} of the de-serialization. A segment of the latter carries
+ * the JSON value it was read from, and while serializing there is no such
+ * value to carry.
+ */
+export class SerializationError extends Error {
+  private readonly _segments = new Array<string>();
+
+  /**
+   * Render the path to the erroneous value as a TypeScript access expression.
+   */
+  get path(): string {
+    return this._segments.join("");
+  }
+
+  /**
+   * Insert the access to the property `name` before the {@link path}.
+   */
+  prependProperty(name: string): void {
+    this._segments.unshift(`.${name}`);
+  }
+
+  /**
+   * Insert the access to the item at `index` before the {@link path}.
+   */
+  prependIndex(index: number): void {
+    this._segments.unshift(`[${index}]`);
+  }
+}
+
+/**
+ * Serialize `that` integer to a JSON-able value.
+ *
+ * Only the integers in the range [-2^53 + 1, 2^53 - 1] are serialized. Outside
+ * of it, an integer can not be exactly represented as a 64-bit floating-point
+ * number, which is what the JSON de-serializers of the other languages read
+ * a number into.
+ *
+ * @param that - integer to be serialized
+ * @returns `that`, unchanged
+ * @throws {@link SerializationError} if outside the range
+ */
+function integerToJsonable(that: number): number {
+  if (!Number.isFinite(that) || that < -9007199254740991 || that > 9007199254740991) {
+    throw new SerializationError(
+      `The integer can not be serialized to JSON as it is outside ` +
+        `the range [-2^53 + 1, 2^53 - 1]: ${that}`
+    );
+  }
+  return that;
+}
+
+/**
  * Serialize every item of `items` with `serializeItem` into a JSON-able
  * array.
  *
@@ -1088,13 +1158,25 @@ const SETTER_MAP_FOR_SOMETHING =
  * @typeParam T - type of a single item to be serialized
  * @typeParam J - type of a single item once serialized
  */
+/**
+ * Serialize `items` one by one, recording the index of the one which is refused.
+ */
 function serializeArray<T, J extends JsonValue>(
   items: Iterable<T>,
   serializeItem: (item: T) => J
 ): Array<J> {
   const result = new Array<J>();
+  let i = 0;
   for (const item of items) {
-    result.push(serializeItem(item));
+    try {
+      result.push(serializeItem(item));
+    } catch (error) {
+      if (error instanceof SerializationError) {
+        error.prependIndex(i);
+      }
+      throw error;
+    }
+    i++;
   }
   return result;
 }
@@ -1135,8 +1217,15 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
   ): JsonObject {
     const jsonable: JsonObject = {};
 
-    jsonable["serialNumber"] =
-      that.serialNumber;
+    try {
+      jsonable["serialNumber"] =
+        integerToJsonable(that.serialNumber);
+    } catch (error) {
+      if (error instanceof SerializationError) {
+        error.prependProperty("serialNumber");
+      }
+      throw error;
+    }
 
     jsonable["modelType"] = "AnotherItem";
 
@@ -1171,10 +1260,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
   ): JsonObject {
     const jsonable: JsonObject = {};
 
-    jsonable["someItems"] = serializeArray(
-      that.someItems,
-      (item) => this.transform(item)
-    );
+    try {
+      jsonable["someItems"] = serializeArray(
+        that.someItems,
+        (item) => this.transform(item)
+      );
+    } catch (error) {
+      if (error instanceof SerializationError) {
+        error.prependProperty("someItems");
+      }
+      throw error;
+    }
 
     jsonable["someSimples"] = serializeArray(
       that.someSimples,

@@ -1446,74 +1446,6 @@ _NUMBER_SERIALIZER_BY_PRIMITIVE_TYPE: Mapping[
 }
 
 
-class _FallibleTypes:
-    """
-    Tell whether the serialization of a value can fail at all.
-
-    Only a number can be refused by the serialization, so a value can fail only
-    if a number is reachable from it. Everything else -- a boolean, a string,
-    a byte array, an enumeration literal, and any collection of them -- is put
-    on the wire as it comes, and hence needs no recording of the path.
-
-    A class is fallible if any of its properties is, which is a fixed point:
-    the classes refer to each other, and a cycle must not be walked twice.
-    """
-
-    def __init__(self, symbol_table: intermediate.SymbolTable) -> None:
-        """Compute the fixed point over the classes of the ``symbol_table``."""
-        self._fallible_ids = set()  # type: Set[int]
-
-        changed = True
-        while changed:
-            changed = False
-
-            for cls in symbol_table.classes:
-                if id(cls) in self._fallible_ids:
-                    continue
-
-                if any(
-                    self.check(prop.type_annotation) for prop in cls.properties
-                ) or any(
-                    id(descendant) in self._fallible_ids
-                    for descendant in cls.concrete_descendants
-                ):
-                    self._fallible_ids.add(id(cls))
-                    changed = True
-
-            for union in symbol_table.named_unions:
-                if id(union) in self._fallible_ids:
-                    continue
-
-                if any(
-                    id(implementer) in self._fallible_ids
-                    for implementer in union.implementers
-                ):
-                    self._fallible_ids.add(id(union))
-                    changed = True
-
-    def check(self, type_annotation: intermediate.TypeAnnotationUnion) -> bool:
-        """Check whether the serialization of a value of that type can fail."""
-        type_anno = intermediate.beneath_optional(type_annotation)
-
-        primitive_type = intermediate.try_primitive_type(type_anno)
-        if primitive_type is not None:
-            return primitive_type in _NUMBER_SERIALIZER_BY_PRIMITIVE_TYPE
-
-        if isinstance(type_anno, intermediate.ListTypeAnnotation):
-            return self.check(type_anno.items)
-
-        if isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            return any(self.check(item) for item in type_anno.items)
-
-        if isinstance(type_anno, intermediate.OurTypeAnnotation):
-            # NOTE (mristin):
-            # An enumeration literal is a string on the wire, so it can not fail.
-            # Everything else is reported by the fixed point computed above.
-            return id(type_anno.our_type) in self._fallible_ids
-
-        return False
-
-
 def _serialized_as_it_is(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
     """
     Check whether a value of the ``type_annotation`` is JSON-able as it comes.
@@ -1702,11 +1634,11 @@ class _SerializerRegistry:
     give out nothing.
     """
 
-    def __init__(self, fallible: _FallibleTypes) -> None:
+    def __init__(self, ids_of_types_reaching_a_number: Set[int]) -> None:
         """Initialize with nothing registered."""
         self._blocks_by_name = dict()  # type: MutableMapping[Identifier, Stripped]
         self._bytes_are_encoded = False
-        self._fallible = fallible
+        self._ids_of_types_reaching_a_number = ids_of_types_reaching_a_number
         self._checked_numbers = set()  # type: Set[intermediate.PrimitiveType]
 
     @property
@@ -1764,7 +1696,9 @@ class _SerializerRegistry:
             Stripped("item"), items_type_anno
         )
 
-        if not self._fallible.check(items_type_anno):
+        if not intermediate.reaches_a_number(
+            items_type_anno, self._ids_of_types_reaching_a_number
+        ):
             body = Stripped(
                 f"""\
 return [
@@ -1831,7 +1765,11 @@ def {name}(
                 _generate_atomic_serialization(Stripped(f"that[{i}]"), item_type_anno)
             )
 
-            item_is_fallible.append(self._fallible.check(item_type_anno))
+            item_is_fallible.append(
+                intermediate.reaches_a_number(
+                    item_type_anno, self._ids_of_types_reaching_a_number
+                )
+            )
 
         name = _tuple_serializer_name(type_annotation)
 
@@ -2071,7 +2009,7 @@ def _float_to_jsonable(
 
 
 def _generate_cls_to_jsonable(
-    cls: intermediate.ConcreteClass, fallible: _FallibleTypes
+    cls: intermediate.ConcreteClass, ids_of_types_reaching_a_number: Set[int]
 ) -> Stripped:
     """Generate the function to serialize an instance of the ``cls``."""
     cls_name = python_naming.class_name(cls.name)
@@ -2097,7 +2035,9 @@ def _generate_cls_to_jsonable(
         # Only a value which can be refused at all is worth guarding. The property
         # is recorded here, and nowhere below, as nothing below knows through which
         # property the value was reached.
-        if fallible.check(prop.type_annotation):
+        if intermediate.reaches_a_number(
+            prop.type_annotation, ids_of_types_reaching_a_number
+        ):
             prop_name_literal = python_common.string_literal(prop.name)
 
             statement = Stripped(
@@ -2208,7 +2148,9 @@ def generate(
     if len(errors) > 0:
         return None, errors
 
-    fallible = _FallibleTypes(symbol_table)
+    ids_of_types_reaching_a_number = (
+        intermediate.collect_ids_of_types_reaching_a_number(symbol_table)
+    )
 
     # region Compose the de/serializers
 
@@ -2218,7 +2160,9 @@ def generate(
     # generated, gated along the call graph.
 
     registry = _ParserRegistry()
-    serializer_registry = _SerializerRegistry(fallible=fallible)
+    serializer_registry = _SerializerRegistry(
+        ids_of_types_reaching_a_number=ids_of_types_reaching_a_number
+    )
 
     for concrete_cls in symbol_table.concrete_classes:
         # NOTE (mristin):
@@ -2605,7 +2549,12 @@ _Parser = Callable[
             # properties, and the model type is part of that.
             blocks.append(implementation)
         else:
-            blocks.append(_generate_cls_to_jsonable(cls=our_type, fallible=fallible))
+            blocks.append(
+                _generate_cls_to_jsonable(
+                    cls=our_type,
+                    ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
+                )
+            )
 
     blocks.append(_generate_serializer(symbol_table=symbol_table))
 

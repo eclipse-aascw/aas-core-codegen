@@ -3578,6 +3578,83 @@ class NumericPlace:
         self.in_list = in_list
 
 
+def reaches_a_number(
+    type_annotation: "TypeAnnotationUnion", ids_of_types_reaching_a_number: Set[int]
+) -> bool:
+    """
+    Check whether a number can be reached from a value of the ``type_annotation``.
+
+    The ``ids_of_types_reaching_a_number`` comes from
+    :py:func:`collect_ids_of_types_reaching_a_number`.
+    """
+    type_anno = beneath_optional(type_annotation)
+
+    a_type = try_primitive_type(type_anno)
+    if a_type is not None:
+        return a_type is PrimitiveType.INT or a_type is PrimitiveType.FLOAT
+
+    if isinstance(type_anno, ListTypeAnnotation):
+        return reaches_a_number(type_anno.items, ids_of_types_reaching_a_number)
+
+    if isinstance(type_anno, TupleTypeAnnotation):
+        return any(
+            reaches_a_number(item, ids_of_types_reaching_a_number)
+            for item in type_anno.items
+        )
+
+    if isinstance(type_anno, OurTypeAnnotation):
+        # NOTE (mristin):
+        # An enumeration literal goes on the wire as a string, so it can not fail.
+        # Everything else is reported by the fixed point.
+        return id(type_anno.our_type) in ids_of_types_reaching_a_number
+
+    return False
+
+
+def collect_ids_of_types_reaching_a_number(symbol_table: SymbolTable) -> Set[int]:
+    """
+    Collect the IDs of our types from which a number can be reached.
+
+    The IDs refer to IDs of the Python objects in this context.
+
+    Only a number can be refused by a JSON serialization, so only a value from
+    which one is reachable can fail at all. Everything else -- a boolean,
+    a string, a byte array, an enumeration literal, and any collection of them
+    -- goes on the wire as it comes.
+
+    This is a fixed point, as the classes refer to each other and a cycle must
+    not be walked twice. Pass the result to :py:func:`reaches_a_number`.
+    """
+    result = set()  # type: Set[int]
+
+    changed = True
+    while changed:
+        changed = False
+
+        for cls in symbol_table.classes:
+            if id(cls) in result:
+                continue
+
+            if any(
+                reaches_a_number(prop.type_annotation, result)
+                for prop in cls.properties
+            ) or any(
+                id(descendant) in result for descendant in cls.concrete_descendants
+            ):
+                result.add(id(cls))
+                changed = True
+
+        for union in symbol_table.named_unions:
+            if id(union) in result:
+                continue
+
+            if any(id(implementer) in result for implementer in union.implementers):
+                result.add(id(union))
+                changed = True
+
+    return result
+
+
 def numeric_places(symbol_table: SymbolTable) -> List[NumericPlace]:
     """
     List the places where a number unrepresentable in JSON can sit.
