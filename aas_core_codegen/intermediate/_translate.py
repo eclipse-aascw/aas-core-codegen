@@ -106,6 +106,13 @@ from aas_core_codegen.intermediate._types import (
     Constant,
     TranspilableVerification,
     type_annotations_equal,
+    runtime_id,
+    IdOfClass,
+    IdOfContract,
+    IdOfInvariant,
+    IdOfProperty,
+    IdOfSnapshot,
+    IdOfTypeAnnotation,
 )
 from aas_core_codegen.parse import (
     retree as parse_retree,
@@ -3194,7 +3201,7 @@ def _resolve_subsets_in_constant_set_of_primitives(
     not (result[0] is not None)
     or (
         all(
-            id(subset_literal) in constant_set.literal_id_set
+            runtime_id(subset_literal) in constant_set.literal_id_set
             for subset in result[0]
             for subset_literal in subset.literals
         )
@@ -3261,7 +3268,7 @@ def _resolve_subsets_in_constant_set_of_enumeration_literals(
             continue
 
         for literal in maybe_subset.literals:
-            if id(literal) not in constant_set.literal_id_set:
+            if runtime_id(literal) not in constant_set.literal_id_set:
                 errors.append(
                     Error(
                         constant_set.parsed.node,
@@ -3479,11 +3486,11 @@ def _second_pass_to_stack_invariants_in_place(symbol_table: SymbolTable) -> None
 
             # NOTE (mristin):
             # Skip duplicates which might arise from the diamond inheritance
-            observed_invariants = set()  # type: Set[int]
+            observed_invariants = set()  # type: Set[IdOfInvariant]
 
             for inheritance in our_type.inheritances:
                 for invariant in inheritance.invariants:
-                    invariant_id = id(invariant)
+                    invariant_id = runtime_id(invariant)
                     if invariant_id not in observed_invariants:
                         inherited_invariants.append(invariant)
                         observed_invariants.add(invariant_id)
@@ -3514,11 +3521,11 @@ def _second_pass_to_stack_properties_in_place(symbol_table: SymbolTable) -> List
             # Mind that we track instances using the Python ``id(.)`` function,
             # which means that the properties are literally equal, including their
             # type annotations.
-            observed_properties = set()  # type: Set[int]
+            observed_properties = set()  # type: Set[IdOfProperty]
 
             for inheritance in our_type.inheritances:
                 for prop in inheritance.properties:
-                    property_id = id(prop)
+                    property_id = runtime_id(prop)
                     if property_id not in observed_properties:
                         inherited_properties.append(prop)
                         observed_properties.add(property_id)
@@ -3645,7 +3652,7 @@ def _second_pass_to_stack_constructors_in_place(
                     )
                     continue
 
-                if id(ancestor) not in cls.inheritance_id_set:
+                if runtime_id(ancestor) not in cls.inheritance_id_set:
                     errors.append(
                         Error(
                             (
@@ -3700,18 +3707,18 @@ def _second_pass_to_stack_constructors_in_place(
 
         # NOTE (mristin):
         # We skip the duplicates since we have to deal with the diamond inheritance.
-        observed_snapshots = set()  # type: Set[int]
-        observed_postconditions = set()  # type: Set[int]
+        observed_snapshots = set()  # type: Set[IdOfSnapshot]
+        observed_postconditions = set()  # type: Set[IdOfContract]
 
         for inheritance in cls.inheritances:
             for snap in inheritance.constructor.contracts.snapshots:
-                snapshot_id = id(snap)
+                snapshot_id = runtime_id(snap)
                 if snapshot_id not in observed_snapshots:
                     inherited_snapshots.append(snap)
                     observed_snapshots.add(snapshot_id)
 
             for postcondition in inheritance.constructor.contracts.postconditions:
-                postcondition_id = id(postcondition)
+                postcondition_id = runtime_id(postcondition)
                 if postcondition_id not in observed_postconditions:
                     inherited_postconditions.append(postcondition)
                     observed_postconditions.add(postcondition_id)
@@ -4006,7 +4013,7 @@ def _second_pass_to_resolve_named_union_implementers_in_place(
         named_union = our_type
 
         implementers = []  # type: List[ConcreteClass]
-        observed_ids = set()  # type: Set[int]
+        observed_ids = set()  # type: Set[IdOfClass]
 
         for member in named_union.members:
             if isinstance(member, NamedUnion):
@@ -4028,9 +4035,9 @@ def _second_pass_to_resolve_named_union_implementers_in_place(
                     candidates.append(member)
 
             for candidate in candidates:
-                if id(candidate) not in observed_ids:
+                if runtime_id(candidate) not in observed_ids:
                     implementers.append(candidate)
-                    observed_ids.add(id(candidate))
+                    observed_ids.add(runtime_id(candidate))
 
         named_union._set_implementers(implementers)
 
@@ -4147,7 +4154,7 @@ def _verify_with_model_type_for_classes_with_at_least_one_concrete_descendant(
     )
 
     for cls in symbol_table.classes:
-        if id(cls) in our_types_in_properties:
+        if runtime_id(cls) in our_types_in_properties:
             if len(cls.concrete_descendants) >= 1:
                 if not cls.serialization.with_model_type:
                     descendants_str = ", ".join(
@@ -5017,8 +5024,9 @@ def _assert_self_not_in_concrete_descendants(symbol_table: SymbolTable) -> None:
         if isinstance(our_type, (Enumeration, NamedUnion)):
             continue
         elif isinstance(our_type, (ConstrainedPrimitive, AbstractClass, ConcreteClass)):
-            assert id(our_type) not in our_type.descendant_id_set, (
-                f"Expected not to find the ID of our type {our_type!r}, {id(our_type)} "
+            assert runtime_id(our_type) not in our_type.descendant_id_set, (
+                f"Expected not to find the ID of our type {our_type!r}, "
+                f"{runtime_id(our_type)} "
                 f"in its descendant_id_set, "
                 f"but it was there: {our_type.descendant_id_set}"
             )
@@ -5074,14 +5082,14 @@ def _assert_all_type_annotations_are_unique_instances(
     This allows us to perform different kinds of inference on the values such as
     inference of schema constraints.
     """
-    class_by_id = {id(cls): cls for cls in symbol_table.classes}
+    class_by_id = {runtime_id(cls): cls for cls in symbol_table.classes}
 
-    type_anno_id_to_cls_id: MutableMapping[int, int] = dict()
-    observed_set_of_type_anno_ids: Set[int] = set()
+    type_anno_id_to_cls_id: MutableMapping[IdOfTypeAnnotation, IdOfClass] = dict()
+    observed_set_of_type_anno_ids: Set[IdOfTypeAnnotation] = set()
 
     for cls in symbol_table.classes:
         for type_anno in _over_type_annotations_in_class(cls):
-            type_anno_id = id(type_anno)
+            type_anno_id = runtime_id(type_anno)
 
             if type_anno_id in observed_set_of_type_anno_ids:
                 other_cls_id = type_anno_id_to_cls_id[type_anno_id]
@@ -5105,7 +5113,7 @@ def _assert_all_type_annotations_are_unique_instances(
                     f"represent values with the respective type annotations."
                 )
 
-            type_anno_id_to_cls_id[type_anno_id] = id(cls)
+            type_anno_id_to_cls_id[type_anno_id] = runtime_id(cls)
             observed_set_of_type_anno_ids.add(type_anno_id)
 
 

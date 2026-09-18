@@ -1502,7 +1502,8 @@ AasStringification.{must_to_str_name}(
 
 
 def _generate_transform(
-    cls: intermediate.ConcreteClass, ids_of_types_reaching_a_number: Set[int]
+    cls: intermediate.ConcreteClass,
+    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Stripped:
     """Generate the ``transformX`` method to serialize an instance into a JSON-able."""
     blocks = [Stripped("const jsonable: JsonObject = {};")]  # type: List[Stripped]
@@ -1958,7 +1959,8 @@ function numberToJsonable(that: number): number {{
 
 
 def _generate_transformer(
-    symbol_table: intermediate.SymbolTable, ids_of_types_reaching_a_number: Set[int]
+    symbol_table: intermediate.SymbolTable,
+    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Stripped:
     methods = []  # type: List[Stripped]
 

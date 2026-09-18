@@ -741,7 +741,7 @@ function parseTuple{arity}<{type_params_joined}>(
     )
 
 
-@require(lambda cls, prop: id(prop) in cls.property_id_set)
+@require(lambda cls, prop: intermediate.runtime_id(prop) in cls.property_id_set)
 def _generate_parse_case_for_property(
     cls: intermediate.ConcreteClass,
     prop: intermediate.Property,
@@ -1593,7 +1593,7 @@ function {name}(
             pass
 
 
-@require(lambda cls, prop: id(prop) in cls.property_id_set)
+@require(lambda cls, prop: intermediate.runtime_id(prop) in cls.property_id_set)
 def _generate_write_property(
     cls: intermediate.ConcreteClass,
     prop: intermediate.Property,

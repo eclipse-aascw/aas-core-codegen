@@ -420,7 +420,7 @@ def _assignable(
                 ):
                     return (
                         target_type.our_type is value_type.our_type
-                        or id(value_type.our_type)
+                        or _types.runtime_id(value_type.our_type)
                         in target_type.our_type.descendant_id_set
                     )
 
@@ -439,7 +439,8 @@ def _assignable(
             # target type.
 
             return target_type.our_type is value_type.our_type or (
-                id(value_type.our_type) in target_type.our_type.descendant_id_set
+                _types.runtime_id(value_type.our_type)
+                in target_type.our_type.descendant_id_set
             )
 
     elif isinstance(target_type, VerificationTypeAnnotation):

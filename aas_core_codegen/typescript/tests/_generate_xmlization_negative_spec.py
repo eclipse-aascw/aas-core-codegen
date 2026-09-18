@@ -71,7 +71,7 @@ def _first_nested_class_dispatch_candidate(
     return None
 
 
-@require(lambda cls, prop: id(prop) in cls.property_id_set)
+@require(lambda cls, prop: intermediate.runtime_id(prop) in cls.property_id_set)
 def _generate_duplicate_property_test(
     cls: intermediate.ConcreteClass, prop: intermediate.Property
 ) -> Stripped:
@@ -119,7 +119,7 @@ test("XML duplicate property fails", () => {{
     )
 
 
-@require(lambda cls, prop: id(prop) in cls.property_id_set)
+@require(lambda cls, prop: intermediate.runtime_id(prop) in cls.property_id_set)
 def _generate_invalid_item_delimiter(
     cls: intermediate.ConcreteClass,
     prop: intermediate.Property,
@@ -170,7 +170,7 @@ test("XML list item element name mismatch fails", () => {{
     )
 
 
-@require(lambda cls, prop: id(prop) in cls.property_id_set)
+@require(lambda cls, prop: intermediate.runtime_id(prop) in cls.property_id_set)
 def _generate_nested_class_dispatch_mismatch(
     cls: intermediate.ConcreteClass,
     prop: intermediate.Property,

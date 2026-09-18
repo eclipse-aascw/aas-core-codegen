@@ -2539,7 +2539,8 @@ class _ConstrainedPrimitiveInvariantTranspiler(cpp_transpilation.Transpiler):
 # fmt: off
 @require(
     lambda invariant, constrained_primitive:
-    id(invariant) in constrained_primitive.invariant_id_set
+    intermediate.runtime_id(invariant)
+    in constrained_primitive.invariant_id_set
 )
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 # fmt: on

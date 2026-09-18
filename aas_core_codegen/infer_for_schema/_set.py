@@ -148,16 +148,17 @@ class _IntersectionOfEnumerationLiterals:
         self._literals = literals
 
         self._count_by_literal_id = {
-            id(literal): 0 for literal in literals
-        }  # type: MutableMapping[int, int]
+            intermediate.runtime_id(literal): 0 for literal in literals
+        }  # type: MutableMapping[intermediate.IdOfEnumerationLiteral, int]
 
         self._counter = 0
 
     def observe(self, literals: Sequence[intermediate.EnumerationLiteral]) -> None:
         """Limit the literals in the intersection."""
         for literal in literals:
-            if id(literal) in self._count_by_literal_id:
-                self._count_by_literal_id[id(literal)] += 1
+            literal_id = intermediate.runtime_id(literal)
+            if literal_id in self._count_by_literal_id:
+                self._count_by_literal_id[literal_id] += 1
 
         self._counter += 1
 
@@ -166,7 +167,8 @@ class _IntersectionOfEnumerationLiterals:
         return [
             literal
             for literal in self._literals
-            if self._count_by_literal_id[id(literal)] == self._counter
+            if self._count_by_literal_id[intermediate.runtime_id(literal)]
+            == self._counter
         ]
 
 
@@ -182,7 +184,8 @@ class _IntersectionOfEnumerationLiterals:
     lambda constraints:
     all(
         all(
-            id(literal) in constraint.enumeration.literal_id_set
+            intermediate.runtime_id(literal)
+            in constraint.enumeration.literal_id_set
             for literal in constraint.literals
         )
         for constraint in constraints

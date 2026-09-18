@@ -1883,7 +1883,8 @@ private static Serializer<{tuple_type}> {function_name}<{type_params_joined}>(
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transform_property(
-    prop: intermediate.Property, ids_of_types_reaching_a_number: Set[int]
+    prop: intermediate.Property,
+    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the snippet to transform a property into a JSON node."""
     type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -1991,7 +1992,8 @@ if ({condition})
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transform_for_class(
-    cls: intermediate.ConcreteClass, ids_of_types_reaching_a_number: Set[int]
+    cls: intermediate.ConcreteClass,
+    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transform method to a JSON object for the given concrete class."""
     errors = []  # type: List[Error]

@@ -350,7 +350,10 @@ def verify(
 # region Generation
 
 
-@require(lambda enumeration, literal: id(literal) in enumeration.literal_id_set)
+@require(
+    lambda enumeration, literal: intermediate.runtime_id(literal)
+    in enumeration.literal_id_set
+)
 @require(lambda literal: literal.description is not None)
 def _generate_comment_for_enumeration_literal(
     enumeration: intermediate.Enumeration,
@@ -1073,7 +1076,7 @@ func {function_name}(
     )
 
 
-@require(lambda cls, prop: id(prop) in cls.property_id_set)
+@require(lambda cls, prop: intermediate.runtime_id(prop) in cls.property_id_set)
 @require(lambda prop: prop.description is not None)
 def _generate_comment_for_property(
     cls: intermediate.ClassUnion,
@@ -1304,7 +1307,10 @@ def _generate_is_interface(
                 Identifier("Model_type"), another_cls.name
             )
 
-            if id(another_cls) in cls.concrete_descendant_id_set or another_cls is cls:
+            if (
+                intermediate.runtime_id(another_cls) in cls.concrete_descendant_id_set
+                or another_cls is cls
+            ):
                 case_statements.append(
                     Stripped(
                         f"""\

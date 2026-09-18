@@ -1575,7 +1575,7 @@ private static readonly ContentReader<
     return result
 
 
-@require(lambda prop, cls: id(prop) in cls.property_id_set)
+@require(lambda prop, cls: intermediate.runtime_id(prop) in cls.property_id_set)
 def _generate_deserialize_property(
     prop: intermediate.Property, cls: intermediate.ConcreteClass
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
@@ -2954,7 +2954,7 @@ private static readonly ContentWriter<
     return result
 
 
-@require(lambda prop, cls: id(prop) in cls.property_id_set)
+@require(lambda prop, cls: intermediate.runtime_id(prop) in cls.property_id_set)
 def _generate_serialize_property(
     prop: intermediate.Property, cls: intermediate.ConcreteClass
 ) -> Tuple[Optional[Stripped], Optional[Error]]:

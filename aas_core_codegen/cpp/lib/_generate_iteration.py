@@ -761,7 +761,7 @@ class IteratorQualities:
     relevant_properties: Final[Sequence[intermediate.Property]]
 
     #: A set of Python IDs of the relevant properties
-    relevant_property_id_set: Final[FrozenSet[int]]
+    relevant_property_id_set: Final[FrozenSet[intermediate.IdOfProperty]]
 
     #: Set if the class contains a property which is a list of instances
     cls_contains_a_list_or_tuple_property: Final[bool]
@@ -870,7 +870,7 @@ class IteratorQualities:
         self.cls = cls
         self.relevant_properties = relevant_properties
         self.relevant_property_id_set = frozenset(
-            id(prop) for prop in self.relevant_properties
+            intermediate.runtime_id(prop) for prop in self.relevant_properties
         )
         self.cls_contains_a_list_or_tuple_property = (
             cls_contains_a_list_or_tuple_property

@@ -105,7 +105,8 @@ class SetOfPrimitivesConstraint:
             self.a_type == other.a_type
             and len(self.literals) == len(other.literals)
             and all(
-                id(that_literal) == id(other_literal)
+                intermediate.runtime_id(that_literal)
+                == intermediate.runtime_id(other_literal)
                 for that_literal, other_literal in zip(self.literals, other.literals)
             )
         )
@@ -125,7 +126,7 @@ class SetOfEnumerationLiteralsConstraint:
     @require(
         lambda enumeration, literals:
         all(
-            id(literal) in enumeration.literal_id_set
+            intermediate.runtime_id(literal) in enumeration.literal_id_set
             for literal in literals
         )
     )
@@ -151,7 +152,8 @@ class SetOfEnumerationLiteralsConstraint:
             return False
 
         return len(self.literals) == len(other.literals) and all(
-            id(that_literal) == id(other_literal)
+            intermediate.runtime_id(that_literal)
+            == intermediate.runtime_id(other_literal)
             for that_literal, other_literal in zip(self.literals, other.literals)
         )
 

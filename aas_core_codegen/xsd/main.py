@@ -1275,7 +1275,10 @@ def _generate(
             assert elements is not None
         else:
             if isinstance(our_type, intermediate.Enumeration):
-                if id(our_type) not in ids_of_our_types_in_properties:
+                if (
+                    intermediate.runtime_id(our_type)
+                    not in ids_of_our_types_in_properties
+                ):
                     continue
 
                 elements = _define_for_enumeration(enumeration=our_type)
