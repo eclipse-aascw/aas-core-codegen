@@ -79,6 +79,7 @@ import enum
 import io
 import math
 import os
+import re
 import sys
 from typing import (
     Any,
@@ -1088,6 +1089,14 @@ def _read_bool_from_element_text(
     return text in ('1', 'true')
 
 
+#: Match the lexical space of ``xs:long``.
+#:
+#: Mind the explicit ``[0-9]``: ``\d`` would match a digit of any script.
+#:
+#: See: https://www.w3.org/TR/xmlschema-2/#long
+_XS_LONG_RE = re.compile(r"(\+|-)?[0-9]+")
+
+
 def _read_int_from_element_text(
     element: Element,
     iterator: Iterator[Tuple[str, Element]]
@@ -1109,6 +1118,20 @@ def _read_int_from_element_text(
         iterator
     )
 
+    # NOTE (mristin):
+    # ``int`` is far too permissive to be handed the text directly: it takes
+    # a digit group separator as in ``1_0``, surrounding whitespace, and
+    # a digit of any script -- the Arabic-Indic ``۵`` would be read as 5.
+    # Mind that it is checked with ``fullmatch`` and not with ``match``: ``$``
+    # would also match just before a trailing newline.
+    #
+    # See: https://www.w3.org/TR/xmlschema-2/#long
+    if _XS_LONG_RE.fullmatch(text) is None:
+        raise DeserializationException(
+            f"Expected a value as xs:long, "
+            f"but got an element with text: {text!r}"
+        )
+
     try:
         value = int(text)
     except ValueError:
@@ -1126,6 +1149,19 @@ _TEXT_TO_XS_DOUBLE_LITERALS = {
     "INF": math.inf,
     "-INF": -math.inf,
 }
+
+#: Match the numeric part of the lexical space of ``xs:double``. The three
+#: named literals are looked up in :py:attr:`_TEXT_TO_XS_DOUBLE_LITERALS`
+#: before this is tried.
+#:
+#: Mind the explicit ``[0-9]``: ``\d`` would match a digit of any script, so
+#: the Arabic-Indic ``۵`` would pass, and :py:func:`float` would read it
+#: as 5.
+#:
+#: See: https://www.w3.org/TR/xmlschema-2/#double
+_XS_DOUBLE_RE = re.compile(
+    r"(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)([Ee](\+|-)?[0-9]+)?"
+)
 
 
 def _read_float_from_element_text(
@@ -1151,6 +1187,19 @@ def _read_float_from_element_text(
 
     value = _TEXT_TO_XS_DOUBLE_LITERALS.get(text, None)
     if value is None:
+        # NOTE (mristin):
+        # ``float`` is far too permissive to be handed the text directly: it
+        # takes ``Infinity``, ``inf``, ``nan`` and ``NAN``, none of which is
+        # a valid ``xs:double``, as well as a digit group separator as in
+        # ``1_0`` and surrounding whitespace. Mind that it is checked with
+        # ``fullmatch`` and not with ``match``: ``$`` would also match just
+        # before a trailing newline.
+        if _XS_DOUBLE_RE.fullmatch(text) is None:
+            raise DeserializationException(
+                f"Expected a value as xs:double, "
+                f"but got an element with text: {text!r}"
+            )
+
         try:
             value = float(text)
         except ValueError:
