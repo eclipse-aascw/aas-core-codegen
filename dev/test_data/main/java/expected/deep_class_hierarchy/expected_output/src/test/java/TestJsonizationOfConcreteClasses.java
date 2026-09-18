@@ -12,6 +12,9 @@ import dummy.jsonization.Jsonization;
 import dummy.reporting.Reporting;
 import dummy.types.impl.*;
 import dummy.types.model.IClass;
+import dummy.common.*;
+import dummy.types.enums.*;
+import dummy.types.model.*;
 import dummy.verification.Verification;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -572,6 +576,69 @@ public class TestJsonizationOfConcreteClasses {
       }
     }
   } // public void testContainerVerificationFail
+
+  private static JsonNode loadTheFirstExpected(String modelType) throws IOException {
+    final List<Path> paths =
+      Common.findPaths(
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Json",
+          "Expected",
+          modelType),
+        ".json");
+
+    if (paths.isEmpty()) {
+      fail("Expected at least one recorded example of " + modelType + ", but got none");
+    }
+
+    return CommonJson.readFromFile(paths.get(0));
+  }
+
+  @Test
+  public void testLeafValueSerializationOutofrange() throws IOException {
+    for (long value : new long[] {9007199254740992L, -9007199254740992L}) {
+      final Leaf instance =
+        Jsonization.Deserialize.deserializeLeaf(
+          loadTheFirstExpected("Leaf"));
+
+      instance.setValue(value);
+
+      try {
+        Jsonization.Serialize.toJsonObject(instance);
+        fail(
+          "Expected the serialization to fail at "
+            + "value"
+            + ", but it succeeded");
+      } catch (Jsonization.SerializeException exception) {
+        assertEquals(
+          "value",
+          exception.getPath().orElse(null));
+      }
+    }
+  } // public void testLeafValueSerializationOutofrange
+
+  @Test
+  public void testBlossomValueSerializationOutofrange() throws IOException {
+    for (long value : new long[] {9007199254740992L, -9007199254740992L}) {
+      final Blossom instance =
+        Jsonization.Deserialize.deserializeBlossom(
+          loadTheFirstExpected("Blossom"));
+
+      instance.setValue(value);
+
+      try {
+        Jsonization.Serialize.toJsonObject(instance);
+        fail(
+          "Expected the serialization to fail at "
+            + "value"
+            + ", but it succeeded");
+      } catch (Jsonization.SerializeException exception) {
+        assertEquals(
+          "value",
+          exception.getPath().orElse(null));
+      }
+    }
+  } // public void testBlossomValueSerializationOutofrange
 } // class TestJsonizationOfConcreteClasses
 
 // package dummy.tests

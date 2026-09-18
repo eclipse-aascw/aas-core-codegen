@@ -23,6 +23,7 @@ from aas_core_codegen.java.common import (
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
+    INDENT5 as IIIII,
 )
 
 #: Maximal length of a generated line before a call is broken over two lines
@@ -1193,12 +1194,29 @@ private static Reporting.Result<Long> tryLongFrom(JsonNode value) {{
  * @param node JSON node to be parsed
  */
 private static Reporting.Result<Double> tryDoubleFrom(JsonNode value) {{
-{I}if (!value.isFloatingPointNumber()) {{
+{I}// NOTE (mristin):
+{I}// We deliberately ask for a number, and not for a floating-point number.
+{I}// JSON has a single number type, so ``3`` is every bit as good a double as
+{I}// ``3.0`` is, and every other SDK reads it as one.
+{I}if (!value.isNumber()) {{
 {II}final Reporting.Error error = new Reporting.Error(
 {III}"Expected a JsonValue of Double, but got " + value.getNodeType());
 {II}return Reporting.Result.failure(error);
 {I}}}
-{I}return Reporting.Result.success(value.asDouble());
+
+{I}// NOTE (mristin):
+{I}// JSON knows neither an infinity nor a not-a-number, so a conformant parser
+{I}// can never give us one. Jackson parses them when
+{I}// JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS is enabled, and the caller can
+{I}// construct such a node programmatically in any case, so we check here.
+{I}final double asDouble = value.asDouble();
+{I}if (!Double.isFinite(asDouble)) {{
+{II}final Reporting.Error error = new Reporting.Error(
+{III}"Expected a finite number, but got " + asDouble);
+{II}return Reporting.Result.failure(error);
+{I}}}
+
+{I}return Reporting.Result.success(asDouble);
 }}"""
         ),
         Stripped(
@@ -1583,8 +1601,8 @@ _SERIALIZE_FUNCTION_BY_PRIMITIVE_TYPE: Final[
     Mapping[intermediate.PrimitiveType, Stripped]
 ] = {
     intermediate.PrimitiveType.BOOL: Stripped("JsonNodeFactory.instance.booleanNode"),
-    intermediate.PrimitiveType.INT: Stripped("toJsonNode"),
-    intermediate.PrimitiveType.FLOAT: Stripped("JsonNodeFactory.instance.numberNode"),
+    intermediate.PrimitiveType.INT: Stripped("longToJsonNode"),
+    intermediate.PrimitiveType.FLOAT: Stripped("doubleToJsonNode"),
     intermediate.PrimitiveType.STR: Stripped("JsonNodeFactory.instance.textNode"),
     intermediate.PrimitiveType.BYTEARRAY: Stripped("bytesToJsonNode"),
 }
@@ -1795,6 +1813,7 @@ def _serialize_call(
 
 def _generate_composed_serializer(
     type_anno: intermediate.ContainerTypeAnnotation,
+    ids_of_types_reaching_a_number: Set[int],
 ) -> Stripped:
     """
     Generate the serializer of the list or of the tuple ``type_anno``.
@@ -1830,6 +1849,11 @@ def _generate_composed_serializer(
         Stripped("final ArrayNode result = JsonNodeFactory.instance.arrayNode();")
     ]  # type: List[Stripped]
 
+    items_are_fallible = any(
+        intermediate.reaches_a_number(item_type_anno, ids_of_types_reaching_a_number)
+        for item_type_anno in item_type_annos
+    )
+
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
         item_type = _serialized_value_type(item_type_annos[0])
         conversion = _serialize_call(
@@ -1840,14 +1864,35 @@ def _generate_composed_serializer(
             indentation=body_indentation + len(I) + len("result.add("),
         )
 
-        stmts.append(
-            Stripped(
-                f"""\
+        if not items_are_fallible:
+            stmts.append(
+                Stripped(
+                    f"""\
 for ({item_type} item : that) {{
 {I}result.add({indent_but_first_line(conversion, I)});
 }}"""
+                )
             )
-        )
+        else:
+            # NOTE (mristin):
+            # The loop has to count so that the failure can name the item
+            # which was refused.
+            stmts.append(
+                Stripped(
+                    f"""\
+int i = 0;
+for ({item_type} item : that) {{
+{I}try {{
+{II}result.add({indent_but_first_line(conversion, II)});
+{I}}} catch (_SerializeFailure failure) {{
+{II}failure.getError().prependSegment(
+{III}new Reporting.IndexSegment(i));
+{II}throw failure;
+{I}}}
+{I}i++;
+}}"""
+                )
+            )
     else:
         for i, item_type_anno in enumerate(item_type_annos):
             conversion = _serialize_call(
@@ -1855,7 +1900,24 @@ for ({item_type} item : that) {{
                 source_expr=Stripped(f"that.item{i + 1}()"),
                 indentation=body_indentation + len("result.add("),
             )
-            stmts.append(Stripped(f"result.add({conversion});"))
+
+            statement = Stripped(f"result.add({conversion});")
+
+            if intermediate.reaches_a_number(
+                item_type_anno, ids_of_types_reaching_a_number
+            ):
+                statement = Stripped(
+                    f"""\
+try {{
+{I}{indent_but_first_line(statement, I)}
+}} catch (_SerializeFailure failure) {{
+{I}failure.getError().prependSegment(
+{II}new Reporting.IndexSegment({i}));
+{I}throw failure;
+}}"""
+                )
+
+            stmts.append(statement)
 
     stmts.append(Stripped("return result;"))
 
@@ -1931,7 +1993,9 @@ private static JsonNode transformUnion(IUnion<?> that) {{
     )
 
 
-def _generate_transform_property(prop: intermediate.Property) -> Stripped:
+def _generate_transform_property(
+    prop: intermediate.Property, ids_of_types_reaching_a_number: Set[int]
+) -> Stripped:
     """
     Generate the snippet to transform a property into a JSON node.
 
@@ -1991,6 +2055,24 @@ def _generate_transform_property(prop: intermediate.Property) -> Stripped:
 
     statement = Stripped(f"result.set({prop_literal}, {conversion});")
 
+    # NOTE (mristin):
+    # Only a value which can be refused at all is worth guarding. The property
+    # is recorded here, and nowhere below, as nothing below knows through which
+    # property the value was reached.
+    if intermediate.reaches_a_number(
+        prop.type_annotation, ids_of_types_reaching_a_number
+    ):
+        statement = Stripped(
+            f"""\
+try {{
+{I}{indent_but_first_line(statement, I)}
+}} catch (_SerializeFailure failure) {{
+{I}failure.getError().prependSegment(
+{II}new Reporting.NameSegment({prop_literal}));
+{I}throw failure;
+}}"""
+        )
+
     if not is_optional:
         return statement
 
@@ -2003,14 +2085,21 @@ if (that.{getter_name}().isPresent()) {{
     )
 
 
-def _generate_transform_for_class(cls: intermediate.ConcreteClass) -> Stripped:
+def _generate_transform_for_class(
+    cls: intermediate.ConcreteClass, ids_of_types_reaching_a_number: Set[int]
+) -> Stripped:
     """Generate the transform method to a JSON object for the given concrete class."""
     blocks = [
         Stripped("final ObjectNode result = JsonNodeFactory.instance.objectNode();"),
     ]  # type: List[Stripped]
 
     for prop in cls.properties:
-        blocks.append(_generate_transform_property(prop=prop))
+        blocks.append(
+            _generate_transform_property(
+                prop=prop,
+                ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
+            )
+        )
 
     if cls.serialization is not None and cls.serialization.with_model_type:
         model_type = java_common.string_literal(naming.json_model_type(cls.name))
@@ -2116,7 +2205,7 @@ def _called_serialize_functions(
     return result
 
 
-def _generate_to_json_node_helper() -> Stripped:
+def _generate_long_to_json_node_helper() -> Stripped:
     """Generate the conversion of a 64-bit integer, which JSON can not hold."""
     return Stripped(
         f"""\
@@ -2125,12 +2214,43 @@ def _generate_to_json_node_helper() -> Stripped:
  *
  * @param that value to be converted
  */
-private static JsonNode toJsonNode(Long that) {{
-{I}// We need to check that we can perform a lossless conversion.
-{I}long primitiveThat = that.longValue();
-{I}if ((long)((double)primitiveThat) != primitiveThat) {{
-{II}throw new IllegalArgumentException(
-{III}"The number can not be losslessly represented in JSON: " + that);
+private static JsonNode longToJsonNode(Long that) {{
+{I}// NOTE (mristin):
+{I}// Outside this range an integer can not be exactly represented as a 64-bit
+{I}// floating-point number, which is what the JSON de-serializers of the other
+{I}// languages read a number into.
+{I}final long primitiveThat = that.longValue();
+{I}if (primitiveThat < -9007199254740991L || primitiveThat > 9007199254740991L) {{
+{II}throw new _SerializeFailure(
+{III}new Reporting.Error(
+{IIII}"The integer can not be serialized to JSON as it is outside "
+{IIIII}+ "the range [-2^53 + 1, 2^53 - 1]: " + that));
+{I}}}
+{I}return JsonNodeFactory.instance.numberNode(that);
+}}"""
+    )
+
+
+def _generate_double_to_json_node_helper() -> Stripped:
+    """Generate the conversion of a double, which JSON can not always hold."""
+    return Stripped(
+        f"""\
+/**
+ * Convert {{@code that}} double-precision 64-bit float to a JSON value.
+ *
+ * <p>JSON knows neither an infinity nor a not-a-number, so we refuse to
+ * serialize them instead of leaving it to Jackson, which writes them out as
+ * the quoted strings {{@code "NaN"}} and {{@code "Infinity"}} -- valid JSON,
+ * but no longer a number.
+ *
+ * @param that value to be converted
+ */
+private static JsonNode doubleToJsonNode(Double that) {{
+{I}if (!Double.isFinite(that)) {{
+{II}throw new _SerializeFailure(
+{III}new Reporting.Error(
+{IIII}"JSON knows neither an infinity nor a not-a-number, so the value "
+{IIIII}+ "can not be serialized: " + that));
 {I}}}
 {I}return JsonNodeFactory.instance.numberNode(that);
 }}"""
@@ -2167,6 +2287,10 @@ def _generate_transformer(
     # the base64 conversion nor the import it needs.
     called = _called_serialize_functions(symbol_table)
 
+    ids_of_types_reaching_a_number = (
+        intermediate.collect_ids_of_types_reaching_a_number(symbol_table)
+    )
+
     blocks = [
         Stripped(
             """\
@@ -2184,14 +2308,19 @@ private static final _Transformer INSTANCE = new _Transformer();"""
     if Stripped("transformUnion") in called:
         blocks.append(_generate_transform_union_helper())
 
-    if Stripped("toJsonNode") in called:
-        blocks.append(_generate_to_json_node_helper())
+    if Stripped("longToJsonNode") in called:
+        blocks.append(_generate_long_to_json_node_helper())
+
+    if Stripped("doubleToJsonNode") in called:
+        blocks.append(_generate_double_to_json_node_helper())
 
     if Stripped("bytesToJsonNode") in called:
         blocks.append(_generate_bytes_to_json_node_helper())
 
     for type_anno in _composed_serializer_type_annotations(symbol_table):
-        blocks.append(_generate_composed_serializer(type_anno))
+        blocks.append(
+            _generate_composed_serializer(type_anno, ids_of_types_reaching_a_number)
+        )
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -2225,7 +2354,12 @@ private static final _Transformer INSTANCE = new _Transformer();"""
 
                 blocks.append(spec_impls[implementation_key])
             else:
-                blocks.append(_generate_transform_for_class(cls=our_type))
+                blocks.append(
+                    _generate_transform_for_class(
+                        cls=our_type,
+                        ids_of_types_reaching_a_number=(ids_of_types_reaching_a_number),
+                    )
+                )
 
         elif isinstance(our_type, intermediate.NamedUnion):
             # A named union is never double-dispatched here directly -- it
@@ -2265,9 +2399,19 @@ def _generate_serialize(
             f"""\
 /**
  * Serialize an instance of the meta-model into a JSON object.
+ *
+ * @throws SerializeException if a value within {{@code that}} instance can
+ * not be represented in JSON
  */
 public static JsonNode toJsonObject(IClass that) {{
-{I}return _Transformer.transformClass(that);
+{I}try {{
+{II}return _Transformer.transformClass(that);
+{I}}} catch (_SerializeFailure failure) {{
+{II}final Reporting.Error error = failure.getError();
+{II}throw new SerializeException(
+{III}Reporting.generateJsonPath(error.getPathSegments()),
+{III}error.getCause());
+{I}}}
 }}"""
         ),
     ]  # type: List[Stripped]
@@ -2478,6 +2622,53 @@ def generate(
 
 {II}public Optional<String> getReason() {{
 {III}return Optional.ofNullable(reason);
+{II}}}
+{I}}}
+
+/**
+* Represent a critical error during the serialization.
+*/
+@SuppressWarnings("serial")
+{I}public static class SerializeException extends RuntimeException {{
+{II}private final String path;
+{II}private final String reason;
+
+{II}public SerializeException(String path, String reason) {{
+{III}super(reason + " at: " + ("".equals(path) ? "the beginning" : path));
+{III}this.path = path;
+{III}this.reason = reason;
+{II}}}
+
+{II}public Optional<String> getPath() {{
+{III}return Optional.ofNullable(path);
+{II}}}
+
+{II}public Optional<String> getReason() {{
+{III}return Optional.ofNullable(reason);
+{II}}}
+{I}}}
+
+/**
+* Signal a failure of the serialization, carrying the path to the culprit.
+*
+* <p>The path is built as the stack unwinds -- every container prepends
+* the one segment it knows, the property its name and the list the index
+* of the item -- which is why this can not be a
+* {{@link SerializeException}} already: that one renders its message in
+* its constructor, so its path has to be complete by then.
+* {{@link Serialize#toJsonObject}} renders and converts.
+*/
+@SuppressWarnings("serial")
+{I}private static class _SerializeFailure extends RuntimeException {{
+{II}private final Reporting.Error error;
+
+{II}_SerializeFailure(Reporting.Error error) {{
+{III}super(error.getCause());
+{III}this.error = error;
+{II}}}
+
+{II}Reporting.Error getError() {{
+{III}return error;
 {II}}}
 {I}}}"""
     )
