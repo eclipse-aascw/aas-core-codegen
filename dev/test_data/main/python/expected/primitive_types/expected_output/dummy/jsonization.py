@@ -236,7 +236,10 @@ def _int_from_jsonable(
     :return: parsed integer
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, int):
+    # NOTE (mristin):
+    # ``bool`` is a subclass of ``int`` in Python, so it has to be excluded
+    # explicitly. Otherwise ``True`` would be read as ``1``.
+    if isinstance(jsonable, bool) or not isinstance(jsonable, int):
         raise DeserializationException(
             f"Expected an int, but got: {type(jsonable)}"
         )
@@ -249,13 +252,28 @@ def _float_from_jsonable(
     """
     Parse :paramref:`jsonable` as a floating-point number.
 
+    An integer is accepted as well. JSON has a single number type, so ``3`` is
+    every bit as good a floating-point number as ``3.0`` is, and :py:mod:`json`
+    gives us an ``int`` for the former.
+
     :param jsonable: JSON-able structure to be parsed
     :return: parsed floating-point number
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, float):
+    # NOTE (mristin):
+    # ``bool`` is a subclass of ``int`` in Python, so it has to be excluded
+    # explicitly. Otherwise ``True`` would be read as ``1.0``.
+    if isinstance(jsonable, bool) or not isinstance(jsonable, (int, float)):
         raise DeserializationException(
             f"Expected a float, but got: {type(jsonable)}"
+        )
+
+    try:
+        value = float(jsonable)
+    except OverflowError:
+        # pylint: disable=raise-missing-from
+        raise DeserializationException(
+            f"Expected a float, but got an integer too large for it: {jsonable}"
         )
 
     # NOTE (mristin):
@@ -263,12 +281,12 @@ def _float_from_jsonable(
     # can never give us one. :py:mod:`json` is not conformant in this respect --
     # it parses ``NaN``, ``Infinity`` and ``-Infinity`` out of the box -- so we
     # have to check here.
-    if not math.isfinite(jsonable):
+    if not math.isfinite(value):
         raise DeserializationException(
-            f"Expected a finite float, but got: {jsonable}"
+            f"Expected a finite float, but got: {value}"
         )
 
-    return jsonable
+    return value
 
 
 def _str_from_jsonable(

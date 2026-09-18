@@ -459,7 +459,10 @@ def _int_from_jsonable(
 {I}:return: parsed integer
 {I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
 {I}"""
-{I}if not isinstance(jsonable, int):
+{I}# NOTE (mristin):
+{I}# ``bool`` is a subclass of ``int`` in Python, so it has to be excluded
+{I}# explicitly. Otherwise ``True`` would be read as ``1``.
+{I}if isinstance(jsonable, bool) or not isinstance(jsonable, int):
 {II}raise DeserializationException(
 {III}f"Expected an int, but got: {{type(jsonable)}}"
 {II})
@@ -473,13 +476,28 @@ def _float_from_jsonable(
 {I}"""
 {I}Parse :paramref:`jsonable` as a floating-point number.
 
+{I}An integer is accepted as well. JSON has a single number type, so ``3`` is
+{I}every bit as good a floating-point number as ``3.0`` is, and :py:mod:`json`
+{I}gives us an ``int`` for the former.
+
 {I}:param jsonable: JSON-able structure to be parsed
 {I}:return: parsed floating-point number
 {I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
 {I}"""
-{I}if not isinstance(jsonable, float):
+{I}# NOTE (mristin):
+{I}# ``bool`` is a subclass of ``int`` in Python, so it has to be excluded
+{I}# explicitly. Otherwise ``True`` would be read as ``1.0``.
+{I}if isinstance(jsonable, bool) or not isinstance(jsonable, (int, float)):
 {II}raise DeserializationException(
 {III}f"Expected a float, but got: {{type(jsonable)}}"
+{II})
+
+{I}try:
+{II}value = float(jsonable)
+{I}except OverflowError:
+{II}# pylint: disable=raise-missing-from
+{II}raise DeserializationException(
+{III}f"Expected a float, but got an integer too large for it: {{jsonable}}"
 {II})
 
 {I}# NOTE (mristin):
@@ -487,12 +505,12 @@ def _float_from_jsonable(
 {I}# can never give us one. :py:mod:`json` is not conformant in this respect --
 {I}# it parses ``NaN``, ``Infinity`` and ``-Infinity`` out of the box -- so we
 {I}# have to check here.
-{I}if not math.isfinite(jsonable):
+{I}if not math.isfinite(value):
 {II}raise DeserializationException(
-{III}f"Expected a finite float, but got: {{jsonable}}"
+{III}f"Expected a finite float, but got: {{value}}"
 {II})
 
-{I}return jsonable'''
+{I}return value'''
         ),
         "_str_from_jsonable": Stripped(
             f'''\

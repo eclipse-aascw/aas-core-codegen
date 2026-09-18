@@ -254,7 +254,10 @@ def _int_from_jsonable(
     :return: parsed integer
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, int):
+    # NOTE (mristin):
+    # ``bool`` is a subclass of ``int`` in Python, so it has to be excluded
+    # explicitly. Otherwise ``True`` would be read as ``1``.
+    if isinstance(jsonable, bool) or not isinstance(jsonable, int):
         raise DeserializationException(
             f"Expected an int, but got: {type(jsonable)}"
         )
