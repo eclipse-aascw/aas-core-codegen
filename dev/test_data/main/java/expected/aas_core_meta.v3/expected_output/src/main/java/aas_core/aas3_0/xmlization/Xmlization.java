@@ -15,6 +15,7 @@ import java.util.Base64;
 import java.util.function.Function;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import aas_core.aas3_0.common.*;
 import aas_core.aas3_0.reporting.Reporting;
 import aas_core.aas3_0.stringification.Stringification;
@@ -412,10 +413,25 @@ public class Xmlization {
         }
         reader.nextEvent();
       }
-      if(!("true".equals(content.toString()) || "false".equals(content.toString()))){
-        throw new IllegalStateException("Content cannot be converted to the type Boolean.");
+      final String text = content.toString();
+
+      // NOTE (mristin):
+      // ``xs:boolean`` spells the two values in four ways, not two, so ``1`` and
+      // ``0`` have to be read as well. Boolean.valueOf is of no use here: it
+      // answers ``false`` to anything which is not ``true``, so it would take
+      // ``0`` and ``banana`` alike, and silently.
+      //
+      // See: https://www.w3.org/TR/xmlschema-2/#boolean
+      if (text.equals("true") || text.equals("1")) {
+        return Boolean.TRUE;
       }
-      return Boolean.valueOf(content.toString());
+
+      if (text.equals("false") || text.equals("0")) {
+        return Boolean.FALSE;
+      }
+
+      throw new IllegalStateException(
+        "Expected a value as xs:boolean, but got: " + text);
     }
 
     private static String readContentAsString(XMLEventReader reader) throws XMLStreamException {

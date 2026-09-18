@@ -15,6 +15,7 @@ import java.util.Base64;
 import java.util.function.Function;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import dummy.common.*;
 import dummy.reporting.Reporting;
 import dummy.stringification.Stringification;

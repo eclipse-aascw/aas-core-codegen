@@ -350,6 +350,12 @@ def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
     if primitive_type is intermediate.PrimitiveType.BYTEARRAY:
         return Identifier("writeByteArrayContent")
 
+    # NOTE (mristin):
+    # A double can not go through ``toString``: that renders an infinity as
+    # ``Infinity``, which is not a valid ``xs:double``.
+    if primitive_type is intermediate.PrimitiveType.FLOAT:
+        return Identifier("writeDoubleContent")
+
     if primitive_type is not None:
         return Identifier("writeStringifiedContent")
 
@@ -816,10 +822,25 @@ private static Boolean readContentAsBool(XMLEventReader reader) throws XMLStream
 {II}}}
 {II}reader.nextEvent();
 {I}}}
-{I}if(!("true".equals(content.toString()) || "false".equals(content.toString()))){{
-{II}throw new IllegalStateException("Content cannot be converted to the type Boolean.");
+{I}final String text = content.toString();
+
+{I}// NOTE (mristin):
+{I}// ``xs:boolean`` spells the two values in four ways, not two, so ``1`` and
+{I}// ``0`` have to be read as well. Boolean.valueOf is of no use here: it
+{I}// answers ``false`` to anything which is not ``true``, so it would take
+{I}// ``0`` and ``banana`` alike, and silently.
+{I}//
+{I}// See: https://www.w3.org/TR/xmlschema-2/#boolean
+{I}if (text.equals("true") || text.equals("1")) {{
+{II}return Boolean.TRUE;
 {I}}}
-{I}return Boolean.valueOf(content.toString());
+
+{I}if (text.equals("false") || text.equals("0")) {{
+{II}return Boolean.FALSE;
+{I}}}
+
+{I}throw new IllegalStateException(
+{II}"Expected a value as xs:boolean, but got: " + text);
 }}"""
     ),
     intermediate.PrimitiveType.INT: Stripped(
@@ -839,6 +860,15 @@ private static Long readContentAsLong(XMLEventReader reader) throws XMLStreamExc
     ),
     intermediate.PrimitiveType.FLOAT: Stripped(
         f"""\
+/**
+ * Match the lexical space of {{@code xs:double}}.
+ *
+ * <p>See: https://www.w3.org/TR/xmlschema-2/#double
+ */
+private static final Pattern XS_DOUBLE_PATTERN = Pattern.compile(
+{I}"^((\\\\+|-)?([0-9]+(\\\\.[0-9]*)?|\\\\.[0-9]+)([Ee](\\\\+|-)?[0-9]+)?"
+{II}+ "|-?INF|NaN)$");
+
 private static Double readContentAsDouble(XMLEventReader reader) throws XMLStreamException {{
 {I}final StringBuilder content = new StringBuilder();
 
@@ -849,7 +879,32 @@ private static Double readContentAsDouble(XMLEventReader reader) throws XMLStrea
 {II}reader.nextEvent();
 {I}}}
 
-{I}return Double.valueOf(content.toString());
+{I}final String text = content.toString();
+
+{I}// NOTE (mristin):
+{I}// The two infinities have to be spelled out: Double.valueOf refuses
+{I}// ``INF`` and ``-INF``, which is exactly what ``xs:double`` calls them.
+{I}if (text.equals("INF")) {{
+{II}return Double.POSITIVE_INFINITY;
+{I}}}
+
+{I}if (text.equals("-INF")) {{
+{II}return Double.NEGATIVE_INFINITY;
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// Double.valueOf is in the other direction far too permissive: it accepts
+{I}// ``Infinity``, a trailing type suffix as in ``1.0d``, a hexadecimal
+{I}// significand as in ``0x1p3``, and surrounding whitespace, none of which
+{I}// is a valid ``xs:double``. The pattern is therefore checked first.
+{I}//
+{I}// See: https://www.w3.org/TR/xmlschema-2/#double
+{I}if (!XS_DOUBLE_PATTERN.matcher(text).matches()) {{
+{II}throw new NumberFormatException(
+{III}"Expected a value as xs:double, but got: " + text);
+{I}}}
+
+{I}return Double.valueOf(text);
 }}"""
     ),
     intermediate.PrimitiveType.BYTEARRAY: Stripped(
@@ -2442,6 +2497,40 @@ private static <T> void writeStringifiedContent(
     )
 
 
+def _generate_write_double_content() -> Stripped:
+    """Generate the writer rendering a double as ``xs:double``."""
+    return Stripped(
+        f"""\
+/**
+ * Write {{@code that}} as XML content in the lexical form of
+ * {{@code xs:double}}.
+ *
+ * <p>This is the {{@link ContentWriter}} of every {{@code double}}-typed
+ * value, be it a property, a list item or a tuple item. A double can not
+ * share {{@link #writeStringifiedContent}} with the other primitives:
+ * {{@code Double.toString}} renders an infinity as {{@code Infinity}}, where
+ * {{@code xs:double}} spells it {{@code INF}}. Only the two infinities differ
+ * -- {{@code NaN}} is spelled the same way in both, and a finite number is
+ * rendered by {{@code Double.toString}} in a form which {{@code xs:double}}
+ * accepts.
+ *
+ * <p>See: https://www.w3.org/TR/xmlschema-2/#double
+ */
+private static void writeDoubleContent(
+{I}Double that,
+{I}XMLStreamWriter writer) throws XMLStreamException {{
+{I}final String text;
+{I}if (that.isInfinite()) {{
+{II}text = (that > 0) ? "INF" : "-INF";
+{I}}} else {{
+{II}text = that.toString();
+{I}}}
+
+{I}writer.writeCharacters(text);
+}}"""
+    )
+
+
 def _generate_write_enum() -> Stripped:
     """Generate the writer rendering any enumeration literal as content."""
     return Stripped(
@@ -2758,6 +2847,9 @@ def _generate_visitor(
     if Identifier("writeStringifiedContent") in needed.called_content_writers:
         blocks.append(_generate_write_stringified_content())
 
+    if Identifier("writeDoubleContent") in needed.called_content_writers:
+        blocks.append(_generate_write_double_content())
+
     if Identifier("writeByteArrayContent") in needed.called_content_writers:
         blocks.append(_generate_write_byte_array_content())
 
@@ -2958,6 +3050,7 @@ def generate(
         Stripped("import java.util.function.Function;"),
         Stripped("import java.util.List;"),
         Stripped("import java.util.Optional;"),
+        Stripped("import java.util.regex.Pattern;"),
         Stripped(f"import {package}.common.*;"),
         Stripped(f"import {package}.reporting.Reporting;"),
         Stripped(f"import {package}.stringification.Stringification;"),
