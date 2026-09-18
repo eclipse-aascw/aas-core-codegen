@@ -4376,6 +4376,47 @@ _DATA_SPECIFICATION_CONTENT_FROM_JSONABLE_DISPATCH: Mapping[
 # region Serialization
 
 
+class SerializationException(Exception):
+    """Signal that the JSON serialization could not be performed."""
+
+    #: Human-readable explanation of the exception's cause
+    cause: Final[str]
+
+    def __init__(
+            self,
+            cause: str
+    ) -> None:
+        """Initialize with the given :paramref:`cause` and an empty path."""
+        self.cause = cause
+        self._segments = []  # type: List[str]
+
+    @property
+    def path(self) -> str:
+        """
+        Render the path to the erroneous value as a Python access expression.
+
+        The path points into the instance which you handed over for
+        the serialization, and *not* into a JSON document -- at the point of
+        the failure, there is no document yet. For example, ``.submodels[0].value``
+        tells you that the serialization broke on ``that.submodels[0].value``.
+        """
+        return ''.join(self._segments)
+
+    def _prepend_property(self, name: str) -> None:
+        """Insert the access to the property :paramref:`name` before the path."""
+        self._segments.insert(0, f'.{name}')
+
+    def _prepend_index(self, index: int) -> None:
+        """Insert the access to the item at :paramref:`index` before the path."""
+        self._segments.insert(0, f'[{index}]')
+
+    def __str__(self) -> str:
+        if len(self._segments) == 0:
+            return self.cause
+
+        return f'{self.path}: {self.cause}'
+
+
 def _bytes_to_base64_str(
     value: bytes
 ) -> str:
@@ -4402,8 +4443,8 @@ def _list_of__asset_administration_shell_to_jsonable(
     """
     return [
         _asset_administration_shell_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4420,8 +4461,8 @@ def _list_of__concept_description_to_jsonable(
     """
     return [
         _concept_description_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4454,8 +4495,8 @@ def _list_of__embedded_data_specification_to_jsonable(
     """
     return [
         _embedded_data_specification_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4472,8 +4513,8 @@ def _list_of__extension_to_jsonable(
     """
     return [
         _extension_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4490,8 +4531,8 @@ def _list_of__key_to_jsonable(
     """
     return [
         _key_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4508,8 +4549,8 @@ def _list_of__lang_string_definition_type_iec_61360_to_jsonable(
     """
     return [
         _lang_string_definition_type_iec_61360_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4526,8 +4567,8 @@ def _list_of__lang_string_name_type_to_jsonable(
     """
     return [
         _lang_string_name_type_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4544,8 +4585,8 @@ def _list_of__lang_string_preferred_name_type_iec_61360_to_jsonable(
     """
     return [
         _lang_string_preferred_name_type_iec_61360_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4562,8 +4603,8 @@ def _list_of__lang_string_short_name_type_iec_61360_to_jsonable(
     """
     return [
         _lang_string_short_name_type_iec_61360_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4580,8 +4621,8 @@ def _list_of__lang_string_text_type_to_jsonable(
     """
     return [
         _lang_string_text_type_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4598,8 +4639,8 @@ def _list_of__operation_variable_to_jsonable(
     """
     return [
         _operation_variable_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4616,8 +4657,8 @@ def _list_of__qualifier_to_jsonable(
     """
     return [
         _qualifier_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4634,8 +4675,8 @@ def _list_of__reference_to_jsonable(
     """
     return [
         _reference_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4652,8 +4693,8 @@ def _list_of__specific_asset_id_to_jsonable(
     """
     return [
         _specific_asset_id_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4686,8 +4727,8 @@ def _list_of__submodel_to_jsonable(
     """
     return [
         _submodel_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -4704,8 +4745,8 @@ def _list_of__value_reference_pair_to_jsonable(
     """
     return [
         _value_reference_pair_to_jsonable(
-    item
-)
+        item
+    )
         for item in that
     ]
 
@@ -6019,6 +6060,9 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
         AAS data to be recursively converted to a JSON-able structure
     :return:
         JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
+    :raise:
+        :py:class:`SerializationException` if :paramref:`that` contains a number
+        which JSON can not represent
     """
     return that.transform(_SERIALIZER)
 

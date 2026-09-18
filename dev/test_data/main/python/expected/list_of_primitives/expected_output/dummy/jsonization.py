@@ -13,6 +13,7 @@ properties do not have fixed order, and hence we can not read
 
 import base64
 import collections.abc
+import math
 import sys
 from typing import (
     cast,
@@ -256,6 +257,17 @@ def _float_from_jsonable(
         raise DeserializationException(
             f"Expected a float, but got: {type(jsonable)}"
         )
+
+    # NOTE (mristin):
+    # JSON knows neither an infinity nor a not-a-number, so a conformant parser
+    # can never give us one. :py:mod:`json` is not conformant in this respect --
+    # it parses ``NaN``, ``Infinity`` and ``-Infinity`` out of the box -- so we
+    # have to check here.
+    if not math.isfinite(jsonable):
+        raise DeserializationException(
+            f"Expected a finite float, but got: {jsonable}"
+        )
+
     return jsonable
 
 
@@ -555,6 +567,92 @@ def something_from_jsonable(
 # region Serialization
 
 
+class SerializationException(Exception):
+    """Signal that the JSON serialization could not be performed."""
+
+    #: Human-readable explanation of the exception's cause
+    cause: Final[str]
+
+    def __init__(
+            self,
+            cause: str
+    ) -> None:
+        """Initialize with the given :paramref:`cause` and an empty path."""
+        self.cause = cause
+        self._segments = []  # type: List[str]
+
+    @property
+    def path(self) -> str:
+        """
+        Render the path to the erroneous value as a Python access expression.
+
+        The path points into the instance which you handed over for
+        the serialization, and *not* into a JSON document -- at the point of
+        the failure, there is no document yet. For example, ``.submodels[0].value``
+        tells you that the serialization broke on ``that.submodels[0].value``.
+        """
+        return ''.join(self._segments)
+
+    def _prepend_property(self, name: str) -> None:
+        """Insert the access to the property :paramref:`name` before the path."""
+        self._segments.insert(0, f'.{name}')
+
+    def _prepend_index(self, index: int) -> None:
+        """Insert the access to the item at :paramref:`index` before the path."""
+        self._segments.insert(0, f'[{index}]')
+
+    def __str__(self) -> str:
+        if len(self._segments) == 0:
+            return self.cause
+
+        return f'{self.path}: {self.cause}'
+
+
+def _int_to_jsonable(
+    that: int
+) -> int:
+    """
+    Serialize :paramref:`that` integer to a JSON-able value.
+
+    Only the integers in the range :math:`[-2^{53} + 1, 2^{53} - 1]` are
+    serialized. Outside of it, an integer can not be exactly represented as
+    a 64-bit floating-point number, which is what the JSON de-serializers of
+    the other languages read a number into.
+
+    :param that: integer to be serialized
+    :return: :paramref:`that`, unchanged
+    :raise: :py:class:`SerializationException` if outside the range
+    """
+    if that < -9007199254740991 or that > 9007199254740991:
+        raise SerializationException(
+            f"The integer can not be serialized to JSON as it is outside "
+            f"the range [-2^53 + 1, 2^53 - 1]: {that}"
+        )
+    return that
+
+
+def _float_to_jsonable(
+    that: float
+) -> float:
+    """
+    Serialize :paramref:`that` floating-point number to a JSON-able value.
+
+    JSON knows neither an infinity nor a not-a-number, so we refuse to serialize
+    them instead of leaving it to :py:mod:`json` to write them out as ``NaN``
+    and ``Infinity``, which no conformant parser reads back.
+
+    :param that: floating-point number to be serialized
+    :return: :paramref:`that`, unchanged
+    :raise: :py:class:`SerializationException` if not finite
+    """
+    if not math.isfinite(that):
+        raise SerializationException(
+            f"JSON knows neither an infinity nor a not-a-number, so the value "
+            f"can not be serialized: {that}"
+        )
+    return that
+
+
 def _bytes_to_base64_str(
     value: bytes
 ) -> str:
@@ -581,10 +679,58 @@ def _list_of__bytes_to_jsonable(
     """
     return [
         _bytes_to_base64_str(
-    item
-)
+        item
+    )
         for item in that
     ]
+
+
+def _list_of__float_to_jsonable(
+    that: List[float]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    ``float``.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _float_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
+
+
+def _list_of__int_to_jsonable(
+    that: List[int]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    ``int``.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _int_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _something_to_jsonable(
@@ -595,12 +741,20 @@ def _something_to_jsonable(
     jsonable['someBools'] = list(
         that.some_bools
     )
-    jsonable['someInts'] = list(
-        that.some_ints
-    )
-    jsonable['someFloats'] = list(
-        that.some_floats
-    )
+    try:
+        jsonable['someInts'] = _list_of__int_to_jsonable(
+            that.some_ints
+        )
+    except SerializationException as exception:
+        exception._prepend_property('some_ints')
+        raise
+    try:
+        jsonable['someFloats'] = _list_of__float_to_jsonable(
+            that.some_floats
+        )
+    except SerializationException as exception:
+        exception._prepend_property('some_floats')
+        raise
     jsonable['someStrings'] = list(
         that.some_strings
     )
@@ -638,6 +792,9 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
         AAS data to be recursively converted to a JSON-able structure
     :return:
         JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
+    :raise:
+        :py:class:`SerializationException` if :paramref:`that` contains a number
+        which JSON can not represent
     """
     return that.transform(_SERIALIZER)
 
