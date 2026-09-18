@@ -58,17 +58,21 @@ def _generate_read_whole_content_as_base_64() -> Stripped:
 private static byte[] ReadWholeContentAsBase64(
 {I}Xml.XmlReader reader)
 {{
-{I}// The capacity of 1024 bytes is an arbitrary,
-{I}// but plausible default capacity.
-{I}byte[] buffer = new byte[1024];
-{I}using System.IO.MemoryStream stream = (
-{II}new System.IO.MemoryStream(1024));
-{I}int readBytes;
-{I}while ((readBytes = reader.ReadContentAsBase64(buffer, 0, 1024)) > 0)
+{I}// NOTE (mristin):
+{I}// The content is read as a text and only then decoded, instead of
+{I}// streaming it through XmlReader.ReadContentAsBase64. That decoder is
+{I}// lenient in ways XSD is not -- it reads "SGk" although it is three
+{I}// characters long -- and it gives us nothing to check before it has
+{I}// already decoded.
+{I}string text = WhitespaceRunRegex.Replace(reader.ReadContentAsString(), "");
+
+{I}if (!MatchesXsBase64Binary(text))
 {I}{{
-{II}stream.Write(buffer, 0, readBytes);
+{II}throw new System.FormatException(
+{III}$"Expected a text as base64-encoded bytes, but got: {{text}}");
 {I}}}
-{I}return stream.ToArray();
+
+{I}return System.Convert.FromBase64String(text);
 }}"""
     )
 
@@ -894,6 +898,99 @@ private static {csharp_type} {function_name}(Xml.XmlReader reader)
             )
         )
 
+    if (
+        intermediate.PrimitiveType.FLOAT in primitive_types
+        or intermediate.PrimitiveType.BYTEARRAY in primitive_types
+    ):
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Match a run of the four characters which XML calls whitespace.
+/// </summary>
+private static readonly RegularExpressions.Regex WhitespaceRunRegex = (
+{I}new RegularExpressions.Regex(
+{II}@"[ \\t\\n\\r]+",
+{II}RegularExpressions.RegexOptions.Compiled));"""
+            )
+        )
+
+    if intermediate.PrimitiveType.BYTEARRAY in primitive_types:
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Tell whether <paramref name="text" /> is a lexical form of
+/// <c>xs:base64Binary</c>.
+/// </summary>
+/// <remarks>
+/// The whitespace is expected to be gone already. What is left has to match
+/// <c>(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=')
+/// | (B64 B04 '=='))?</c> -- a length which is a multiple of four,
+/// the alphabet and nothing else, an equals sign only at the very end, and,
+/// easily missed, a constrained character <i>before</i> the padding, as
+/// the bits which the padding drops have to be zero.
+///
+/// The decoders do not agree on any of this, so every target does the same
+/// check of its own and refuses the same texts.
+///
+/// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+/// </remarks>
+private static bool MatchesXsBase64Binary(string text)
+{{
+{I}if (text.Length % 4 != 0)
+{I}{{
+{II}return false;
+{I}}}
+
+{I}if (text.Length == 0)
+{I}{{
+{II}return true;
+{I}}}
+
+{I}int pads = 0;
+{I}if (text[text.Length - 1] == '=')
+{I}{{
+{II}pads = 1;
+{II}if (text[text.Length - 2] == '=')
+{II}{{
+{III}pads = 2;
+{II}}}
+{I}}}
+
+{I}for (int i = 0; i < text.Length - pads; i++)
+{I}{{
+{II}char character = text[i];
+{II}bool inAlphabet =
+{III}(character >= 'A' && character <= 'Z')
+{IIII}|| (character >= 'a' && character <= 'z')
+{IIII}|| (character >= '0' && character <= '9')
+{IIII}|| character == '+'
+{IIII}|| character == '/';
+{II}if (!inAlphabet)
+{II}{{
+{III}return false;
+{II}}}
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// Only these sixteen characters leave the two dropped bits at zero, and
+{I}// only these four leave the four dropped bits at zero.
+{I}if (pads == 1)
+{I}{{
+{II}return "AEIMQUYcgkosw048".IndexOf(text[text.Length - 2]) >= 0;
+{I}}}
+
+{I}if (pads == 2)
+{I}{{
+{II}return "AQgw".IndexOf(text[text.Length - 3]) >= 0;
+{I}}}
+
+{I}return true;
+}}"""
+            )
+        )
+
     if intermediate.PrimitiveType.FLOAT in primitive_types:
         result.append(
             Stripped(
@@ -909,14 +1006,6 @@ private static {csharp_type} {function_name}(Xml.XmlReader reader)
 ///
 /// See: https://www.w3.org/TR/xmlschema-2/#double
 /// </remarks>
-/// <summary>
-/// Match a run of the four characters which XML calls whitespace.
-/// </summary>
-private static readonly RegularExpressions.Regex WhitespaceRunRegex = (
-{I}new RegularExpressions.Regex(
-{II}@"[ \t\n\r]+",
-{II}RegularExpressions.RegexOptions.Compiled));
-
 private static readonly RegularExpressions.Regex XsDoubleRegex = (
 {I}new RegularExpressions.Regex(
 {II}@"^(\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?\\z",

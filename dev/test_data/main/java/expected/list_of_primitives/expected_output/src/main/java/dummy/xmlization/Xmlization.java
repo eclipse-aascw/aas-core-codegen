@@ -392,6 +392,67 @@ public class Xmlization {
       return WHITESPACE_RUN.matcher(text).replaceAll("");
     }
 
+    /**
+     * Tell whether {@code text} is a lexical form of {@code xs:base64Binary}.
+     *
+     * <p>The whitespace is expected to be gone already. What is left has to match
+     * {@code (B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=')
+     * | (B64 B04 '=='))?} -- a length which is a multiple of four,
+     * the alphabet and nothing else, an equals sign only at the very end, and,
+     * easily missed, a constrained character <i>before</i> the padding, as
+     * the bits which the padding drops have to be zero.
+     *
+     * <p>The decoders do not agree on any of this. Base64.getDecoder() reads
+     * {@code SGk} although it is three characters long, where the Go and
+     * the Python SDKs refuse it. Hence this check, so that every target refuses
+     * the same texts.
+     *
+     * <p>See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+     */
+    private static boolean matchesXsBase64Binary(String text) {
+      if (text.length() % 4 != 0) {
+        return false;
+      }
+
+      if (text.isEmpty()) {
+        return true;
+      }
+
+      int pads = 0;
+      if (text.charAt(text.length() - 1) == '=') {
+        pads = 1;
+        if (text.charAt(text.length() - 2) == '=') {
+          pads = 2;
+        }
+      }
+
+      for (int i = 0; i < text.length() - pads; i++) {
+        final char character = text.charAt(i);
+        final boolean inAlphabet =
+          (character >= 'A' && character <= 'Z')
+            || (character >= 'a' && character <= 'z')
+            || (character >= '0' && character <= '9')
+            || character == '+'
+            || character == '/';
+        if (!inAlphabet) {
+          return false;
+        }
+      }
+
+      // NOTE (mristin):
+      // Only these sixteen characters leave the two dropped bits at zero, and
+      // only these four leave the four dropped bits at zero.
+      if (pads == 1) {
+        return "AEIMQUYcgkosw048".indexOf(text.charAt(text.length() - 2)) >= 0;
+      }
+
+      if (pads == 2) {
+        return "AQgw".indexOf(text.charAt(text.length() - 3)) >= 0;
+      }
+
+      return true;
+    }
+
     private static Boolean readContentAsBool(XMLEventReader reader) throws XMLStreamException {
       final StringBuilder content = new StringBuilder();
 
@@ -516,6 +577,11 @@ public class Xmlization {
       //
       // See: https://www.w3.org/TR/xmlschema-2/#base64Binary
       String encodedData = removeWhitespace(content.toString());
+
+      if (!matchesXsBase64Binary(encodedData)) {
+        throw new XMLStreamException(
+          "Expected a text as base64-encoded bytes, but got: " + encodedData);
+      }
       final byte[] decodedData;
       Base64.Decoder decoder = Base64.getDecoder();
 

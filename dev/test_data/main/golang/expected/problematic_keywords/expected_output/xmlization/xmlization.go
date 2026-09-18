@@ -163,6 +163,62 @@ func collapseWhitespace(text string) string {
 	return strings.Trim(whitespaceRunRe.ReplaceAllString(text, " "), " ")
 }
 
+// Tell whether `text` is a lexical form of `xs:base64Binary`.
+//
+// The whitespace is expected to be gone already. What is left has to match
+// `(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 "=") | (B64 B04 "=="))?`
+// -- a length which is a multiple of four, the alphabet and nothing else,
+// an equals sign only at the very end, and, easily missed, a constrained
+// character *before* the padding, as the bits which the padding drops have to
+// be zero.
+//
+// The decoders do not agree on any of this, so every target does the same
+// check of its own and refuses the same texts.
+//
+// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+func matchesXsBase64Binary(text string) bool {
+	if len(text)%4 != 0 {
+		return false
+	}
+
+	if len(text) == 0 {
+		return true
+	}
+
+	pads := 0
+	if text[len(text)-1] == '=' {
+		pads = 1
+		if text[len(text)-2] == '=' {
+			pads = 2
+		}
+	}
+
+	for i := 0; i < len(text)-pads; i++ {
+		character := text[i]
+		inAlphabet := (character >= 'A' && character <= 'Z') ||
+			(character >= 'a' && character <= 'z') ||
+			(character >= '0' && character <= '9') ||
+			character == '+' ||
+			character == '/'
+		if !inAlphabet {
+			return false
+		}
+	}
+
+	// NOTE:
+	// Only these sixteen characters leave the two dropped bits at zero, and
+	// only these four leave the four dropped bits at zero.
+	if pads == 1 {
+		return strings.IndexByte("AEIMQUYcgkosw048", text[len(text)-2]) >= 0
+	}
+
+	if pads == 2 {
+		return strings.IndexByte("AQgw", text[len(text)-3]) >= 0
+	}
+
+	return true
+}
+
 // Drop every whitespace character of `text`.
 //
 // This is what `xs:base64Binary` needs: it allows whitespace between
@@ -410,6 +466,16 @@ func readTextAs_bytes(
 	//
 	// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
 	text = removeWhitespace(text)
+
+	if !matchesXsBase64Binary(text) {
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected a text as base64-encoded bytes, but got: %s",
+				text,
+			),
+		)
+		return
+	}
 
 	var decodingErr error
 	value, decodingErr = b64.StdEncoding.DecodeString(text)

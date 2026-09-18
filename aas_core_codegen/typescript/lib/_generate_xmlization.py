@@ -316,8 +316,15 @@ function {function_name}(
 {I}// whitespace character is dropped, and not merely collapsed.
 {I}//
 {I}// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
-{I}const decodedOrError = AasCommon.base64Decode(
-{II}removeWhitespace(parseTextContent(cursor)));
+{I}const text = removeWhitespace(parseTextContent(cursor));
+
+{I}if (!matchesXsBase64Binary(text)) {{
+{II}return newDeserializationError<Uint8Array>(
+{III}`Expected a text as base64-encoded bytes, but got: ${{text}}`
+{II});
+{I}}}
+
+{I}const decodedOrError = AasCommon.base64Decode(text);
 {I}if (decodedOrError.error !== null) {{
 {II}return newDeserializationError<Uint8Array>(
 {III}decodedOrError.error
@@ -2342,6 +2349,65 @@ const WHITESPACE_RUN = /[ \\t\\n\\r]+/g;
  */
 function collapseWhitespace(text: string): string {{
 {I}return text.replace(WHITESPACE_RUN, " ").trim();
+}}
+
+/**
+ * Tell whether `text` is a lexical form of `xs:base64Binary`.
+ *
+ * The whitespace is expected to be gone already. What is left has to match
+ * `(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 "=") | (B64 B04 "=="))?`
+ * -- a length which is a multiple of four, the alphabet and nothing else,
+ * an equals sign only at the very end, and, easily missed, a constrained
+ * character *before* the padding, as the bits which the padding drops have
+ * to be zero.
+ *
+ * The decoders do not agree on any of this, so every target does the same
+ * check of its own and refuses the same texts.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+ */
+function matchesXsBase64Binary(text: string): boolean {{
+{I}if (text.length % 4 !== 0) {{
+{II}return false;
+{I}}}
+
+{I}if (text.length === 0) {{
+{II}return true;
+{I}}}
+
+{I}let pads = 0;
+{I}if (text[text.length - 1] === "=") {{
+{II}pads = 1;
+{II}if (text[text.length - 2] === "=") {{
+{III}pads = 2;
+{II}}}
+{I}}}
+
+{I}for (let i = 0; i < text.length - pads; i++) {{
+{II}const character = text[i];
+{II}const inAlphabet =
+{III}(character >= "A" && character <= "Z") ||
+{III}(character >= "a" && character <= "z") ||
+{III}(character >= "0" && character <= "9") ||
+{III}character === "+" ||
+{III}character === "/";
+{II}if (!inAlphabet) {{
+{III}return false;
+{II}}}
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// Only these sixteen characters leave the two dropped bits at zero, and
+{I}// only these four leave the four dropped bits at zero.
+{I}if (pads === 1) {{
+{II}return "AEIMQUYcgkosw048".includes(text[text.length - 2]);
+{I}}}
+
+{I}if (pads === 2) {{
+{II}return "AQgw".includes(text[text.length - 3]);
+{I}}}
+
+{I}return true;
 }}
 
 /**

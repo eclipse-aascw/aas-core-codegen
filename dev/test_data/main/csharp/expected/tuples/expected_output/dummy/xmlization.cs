@@ -60,17 +60,21 @@ namespace dummy
             private static byte[] ReadWholeContentAsBase64(
                 Xml.XmlReader reader)
             {
-                // The capacity of 1024 bytes is an arbitrary,
-                // but plausible default capacity.
-                byte[] buffer = new byte[1024];
-                using System.IO.MemoryStream stream = (
-                    new System.IO.MemoryStream(1024));
-                int readBytes;
-                while ((readBytes = reader.ReadContentAsBase64(buffer, 0, 1024)) > 0)
+                // NOTE (mristin):
+                // The content is read as a text and only then decoded, instead of
+                // streaming it through XmlReader.ReadContentAsBase64. That decoder is
+                // lenient in ways XSD is not -- it reads "SGk" although it is three
+                // characters long -- and it gives us nothing to check before it has
+                // already decoded.
+                string text = WhitespaceRunRegex.Replace(reader.ReadContentAsString(), "");
+
+                if (!MatchesXsBase64Binary(text))
                 {
-                    stream.Write(buffer, 0, readBytes);
+                    throw new System.FormatException(
+                        $"Expected a text as base64-encoded bytes, but got: {text}");
                 }
-                return stream.ToArray();
+
+                return System.Convert.FromBase64String(text);
             }
 
             /// <summary>

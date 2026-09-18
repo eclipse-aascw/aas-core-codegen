@@ -60,17 +60,21 @@ namespace AasCore.Aas3_0
             private static byte[] ReadWholeContentAsBase64(
                 Xml.XmlReader reader)
             {
-                // The capacity of 1024 bytes is an arbitrary,
-                // but plausible default capacity.
-                byte[] buffer = new byte[1024];
-                using System.IO.MemoryStream stream = (
-                    new System.IO.MemoryStream(1024));
-                int readBytes;
-                while ((readBytes = reader.ReadContentAsBase64(buffer, 0, 1024)) > 0)
+                // NOTE (mristin):
+                // The content is read as a text and only then decoded, instead of
+                // streaming it through XmlReader.ReadContentAsBase64. That decoder is
+                // lenient in ways XSD is not -- it reads "SGk" although it is three
+                // characters long -- and it gives us nothing to check before it has
+                // already decoded.
+                string text = WhitespaceRunRegex.Replace(reader.ReadContentAsString(), "");
+
+                if (!MatchesXsBase64Binary(text))
                 {
-                    stream.Write(buffer, 0, readBytes);
+                    throw new System.FormatException(
+                        $"Expected a text as base64-encoded bytes, but got: {text}");
                 }
-                return stream.ToArray();
+
+                return System.Convert.FromBase64String(text);
             }
 
             /// <summary>
@@ -297,6 +301,84 @@ namespace AasCore.Aas3_0
             {
                 return ReadWholeContentAsBase64(
                     reader);
+            }
+
+            /// <summary>
+            /// Match a run of the four characters which XML calls whitespace.
+            /// </summary>
+            private static readonly RegularExpressions.Regex WhitespaceRunRegex = (
+                new RegularExpressions.Regex(
+                    @"[ \t\n\r]+",
+                    RegularExpressions.RegexOptions.Compiled));
+
+            /// <summary>
+            /// Tell whether <paramref name="text" /> is a lexical form of
+            /// <c>xs:base64Binary</c>.
+            /// </summary>
+            /// <remarks>
+            /// The whitespace is expected to be gone already. What is left has to match
+            /// <c>(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=')
+            /// | (B64 B04 '=='))?</c> -- a length which is a multiple of four,
+            /// the alphabet and nothing else, an equals sign only at the very end, and,
+            /// easily missed, a constrained character <i>before</i> the padding, as
+            /// the bits which the padding drops have to be zero.
+            ///
+            /// The decoders do not agree on any of this, so every target does the same
+            /// check of its own and refuses the same texts.
+            ///
+            /// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+            /// </remarks>
+            private static bool MatchesXsBase64Binary(string text)
+            {
+                if (text.Length % 4 != 0)
+                {
+                    return false;
+                }
+
+                if (text.Length == 0)
+                {
+                    return true;
+                }
+
+                int pads = 0;
+                if (text[text.Length - 1] == '=')
+                {
+                    pads = 1;
+                    if (text[text.Length - 2] == '=')
+                    {
+                        pads = 2;
+                    }
+                }
+
+                for (int i = 0; i < text.Length - pads; i++)
+                {
+                    char character = text[i];
+                    bool inAlphabet =
+                        (character >= 'A' && character <= 'Z')
+                            || (character >= 'a' && character <= 'z')
+                            || (character >= '0' && character <= '9')
+                            || character == '+'
+                            || character == '/';
+                    if (!inAlphabet)
+                    {
+                        return false;
+                    }
+                }
+
+                // NOTE (mristin):
+                // Only these sixteen characters leave the two dropped bits at zero, and
+                // only these four leave the four dropped bits at zero.
+                if (pads == 1)
+                {
+                    return "AEIMQUYcgkosw048".IndexOf(text[text.Length - 2]) >= 0;
+                }
+
+                if (pads == 2)
+                {
+                    return "AQgw".IndexOf(text[text.Length - 3]) >= 0;
+                }
+
+                return true;
             }
 
             /// <summary>
