@@ -909,6 +909,14 @@ private static {csharp_type} {function_name}(Xml.XmlReader reader)
 ///
 /// See: https://www.w3.org/TR/xmlschema-2/#double
 /// </remarks>
+/// <summary>
+/// Match a run of the four characters which XML calls whitespace.
+/// </summary>
+private static readonly RegularExpressions.Regex WhitespaceRunRegex = (
+{I}new RegularExpressions.Regex(
+{II}@"[ \t\n\r]+",
+{II}RegularExpressions.RegexOptions.Compiled));
+
 private static readonly RegularExpressions.Regex XsDoubleRegex = (
 {I}new RegularExpressions.Regex(
 {II}@"^(\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?\\z",
@@ -927,8 +935,23 @@ private static readonly RegularExpressions.Regex XsDoubleRegex = (
 /// <exception cref="System.FormatException">
 /// Thrown when <paramref name="text" /> is not a <c>xs:double</c>
 /// </exception>
-private static double ParseXsDouble(string text)
+private static double ParseXsDouble(string rawText)
 {{
+{I}// NOTE (mristin):
+{I}// Every atomic XSD type except a string fixes whiteSpace to collapse,
+{I}// and a schema author can not change it, so the text is normalized
+{I}// before it is matched: a tab, a line feed and a carriage return each
+{I}// become a space, a run of spaces becomes one space, and the leading
+{I}// and trailing spaces go. Mind that this strips only the whitespace
+{I}// *around* the value: a space within it survives as a single space, so
+{I}// "2  3" becomes "2 3", which is still no number.
+{I}//
+{I}// The other readers of this class need no such thing -- XmlConvert,
+{I}// which XmlReader.ReadContentAs* goes through, already collapses.
+{I}//
+{I}// See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
+{I}string text = WhitespaceRunRegex.Replace(rawText, " ").Trim(' ');
+
 {I}switch (text)
 {I}{{
 {II}case "INF":

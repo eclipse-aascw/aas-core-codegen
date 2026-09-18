@@ -574,6 +574,41 @@ function readRequiredRootOpenTag(
 }
 
 /**
+ * Match a run of the four characters which XML calls whitespace.
+ */
+const WHITESPACE_RUN = /[ \t\n\r]+/g;
+
+/**
+ * Normalize `text` the way `whiteSpace="collapse"` prescribes.
+ *
+ * Every atomic XSD type except a string, and every type derived from one by
+ * restriction, fixes `whiteSpace` to `collapse`, and a schema author can not
+ * change it. A tab, a line feed and a carriage return each become a space,
+ * a run of spaces becomes one space, and the leading and trailing spaces go.
+ * Only the result of that is a lexical representation to be matched.
+ *
+ * Mind that this strips only the whitespace *around* the value: a space
+ * within it survives as a single space, so `2  3` becomes `2 3`, which is
+ * still no number.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
+ */
+function collapseWhitespace(text: string): string {
+  return text.replace(WHITESPACE_RUN, " ").trim();
+}
+
+/**
+ * Drop every whitespace character of `text`.
+ *
+ * This is what `xs:base64Binary` needs: it allows whitespace between
+ * the characters and not only around them, so collapsing is not enough --
+ * the decoder accepts none of it.
+ */
+function removeWhitespace(text: string): string {
+  return text.replace(WHITESPACE_RUN, "");
+}
+
+/**
  * Consume the text (or CDATA) content at `cursor`, if any.
  *
  * The caller is responsible for reading and verifying the closing element
@@ -610,7 +645,7 @@ function duplicatePropertyError(localName: string): DeserializationError {
 function parse_bool(
   cursor: XmlCursor
 ): AasCommon.Either<boolean, DeserializationError> {
-  const text = parseTextContent(cursor);
+  const text = collapseWhitespace(parseTextContent(cursor));
 
   if (text === "true" || text === "1") {
     return new AasCommon.Either<boolean, DeserializationError>(true, null);
@@ -627,7 +662,7 @@ function parse_bool(
 function parse_int(
   cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
-  const text = parseTextContent(cursor);
+  const text = collapseWhitespace(parseTextContent(cursor));
 
   if (!/^[+-]?\d+$/.test(text)) {
     return newDeserializationError<number>(
@@ -659,7 +694,7 @@ function parse_int(
 function parse_float(
   cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
-  const text = parseTextContent(cursor);
+  const text = collapseWhitespace(parseTextContent(cursor));
 
   if (text === "INF") {
     return new AasCommon.Either<number, DeserializationError>(Infinity, null);
@@ -706,7 +741,14 @@ function parse_str(
 function parse_bytes(
   cursor: XmlCursor
 ): AasCommon.Either<Uint8Array, DeserializationError> {
-  const decodedOrError = AasCommon.base64Decode(parseTextContent(cursor));
+  // NOTE (mristin):
+  // ``xs:base64Binary`` allows whitespace between the characters, and not
+  // only around them, while the decoder accepts none of it. So every
+  // whitespace character is dropped, and not merely collapsed.
+  //
+  // See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+  const decodedOrError = AasCommon.base64Decode(
+    removeWhitespace(parseTextContent(cursor)));
   if (decodedOrError.error !== null) {
     return newDeserializationError<Uint8Array>(
       decodedOrError.error
