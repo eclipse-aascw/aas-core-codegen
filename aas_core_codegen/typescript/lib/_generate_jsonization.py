@@ -1434,318 +1434,487 @@ export function {function_name}(
 
 # region Serialization
 
+# NOTE (mristin):
+# The serialization guards with a ``try`` so that the path can be prepended as
+# the stack unwinds: one ``try`` per serializer for the properties, and one per
+# list, or per refusable item of a tuple, for the index. Only a value which can be
+# refused at all is worth guarding, and two of them can be:
+#
+# * a number, as JSON holds neither an infinity nor a not-a-number, and an integer
+#   only within [-2^53 + 1, 2^53 - 1]; and
+# * an enumeration literal, as a TypeScript enumeration is a number at run time, so
+#   a literal outside the enumeration is possible and ``{enum}ToString`` gives out
+#   ``null`` for it.
+#
+# Hence the ``reaches_a_number(...) or reaches_an_enumeration(...)`` spelled out at
+# each of the three sites below. The two are deliberately not folded into a single
+# query: *which* values a serialization can refuse is a property of the target
+# language -- a literal can not be invalid in Java or in Python -- whereas *what
+# a type reaches* is a property of the meta-model, and only the latter belongs in
+# :py:mod:`aas_core_codegen.intermediate`.
 
-def _generate_transform_atomic_value(
-    access_expression: str, type_anno: intermediate.AtomicTypeAnnotation
+
+def _serialize_function_name(cls: intermediate.ConcreteClass) -> Identifier:
+    """
+    Name the function serializing an instance of ``cls``.
+
+    The name is keyed by a symbol of the meta-model, so it carries no underscore,
+    see :py:func:`aas_core_codegen.typescript.common.type_moniker`.
+    """
+    return typescript_naming.function_name(Identifier(f"serialize_{cls.name}"))
+
+
+def _serialize_enumeration_function_name(
+    enumeration: intermediate.Enumeration,
+) -> Identifier:
+    """
+    Name the function serializing a literal of ``enumeration``.
+
+    Unlike :py:func:`_serialize_function_name`, this one is keyed by a *type*, so it
+    carries an underscore and ends in the moniker of that type.
+    """
+    return Identifier(f"serialize_{typescript_naming.enum_name(enumeration.name)}")
+
+
+def _composed_serialize_function_name(
+    type_anno: intermediate.ContainerTypeAnnotation,
+) -> Identifier:
+    """Name the function serializing the list or the tuple ``type_anno``."""
+    return Identifier(f"serialize_{typescript_common.type_moniker(type_anno)}")
+
+
+def _jsonable_type_of_atomic(type_anno: intermediate.AtomicTypeAnnotation) -> Stripped:
+    """Render the JSON-able type which a value of the atomic ``type_anno`` becomes."""
+    primitive_type = intermediate.try_primitive_type(type_anno)
+
+    if primitive_type is not None:
+        if primitive_type is intermediate.PrimitiveType.BOOL:
+            return Stripped("boolean")
+        elif primitive_type is intermediate.PrimitiveType.INT:
+            return Stripped("number")
+        elif primitive_type is intermediate.PrimitiveType.FLOAT:
+            return Stripped("number")
+        elif primitive_type is intermediate.PrimitiveType.STR:
+            return Stripped("string")
+        elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+            # NOTE (mristin):
+            # A byte array goes on the wire base64-encoded.
+            return Stripped("string")
+        else:
+            assert_never(primitive_type)
+
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got: {type_anno}"
+
+    if isinstance(type_anno.our_type, intermediate.Enumeration):
+        # NOTE (mristin):
+        # A literal goes on the wire as the text which the stringification gives out.
+        return Stripped("string")
+
+    return Stripped("JsonObject")
+
+
+def _generate_serialize_call(
+    access_expression: Stripped, type_anno: intermediate.AtomicTypeAnnotation
 ) -> Stripped:
     """
-    Generate the snippet to transform the ``access_expression``.
+    Generate the expression serializing the atomic ``access_expression``.
 
-    The ``access_expression`` should either be a name or a member access.
+    A value whose run-time type its declared type leaves open is dispatched through
+    ``serializeClass``; everything else names the one function which serializes it,
+    so neither a dispatch nor a closure is paid where the type already answers.
     """
-    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation) or (
-        isinstance(type_anno, intermediate.OurTypeAnnotation)
-        and isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive)
-    ):
-        a_type = intermediate.try_primitive_type(type_anno)
-        assert a_type is not None
+    primitive_type = intermediate.try_primitive_type(type_anno)
 
-        if (
-            a_type is intermediate.PrimitiveType.BOOL
-            or a_type is intermediate.PrimitiveType.STR
-        ):
-            return Stripped(f"{access_expression}")
+    if primitive_type is not None:
+        # NOTE (mristin):
+        # JSON carries a boolean and a string as they come.
+        if primitive_type is intermediate.PrimitiveType.BOOL:
+            return access_expression
 
-        elif a_type is intermediate.PrimitiveType.INT:
+        elif primitive_type is intermediate.PrimitiveType.STR:
+            return access_expression
+
+        elif primitive_type is intermediate.PrimitiveType.INT:
             return Stripped(f"integerToJsonable({access_expression})")
 
-        elif a_type is intermediate.PrimitiveType.FLOAT:
+        elif primitive_type is intermediate.PrimitiveType.FLOAT:
             return Stripped(f"numberToJsonable({access_expression})")
 
-        elif a_type is intermediate.PrimitiveType.BYTEARRAY:
+        elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
             return Stripped(f"AasCommon.base64Encode({access_expression})")
 
         else:
-            assert_never(a_type)
+            assert_never(primitive_type)
 
-    elif isinstance(type_anno, intermediate.OurTypeAnnotation):
-        if isinstance(type_anno.our_type, intermediate.Enumeration):
-            must_to_str_name = typescript_naming.function_name(
-                Identifier(f"must_{type_anno.our_type.name}_to_string")
-            )
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got: {type_anno}"
 
-            return Stripped(
-                f"""\
-AasStringification.{must_to_str_name}(
-{I}{indent_but_first_line(access_expression, I)}
-)"""
-            )
+    our_type = type_anno.our_type
 
-        elif isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive):
-            raise AssertionError("This case should have been handled before.")
+    if isinstance(our_type, intermediate.Enumeration):
+        function_name = _serialize_enumeration_function_name(our_type)
+        return Stripped(f"{function_name}({access_expression})")
 
-        elif isinstance(
-            type_anno.our_type,
-            (
-                intermediate.AbstractClass,
-                intermediate.ConcreteClass,
-                intermediate.NamedUnion,
-            ),
-        ):
-            return Stripped(f"this.transform({access_expression})")
+    if isinstance(our_type, intermediate.ConstrainedPrimitive):
+        raise AssertionError("This case should have been handled before.")
 
-        else:
-            assert_never(type_anno.our_type)
+    if isinstance(
+        our_type,
+        (
+            intermediate.AbstractClass,
+            intermediate.ConcreteClass,
+            intermediate.NamedUnion,
+        ),
+    ):
+        if typescript_common.is_dispatched(type_anno):
+            return Stripped(f"serializeClass({access_expression})")
 
-    else:
-        assert_never(type_anno.our_type)
+        assert isinstance(our_type, intermediate.ConcreteClass), (
+            f"A class which is not dispatched must be concrete, " f"but got: {our_type}"
+        )
+
+        function_name = _serialize_function_name(our_type)
+        return Stripped(f"{function_name}({access_expression})")
+
+    assert_never(our_type)
 
 
-def _generate_transform(
-    cls: intermediate.ConcreteClass,
-    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
+def _generate_serialize_enumeration(
+    enumeration: intermediate.Enumeration,
 ) -> Stripped:
-    """Generate the ``transformX`` method to serialize an instance into a JSON-able."""
-    blocks = [Stripped("const jsonable: JsonObject = {};")]  # type: List[Stripped]
+    """
+    Generate the function serializing a literal of ``enumeration``.
 
-    for prop in cls.properties:
-        key_literal = typescript_common.string_literal(prop.json_name)
-        prop_name = typescript_naming.property_name(prop.name)
+    A TypeScript enumeration is a number at run time, so a value outside
+    the enumeration can reach us here. We go through the ``{enum}ToString`` of
+    the stringification, which gives out ``null`` for a literal it does not know,
+    rather than through its ``must{Enum}ToString``, which raises a bare ``Error``
+    and would escape the reporting of this module. This is the same choice
+    the XML serialization makes.
+    """
+    enum_name = typescript_naming.enum_name(enumeration.name)
+    function_name = _serialize_enumeration_function_name(enumeration)
+    to_string_name = typescript_naming.function_name(
+        Identifier(f"{enumeration.name}_to_string")
+    )
 
-        type_anno = intermediate.beneath_optional(prop.type_annotation)
+    return Stripped(
+        f"""\
+/**
+ * Serialize `that` literal to a JSON-able string.
+ *
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {{@link SerializationError}} if `that` is outside
+ * {{@link types!{enum_name}}}
+ */
+function {function_name}(
+{I}that: AasTypes.{enum_name}
+): string {{
+{I}const text = AasStringification.{to_string_name}(that);
+{I}if (text === null) {{
+{II}throw new SerializationError(
+{III}`Invalid literal of {enum_name}: ${{that}}`
+{II});
+{I}}}
+{I}return text;
+}}"""
+    )
 
-        block: Stripped
 
-        if isinstance(
-            type_anno,
-            (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-        ):
-            transformation_expression = _generate_transform_atomic_value(
-                access_expression=Stripped(f"that.{prop_name}"), type_anno=type_anno
-            )
+def _generate_serialize_list(
+    type_anno: intermediate.ListTypeAnnotation, guarded: bool
+) -> Stripped:
+    """
+    Generate the function serializing the list ``type_anno``.
 
-            block = Stripped(
-                f"""\
-jsonable[{key_literal}] =
-{I}{indent_but_first_line(transformation_expression, I)};"""
-            )
+    The items are serialized by name, so the call is monomorphic, which it can not
+    be in a helper shared by every kind of item. Nothing is composed at the point
+    of the call and no closure is allocated.
 
-        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-            assert isinstance(
-                type_anno.items,
-                intermediate.AtomicTypeAnnotationAsTuple,
-            ), (
-                f"(mristin) We generate the JSON serialization code only for "
-                f"the lists of atomic values at the moment, "
-                f"but we got a list of type {type_anno}. "
-                "Please contact the developers if you need this feature."
-            )
+    The array is sized up front and written by index, which also gives the index
+    of a refused item for free. When ``guarded``, the ``try`` sits outside the loop
+    with the index advanced only after an item has been written, as the XML
+    ``writeList`` already does.
+    """
+    items_type_anno = type_anno.items
+    assert isinstance(items_type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
+        f"(mristin) We generate the JSON serialization code only for "
+        f"the lists of atomic values at the moment, "
+        f"but we got a list of type {type_anno}. "
+        f"Please contact the developers if you need this feature."
+    )
 
-            items_primitive_type = intermediate.try_primitive_type(type_anno.items)
+    function_name = _composed_serialize_function_name(type_anno)
 
-            if items_primitive_type in (
-                intermediate.PrimitiveType.INT,
-                intermediate.PrimitiveType.FLOAT,
-            ):
-                # NOTE (mristin):
-                # A number has to be checked, so the items can not simply be
-                # copied over. ``serializeArray`` records the index of the item
-                # which is refused.
-                item_serializer = (
-                    "integerToJsonable"
-                    if items_primitive_type is intermediate.PrimitiveType.INT
-                    else "numberToJsonable"
-                )
+    item_type = typescript_common.generate_type(
+        items_type_anno, types_module=Identifier("AasTypes")
+    )
+    jsonable_item_type = _jsonable_type_of_atomic(items_type_anno)
 
-                block = Stripped(
-                    f"""\
-jsonable[{key_literal}] = serializeArray(
-{I}that.{prop_name},
-{I}{item_serializer}
-);"""
-                )
+    serialize_item = _generate_serialize_call(
+        access_expression=Stripped("that[i]"), type_anno=items_type_anno
+    )
 
-            elif items_primitive_type is not None and (
-                items_primitive_type != intermediate.PrimitiveType.BYTEARRAY
-            ):
-                # NOTE (mristin):
-                # No transformation is needed for these primitive types, so we
-                # do not even need ``serializeArray`` -- a defensive copy of
-                # the items suffices.
-                block = Stripped(
-                    f"jsonable[{key_literal}] = Array.from(that.{prop_name});"
-                )
-
-            elif items_primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-                block = Stripped(
-                    f"""\
-jsonable[{key_literal}] = serializeArray(
-{I}that.{prop_name},
-{I}AasCommon.base64Encode
-);"""
-                )
-
-            elif isinstance(type_anno.items, intermediate.OurTypeAnnotation):
-                if isinstance(type_anno.items.our_type, intermediate.Enumeration):
-                    must_to_str_name = typescript_naming.function_name(
-                        Identifier(f"must_{type_anno.items.our_type.name}_to_string")
-                    )
-
-                    block = Stripped(
-                        f"""\
-jsonable[{key_literal}] = serializeArray(
-{I}that.{prop_name},
-{I}AasStringification.{must_to_str_name}
-);"""
-                    )
-
-                elif isinstance(
-                    type_anno.items.our_type, intermediate.ConstrainedPrimitive
-                ):
-                    raise AssertionError("This case should have been handled before.")
-
-                elif isinstance(
-                    type_anno.items.our_type,
-                    (
-                        intermediate.AbstractClass,
-                        intermediate.ConcreteClass,
-                        intermediate.NamedUnion,
-                    ),
-                ):
-                    # NOTE (mristin):
-                    # ``this.transform`` needs a bound ``this``, so this is the
-                    # one case where we can not pass a bare function reference.
-                    block = Stripped(
-                        f"""\
-jsonable[{key_literal}] = serializeArray(
-{I}that.{prop_name},
-{I}(item) => this.transform(item)
-);"""
-                    )
-
-                else:
-                    assert_never(type_anno.items.our_type)
-
-            else:
-                raise NotImplementedError(
-                    f"(mristin) We generate the JSON serialization code only for "
-                    f"the lists of atomic values at the moment, "
-                    f"but we got a list of type {type_anno}. "
-                    "Please contact the developers if you need this feature."
-                )
-
-        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            item_expressions = []  # type: List[Stripped]
-            for i, item_type_anno in enumerate(type_anno.items):
-                assert isinstance(
-                    item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
-                ), (
-                    "Tuple items are restricted to atomic types (primitives, "
-                    "constrained primitives, classes and enumerations) by "
-                    "intermediate._translate._verify_only_simple_type_patterns, so no "
-                    "nested optionals, lists or tuples are expected here."
-                )
-
-                item_expressions.append(
-                    _generate_transform_atomic_value(
-                        access_expression=Stripped(f"that.{prop_name}[{i}]"),
-                        type_anno=item_type_anno,
-                    )
-                )
-
-            item_is_fallible = [
-                intermediate.reaches_a_number(
-                    item_type_anno, ids_of_types_reaching_a_number
-                )
-                for item_type_anno in type_anno.items
-            ]
-
-            if not any(item_is_fallible):
-                item_expressions_joined = ",\n".join(item_expressions)
-
-                block = Stripped(
-                    f"""\
-jsonable[{key_literal}] = [
-{I}{indent_but_first_line(item_expressions_joined, I)}
-];"""
-                )
-            else:
-                # NOTE (mristin):
-                # An array literal can not record which item was refused, so
-                # the items are pushed one by one, each under its own position.
-                items_var = typescript_naming.variable_name(
-                    Identifier(f"{prop.name}_items")
-                )
-
-                push_statements = []  # type: List[Stripped]
-
-                for i, (item_expression, is_fallible) in enumerate(
-                    zip(item_expressions, item_is_fallible)
-                ):
-                    push_statement = Stripped(
-                        f"""\
-{items_var}.push(
-{I}{indent_but_first_line(item_expression, I)}
-);"""
-                    )
-
-                    if is_fallible:
-                        push_statement = Stripped(
-                            f"""\
+    if not guarded:
+        body = Stripped(
+            f"""\
+const result = new Array<{jsonable_item_type}>(that.length);
+for (let i = 0; i < that.length; i++) {{
+{I}result[i] = {serialize_item};
+}}
+return result;"""
+        )
+    else:
+        body = Stripped(
+            f"""\
+const result = new Array<{jsonable_item_type}>(that.length);
+let i = 0;
 try {{
-{I}{indent_but_first_line(push_statement, I)}
+{I}for (; i < that.length; i++) {{
+{II}result[i] = {serialize_item};
+{I}}}
+}} catch (error) {{
+{I}if (error instanceof SerializationError) {{
+{II}error.prependIndex(i);
+{I}}}
+{I}throw error;
+}}
+return result;"""
+        )
+
+    return Stripped(
+        f"""\
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function {function_name}(
+{I}that: ReadonlyArray<{item_type}>
+): Array<{jsonable_item_type}> {{
+{I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+
+def _generate_serialize_tuple(
+    type_anno: intermediate.TupleTypeAnnotation,
+    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
+    ids_of_types_reaching_an_enumeration: Set[intermediate.IdOfOurType],
+) -> Stripped:
+    """
+    Generate the function serializing the tuple ``type_anno``.
+
+    The items are written out in order, so the name of the function states what its
+    body does, and only an item which can be refused carries a ``try``.
+    """
+    item_type_annos = []  # type: List[intermediate.AtomicTypeAnnotation]
+    for item_type_anno in type_anno.items:
+        assert isinstance(item_type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
+            "Tuple items are restricted to atomic types (primitives, "
+            "constrained primitives, classes and enumerations) by "
+            "intermediate._translate._verify_only_simple_type_patterns, so no "
+            "nested optionals, lists or tuples are expected here."
+        )
+        item_type_annos.append(item_type_anno)
+
+    function_name = _composed_serialize_function_name(type_anno)
+
+    item_types = ", ".join(
+        typescript_common.generate_type(
+            item_type_anno, types_module=Identifier("AasTypes")
+        )
+        for item_type_anno in item_type_annos
+    )
+
+    statements = []  # type: List[Stripped]
+    for i, item_type_anno in enumerate(item_type_annos):
+        statement = Stripped(
+            f"result[{i}] = "
+            f"{_generate_serialize_call(Stripped(f'that[{i}]'), item_type_anno)};"
+        )
+
+        # NOTE (mristin):
+        # See the note at the top of this region on the two queries.
+        if intermediate.reaches_a_number(
+            item_type_anno, ids_of_types_reaching_a_number
+        ) or intermediate.reaches_an_enumeration(
+            item_type_anno, ids_of_types_reaching_an_enumeration
+        ):
+            statement = Stripped(
+                f"""\
+try {{
+{I}{indent_but_first_line(statement, I)}
 }} catch (error) {{
 {I}if (error instanceof SerializationError) {{
 {II}error.prependIndex({i});
 {I}}}
 {I}throw error;
 }}"""
-                        )
+            )
 
-                    push_statements.append(push_statement)
+        statements.append(statement)
 
-                push_statements_joined = "\n".join(push_statements)
+    statements_joined = "\n".join(statements)
 
-                block = Stripped(
-                    f"""\
-const {items_var} = new Array<JsonValue>();
-{push_statements_joined}
-jsonable[{key_literal}] = {items_var};"""
-                )
+    return Stripped(
+        f"""\
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - tuple to be serialized
+ * @returns JSON-able array
+ */
+function {function_name}(
+{I}that: readonly [{item_types}]
+): Array<JsonValue> {{
+{I}const result = new Array<JsonValue>({len(item_type_annos)});
+{I}{indent_but_first_line(Stripped(statements_joined), I)}
+{I}return result;
+}}"""
+    )
 
-        else:
-            assert_never(type_anno)
 
+def _generate_serialize_property(
+    prop: intermediate.Property, refusable: bool
+) -> Stripped:
+    """
+    Generate the statement serializing ``prop`` into the JSON object.
+
+    Every property is one statement -- a key, and the value serialized by the one
+    function of its type -- since a list and a tuple are named just like everything
+    else. They used to spell their framing out at the call site, and to hand
+    a ``this``-capturing closure to a shared helper on top of that.
+
+    A ``refusable`` property records its name in ``prop`` first, for the single
+    ``catch`` of the serializer to report, see
+    :py:func:`_generate_serialize_class`. The recording sits inside the ``if`` of
+    an optional property, so an absent one pays nothing at all.
+    """
+    type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+    key_literal = typescript_common.string_literal(prop.json_name)
+    prop_name = typescript_naming.property_name(prop.name)
+    access_expression = Stripped(f"that.{prop_name}")
+
+    value_expression: Stripped
+
+    if isinstance(
+        type_anno,
+        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
+    ):
+        value_expression = _generate_serialize_call(access_expression, type_anno)
+
+    elif isinstance(type_anno, intermediate.ListTypeAnnotation) and (
+        intermediate.try_primitive_type(type_anno.items)
+        in (intermediate.PrimitiveType.BOOL, intermediate.PrimitiveType.STR)
+    ):
         # NOTE (mristin):
-        # Only a value which can be refused at all is worth guarding. The property
-        # is recorded here, and nowhere below, as nothing below knows through which
-        # property the value was reached.
-        if intermediate.reaches_a_number(
-            prop.type_annotation, ids_of_types_reaching_a_number
-        ):
-            prop_name_literal = typescript_common.string_literal(prop_name)
+        # JSON carries a boolean and a string as they come, so a list of them needs
+        # no serializer of its own: ``Array.from`` already is the whole conversion,
+        # and it copies at the speed of the engine.
+        value_expression = Stripped(f"Array.from({access_expression})")
 
-            block = Stripped(
+    elif isinstance(type_anno, intermediate.ContainerTypeAnnotationAsTuple):
+        function_name = _composed_serialize_function_name(type_anno)
+        value_expression = Stripped(f"{function_name}({access_expression})")
+
+    else:
+        assert_never(type_anno)
+
+    statement = Stripped(
+        f"""\
+jsonable[{key_literal}] =
+{I}{indent_but_first_line(value_expression, I)};"""
+    )
+
+    # NOTE (mristin):
+    # The property is recorded here, and nowhere below, as nothing below knows
+    # through which property the value was reached.
+    if refusable:
+        prop_name_literal = typescript_common.string_literal(prop_name)
+
+        statement = Stripped(
+            f"""\
+prop = {prop_name_literal};
+{statement}"""
+        )
+
+    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+        statement = Stripped(
+            f"""\
+if ({access_expression} !== null) {{
+{I}{indent_but_first_line(statement, I)}
+}}"""
+        )
+
+    return statement
+
+
+def _generate_serialize_class(
+    cls: intermediate.ConcreteClass,
+    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
+    ids_of_types_reaching_an_enumeration: Set[intermediate.IdOfOurType],
+) -> Stripped:
+    """
+    Generate the function serializing an instance of ``cls``.
+
+    The properties which can be refused share a single ``try``, and the one which is
+    being serialized records its name in ``prop`` for the ``catch`` to report. One
+    ``try`` per property would cost seven lines apiece, where this costs one line
+    apiece and eight for the whole serializer.
+
+    ``prop`` can not be read stale. The ``catch`` prepends only for
+    a ``SerializationError``, and a property which records no name can raise none --
+    that is the very question which decided whether to record it. A class whose every
+    property is beyond refusal is written without a ``try`` at all.
+    """
+    property_blocks = []  # type: List[Stripped]
+    any_refusable = False
+
+    for prop in cls.properties:
+        # NOTE (mristin):
+        # See the note at the top of this region on why the two queries are asked
+        # here, one beside the other, instead of being folded into one.
+        refusable = intermediate.reaches_a_number(
+            prop.type_annotation, ids_of_types_reaching_a_number
+        ) or intermediate.reaches_an_enumeration(
+            prop.type_annotation, ids_of_types_reaching_an_enumeration
+        )
+
+        any_refusable = any_refusable or refusable
+
+        property_blocks.append(
+            _generate_serialize_property(prop=prop, refusable=refusable)
+        )
+
+    blocks = [Stripped("const jsonable: JsonObject = {};")]  # type: List[Stripped]
+
+    if not any_refusable:
+        blocks.extend(property_blocks)
+    else:
+        property_blocks_joined = "\n\n".join(property_blocks)
+
+        blocks.append(
+            Stripped(
                 f"""\
+// Only a property which can be refused records its name.
+let prop = "";
 try {{
-{I}{indent_but_first_line(block, I)}
+{textwrap.indent(property_blocks_joined, I)}
 }} catch (error) {{
 {I}if (error instanceof SerializationError) {{
-{II}error.prependProperty({prop_name_literal});
+{II}error.prependProperty(prop);
 {I}}}
 {I}throw error;
 }}"""
             )
-
-        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            block = Stripped(
-                f"""\
-if (that.{prop_name} !== null) {{
-{I}{indent_but_first_line(block, I)}
-}}"""
-            )
-
-        blocks.append(block)
+        )
 
     if cls.serialization.with_model_type:
         model_type_literal = typescript_common.string_literal(
@@ -1755,21 +1924,19 @@ if (that.{prop_name} !== null) {{
 
     blocks.append(Stripped("return jsonable;"))
 
-    method_name = typescript_naming.method_name(Identifier(f"transform_{cls.name}"))
-
+    function_name = _serialize_function_name(cls)
     cls_name = typescript_naming.class_name(cls.name)
 
     writer = io.StringIO()
-
     writer.write(
         f"""\
 /**
  * Serialize `that` to a JSON-able representation.
  *
- * @param that - instance to be serialization
+ * @param that - instance to be serialized
  * @returns JSON-able representation
  */
-{method_name}(
+function {function_name}(
 {I}that: AasTypes.{cls_name}
 ): JsonObject {{
 """
@@ -1785,43 +1952,162 @@ if (that.{prop_name} !== null) {{
     return Stripped(writer.getvalue())
 
 
-def _generate_serialize_array() -> Stripped:
-    """Generate the generic helper to serialize an iterable into a JSON array."""
+def _generate_transformer(symbol_table: intermediate.SymbolTable) -> Stripped:
+    """
+    Generate the transformer which dispatches on the run-time type of an instance.
+
+    The methods forward to the module-level serializers, which is what lets
+    a statically known concrete value, a list item and a tuple item all name their
+    serializer directly and pay no dispatch at all.
+    """
+    methods = []  # type: List[Stripped]
+
+    for cls in symbol_table.concrete_classes:
+        method_name = typescript_naming.method_name(Identifier(f"transform_{cls.name}"))
+        cls_name = typescript_naming.class_name(cls.name)
+        function_name = _serialize_function_name(cls)
+
+        methods.append(
+            Stripped(
+                f"""\
+{method_name}(
+{I}that: AasTypes.{cls_name}
+): JsonObject {{
+{I}return {function_name}(that);
+}}"""
+            )
+        )
+
+    writer = io.StringIO()
+    writer.write(
+        """\
+/**
+ * Dispatch the serialization on the run-time type of an instance.
+ */
+class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
+"""
+    )
+
+    for i, method in enumerate(methods):
+        if i > 0:
+            writer.write("\n")
+        writer.write(textwrap.indent(method, I))
+        writer.write("\n")
+
+    writer.write("}")
+
+    return Stripped(writer.getvalue())
+
+
+def _generate_serialize_instance() -> Stripped:
+    """Generate the one function which dispatches on the run-time type."""
     return Stripped(
         f"""\
 /**
- * Serialize every item of `items` with `serializeItem` into a JSON-able
- * array.
+ * Serialize `that` to a JSON-able representation.
  *
- * @param items - to be serialized
- * @param serializeItem - to serialize a single item of `items`
- * @returns JSON-able array
- * @typeParam T - type of a single item to be serialized
- * @typeParam J - type of a single item once serialized
+ * Which JSON object that is, is decided by the run-time type of `that`, so this
+ * one function serves an abstract class, a concrete class with descendants and
+ * a named union alike. The de-serialization, which has to decide what to construct
+ * before it has read anything, needs a dispatcher per type instead.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
  */
-/**
- * Serialize `items` one by one, recording the index of the one which is refused.
- */
-function serializeArray<T, J extends JsonValue>(
-{I}items: Iterable<T>,
-{I}serializeItem: (item: T) => J
-): Array<J> {{
-{I}const result = new Array<J>();
-{I}let i = 0;
-{I}for (const item of items) {{
-{II}try {{
-{III}result.push(serializeItem(item));
-{II}}} catch (error) {{
-{III}if (error instanceof SerializationError) {{
-{IIII}error.prependIndex(i);
-{III}}}
-{III}throw error;
-{II}}}
-{II}i++;
-{I}}}
-{I}return result;
+function serializeClass(that: AasTypes.Class): JsonObject {{
+{I}return that.transform(SERIALIZER);
 }}"""
     )
+
+
+def _needs_composed_serializer(
+    type_anno: intermediate.TypeAnnotationUnion,
+) -> bool:
+    """
+    Check whether a value of ``type_anno`` is serialized by a composed serializer.
+
+    Only a list and a tuple have no function of their own to be named after, so
+    only they are composed out of the serialization of their items -- and a list of
+    booleans or of strings not even that, as ``Array.from`` already is the whole
+    conversion.
+    """
+    if not isinstance(type_anno, intermediate.ContainerTypeAnnotationAsTuple):
+        return False
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return intermediate.try_primitive_type(type_anno.items) not in (
+            intermediate.PrimitiveType.BOOL,
+            intermediate.PrimitiveType.STR,
+        )
+
+    return True
+
+
+def _collect_composed_type_annotations(
+    symbol_table: intermediate.SymbolTable,
+) -> List[intermediate.ContainerTypeAnnotation]:
+    """
+    List the lists and the tuples which need a serializer of their own.
+
+    The result is de-duplicated by the name of the serializer, which follows
+    the moniker of the type, so every list of the same item type collapses onto one
+    entry. An implementation-specific class is scanned as well: its own serializer
+    is given as a snippet, but that snippet still serializes the properties of that
+    very class and may well call the serializers of their types.
+    """
+    result = []  # type: List[intermediate.ContainerTypeAnnotation]
+    observed = set()  # type: Set[str]
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+            if not _needs_composed_serializer(type_anno):
+                continue
+
+            assert isinstance(type_anno, intermediate.ContainerTypeAnnotationAsTuple)
+
+            name = _composed_serialize_function_name(type_anno)
+            if name not in observed:
+                observed.add(name)
+                result.append(type_anno)
+
+    return result
+
+
+def _collect_enumerations_to_serialize(
+    symbol_table: intermediate.SymbolTable,
+) -> List[intermediate.Enumeration]:
+    """
+    List the enumerations which the serialization actually writes.
+
+    An enumeration which no property and no item of a list or of a tuple ever holds
+    needs no serializer, and an unused one would trip the linter of the generated
+    code -- ``jsonization.ts``, unlike ``xmlization.ts``, carries no override of
+    ``no-unused-vars``.
+    """
+    result = []  # type: List[intermediate.Enumeration]
+    observed = set()  # type: Set[intermediate.IdOfOurType]
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            for (
+                type_anno
+            ) in intermediate.over_type_annotation_and_nested_type_annotations(
+                prop.type_annotation
+            ):
+                if not isinstance(type_anno, intermediate.OurTypeAnnotation):
+                    continue
+
+                our_type = type_anno.our_type
+                if not isinstance(our_type, intermediate.Enumeration):
+                    continue
+
+                if intermediate.runtime_id(our_type) not in observed:
+                    observed.add(intermediate.runtime_id(our_type))
+                    result.append(our_type)
+
+    return result
 
 
 def _generate_serialization_error() -> Stripped:
@@ -1958,34 +2244,6 @@ function numberToJsonable(that: number): number {{
     ]
 
 
-def _generate_transformer(
-    symbol_table: intermediate.SymbolTable,
-    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
-) -> Stripped:
-    methods = []  # type: List[Stripped]
-
-    for cls in symbol_table.concrete_classes:
-        methods.append(_generate_transform(cls, ids_of_types_reaching_a_number))
-
-    writer = io.StringIO()
-    writer.write(
-        """\
-/**
- * Transform the instance to its JSON-able representation.
- */
-class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
-"""
-    )
-
-    for method in methods:
-        writer.write("\n\n")
-        writer.write(textwrap.indent(method, I))
-
-    writer.write("\n}")
-
-    return Stripped(writer.getvalue())
-
-
 # endregion
 
 # fmt: off
@@ -2003,6 +2261,10 @@ def generate(
     """Generate code for JSON de/serialization."""
     ids_of_types_reaching_a_number = (
         intermediate.collect_ids_of_types_reaching_a_number(symbol_table)
+    )
+
+    ids_of_types_reaching_an_enumeration = (
+        intermediate.collect_ids_of_types_reaching_an_enumeration(symbol_table)
     )
 
     number_types = _collect_number_types(symbol_table)
@@ -2252,16 +2514,72 @@ function newDeserializationError<T>(
 
     blocks.extend(_generate_number_serializers(number_types))
 
-    blocks.append(_generate_serialize_array())
+    for enumeration in _collect_enumerations_to_serialize(symbol_table):
+        blocks.append(_generate_serialize_enumeration(enumeration=enumeration))
 
-    blocks.append(
-        _generate_transformer(
-            symbol_table=symbol_table,
-            ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
-        )
-    )
+    for concrete_cls in symbol_table.concrete_classes:
+        if concrete_cls.is_implementation_specific:
+            implementation_key = specific_implementations.ImplementationKey(
+                f"Jsonization/{_serialize_function_name(concrete_cls)}.ts"
+            )
+
+            implementation = spec_impls.get(implementation_key, None)
+            if implementation is None:
+                errors.append(
+                    Error(
+                        concrete_cls.parsed.node,
+                        f"The jsonization snippet is missing "
+                        f"for the implementation-specific "
+                        f"class {concrete_cls.name}: {implementation_key}",
+                    )
+                )
+                continue
+
+            blocks.append(implementation)
+        else:
+            blocks.append(
+                _generate_serialize_class(
+                    cls=concrete_cls,
+                    ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
+                    ids_of_types_reaching_an_enumeration=(
+                        ids_of_types_reaching_an_enumeration
+                    ),
+                )
+            )
+
+    for composed_type_anno in _collect_composed_type_annotations(symbol_table):
+        if isinstance(composed_type_anno, intermediate.ListTypeAnnotation):
+            items_type_anno = composed_type_anno.items
+
+            blocks.append(
+                _generate_serialize_list(
+                    type_anno=composed_type_anno,
+                    guarded=(
+                        intermediate.reaches_a_number(
+                            items_type_anno, ids_of_types_reaching_a_number
+                        )
+                        or intermediate.reaches_an_enumeration(
+                            items_type_anno, ids_of_types_reaching_an_enumeration
+                        )
+                    ),
+                )
+            )
+        else:
+            blocks.append(
+                _generate_serialize_tuple(
+                    type_anno=composed_type_anno,
+                    ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
+                    ids_of_types_reaching_an_enumeration=(
+                        ids_of_types_reaching_an_enumeration
+                    ),
+                )
+            )
+
+    blocks.append(_generate_transformer(symbol_table=symbol_table))
 
     blocks.append(Stripped("const SERIALIZER = new Serializer();"))
+
+    blocks.append(_generate_serialize_instance())
 
     # pylint: disable=line-too-long
     blocks.append(
@@ -2276,7 +2594,7 @@ function newDeserializationError<T>(
  * {{@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify|JSON.stringify}})
  */
 export function toJsonable(that: AasTypes.Class): JsonObject {{
-{I}return SERIALIZER.transform(that);
+{I}return serializeClass(that);
 }}"""
         )
     )

@@ -541,60 +541,46 @@ export class SerializationError extends Error {
 }
 
 /**
- * Serialize every item of `items` with `serializeItem` into a JSON-able
- * array.
+ * Serialize `that` to a JSON-able representation.
  *
- * @param items - to be serialized
- * @param serializeItem - to serialize a single item of `items`
- * @returns JSON-able array
- * @typeParam T - type of a single item to be serialized
- * @typeParam J - type of a single item once serialized
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
  */
-/**
- * Serialize `items` one by one, recording the index of the one which is refused.
- */
-function serializeArray<T, J extends JsonValue>(
-  items: Iterable<T>,
-  serializeItem: (item: T) => J
-): Array<J> {
-  const result = new Array<J>();
-  let i = 0;
-  for (const item of items) {
-    try {
-      result.push(serializeItem(item));
-    } catch (error) {
-      if (error instanceof SerializationError) {
-        error.prependIndex(i);
-      }
-      throw error;
-    }
-    i++;
-  }
-  return result;
+function serializeSomething(
+  that: AasTypes.Something
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  return jsonable;
 }
 
 /**
- * Transform the instance to its JSON-able representation.
+ * Dispatch the serialization on the run-time type of an instance.
  */
 class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
-
-
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformSomething(
     that: AasTypes.Something
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    return jsonable;
+    return serializeSomething(that);
   }
 }
 
 const SERIALIZER = new Serializer();
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * Which JSON object that is, is decided by the run-time type of `that`, so this
+ * one function serves an abstract class, a concrete class with descendants and
+ * a named union alike. The de-serialization, which has to decide what to construct
+ * before it has read anything, needs a dispatcher per type instead.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeClass(that: AasTypes.Class): JsonObject {
+  return that.transform(SERIALIZER);
+}
 
 /**
  * Convert `that` to a JSON-able structure.
@@ -605,7 +591,7 @@ const SERIALIZER = new Serializer();
  * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify|JSON.stringify})
  */
 export function toJsonable(that: AasTypes.Class): JsonObject {
-  return SERIALIZER.transform(that);
+  return serializeClass(that);
 }
 
 // endregion

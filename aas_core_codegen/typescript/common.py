@@ -11,6 +11,123 @@ from aas_core_codegen.common import Stripped, assert_never, Identifier
 from aas_core_codegen.typescript import naming as typescript_naming
 
 
+# region Type monikers
+
+
+#: Moniker of a primitive type, see :py:func:`type_moniker`.
+#:
+#: The monikers are spelled in lower case, while a moniker of one of our types goes
+#: through :py:func:`aas_core_codegen.naming.capitalized_camel_case`, so a primitive
+#: can never be confused with a type which somebody named ``Str`` or ``Float``.
+MONIKER_BY_PRIMITIVE_TYPE = {
+    intermediate.PrimitiveType.BOOL: Identifier("bool"),
+    intermediate.PrimitiveType.INT: Identifier("int"),
+    intermediate.PrimitiveType.FLOAT: Identifier("float"),
+    intermediate.PrimitiveType.STR: Identifier("str"),
+    intermediate.PrimitiveType.BYTEARRAY: Identifier("bytes"),
+}
+
+
+def type_name_of_our_type(our_type: intermediate.OurType) -> Identifier:
+    """Give out the name of the TypeScript type which stands for ``our_type``."""
+    if isinstance(our_type, intermediate.Enumeration):
+        return typescript_naming.enum_name(our_type.name)
+
+    elif isinstance(our_type, intermediate.AbstractClass):
+        return typescript_naming.interface_name(our_type.name)
+
+    elif isinstance(our_type, intermediate.ConcreteClass):
+        return typescript_naming.class_name(our_type.name)
+
+    elif isinstance(our_type, intermediate.NamedUnion):
+        return typescript_naming.union_name(our_type.name)
+
+    elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+        raise AssertionError("Expected to handle this case before")
+
+    else:
+        assert_never(our_type)
+
+    raise AssertionError("Should not have gotten here")
+
+
+def atomic_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> Identifier:
+    """
+    Determine the leaf moniker of the atomic ``type_annotation``.
+
+    The monikers are the parts out of which we build the names of the de/serializers
+    which are keyed by a *structural* type -- a list, a tuple, an item at a fixed
+    XML element name -- rather than by a symbol of the meta-model. A leaf moniker never
+    contains an underscore: our types go through
+    :py:func:`aas_core_codegen.naming.capitalized_camel_case`, and a primitive is
+    spelled in lower case, which also keeps it apart from a type of the same name.
+    See :py:func:`type_moniker` for the compound monikers built on top of these.
+    """
+    primitive_type = intermediate.try_primitive_type(type_annotation)
+    if primitive_type is not None:
+        return MONIKER_BY_PRIMITIVE_TYPE[primitive_type]
+
+    assert isinstance(
+        type_annotation, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got: {type_annotation}"
+
+    return type_name_of_our_type(type_annotation.our_type)
+
+
+def is_dispatched(type_anno: intermediate.TypeAnnotationUnion) -> bool:
+    """
+    Check whether the run-time type of a value of ``type_anno`` is left open by
+    the declared type.
+
+    This is the case for an abstract class, for a concrete class with concrete
+    descendants, and for a named union. Reading such a value, we have to decide what
+    to construct before we have read anything, so something in the document has to
+    tell us -- the local name of the XML element, or the ``modelType`` of the JSON
+    object. Writing one, the instance itself answers, so the serialization simply
+    dispatches on it.
+    """
+    if not isinstance(type_anno, intermediate.OurTypeAnnotation):
+        return False
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return True
+
+    if isinstance(our_type, intermediate.AbstractClass):
+        return True
+
+    if isinstance(our_type, intermediate.ConcreteClass):
+        return len(our_type.concrete_descendants) > 0
+
+    return False
+
+
+def type_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> str:
+    """
+    Determine the moniker of the ``type_annotation``.
+
+    A moniker of a list or of a tuple is a Polish notation over ``_``-separated
+    tokens: ``ListOf_{M}`` takes exactly one argument, and ``TupleOf{N}_{M}...``
+    exactly ``N`` of them. As a leaf moniker never contains an underscore, such
+    a name can always be split back into its parts, so the monikers are unique by
+    construction and we need no check for collisions.
+    """
+    type_anno = intermediate.beneath_optional(type_annotation)
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return f"ListOf_{type_moniker(type_anno.items)}"
+
+    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        monikers = "_".join(type_moniker(item) for item in type_anno.items)
+        return f"TupleOf{len(type_anno.items)}_{monikers}"
+
+    return atomic_moniker(type_anno)
+
+
+# endregion
+
+
 def boolean_literal(value: bool) -> Stripped:
     """Generate the boolean literal corresponding to the ``value``."""
     return Stripped("true") if value else Stripped("false")

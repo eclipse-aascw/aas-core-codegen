@@ -8765,75 +8765,258 @@ export class SerializationError extends Error {
 }
 
 /**
- * Serialize every item of `items` with `serializeItem` into a JSON-able
- * array.
+ * Serialize `that` literal to a JSON-able string.
  *
- * @param items - to be serialized
- * @param serializeItem - to serialize a single item of `items`
- * @returns JSON-able array
- * @typeParam T - type of a single item to be serialized
- * @typeParam J - type of a single item once serialized
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {@link SerializationError} if `that` is outside
+ * {@link types!DataTypeDefXsd}
  */
-/**
- * Serialize `items` one by one, recording the index of the one which is refused.
- */
-function serializeArray<T, J extends JsonValue>(
-  items: Iterable<T>,
-  serializeItem: (item: T) => J
-): Array<J> {
-  const result = new Array<J>();
-  let i = 0;
-  for (const item of items) {
-    try {
-      result.push(serializeItem(item));
-    } catch (error) {
-      if (error instanceof SerializationError) {
-        error.prependIndex(i);
-      }
-      throw error;
-    }
-    i++;
+function serialize_DataTypeDefXsd(
+  that: AasTypes.DataTypeDefXsd
+): string {
+  const text = AasStringification.dataTypeDefXsdToString(that);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of DataTypeDefXsd: ${that}`
+    );
   }
-  return result;
+  return text;
 }
 
 /**
- * Transform the instance to its JSON-able representation.
+ * Serialize `that` literal to a JSON-able string.
+ *
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {@link SerializationError} if `that` is outside
+ * {@link types!QualifierKind}
  */
-class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
+function serialize_QualifierKind(
+  that: AasTypes.QualifierKind
+): string {
+  const text = AasStringification.qualifierKindToString(that);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of QualifierKind: ${that}`
+    );
+  }
+  return text;
+}
 
+/**
+ * Serialize `that` literal to a JSON-able string.
+ *
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {@link SerializationError} if `that` is outside
+ * {@link types!AssetKind}
+ */
+function serialize_AssetKind(
+  that: AasTypes.AssetKind
+): string {
+  const text = AasStringification.assetKindToString(that);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of AssetKind: ${that}`
+    );
+  }
+  return text;
+}
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformExtension(
-    that: AasTypes.Extension
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+/**
+ * Serialize `that` literal to a JSON-able string.
+ *
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {@link SerializationError} if `that` is outside
+ * {@link types!ModellingKind}
+ */
+function serialize_ModellingKind(
+  that: AasTypes.ModellingKind
+): string {
+  const text = AasStringification.modellingKindToString(that);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of ModellingKind: ${that}`
+    );
+  }
+  return text;
+}
 
+/**
+ * Serialize `that` literal to a JSON-able string.
+ *
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {@link SerializationError} if `that` is outside
+ * {@link types!AasSubmodelElements}
+ */
+function serialize_AasSubmodelElements(
+  that: AasTypes.AasSubmodelElements
+): string {
+  const text = AasStringification.aasSubmodelElementsToString(that);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of AasSubmodelElements: ${that}`
+    );
+  }
+  return text;
+}
+
+/**
+ * Serialize `that` literal to a JSON-able string.
+ *
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {@link SerializationError} if `that` is outside
+ * {@link types!EntityType}
+ */
+function serialize_EntityType(
+  that: AasTypes.EntityType
+): string {
+  const text = AasStringification.entityTypeToString(that);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of EntityType: ${that}`
+    );
+  }
+  return text;
+}
+
+/**
+ * Serialize `that` literal to a JSON-able string.
+ *
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {@link SerializationError} if `that` is outside
+ * {@link types!Direction}
+ */
+function serialize_Direction(
+  that: AasTypes.Direction
+): string {
+  const text = AasStringification.directionToString(that);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of Direction: ${that}`
+    );
+  }
+  return text;
+}
+
+/**
+ * Serialize `that` literal to a JSON-able string.
+ *
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {@link SerializationError} if `that` is outside
+ * {@link types!StateOfEvent}
+ */
+function serialize_StateOfEvent(
+  that: AasTypes.StateOfEvent
+): string {
+  const text = AasStringification.stateOfEventToString(that);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of StateOfEvent: ${that}`
+    );
+  }
+  return text;
+}
+
+/**
+ * Serialize `that` literal to a JSON-able string.
+ *
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {@link SerializationError} if `that` is outside
+ * {@link types!ReferenceTypes}
+ */
+function serialize_ReferenceTypes(
+  that: AasTypes.ReferenceTypes
+): string {
+  const text = AasStringification.referenceTypesToString(that);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of ReferenceTypes: ${that}`
+    );
+  }
+  return text;
+}
+
+/**
+ * Serialize `that` literal to a JSON-able string.
+ *
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {@link SerializationError} if `that` is outside
+ * {@link types!KeyTypes}
+ */
+function serialize_KeyTypes(
+  that: AasTypes.KeyTypes
+): string {
+  const text = AasStringification.keyTypesToString(that);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of KeyTypes: ${that}`
+    );
+  }
+  return text;
+}
+
+/**
+ * Serialize `that` literal to a JSON-able string.
+ *
+ * @param that - literal to be serialized
+ * @returns text of `that`
+ * @throws {@link SerializationError} if `that` is outside
+ * {@link types!DataTypeIec61360}
+ */
+function serialize_DataTypeIec61360(
+  that: AasTypes.DataTypeIec61360
+): string {
+  const text = AasStringification.dataTypeIec61360ToString(that);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of DataTypeIec61360: ${that}`
+    );
+  }
+  return text;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeExtension(
+  that: AasTypes.Extension
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     jsonable["name"] =
       that.name;
 
     if (that.valueType !== null) {
+      prop = "valueType";
       jsonable["valueType"] =
-        AasStringification.mustDataTypeDefXsdToString(
-          that.valueType
-        );
+        serialize_DataTypeDefXsd(that.valueType);
     }
 
     if (that.value !== null) {
@@ -8842,31 +9025,38 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.refersTo !== null) {
-      jsonable["refersTo"] = serializeArray(
-        that.refersTo,
-        (item) => this.transform(item)
-      );
+      prop = "refersTo";
+      jsonable["refersTo"] =
+        serialize_ListOf_Reference(that.refersTo);
     }
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformAdministrativeInformation(
-    that: AasTypes.AdministrativeInformation
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeAdministrativeInformation(
+  that: AasTypes.AdministrativeInformation
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.version !== null) {
@@ -8880,55 +9070,63 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.creator !== null) {
+      prop = "creator";
       jsonable["creator"] =
-        this.transform(that.creator);
+        serializeReference(that.creator);
     }
 
     if (that.templateId !== null) {
       jsonable["templateId"] =
         that.templateId;
     }
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformQualifier(
-    that: AasTypes.Qualifier
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeQualifier(
+  that: AasTypes.Qualifier
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.kind !== null) {
+      prop = "kind";
       jsonable["kind"] =
-        AasStringification.mustQualifierKindToString(
-          that.kind
-        );
+        serialize_QualifierKind(that.kind);
     }
 
     jsonable["type"] =
       that.type;
 
+    prop = "valueType";
     jsonable["valueType"] =
-      AasStringification.mustDataTypeDefXsdToString(
-        that.valueType
-      );
+      serialize_DataTypeDefXsd(that.valueType);
 
     if (that.value !== null) {
       jsonable["value"] =
@@ -8936,29 +9134,38 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.valueId !== null) {
+      prop = "valueId";
       jsonable["valueId"] =
-        this.transform(that.valueId);
+        serializeReference(that.valueId);
     }
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformAssetAdministrationShell(
-    that: AasTypes.AssetAdministrationShell
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeAssetAdministrationShell(
+  that: AasTypes.AssetAdministrationShell
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -8972,69 +9179,74 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.administration !== null) {
+      prop = "administration";
       jsonable["administration"] =
-        this.transform(that.administration);
+        serializeAdministrativeInformation(that.administration);
     }
 
     jsonable["id"] =
       that.id;
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.derivedFrom !== null) {
+      prop = "derivedFrom";
       jsonable["derivedFrom"] =
-        this.transform(that.derivedFrom);
+        serializeReference(that.derivedFrom);
     }
 
+    prop = "assetInformation";
     jsonable["assetInformation"] =
-      this.transform(that.assetInformation);
+      serializeAssetInformation(that.assetInformation);
 
     if (that.submodels !== null) {
-      jsonable["submodels"] = serializeArray(
-        that.submodels,
-        (item) => this.transform(item)
-      );
+      prop = "submodels";
+      jsonable["submodels"] =
+        serialize_ListOf_Reference(that.submodels);
     }
-
-    jsonable["modelType"] = "AssetAdministrationShell";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformAssetInformation(
-    that: AasTypes.AssetInformation
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "AssetAdministrationShell";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeAssetInformation(
+  that: AasTypes.AssetInformation
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
+    prop = "assetKind";
     jsonable["assetKind"] =
-      AasStringification.mustAssetKindToString(
-        that.assetKind
-      );
+      serialize_AssetKind(that.assetKind);
 
     if (that.globalAssetId !== null) {
       jsonable["globalAssetId"] =
@@ -9042,10 +9254,9 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.specificAssetIds !== null) {
-      jsonable["specificAssetIds"] = serializeArray(
-        that.specificAssetIds,
-        (item) => this.transform(item)
-      );
+      prop = "specificAssetIds";
+      jsonable["specificAssetIds"] =
+        serialize_ListOf_SpecificAssetId(that.specificAssetIds);
     }
 
     if (that.assetType !== null) {
@@ -9055,55 +9266,64 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
 
     if (that.defaultThumbnail !== null) {
       jsonable["defaultThumbnail"] =
-        this.transform(that.defaultThumbnail);
+        serializeResource(that.defaultThumbnail);
     }
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformResource(
-    that: AasTypes.Resource
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
-    jsonable["path"] =
-      that.path;
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeResource(
+  that: AasTypes.Resource
+): JsonObject {
+  const jsonable: JsonObject = {};
 
-    if (that.contentType !== null) {
-      jsonable["contentType"] =
-        that.contentType;
-    }
+  jsonable["path"] =
+    that.path;
 
-    return jsonable;
+  if (that.contentType !== null) {
+    jsonable["contentType"] =
+      that.contentType;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformSpecificAssetId(
-    that: AasTypes.SpecificAssetId
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeSpecificAssetId(
+  that: AasTypes.SpecificAssetId
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     jsonable["name"] =
@@ -9113,29 +9333,38 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
       that.value;
 
     if (that.externalSubjectId !== null) {
+      prop = "externalSubjectId";
       jsonable["externalSubjectId"] =
-        this.transform(that.externalSubjectId);
+        serializeReference(that.externalSubjectId);
     }
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformSubmodel(
-    that: AasTypes.Submodel
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeSubmodel(
+  that: AasTypes.Submodel
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -9149,88 +9378,89 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.administration !== null) {
+      prop = "administration";
       jsonable["administration"] =
-        this.transform(that.administration);
+        serializeAdministrativeInformation(that.administration);
     }
 
     jsonable["id"] =
       that.id;
 
     if (that.kind !== null) {
+      prop = "kind";
       jsonable["kind"] =
-        AasStringification.mustModellingKindToString(
-          that.kind
-        );
+        serialize_ModellingKind(that.kind);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.submodelElements !== null) {
-      jsonable["submodelElements"] = serializeArray(
-        that.submodelElements,
-        (item) => this.transform(item)
-      );
+      prop = "submodelElements";
+      jsonable["submodelElements"] =
+        serialize_ListOf_ISubmodelElement(that.submodelElements);
     }
-
-    jsonable["modelType"] = "Submodel";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformRelationshipElement(
-    that: AasTypes.RelationshipElement
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "Submodel";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeRelationshipElement(
+  that: AasTypes.RelationshipElement
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -9244,72 +9474,76 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
+    prop = "first";
     jsonable["first"] =
-      this.transform(that.first);
+      serializeReference(that.first);
 
+    prop = "second";
     jsonable["second"] =
-      this.transform(that.second);
-
-    jsonable["modelType"] = "RelationshipElement";
-
-    return jsonable;
+      serializeReference(that.second);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformSubmodelElementList(
-    that: AasTypes.SubmodelElementList
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "RelationshipElement";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeSubmodelElementList(
+  that: AasTypes.SubmodelElementList
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -9323,43 +9557,37 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.orderRelevant !== null) {
@@ -9368,50 +9596,56 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.semanticIdListElement !== null) {
+      prop = "semanticIdListElement";
       jsonable["semanticIdListElement"] =
-        this.transform(that.semanticIdListElement);
+        serializeReference(that.semanticIdListElement);
     }
 
+    prop = "typeValueListElement";
     jsonable["typeValueListElement"] =
-      AasStringification.mustAasSubmodelElementsToString(
-        that.typeValueListElement
-      );
+      serialize_AasSubmodelElements(that.typeValueListElement);
 
     if (that.valueTypeListElement !== null) {
+      prop = "valueTypeListElement";
       jsonable["valueTypeListElement"] =
-        AasStringification.mustDataTypeDefXsdToString(
-          that.valueTypeListElement
-        );
+        serialize_DataTypeDefXsd(that.valueTypeListElement);
     }
 
     if (that.value !== null) {
-      jsonable["value"] = serializeArray(
-        that.value,
-        (item) => this.transform(item)
-      );
+      prop = "value";
+      jsonable["value"] =
+        serialize_ListOf_ISubmodelElement(that.value);
     }
-
-    jsonable["modelType"] = "SubmodelElementList";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformSubmodelElementCollection(
-    that: AasTypes.SubmodelElementCollection
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "SubmodelElementList";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeSubmodelElementCollection(
+  that: AasTypes.SubmodelElementCollection
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -9425,73 +9659,74 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.value !== null) {
-      jsonable["value"] = serializeArray(
-        that.value,
-        (item) => this.transform(item)
-      );
+      prop = "value";
+      jsonable["value"] =
+        serialize_ListOf_ISubmodelElement(that.value);
     }
-
-    jsonable["modelType"] = "SubmodelElementCollection";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformProperty(
-    that: AasTypes.Property
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "SubmodelElementCollection";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeProperty(
+  that: AasTypes.Property
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -9505,49 +9740,42 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
+    prop = "valueType";
     jsonable["valueType"] =
-      AasStringification.mustDataTypeDefXsdToString(
-        that.valueType
-      );
+      serialize_DataTypeDefXsd(that.valueType);
 
     if (that.value !== null) {
       jsonable["value"] =
@@ -9555,31 +9783,40 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.valueId !== null) {
+      prop = "valueId";
       jsonable["valueId"] =
-        this.transform(that.valueId);
+        serializeReference(that.valueId);
     }
-
-    jsonable["modelType"] = "Property";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformMultiLanguageProperty(
-    that: AasTypes.MultiLanguageProperty
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "Property";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeMultiLanguageProperty(
+  that: AasTypes.MultiLanguageProperty
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -9593,78 +9830,79 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.value !== null) {
-      jsonable["value"] = serializeArray(
-        that.value,
-        (item) => this.transform(item)
-      );
+      jsonable["value"] =
+        serialize_ListOf_LangStringTextType(that.value);
     }
 
     if (that.valueId !== null) {
+      prop = "valueId";
       jsonable["valueId"] =
-        this.transform(that.valueId);
+        serializeReference(that.valueId);
     }
-
-    jsonable["modelType"] = "MultiLanguageProperty";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformRange(
-    that: AasTypes.Range
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "MultiLanguageProperty";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeRange(
+  that: AasTypes.Range
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -9678,49 +9916,42 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
+    prop = "valueType";
     jsonable["valueType"] =
-      AasStringification.mustDataTypeDefXsdToString(
-        that.valueType
-      );
+      serialize_DataTypeDefXsd(that.valueType);
 
     if (that.min !== null) {
       jsonable["min"] =
@@ -9731,28 +9962,36 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
       jsonable["max"] =
         that.max;
     }
-
-    jsonable["modelType"] = "Range";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformReferenceElement(
-    that: AasTypes.ReferenceElement
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "Range";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeReferenceElement(
+  that: AasTypes.ReferenceElement
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -9766,71 +10005,74 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.value !== null) {
+      prop = "value";
       jsonable["value"] =
-        this.transform(that.value);
+        serializeReference(that.value);
     }
-
-    jsonable["modelType"] = "ReferenceElement";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformBlob(
-    that: AasTypes.Blob
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "ReferenceElement";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeBlob(
+  that: AasTypes.Blob
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -9844,43 +10086,37 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.value !== null) {
@@ -9890,28 +10126,36 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
 
     jsonable["contentType"] =
       that.contentType;
-
-    jsonable["modelType"] = "Blob";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformFile(
-    that: AasTypes.File
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "Blob";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeFile(
+  that: AasTypes.File
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -9925,43 +10169,37 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.value !== null) {
@@ -9971,28 +10209,36 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
 
     jsonable["contentType"] =
       that.contentType;
-
-    jsonable["modelType"] = "File";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformAnnotatedRelationshipElement(
-    that: AasTypes.AnnotatedRelationshipElement
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "File";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeAnnotatedRelationshipElement(
+  that: AasTypes.AnnotatedRelationshipElement
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -10006,79 +10252,82 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
+    prop = "first";
     jsonable["first"] =
-      this.transform(that.first);
+      serializeReference(that.first);
 
+    prop = "second";
     jsonable["second"] =
-      this.transform(that.second);
+      serializeReference(that.second);
 
     if (that.annotations !== null) {
-      jsonable["annotations"] = serializeArray(
-        that.annotations,
-        (item) => this.transform(item)
-      );
+      prop = "annotations";
+      jsonable["annotations"] =
+        serialize_ListOf_IDataElement(that.annotations);
     }
-
-    jsonable["modelType"] = "AnnotatedRelationshipElement";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformEntity(
-    that: AasTypes.Entity
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "AnnotatedRelationshipElement";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeEntity(
+  that: AasTypes.Entity
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -10092,56 +10341,48 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.statements !== null) {
-      jsonable["statements"] = serializeArray(
-        that.statements,
-        (item) => this.transform(item)
-      );
+      prop = "statements";
+      jsonable["statements"] =
+        serialize_ListOf_ISubmodelElement(that.statements);
     }
 
+    prop = "entityType";
     jsonable["entityType"] =
-      AasStringification.mustEntityTypeToString(
-        that.entityType
-      );
+      serialize_EntityType(that.entityType);
 
     if (that.globalAssetId !== null) {
       jsonable["globalAssetId"] =
@@ -10149,42 +10390,54 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.specificAssetIds !== null) {
-      jsonable["specificAssetIds"] = serializeArray(
-        that.specificAssetIds,
-        (item) => this.transform(item)
-      );
+      prop = "specificAssetIds";
+      jsonable["specificAssetIds"] =
+        serialize_ListOf_SpecificAssetId(that.specificAssetIds);
     }
-
-    jsonable["modelType"] = "Entity";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformEventPayload(
-    that: AasTypes.EventPayload
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "Entity";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeEventPayload(
+  that: AasTypes.EventPayload
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
+    prop = "source";
     jsonable["source"] =
-      this.transform(that.source);
+      serializeReference(that.source);
 
     if (that.sourceSemanticId !== null) {
+      prop = "sourceSemanticId";
       jsonable["sourceSemanticId"] =
-        this.transform(that.sourceSemanticId);
+        serializeReference(that.sourceSemanticId);
     }
 
+    prop = "observableReference";
     jsonable["observableReference"] =
-      this.transform(that.observableReference);
+      serializeReference(that.observableReference);
 
     if (that.observableSemanticId !== null) {
+      prop = "observableSemanticId";
       jsonable["observableSemanticId"] =
-        this.transform(that.observableSemanticId);
+        serializeReference(that.observableSemanticId);
     }
 
     if (that.topic !== null) {
@@ -10193,8 +10446,9 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.subjectId !== null) {
+      prop = "subjectId";
       jsonable["subjectId"] =
-        this.transform(that.subjectId);
+        serializeReference(that.subjectId);
     }
 
     jsonable["timeStamp"] =
@@ -10204,26 +10458,34 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
       jsonable["payload"] =
         AasCommon.base64Encode(that.payload);
     }
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformBasicEventElement(
-    that: AasTypes.BasicEventElement
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeBasicEventElement(
+  that: AasTypes.BasicEventElement
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -10237,57 +10499,50 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
+    prop = "observed";
     jsonable["observed"] =
-      this.transform(that.observed);
+      serializeReference(that.observed);
 
+    prop = "direction";
     jsonable["direction"] =
-      AasStringification.mustDirectionToString(
-        that.direction
-      );
+      serialize_Direction(that.direction);
 
+    prop = "state";
     jsonable["state"] =
-      AasStringification.mustStateOfEventToString(
-        that.state
-      );
+      serialize_StateOfEvent(that.state);
 
     if (that.messageTopic !== null) {
       jsonable["messageTopic"] =
@@ -10295,8 +10550,9 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.messageBroker !== null) {
+      prop = "messageBroker";
       jsonable["messageBroker"] =
-        this.transform(that.messageBroker);
+        serializeReference(that.messageBroker);
     }
 
     if (that.lastUpdate !== null) {
@@ -10313,28 +10569,36 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
       jsonable["maxInterval"] =
         that.maxInterval;
     }
-
-    jsonable["modelType"] = "BasicEventElement";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformOperation(
-    that: AasTypes.Operation
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "BasicEventElement";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeOperation(
+  that: AasTypes.Operation
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -10348,104 +10612,113 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.inputVariables !== null) {
-      jsonable["inputVariables"] = serializeArray(
-        that.inputVariables,
-        (item) => this.transform(item)
-      );
+      prop = "inputVariables";
+      jsonable["inputVariables"] =
+        serialize_ListOf_OperationVariable(that.inputVariables);
     }
 
     if (that.outputVariables !== null) {
-      jsonable["outputVariables"] = serializeArray(
-        that.outputVariables,
-        (item) => this.transform(item)
-      );
+      prop = "outputVariables";
+      jsonable["outputVariables"] =
+        serialize_ListOf_OperationVariable(that.outputVariables);
     }
 
     if (that.inoutputVariables !== null) {
-      jsonable["inoutputVariables"] = serializeArray(
-        that.inoutputVariables,
-        (item) => this.transform(item)
-      );
+      prop = "inoutputVariables";
+      jsonable["inoutputVariables"] =
+        serialize_ListOf_OperationVariable(that.inoutputVariables);
     }
-
-    jsonable["modelType"] = "Operation";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformOperationVariable(
-    that: AasTypes.OperationVariable
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "Operation";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeOperationVariable(
+  that: AasTypes.OperationVariable
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
+    prop = "value";
     jsonable["value"] =
-      this.transform(that.value);
-
-    return jsonable;
+      serializeClass(that.value);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformCapability(
-    that: AasTypes.Capability
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeCapability(
+  that: AasTypes.Capability
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -10459,66 +10732,68 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.semanticId !== null) {
+      prop = "semanticId";
       jsonable["semanticId"] =
-        this.transform(that.semanticId);
+        serializeReference(that.semanticId);
     }
 
     if (that.supplementalSemanticIds !== null) {
-      jsonable["supplementalSemanticIds"] = serializeArray(
-        that.supplementalSemanticIds,
-        (item) => this.transform(item)
-      );
+      prop = "supplementalSemanticIds";
+      jsonable["supplementalSemanticIds"] =
+        serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
     if (that.qualifiers !== null) {
-      jsonable["qualifiers"] = serializeArray(
-        that.qualifiers,
-        (item) => this.transform(item)
-      );
+      prop = "qualifiers";
+      jsonable["qualifiers"] =
+        serialize_ListOf_Qualifier(that.qualifiers);
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
-
-    jsonable["modelType"] = "Capability";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformConceptDescription(
-    that: AasTypes.ConceptDescription
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "Capability";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeConceptDescription(
+  that: AasTypes.ConceptDescription
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.extensions !== null) {
-      jsonable["extensions"] = serializeArray(
-        that.extensions,
-        (item) => this.transform(item)
-      );
+      prop = "extensions";
+      jsonable["extensions"] =
+        serialize_ListOf_Extension(that.extensions);
     }
 
     if (that.category !== null) {
@@ -10532,338 +10807,389 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      jsonable["displayName"] = serializeArray(
-        that.displayName,
-        (item) => this.transform(item)
-      );
+      jsonable["displayName"] =
+        serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
-      jsonable["description"] = serializeArray(
-        that.description,
-        (item) => this.transform(item)
-      );
+      jsonable["description"] =
+        serialize_ListOf_LangStringTextType(that.description);
     }
 
     if (that.administration !== null) {
+      prop = "administration";
       jsonable["administration"] =
-        this.transform(that.administration);
+        serializeAdministrativeInformation(that.administration);
     }
 
     jsonable["id"] =
       that.id;
 
     if (that.embeddedDataSpecifications !== null) {
-      jsonable["embeddedDataSpecifications"] = serializeArray(
-        that.embeddedDataSpecifications,
-        (item) => this.transform(item)
-      );
+      prop = "embeddedDataSpecifications";
+      jsonable["embeddedDataSpecifications"] =
+        serialize_ListOf_EmbeddedDataSpecification(that.embeddedDataSpecifications);
     }
 
     if (that.isCaseOf !== null) {
-      jsonable["isCaseOf"] = serializeArray(
-        that.isCaseOf,
-        (item) => this.transform(item)
-      );
+      prop = "isCaseOf";
+      jsonable["isCaseOf"] =
+        serialize_ListOf_Reference(that.isCaseOf);
     }
-
-    jsonable["modelType"] = "ConceptDescription";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformReference(
-    that: AasTypes.Reference
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "ConceptDescription";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeReference(
+  that: AasTypes.Reference
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
+    prop = "type";
     jsonable["type"] =
-      AasStringification.mustReferenceTypesToString(
-        that.type
-      );
+      serialize_ReferenceTypes(that.type);
 
     if (that.referredSemanticId !== null) {
+      prop = "referredSemanticId";
       jsonable["referredSemanticId"] =
-        this.transform(that.referredSemanticId);
+        serializeReference(that.referredSemanticId);
     }
 
-    jsonable["keys"] = serializeArray(
-      that.keys,
-      (item) => this.transform(item)
-    );
-
-    return jsonable;
+    prop = "keys";
+    jsonable["keys"] =
+      serialize_ListOf_Key(that.keys);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformKey(
-    that: AasTypes.Key
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeKey(
+  that: AasTypes.Key
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
+    prop = "type";
     jsonable["type"] =
-      AasStringification.mustKeyTypesToString(
-        that.type
-      );
+      serialize_KeyTypes(that.type);
 
     jsonable["value"] =
       that.value;
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformLangStringNameType(
-    that: AasTypes.LangStringNameType
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
-    jsonable["language"] =
-      that.language;
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeLangStringNameType(
+  that: AasTypes.LangStringNameType
+): JsonObject {
+  const jsonable: JsonObject = {};
 
-    jsonable["text"] =
-      that.text;
+  jsonable["language"] =
+    that.language;
 
-    return jsonable;
-  }
+  jsonable["text"] =
+    that.text;
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformLangStringTextType(
-    that: AasTypes.LangStringTextType
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
-    jsonable["language"] =
-      that.language;
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeLangStringTextType(
+  that: AasTypes.LangStringTextType
+): JsonObject {
+  const jsonable: JsonObject = {};
 
-    jsonable["text"] =
-      that.text;
+  jsonable["language"] =
+    that.language;
 
-    return jsonable;
-  }
+  jsonable["text"] =
+    that.text;
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformEnvironment(
-    that: AasTypes.Environment
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeEnvironment(
+  that: AasTypes.Environment
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     if (that.assetAdministrationShells !== null) {
-      jsonable["assetAdministrationShells"] = serializeArray(
-        that.assetAdministrationShells,
-        (item) => this.transform(item)
-      );
+      prop = "assetAdministrationShells";
+      jsonable["assetAdministrationShells"] =
+        serialize_ListOf_AssetAdministrationShell(that.assetAdministrationShells);
     }
 
     if (that.submodels !== null) {
-      jsonable["submodels"] = serializeArray(
-        that.submodels,
-        (item) => this.transform(item)
-      );
+      prop = "submodels";
+      jsonable["submodels"] =
+        serialize_ListOf_Submodel(that.submodels);
     }
 
     if (that.conceptDescriptions !== null) {
-      jsonable["conceptDescriptions"] = serializeArray(
-        that.conceptDescriptions,
-        (item) => this.transform(item)
-      );
+      prop = "conceptDescriptions";
+      jsonable["conceptDescriptions"] =
+        serialize_ListOf_ConceptDescription(that.conceptDescriptions);
     }
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformEmbeddedDataSpecification(
-    that: AasTypes.EmbeddedDataSpecification
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeEmbeddedDataSpecification(
+  that: AasTypes.EmbeddedDataSpecification
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
+    prop = "dataSpecification";
     jsonable["dataSpecification"] =
-      this.transform(that.dataSpecification);
+      serializeReference(that.dataSpecification);
 
+    prop = "dataSpecificationContent";
     jsonable["dataSpecificationContent"] =
-      this.transform(that.dataSpecificationContent);
-
-    return jsonable;
+      serializeClass(that.dataSpecificationContent);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformLevelType(
-    that: AasTypes.LevelType
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
-    jsonable["min"] =
-      that.min;
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeLevelType(
+  that: AasTypes.LevelType
+): JsonObject {
+  const jsonable: JsonObject = {};
 
-    jsonable["nom"] =
-      that.nom;
+  jsonable["min"] =
+    that.min;
 
-    jsonable["typ"] =
-      that.typ;
+  jsonable["nom"] =
+    that.nom;
 
-    jsonable["max"] =
-      that.max;
+  jsonable["typ"] =
+    that.typ;
 
-    return jsonable;
-  }
+  jsonable["max"] =
+    that.max;
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformValueReferencePair(
-    that: AasTypes.ValueReferencePair
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeValueReferencePair(
+  that: AasTypes.ValueReferencePair
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     jsonable["value"] =
       that.value;
 
+    prop = "valueId";
     jsonable["valueId"] =
-      this.transform(that.valueId);
-
-    return jsonable;
+      serializeReference(that.valueId);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformValueList(
-    that: AasTypes.ValueList
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
-    jsonable["valueReferencePairs"] = serializeArray(
-      that.valueReferencePairs,
-      (item) => this.transform(item)
-    );
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeValueList(
+  that: AasTypes.ValueList
+): JsonObject {
+  const jsonable: JsonObject = {};
 
-    return jsonable;
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
+    prop = "valueReferencePairs";
+    jsonable["valueReferencePairs"] =
+      serialize_ListOf_ValueReferencePair(that.valueReferencePairs);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformLangStringPreferredNameTypeIec61360(
-    that: AasTypes.LangStringPreferredNameTypeIec61360
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
-    jsonable["language"] =
-      that.language;
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeLangStringPreferredNameTypeIec61360(
+  that: AasTypes.LangStringPreferredNameTypeIec61360
+): JsonObject {
+  const jsonable: JsonObject = {};
 
-    jsonable["text"] =
-      that.text;
+  jsonable["language"] =
+    that.language;
 
-    return jsonable;
-  }
+  jsonable["text"] =
+    that.text;
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformLangStringShortNameTypeIec61360(
-    that: AasTypes.LangStringShortNameTypeIec61360
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
-    jsonable["language"] =
-      that.language;
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeLangStringShortNameTypeIec61360(
+  that: AasTypes.LangStringShortNameTypeIec61360
+): JsonObject {
+  const jsonable: JsonObject = {};
 
-    jsonable["text"] =
-      that.text;
+  jsonable["language"] =
+    that.language;
 
-    return jsonable;
-  }
+  jsonable["text"] =
+    that.text;
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformLangStringDefinitionTypeIec61360(
-    that: AasTypes.LangStringDefinitionTypeIec61360
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
-    jsonable["language"] =
-      that.language;
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeLangStringDefinitionTypeIec61360(
+  that: AasTypes.LangStringDefinitionTypeIec61360
+): JsonObject {
+  const jsonable: JsonObject = {};
 
-    jsonable["text"] =
-      that.text;
+  jsonable["language"] =
+    that.language;
 
-    return jsonable;
-  }
+  jsonable["text"] =
+    that.text;
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformDataSpecificationIec61360(
-    that: AasTypes.DataSpecificationIec61360
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  return jsonable;
+}
 
-    jsonable["preferredName"] = serializeArray(
-      that.preferredName,
-      (item) => this.transform(item)
-    );
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeDataSpecificationIec61360(
+  that: AasTypes.DataSpecificationIec61360
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
+    jsonable["preferredName"] =
+      serialize_ListOf_LangStringPreferredNameTypeIec61360(that.preferredName);
 
     if (that.shortName !== null) {
-      jsonable["shortName"] = serializeArray(
-        that.shortName,
-        (item) => this.transform(item)
-      );
+      jsonable["shortName"] =
+        serialize_ListOf_LangStringShortNameTypeIec61360(that.shortName);
     }
 
     if (that.unit !== null) {
@@ -10872,8 +11198,9 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.unitId !== null) {
+      prop = "unitId";
       jsonable["unitId"] =
-        this.transform(that.unitId);
+        serializeReference(that.unitId);
     }
 
     if (that.sourceOfDefinition !== null) {
@@ -10887,17 +11214,14 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.dataType !== null) {
+      prop = "dataType";
       jsonable["dataType"] =
-        AasStringification.mustDataTypeIec61360ToString(
-          that.dataType
-        );
+        serialize_DataTypeIec61360(that.dataType);
     }
 
     if (that.definition !== null) {
-      jsonable["definition"] = serializeArray(
-        that.definition,
-        (item) => this.transform(item)
-      );
+      jsonable["definition"] =
+        serialize_ListOf_LangStringDefinitionTypeIec61360(that.definition);
     }
 
     if (that.valueFormat !== null) {
@@ -10906,8 +11230,9 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.valueList !== null) {
+      prop = "valueList";
       jsonable["valueList"] =
-        this.transform(that.valueList);
+        serializeValueList(that.valueList);
     }
 
     if (that.value !== null) {
@@ -10917,16 +11242,661 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
 
     if (that.levelType !== null) {
       jsonable["levelType"] =
-        this.transform(that.levelType);
+        serializeLevelType(that.levelType);
     }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
-    jsonable["modelType"] = "DataSpecificationIec61360";
+  jsonable["modelType"] = "DataSpecificationIec61360";
 
-    return jsonable;
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_Reference(
+  that: ReadonlyArray<AasTypes.Reference>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeReference(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_EmbeddedDataSpecification(
+  that: ReadonlyArray<AasTypes.EmbeddedDataSpecification>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeEmbeddedDataSpecification(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_Extension(
+  that: ReadonlyArray<AasTypes.Extension>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeExtension(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_LangStringNameType(
+  that: ReadonlyArray<AasTypes.LangStringNameType>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  for (let i = 0; i < that.length; i++) {
+    result[i] = serializeLangStringNameType(that[i]);
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_LangStringTextType(
+  that: ReadonlyArray<AasTypes.LangStringTextType>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  for (let i = 0; i < that.length; i++) {
+    result[i] = serializeLangStringTextType(that[i]);
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_SpecificAssetId(
+  that: ReadonlyArray<AasTypes.SpecificAssetId>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeSpecificAssetId(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_Qualifier(
+  that: ReadonlyArray<AasTypes.Qualifier>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeQualifier(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_ISubmodelElement(
+  that: ReadonlyArray<AasTypes.ISubmodelElement>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeClass(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_IDataElement(
+  that: ReadonlyArray<AasTypes.IDataElement>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeClass(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_OperationVariable(
+  that: ReadonlyArray<AasTypes.OperationVariable>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeOperationVariable(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_Key(
+  that: ReadonlyArray<AasTypes.Key>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeKey(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_AssetAdministrationShell(
+  that: ReadonlyArray<AasTypes.AssetAdministrationShell>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeAssetAdministrationShell(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_Submodel(
+  that: ReadonlyArray<AasTypes.Submodel>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeSubmodel(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_ConceptDescription(
+  that: ReadonlyArray<AasTypes.ConceptDescription>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeConceptDescription(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_ValueReferencePair(
+  that: ReadonlyArray<AasTypes.ValueReferencePair>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeValueReferencePair(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_LangStringPreferredNameTypeIec61360(
+  that: ReadonlyArray<AasTypes.LangStringPreferredNameTypeIec61360>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  for (let i = 0; i < that.length; i++) {
+    result[i] = serializeLangStringPreferredNameTypeIec61360(that[i]);
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_LangStringShortNameTypeIec61360(
+  that: ReadonlyArray<AasTypes.LangStringShortNameTypeIec61360>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  for (let i = 0; i < that.length; i++) {
+    result[i] = serializeLangStringShortNameTypeIec61360(that[i]);
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_LangStringDefinitionTypeIec61360(
+  that: ReadonlyArray<AasTypes.LangStringDefinitionTypeIec61360>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  for (let i = 0; i < that.length; i++) {
+    result[i] = serializeLangStringDefinitionTypeIec61360(that[i]);
+  }
+  return result;
+}
+
+/**
+ * Dispatch the serialization on the run-time type of an instance.
+ */
+class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
+  transformExtension(
+    that: AasTypes.Extension
+  ): JsonObject {
+    return serializeExtension(that);
+  }
+
+  transformAdministrativeInformation(
+    that: AasTypes.AdministrativeInformation
+  ): JsonObject {
+    return serializeAdministrativeInformation(that);
+  }
+
+  transformQualifier(
+    that: AasTypes.Qualifier
+  ): JsonObject {
+    return serializeQualifier(that);
+  }
+
+  transformAssetAdministrationShell(
+    that: AasTypes.AssetAdministrationShell
+  ): JsonObject {
+    return serializeAssetAdministrationShell(that);
+  }
+
+  transformAssetInformation(
+    that: AasTypes.AssetInformation
+  ): JsonObject {
+    return serializeAssetInformation(that);
+  }
+
+  transformResource(
+    that: AasTypes.Resource
+  ): JsonObject {
+    return serializeResource(that);
+  }
+
+  transformSpecificAssetId(
+    that: AasTypes.SpecificAssetId
+  ): JsonObject {
+    return serializeSpecificAssetId(that);
+  }
+
+  transformSubmodel(
+    that: AasTypes.Submodel
+  ): JsonObject {
+    return serializeSubmodel(that);
+  }
+
+  transformRelationshipElement(
+    that: AasTypes.RelationshipElement
+  ): JsonObject {
+    return serializeRelationshipElement(that);
+  }
+
+  transformSubmodelElementList(
+    that: AasTypes.SubmodelElementList
+  ): JsonObject {
+    return serializeSubmodelElementList(that);
+  }
+
+  transformSubmodelElementCollection(
+    that: AasTypes.SubmodelElementCollection
+  ): JsonObject {
+    return serializeSubmodelElementCollection(that);
+  }
+
+  transformProperty(
+    that: AasTypes.Property
+  ): JsonObject {
+    return serializeProperty(that);
+  }
+
+  transformMultiLanguageProperty(
+    that: AasTypes.MultiLanguageProperty
+  ): JsonObject {
+    return serializeMultiLanguageProperty(that);
+  }
+
+  transformRange(
+    that: AasTypes.Range
+  ): JsonObject {
+    return serializeRange(that);
+  }
+
+  transformReferenceElement(
+    that: AasTypes.ReferenceElement
+  ): JsonObject {
+    return serializeReferenceElement(that);
+  }
+
+  transformBlob(
+    that: AasTypes.Blob
+  ): JsonObject {
+    return serializeBlob(that);
+  }
+
+  transformFile(
+    that: AasTypes.File
+  ): JsonObject {
+    return serializeFile(that);
+  }
+
+  transformAnnotatedRelationshipElement(
+    that: AasTypes.AnnotatedRelationshipElement
+  ): JsonObject {
+    return serializeAnnotatedRelationshipElement(that);
+  }
+
+  transformEntity(
+    that: AasTypes.Entity
+  ): JsonObject {
+    return serializeEntity(that);
+  }
+
+  transformEventPayload(
+    that: AasTypes.EventPayload
+  ): JsonObject {
+    return serializeEventPayload(that);
+  }
+
+  transformBasicEventElement(
+    that: AasTypes.BasicEventElement
+  ): JsonObject {
+    return serializeBasicEventElement(that);
+  }
+
+  transformOperation(
+    that: AasTypes.Operation
+  ): JsonObject {
+    return serializeOperation(that);
+  }
+
+  transformOperationVariable(
+    that: AasTypes.OperationVariable
+  ): JsonObject {
+    return serializeOperationVariable(that);
+  }
+
+  transformCapability(
+    that: AasTypes.Capability
+  ): JsonObject {
+    return serializeCapability(that);
+  }
+
+  transformConceptDescription(
+    that: AasTypes.ConceptDescription
+  ): JsonObject {
+    return serializeConceptDescription(that);
+  }
+
+  transformReference(
+    that: AasTypes.Reference
+  ): JsonObject {
+    return serializeReference(that);
+  }
+
+  transformKey(
+    that: AasTypes.Key
+  ): JsonObject {
+    return serializeKey(that);
+  }
+
+  transformLangStringNameType(
+    that: AasTypes.LangStringNameType
+  ): JsonObject {
+    return serializeLangStringNameType(that);
+  }
+
+  transformLangStringTextType(
+    that: AasTypes.LangStringTextType
+  ): JsonObject {
+    return serializeLangStringTextType(that);
+  }
+
+  transformEnvironment(
+    that: AasTypes.Environment
+  ): JsonObject {
+    return serializeEnvironment(that);
+  }
+
+  transformEmbeddedDataSpecification(
+    that: AasTypes.EmbeddedDataSpecification
+  ): JsonObject {
+    return serializeEmbeddedDataSpecification(that);
+  }
+
+  transformLevelType(
+    that: AasTypes.LevelType
+  ): JsonObject {
+    return serializeLevelType(that);
+  }
+
+  transformValueReferencePair(
+    that: AasTypes.ValueReferencePair
+  ): JsonObject {
+    return serializeValueReferencePair(that);
+  }
+
+  transformValueList(
+    that: AasTypes.ValueList
+  ): JsonObject {
+    return serializeValueList(that);
+  }
+
+  transformLangStringPreferredNameTypeIec61360(
+    that: AasTypes.LangStringPreferredNameTypeIec61360
+  ): JsonObject {
+    return serializeLangStringPreferredNameTypeIec61360(that);
+  }
+
+  transformLangStringShortNameTypeIec61360(
+    that: AasTypes.LangStringShortNameTypeIec61360
+  ): JsonObject {
+    return serializeLangStringShortNameTypeIec61360(that);
+  }
+
+  transformLangStringDefinitionTypeIec61360(
+    that: AasTypes.LangStringDefinitionTypeIec61360
+  ): JsonObject {
+    return serializeLangStringDefinitionTypeIec61360(that);
+  }
+
+  transformDataSpecificationIec61360(
+    that: AasTypes.DataSpecificationIec61360
+  ): JsonObject {
+    return serializeDataSpecificationIec61360(that);
   }
 }
 
 const SERIALIZER = new Serializer();
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * Which JSON object that is, is decided by the run-time type of `that`, so this
+ * one function serves an abstract class, a concrete class with descendants and
+ * a named union alike. The de-serialization, which has to decide what to construct
+ * before it has read anything, needs a dispatcher per type instead.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeClass(that: AasTypes.Class): JsonObject {
+  return that.transform(SERIALIZER);
+}
 
 /**
  * Convert `that` to a JSON-able structure.
@@ -10937,7 +11907,7 @@ const SERIALIZER = new Serializer();
  * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify|JSON.stringify})
  */
 export function toJsonable(that: AasTypes.Class): JsonObject {
-  return SERIALIZER.transform(that);
+  return serializeClass(that);
 }
 
 // endregion

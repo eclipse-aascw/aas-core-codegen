@@ -26,119 +26,6 @@ from aas_core_codegen.typescript.common import (
 )
 
 
-# region Shared between the de-serialization and the serialization
-
-
-#: Moniker of a primitive type, see :py:func:`_type_moniker`.
-#:
-#: The monikers are spelled in lower case, while a moniker of one of our types goes
-#: through :py:func:`aas_core_codegen.naming.capitalized_camel_case`, so a primitive
-#: can never be confused with a type which somebody named ``Str`` or ``Float``.
-_MONIKER_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: Identifier("bool"),
-    intermediate.PrimitiveType.INT: Identifier("int"),
-    intermediate.PrimitiveType.FLOAT: Identifier("float"),
-    intermediate.PrimitiveType.STR: Identifier("str"),
-    intermediate.PrimitiveType.BYTEARRAY: Identifier("bytes"),
-}
-
-
-def _type_name_of_our_type(our_type: intermediate.OurType) -> Identifier:
-    """Give out the TypeScript type which the parser of ``our_type`` gives out."""
-    if isinstance(our_type, intermediate.Enumeration):
-        return typescript_naming.enum_name(our_type.name)
-
-    elif isinstance(our_type, intermediate.AbstractClass):
-        return typescript_naming.interface_name(our_type.name)
-
-    elif isinstance(our_type, intermediate.ConcreteClass):
-        return typescript_naming.class_name(our_type.name)
-
-    elif isinstance(our_type, intermediate.NamedUnion):
-        return typescript_naming.union_name(our_type.name)
-
-    elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-        raise AssertionError("Expected to handle this case before")
-
-    else:
-        assert_never(our_type)
-
-    raise AssertionError("Should not have gotten here")
-
-
-def _atomic_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> Identifier:
-    """
-    Determine the leaf moniker of the atomic ``type_annotation``.
-
-    The monikers are the parts out of which we build the names of the de/serializers
-    which are keyed by a *structural* type -- a list, a tuple, an item at a fixed
-    element name -- rather than by a symbol of the meta-model. A leaf moniker never
-    contains an underscore: our types go through
-    :py:func:`aas_core_codegen.naming.capitalized_camel_case`, and a primitive is
-    spelled in lower case, which also keeps it apart from a type of the same name.
-    See :py:func:`_type_moniker` for the compound monikers built on top of these.
-    """
-    primitive_type = intermediate.try_primitive_type(type_annotation)
-    if primitive_type is not None:
-        return _MONIKER_BY_PRIMITIVE_TYPE[primitive_type]
-
-    assert isinstance(
-        type_annotation, intermediate.OurTypeAnnotation
-    ), f"Expected an atomic type annotation, but got: {type_annotation}"
-
-    return _type_name_of_our_type(type_annotation.our_type)
-
-
-def _is_dispatched(type_anno: intermediate.TypeAnnotationUnion) -> bool:
-    """
-    Check whether a value of ``type_anno`` is parsed by dispatching on the local name
-    of its XML element.
-
-    This is the case for an abstract class, for a concrete class with concrete
-    descendants, and for a named union -- none of them prescribes the element tag,
-    so the tag is what tells us which parser to use.
-    """
-    if not isinstance(type_anno, intermediate.OurTypeAnnotation):
-        return False
-
-    our_type = type_anno.our_type
-
-    if isinstance(our_type, intermediate.NamedUnion):
-        return True
-
-    if isinstance(our_type, intermediate.AbstractClass):
-        return True
-
-    if isinstance(our_type, intermediate.ConcreteClass):
-        return len(our_type.concrete_descendants) > 0
-
-    return False
-
-
-def _type_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> str:
-    """
-    Determine the moniker of the ``type_annotation``.
-
-    A moniker of a list or of a tuple is a Polish notation over ``_``-separated
-    tokens: ``ListOf_{M}`` takes exactly one argument, and ``TupleOf{N}_{M}...``
-    exactly ``N`` of them. As a leaf moniker never contains an underscore, such
-    a name can always be split back into its parts, so the monikers are unique by
-    construction and we need no check for collisions.
-    """
-    type_anno = intermediate.beneath_optional(type_annotation)
-
-    if isinstance(type_anno, intermediate.ListTypeAnnotation):
-        return f"ListOf_{_type_moniker(type_anno.items)}"
-
-    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        monikers = "_".join(_type_moniker(item) for item in type_anno.items)
-        return f"TupleOf{len(type_anno.items)}_{monikers}"
-
-    return _atomic_moniker(type_anno)
-
-
-# endregion
-
 # region De-serialization
 
 
@@ -153,7 +40,9 @@ def _generate_parse_content_for_primitive_type(
     and a text parser of its own would be called from nowhere else -- a list item and
     a tuple item go through ``parseNamedElement``, which is given this parser.
     """
-    function_name = Identifier(f"parse_{_MONIKER_BY_PRIMITIVE_TYPE[primitive_type]}")
+    function_name = Identifier(
+        f"parse_{typescript_common.MONIKER_BY_PRIMITIVE_TYPE[primitive_type]}"
+    )
 
     if primitive_type is intermediate.PrimitiveType.BOOL:
         return Stripped(
@@ -396,7 +285,7 @@ def _dispatch_map_name(name: Identifier) -> Identifier:
 def _dispatch_parse_function_name(
     type_anno: intermediate.OurTypeAnnotation,
 ) -> Identifier:
-    """Give out the dispatching parser of ``type_anno``, see :py:func:`_is_dispatched`."""
+    """Give out the dispatching parser of ``type_anno``, see :py:func:`typescript_common.is_dispatched`."""
     our_type = type_anno.our_type
 
     if isinstance(our_type, intermediate.NamedUnion):
@@ -432,7 +321,7 @@ def _content_parser_name(
     ``dispatchParse{X}Element`` reads whole. Those two are keyed by a *symbol* of
     the meta-model, and their names contain no underscore; everything else is keyed
     by a *type*, and its name ends in an underscore and the type's moniker, see
-    :py:func:`_type_moniker`.
+    :py:func:`typescript_common.type_moniker`.
 
     This is a pure function of its argument. The code of the parsers which have to be
     composed is generated by :py:class:`_ParserRegistry`.
@@ -447,7 +336,7 @@ def _content_parser_name(
             intermediate.NamedUnion,
         ),
     ):
-        if _is_dispatched(type_anno):
+        if typescript_common.is_dispatched(type_anno):
             return _dispatch_parse_function_name(type_anno)
 
         assert isinstance(type_anno.our_type, intermediate.ConcreteClass), (
@@ -457,7 +346,7 @@ def _content_parser_name(
 
         return _parse_sequence_function_name_for_concrete_class(cls=type_anno.our_type)
 
-    return Identifier(f"parse_{_type_moniker(type_anno)}")
+    return Identifier(f"parse_{typescript_common.type_moniker(type_anno)}")
 
 
 def _element_parser_name(
@@ -473,16 +362,18 @@ def _element_parser_name(
     else sits in an element tagged ``v``, ``v1``, ``v2``, *etc.*, prescribed by
     the position, which the ``tag_suffix`` gives.
     """
-    if _is_dispatched(type_anno):
+    if typescript_common.is_dispatched(type_anno):
         assert isinstance(type_anno, intermediate.OurTypeAnnotation)
         return _dispatch_parse_function_name(type_anno)
 
     if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
         type_anno.our_type, intermediate.ConcreteClass
     ):
-        return Identifier(f"parseElement_{_atomic_moniker(type_anno)}")
+        return Identifier(f"parseElement_{typescript_common.atomic_moniker(type_anno)}")
 
-    return Identifier(f"parseAtV{tag_suffix}_{_atomic_moniker(type_anno)}")
+    return Identifier(
+        f"parseAtV{tag_suffix}_{typescript_common.atomic_moniker(type_anno)}"
+    )
 
 
 class _ParserRegistry:
@@ -527,7 +418,7 @@ class _ParserRegistry:
 
         A dispatched value needs none, see :py:func:`_element_parser_name`.
         """
-        if _is_dispatched(type_anno):
+        if typescript_common.is_dispatched(type_anno):
             return
 
         name = _element_parser_name(type_anno, tag_suffix)
@@ -1178,7 +1069,7 @@ def _content_writer_name(
     if _is_instance_type(type_anno):
         assert isinstance(type_anno, intermediate.OurTypeAnnotation)
 
-        if _is_dispatched(type_anno):
+        if typescript_common.is_dispatched(type_anno):
             return Identifier("writeClass")
 
         assert isinstance(type_anno.our_type, intermediate.ConcreteClass), (
@@ -1193,7 +1084,7 @@ def _content_writer_name(
     ):
         return Identifier("writeListOfInstances")
 
-    return Identifier(f"write_{_type_moniker(type_anno)}")
+    return Identifier(f"write_{typescript_common.type_moniker(type_anno)}")
 
 
 def _element_writer_name(
@@ -1211,7 +1102,9 @@ def _element_writer_name(
     if _is_instance_type(type_anno):
         return Identifier("writeClass")
 
-    return Identifier(f"writeAtV{tag_suffix}_{_atomic_moniker(type_anno)}")
+    return Identifier(
+        f"writeAtV{tag_suffix}_{typescript_common.atomic_moniker(type_anno)}"
+    )
 
 
 def _generate_write_content_for_primitive_type(
@@ -1224,7 +1117,9 @@ def _generate_write_content_for_primitive_type(
     which has to validate the text before it can hand out a value, there is nothing
     left to separate here once the value is at hand.
     """
-    function_name = Identifier(f"write_{_MONIKER_BY_PRIMITIVE_TYPE[primitive_type]}")
+    function_name = Identifier(
+        f"write_{typescript_common.MONIKER_BY_PRIMITIVE_TYPE[primitive_type]}"
+    )
 
     if primitive_type is intermediate.PrimitiveType.BOOL:
         return Stripped(
