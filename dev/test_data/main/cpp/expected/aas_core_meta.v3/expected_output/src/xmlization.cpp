@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <deque>
 #include <iomanip>
 #include <locale>
@@ -5443,6 +5444,98 @@ std::string CollapseWhitespace(const std::string& text) {
 }
 
 /**
+ * \brief Tell whether \p text is a numeral of the `xs:long` lexical space.
+ *
+ *     [-+]?[0-9]+
+ *
+ * The range is left to the parser, which refuses what does not fit
+ * a 64-bit integer.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#long
+ */
+bool MatchesXsLongNumeral(const std::string& text) {
+  std::size_t cursor = 0;
+  const std::size_t size = text.size();
+
+  if (cursor < size && (text[cursor] == '+' || text[cursor] == '-')) {
+    ++cursor;
+  }
+
+  std::size_t digits = 0;
+  while (cursor < size && text[cursor] >= '0' && text[cursor] <= '9') {
+    ++cursor;
+    ++digits;
+  }
+
+  return digits > 0 && cursor == size;
+}
+
+/**
+ * \brief Tell whether \p text is a numeral of the `xs:double` lexical space.
+ *
+ * The three named literals -- `INF`, `-INF` and `NaN` -- are matched by
+ * the caller, so only the numeral is considered here:
+ *
+ *     (\+|-)? ( [0-9]+ (\.[0-9]*)? | \.[0-9]+ ) ([Ee](\+|-)?[0-9]+)?
+ *
+ * This is spelled out rather than left to `std::regex` so that no pattern has
+ * to be compiled, and rather than left to `std::stod` because that one reads
+ * far more than XSD admits.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#double
+ */
+bool MatchesXsDoubleNumeral(const std::string& text) {
+  std::size_t cursor = 0;
+  const std::size_t size = text.size();
+
+  if (cursor < size && (text[cursor] == '+' || text[cursor] == '-')) {
+    ++cursor;
+  }
+
+  std::size_t digits_before_the_point = 0;
+  while (cursor < size && text[cursor] >= '0' && text[cursor] <= '9') {
+    ++cursor;
+    ++digits_before_the_point;
+  }
+
+  std::size_t digits_after_the_point = 0;
+  if (cursor < size && text[cursor] == '.') {
+    ++cursor;
+    while (cursor < size && text[cursor] >= '0' && text[cursor] <= '9') {
+      ++cursor;
+      ++digits_after_the_point;
+    }
+  }
+
+  // NOTE (mristin):
+  // A numeral needs a digit somewhere, but on either side of the point will
+  // do: both "1." and ".5" are good xs:double numerals.
+  if (digits_before_the_point == 0 && digits_after_the_point == 0) {
+    return false;
+  }
+
+  if (cursor < size && (text[cursor] == 'e' || text[cursor] == 'E')) {
+    ++cursor;
+
+    if (cursor < size && (text[cursor] == '+' || text[cursor] == '-')) {
+      ++cursor;
+    }
+
+    std::size_t digits_in_the_exponent = 0;
+    while (cursor < size && text[cursor] >= '0' && text[cursor] <= '9') {
+      ++cursor;
+      ++digits_in_the_exponent;
+    }
+
+    if (digits_in_the_exponent == 0) {
+      return false;
+    }
+  }
+
+  return cursor == size;
+}
+
+/**
  * \brief Drop every whitespace character of \p text.
  *
  * This is what `xs:base64Binary` needs: it allows whitespace between
@@ -5568,6 +5661,21 @@ std::pair<
     )
   );
 
+  // NOTE (mristin):
+  // The lexical form has to be checked before the text is parsed. The std::sto*
+  // family reads far more than XSD admits: it stops at the first character it
+  // can not use and answers with what it has read so far, so "0x10" comes out
+  // as 0, "1abc" as 1, and "5.0" as 5.
+  if (!MatchesXsLongNumeral(text)) {
+    return NoInstanceAndDeserializationErrorWithCause<int64_t>(
+      common::Concat(
+        L"Expected to parse an xs:long from text, "
+        L"but got an invalid value: ",
+        common::Utf8ToWstring(text)
+      )
+    );
+  }
+
   common::optional<int64_t> deserialized;
 
   static_assert(
@@ -5670,55 +5778,44 @@ std::pair<
     )
   );
 
-  double deserialized;
-
-  try {
-    deserialized = std::stod(text);
-  } catch (std::invalid_argument&) {
-    return NoInstanceAndDeserializationErrorWithCause<double>(
-      common::Concat(
-        L"Expected to parse an xs:double from text, "
-        L"but got an invalid value: ",
-        common::Utf8ToWstring(text)
-      )
-    );
-  } catch (std::out_of_range&) {
-    return NoInstanceAndDeserializationErrorWithCause<double>(
-      common::Concat(
-        L"Expected to parse an xs:double from text, "
-        L"but got a value out of the xs:double range: ",
-        common::Utf8ToWstring(text)
-      )
-    );
-  }
-
   // NOTE (mristin):
-  // XSD basic types are not case insensitive and quite strict.
-  // We follow this strictness in the parsing as well.
+  // XSD names the three special values, and it is case-sensitive about it.
   //
   // See: https://www.w3.org/TR/xmlschema11-2/#double
+  double deserialized;
 
-  const bool invalid_xml(
-    (
-      deserialized == std::numeric_limits<double>::infinity()
-      && text != "INF"
-    ) || (
-      deserialized == -std::numeric_limits<double>::infinity()
-      && text != "-INF"
-    ) || (
-      std::isnan(deserialized)
-      && text != "NaN"
-    )
-  );
+  if (text == "INF") {
+    deserialized = std::numeric_limits<double>::infinity();
+  } else if (text == "-INF") {
+    deserialized = -std::numeric_limits<double>::infinity();
+  } else if (text == "NaN") {
+    deserialized = std::numeric_limits<double>::quiet_NaN();
+  } else {
+    // NOTE (mristin):
+    // The lexical form has to be checked before the text is parsed.
+    // std::stod reads far more than XSD admits: a hexadecimal significand,
+    // so "0x10" comes out as 16; a trailing remainder, so "1.0abc" comes
+    // out as 1; and the spellings "inf", "infinity", "nan" and "NAN".
+    if (!MatchesXsDoubleNumeral(text)) {
+      return NoInstanceAndDeserializationErrorWithCause<double>(
+        common::Concat(
+          L"Expected to parse an xs:double from text, "
+          L"but got an invalid value: ",
+          common::Utf8ToWstring(text)
+        )
+      );
+    }
 
-  if (invalid_xml) {
-    return NoInstanceAndDeserializationErrorWithCause<double>(
-      common::Concat(
-        L"Expected to parse an xs:double from text, "
-        L"but got an invalid value: ",
-        common::Utf8ToWstring(text)
-      )
-    );
+    // NOTE (mristin):
+    // std::stod refuses a literal whose value does not fit a double, by
+    // throwing std::out_of_range, and it does so at both ends. XSD asks for
+    // neither refusal: a literal too large rounds to an infinity, which is
+    // in the value space of xs:double, and one too small rounds to zero.
+    // std::strtod gives exactly that, reporting the range through errno,
+    // which we deliberately leave alone.
+    //
+    // The numeral has already been matched, so strtod consumes all of it.
+    deserialized = std::strtod(text.c_str(), nullptr);
   }
 
   // NOTE (mristin):
