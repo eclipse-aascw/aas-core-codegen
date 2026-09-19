@@ -1259,69 +1259,48 @@ def _generate(
 
         elements: Optional[List[ET.Element]]
 
-        if (
-            isinstance(
-                our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-            )
-            and our_type.is_implementation_specific
+        if isinstance(our_type, intermediate.Enumeration):
+            if intermediate.runtime_id(our_type) not in ids_of_our_types_in_properties:
+                continue
+
+            elements = _define_for_enumeration(enumeration=our_type)
+
+        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+            # NOTE (mristin):
+            # We in-line the constraints from the constrained primitives directly
+            # in the properties. We do not want to introduce separate definitions
+            # for them as that would make it more difficult for downstream code
+            # generators to generate meaningful code.
+
+            continue
+
+        elif isinstance(
+            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
         ):
-            elements, impl_spec_errors = _retrieve_implementation_specific_elements(
-                cls=our_type, spec_impls=spec_impls
+            elements, definition_error = _define_for_class(
+                cls=our_type, constraints_by_class=constraints_by_class
             )
-            if impl_spec_errors is not None:
-                errors.extend(impl_spec_errors)
+
+            if definition_error is not None:
+                errors.append(definition_error)
                 continue
 
             assert elements is not None
+
+            if len(our_type.concrete_descendants) > 0:
+                choice_group = _generate_choice_group(cls=our_type)
+                elements.append(choice_group)
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union has no complex type or element of its own -- it
+            # is entirely represented by its choice group over its
+            # implementers.
+            elements = [_generate_choice_group_for_named_union(named_union=our_type)]
+
         else:
-            if isinstance(our_type, intermediate.Enumeration):
-                if (
-                    intermediate.runtime_id(our_type)
-                    not in ids_of_our_types_in_properties
-                ):
-                    continue
-
-                elements = _define_for_enumeration(enumeration=our_type)
-
-            elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-                # NOTE (mristin):
-                # We in-line the constraints from the constrained primitives directly
-                # in the properties. We do not want to introduce separate definitions
-                # for them as that would make it more difficult for downstream code
-                # generators to generate meaningful code.
-
-                continue
-
-            elif isinstance(
-                our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-            ):
-                elements, definition_error = _define_for_class(
-                    cls=our_type, constraints_by_class=constraints_by_class
-                )
-
-                if definition_error is not None:
-                    errors.append(definition_error)
-                    continue
-
-                assert elements is not None
-
-                if len(our_type.concrete_descendants) > 0:
-                    choice_group = _generate_choice_group(cls=our_type)
-                    elements.append(choice_group)
-
-            elif isinstance(our_type, intermediate.NamedUnion):
-                # NOTE (mristin):
-                # A named union has no complex type or element of its own -- it
-                # is entirely represented by its choice group over its
-                # implementers.
-                elements = [
-                    _generate_choice_group_for_named_union(named_union=our_type)
-                ]
-
-            else:
-                # noinspection PyTypeChecker
-                assert_never(our_type)
-
+            # noinspection PyTypeChecker
+            assert_never(our_type)
         assert elements is not None
         root.extend(elements)
 

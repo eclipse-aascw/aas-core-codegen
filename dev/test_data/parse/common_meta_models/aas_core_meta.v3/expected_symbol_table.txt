@@ -2,7 +2,6 @@ UnverifiedSymbolTable(
   our_types=[
     ConcreteClass(
       name='XML_serializable_string',
-      is_implementation_specific=False,
       inheritances=[
         'str'],
       properties=[],
@@ -28,7 +27,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Non_empty_XML_serializable_string',
-      is_implementation_specific=False,
       inheritances=[
         'XML_serializable_string'],
       properties=[],
@@ -60,7 +58,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Date_time_UTC',
-      is_implementation_specific=False,
       inheritances=[
         'str'],
       properties=[],
@@ -97,7 +94,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Duration',
-      is_implementation_specific=False,
       inheritances=[
         'str'],
       properties=[],
@@ -123,7 +119,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Blob_type',
-      is_implementation_specific=False,
       inheritances=[
         'bytearray'],
       properties=[],
@@ -138,7 +133,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Identifier',
-      is_implementation_specific=False,
       inheritances=[
         'Non_empty_XML_serializable_string'],
       properties=[],
@@ -170,7 +164,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Value_type_IEC_61360',
-      is_implementation_specific=False,
       inheritances=[
         'Non_empty_XML_serializable_string'],
       properties=[],
@@ -202,7 +195,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Name_type',
-      is_implementation_specific=False,
       inheritances=[
         'Non_empty_XML_serializable_string'],
       properties=[],
@@ -234,7 +226,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Version_type',
-      is_implementation_specific=False,
       inheritances=[
         'Non_empty_XML_serializable_string'],
       properties=[],
@@ -277,7 +268,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Revision_type',
-      is_implementation_specific=False,
       inheritances=[
         'Non_empty_XML_serializable_string'],
       properties=[],
@@ -320,7 +310,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Label_type',
-      is_implementation_specific=False,
       inheritances=[
         'Non_empty_XML_serializable_string'],
       properties=[],
@@ -352,7 +341,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Message_topic_type',
-      is_implementation_specific=False,
       inheritances=[
         'Non_empty_XML_serializable_string'],
       properties=[],
@@ -384,7 +372,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='BCP_47_language_tag',
-      is_implementation_specific=False,
       inheritances=[
         'str'],
       properties=[],
@@ -410,7 +397,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Content_type',
-      is_implementation_specific=False,
       inheritances=[
         'Non_empty_XML_serializable_string'],
       properties=[],
@@ -453,7 +439,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Path_type',
-      is_implementation_specific=False,
       inheritances=[
         'Identifier'],
       properties=[],
@@ -468,7 +453,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Qualifier_type',
-      is_implementation_specific=False,
       inheritances=[
         'Name_type'],
       properties=[],
@@ -483,7 +467,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Value_data_type',
-      is_implementation_specific=False,
       inheritances=[
         'XML_serializable_string'],
       properties=[],
@@ -498,7 +481,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='ID_short_type',
-      is_implementation_specific=False,
       inheritances=[
         'Name_type'],
       properties=[],
@@ -524,7 +506,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Has_semantics',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -671,7 +652,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Extension',
-      is_implementation_specific=False,
       inheritances=[
         'Has_semantics'],
       properties=[
@@ -923,7 +903,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Has_extensions',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -1045,7 +1024,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Referable',
-      is_implementation_specific=False,
       inheritances=[
         'Has_extensions'],
       properties=[
@@ -1328,7 +1306,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Identifiable',
-      is_implementation_specific=False,
       inheritances=[
         'Referable'],
       properties=[
@@ -1501,7 +1478,6 @@ UnverifiedSymbolTable(
       literals_by_name=...),
     AbstractClass(
       name='Has_kind',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -1581,7 +1557,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Has_data_specification',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -1679,7 +1654,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Administrative_information',
-      is_implementation_specific=False,
       inheritances=[
         'Has_data_specification'],
       properties=[
@@ -1859,7 +1833,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Qualifiable',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -2011,7 +1984,6 @@ UnverifiedSymbolTable(
       literals_by_name=...),
     ConcreteClass(
       name='Qualifier',
-      is_implementation_specific=False,
       inheritances=[
         'Has_semantics'],
       properties=[
@@ -2240,7 +2212,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Asset_administration_shell',
-      is_implementation_specific=False,
       inheritances=[
         'Identifiable',
         'Has_data_specification'],
@@ -2562,7 +2533,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Asset_information',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -2891,7 +2861,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Resource',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -2998,7 +2967,6 @@ UnverifiedSymbolTable(
       literals_by_name=...),
     ConcreteClass(
       name='Specific_asset_ID',
-      is_implementation_specific=False,
       inheritances=[
         'Has_semantics'],
       properties=[
@@ -3155,7 +3123,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Submodel',
-      is_implementation_specific=False,
       inheritances=[
         'Identifiable',
         'Has_kind',
@@ -3633,7 +3600,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Submodel_element',
-      is_implementation_specific=False,
       inheritances=[
         'Referable',
         'Has_semantics',
@@ -3802,7 +3768,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Relationship_element',
-      is_implementation_specific=False,
       inheritances=[
         'Submodel_element'],
       properties=[
@@ -4097,7 +4062,6 @@ UnverifiedSymbolTable(
       literals_by_name=...),
     ConcreteClass(
       name='Submodel_element_list',
-      is_implementation_specific=False,
       inheritances=[
         'Submodel_element'],
       properties=[
@@ -4687,7 +4651,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Submodel_element_collection',
-      is_implementation_specific=False,
       inheritances=[
         'Submodel_element'],
       properties=[
@@ -4977,7 +4940,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Data_element',
-      is_implementation_specific=False,
       inheritances=[
         'Submodel_element'],
       properties=[],
@@ -5194,7 +5156,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Property',
-      is_implementation_specific=False,
       inheritances=[
         'Data_element'],
       properties=[
@@ -5462,7 +5423,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Multi_language_property',
-      is_implementation_specific=False,
       inheritances=[
         'Data_element'],
       properties=[
@@ -5744,7 +5704,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Range',
-      is_implementation_specific=False,
       inheritances=[
         'Data_element'],
       properties=[
@@ -6042,7 +6001,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Reference_element',
-      is_implementation_specific=False,
       inheritances=[
         'Data_element'],
       properties=[
@@ -6235,7 +6193,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Blob',
-      is_implementation_specific=False,
       inheritances=[
         'Data_element'],
       properties=[
@@ -6446,7 +6403,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='File',
-      is_implementation_specific=False,
       inheritances=[
         'Data_element'],
       properties=[
@@ -6657,7 +6613,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Annotated_relationship_element',
-      is_implementation_specific=False,
       inheritances=[
         'Relationship_element'],
       properties=[
@@ -6937,7 +6892,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Entity',
-      is_implementation_specific=False,
       inheritances=[
         'Submodel_element'],
       properties=[
@@ -7495,7 +7449,6 @@ UnverifiedSymbolTable(
       literals_by_name=...),
     ConcreteClass(
       name='Event_payload',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -7770,7 +7723,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Event_element',
-      is_implementation_specific=False,
       inheritances=[
         'Submodel_element'],
       properties=[],
@@ -7936,7 +7888,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Basic_event_element',
-      is_implementation_specific=False,
       inheritances=[
         'Event_element'],
       properties=[
@@ -8358,7 +8309,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Operation',
-      is_implementation_specific=False,
       inheritances=[
         'Submodel_element'],
       properties=[
@@ -8745,7 +8695,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Operation_variable',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -8811,7 +8760,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Capability',
-      is_implementation_specific=False,
       inheritances=[
         'Submodel_element'],
       properties=[],
@@ -8977,7 +8925,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Concept_description',
-      is_implementation_specific=False,
       inheritances=[
         'Identifiable',
         'Has_data_specification'],
@@ -9446,7 +9393,6 @@ UnverifiedSymbolTable(
       literals_by_name=...),
     ConcreteClass(
       name='Reference',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -10200,7 +10146,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Key',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -10577,7 +10522,6 @@ UnverifiedSymbolTable(
       literals_by_name=...),
     AbstractClass(
       name='Abstract_lang_string',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -10646,7 +10590,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Lang_string_name_type',
-      is_implementation_specific=False,
       inheritances=[
         'Abstract_lang_string'],
       properties=[],
@@ -10714,7 +10657,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Lang_string_text_type',
-      is_implementation_specific=False,
       inheritances=[
         'Abstract_lang_string'],
       properties=[],
@@ -10782,7 +10724,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Environment',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -11010,7 +10951,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Data_specification_content',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[],
       methods=[],
@@ -11025,7 +10965,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Embedded_data_specification',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -11233,7 +11172,6 @@ UnverifiedSymbolTable(
       literals_by_name=...),
     ConcreteClass(
       name='Level_type',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -11338,7 +11276,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Value_reference_pair',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -11407,7 +11344,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Value_list',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -11486,7 +11422,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Lang_string_preferred_name_type_IEC_61360',
-      is_implementation_specific=False,
       inheritances=[
         'Abstract_lang_string'],
       properties=[],
@@ -11554,7 +11489,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Lang_string_short_name_type_IEC_61360',
-      is_implementation_specific=False,
       inheritances=[
         'Abstract_lang_string'],
       properties=[],
@@ -11622,7 +11556,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Lang_string_definition_type_IEC_61360',
-      is_implementation_specific=False,
       inheritances=[
         'Abstract_lang_string'],
       properties=[],
@@ -11690,7 +11623,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Data_specification_IEC_61360',
-      is_implementation_specific=False,
       inheritances=[
         'Data_specification_content'],
       properties=[

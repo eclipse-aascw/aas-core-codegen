@@ -15,7 +15,7 @@ from typing import (
 
 from icontract import ensure, require
 
-from aas_core_codegen import intermediate, naming, specific_implementations
+from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
     Error,
     Stripped,
@@ -2158,7 +2158,6 @@ class _Serializer(
 def generate(
     symbol_table: intermediate.SymbolTable,
     qualified_module_name: python_common.QualifiedModuleName,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """
     Generate code for JSON de/serialization.
@@ -2186,23 +2185,11 @@ def generate(
     )
 
     for concrete_cls in symbol_table.concrete_classes:
-        # NOTE (mristin):
-        # An implementation-specific class is de/serialized by a snippet, so
-        # the de/serializers which its properties would need are never called.
-        if concrete_cls.is_implementation_specific:
-            continue
-
         for prop in concrete_cls.properties:
             registry.register_parser(prop.type_annotation)
             serializer_registry.register_serializer(prop.type_annotation)
 
-    if (
-        any(
-            not concrete_cls.is_implementation_specific
-            for concrete_cls in symbol_table.concrete_classes
-        )
-        or len(symbol_table.named_unions) > 0
-    ):
+    if len(symbol_table.concrete_classes) > 0 or len(symbol_table.named_unions) > 0:
         registry.note_needed_helper("_as_mapping")
 
     if any(len(cls.concrete_descendants) > 0 for cls in symbol_table.classes) or any(
@@ -2215,23 +2202,6 @@ def generate(
         registry.note_needed_helper("_dispatch_from_jsonable")
 
     helper_blocks = _generate_deserialization_helpers()
-
-    # NOTE (mristin):
-    # We can not see inside a snippet, so we do not know which of the shared helpers
-    # it calls. As soon as a meta-model has an implementation-specific class, we
-    # therefore generate all of them, instead of letting the snippet fail with
-    # a ``NameError`` at the time of the de/serialization.
-    if any(
-        concrete_cls.is_implementation_specific
-        for concrete_cls in symbol_table.concrete_classes
-    ):
-        for helper_name in helper_blocks:
-            registry.note_needed_helper(helper_name)
-
-        for arity in intermediate.tuple_arities(symbol_table):
-            registry.note_tuple_arity(arity)
-
-        serializer_registry.note_bytes_are_encoded()
 
     needed_helpers = _collect_needed_helpers(registry.needed_helpers)
 
@@ -2483,26 +2453,7 @@ _Parser = Callable[
             if len(our_type.concrete_descendants) > 0:
                 blocks.append(_generate_dispatch_from_jsonable(cls=our_type))
 
-            if our_type.is_implementation_specific:
-                implementation_key = specific_implementations.ImplementationKey(
-                    f"Jsonization/{our_type.name}_from_jsonable.py"
-                )
-
-                implementation = spec_impls.get(implementation_key, None)
-                if implementation is None:
-                    errors.append(
-                        Error(
-                            our_type.parsed.node,
-                            f"The jsonization snippet is missing "
-                            f"for the implementation-specific "
-                            f"class {our_type.name}: {implementation_key}",
-                        )
-                    )
-                    continue
-
-                blocks.append(implementation)
-            else:
-                blocks.append(_generate_concrete_class_from_jsonable(cls=our_type))
+            blocks.append(_generate_concrete_class_from_jsonable(cls=our_type))
         elif isinstance(our_type, intermediate.NamedUnion):
             blocks.append(_generate_named_union_from_jsonable(named_union=our_type))
         else:
@@ -2546,37 +2497,12 @@ _Parser = Callable[
         if not isinstance(our_type, intermediate.ConcreteClass):
             continue
 
-        if our_type.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Jsonization/{our_type.name}_to_jsonable.py"
+        blocks.append(
+            _generate_cls_to_jsonable(
+                cls=our_type,
+                ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
             )
-
-            implementation = spec_impls.get(implementation_key, None)
-            if implementation is None:
-                errors.append(
-                    Error(
-                        our_type.parsed.node,
-                        f"The jsonization snippet is missing "
-                        f"for the implementation-specific "
-                        f"class {our_type.name}: {implementation_key}",
-                    )
-                )
-                continue
-
-            # NOTE (mristin):
-            # The snippet is expected to define the serializer of the class, named
-            # by :py:func:`_cls_serializer_name`, and to be the whole of it: what
-            # an instance of such a class puts on the wire does not follow from its
-            # properties, and the model type is part of that.
-            blocks.append(implementation)
-        else:
-            blocks.append(
-                _generate_cls_to_jsonable(
-                    cls=our_type,
-                    ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
-                )
-            )
-
+        )
     blocks.append(_generate_serializer(symbol_table=symbol_table))
 
     blocks.append(Stripped("_SERIALIZER = _Serializer()"))

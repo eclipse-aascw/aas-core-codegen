@@ -2,7 +2,6 @@ UnverifiedSymbolTable(
   our_types=[
     AbstractClass(
       name='Abstract_item',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[],
       methods=[],
@@ -15,7 +14,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Some_item',
-      is_implementation_specific=False,
       inheritances=[
         'Abstract_item'],
       properties=[
@@ -63,7 +61,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Another_item',
-      is_implementation_specific=False,
       inheritances=[
         'Abstract_item'],
       properties=[
@@ -111,7 +108,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Simple',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -158,7 +154,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Something',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(

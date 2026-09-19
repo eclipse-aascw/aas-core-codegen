@@ -156,7 +156,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             src_dir / "jsonization.cpp",
             lambda: cpp_lib.generate_jsonization_implementation(
                 symbol_table=context.symbol_table,
-                spec_impls=context.spec_impls,
                 library_namespace=library_namespace,
             ),
         ),
@@ -295,7 +294,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             src_dir / "xmlization.cpp",
             lambda: cpp_lib.generate_xmlization_implementation(
                 symbol_table=context.symbol_table,
-                spec_impls=context.spec_impls,
                 library_namespace=library_namespace,
             ),
         ),

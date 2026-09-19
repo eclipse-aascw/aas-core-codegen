@@ -4,9 +4,9 @@ import io
 import textwrap
 from typing import Tuple, Optional, List
 
-from icontract import ensure, require
+from icontract import ensure
 
-from aas_core_codegen import intermediate, specific_implementations
+from aas_core_codegen import intermediate
 from aas_core_codegen.common import (
     Error,
     Stripped,
@@ -74,7 +74,6 @@ public {returns} {method_name}(
 
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-@require(lambda cls: not cls.is_implementation_specific)
 def _generate_enhanced_class(
     cls: intermediate.ConcreteClass,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
@@ -279,7 +278,6 @@ private T Transform<T>(Aas.IUnion<T> that) where T : Aas.IUnion<T>
     )
 
 
-@require(lambda cls: not cls.is_implementation_specific)
 def _generate_transform(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the transform method to wrap the instance with an enhancement."""
     blocks = [
@@ -555,10 +553,8 @@ public override Aas.IClass {transform_name}(
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_wrapper(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transformer that wraps an instance with the enhancement."""
-    errors = []  # type: List[Error]
     blocks = [
         Stripped(
             "private readonly System.Func<Aas.IClass, TEnhancement?> "
@@ -576,25 +572,6 @@ internal Wrapper(
     ]  # type: List[Stripped]
 
     for cls in symbol_table.concrete_classes:
-        if cls.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Enhancing/Wrap/{cls.name}.cs"
-            )
-
-            code = spec_impls.get(implementation_key, None)
-            if code is None:
-                errors.append(
-                    Error(
-                        cls.parsed.node,
-                        f"The implementation is missing "
-                        f"for the implementation-specific class: {implementation_key}",
-                    )
-                )
-                continue
-
-            blocks.append(code)
-            continue
-
         blocks.append(_generate_transform(cls=cls))
 
     if len(symbol_table.named_unions) > 0:
@@ -632,7 +609,6 @@ internal class Wrapper<TEnhancement>
 def generate(
     symbol_table: intermediate.SymbolTable,
     namespace: csharp_common.NamespaceIdentifier,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """
     Generate code for enhancing model classes.
@@ -663,36 +639,14 @@ public abstract class Enhanced<TEnhancement> where TEnhancement : class
     errors = []  # type: List[Error]
 
     for cls in symbol_table.concrete_classes:
-        if cls.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Enhancing/Enhanced/{cls.name}.cs"
-            )
+        code, error = _generate_enhanced_class(cls=cls)
+        if error is not None:
+            errors.append(error)
+            continue
 
-            code = spec_impls.get(implementation_key, None)
-            if code is None:
-                errors.append(
-                    Error(
-                        cls.parsed.node,
-                        f"The implementation is missing "
-                        f"for the implementation-specific class: {implementation_key}",
-                    )
-                )
-                continue
-
-            assert code is not None
-            enhancing_blocks.append(code)
-        else:
-            code, error = _generate_enhanced_class(cls=cls)
-            if error is not None:
-                errors.append(error)
-                continue
-
-            assert code is not None
-            enhancing_blocks.append(code)
-
-    wrapper, wrapper_errors = _generate_wrapper(
-        symbol_table=symbol_table, spec_impls=spec_impls
-    )
+        assert code is not None
+        enhancing_blocks.append(code)
+    wrapper, wrapper_errors = _generate_wrapper(symbol_table=symbol_table)
     if wrapper_errors is not None:
         errors.extend(wrapper_errors)
 

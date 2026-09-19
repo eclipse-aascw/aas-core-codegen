@@ -321,9 +321,6 @@ def _stringify_abstract_class(that: AbstractClass) -> stringify.Entity:
         name=that.__class__.__name__,
         properties=[
             stringify.Property("name", that.name),
-            stringify.Property(
-                "is_implementation_specific", that.is_implementation_specific
-            ),
             stringify.Property("inheritances", that.inheritances),
             stringify.Property("properties", list(map(_stringify, that.properties))),
             stringify.Property("methods", list(map(_stringify, that.methods))),
@@ -344,9 +341,6 @@ def _stringify_concrete_class(that: ConcreteClass) -> stringify.Entity:
         name=that.__class__.__name__,
         properties=[
             stringify.Property("name", that.name),
-            stringify.Property(
-                "is_implementation_specific", that.is_implementation_specific
-            ),
             stringify.Property("inheritances", that.inheritances),
             stringify.Property("properties", list(map(_stringify, that.properties))),
             stringify.Property("methods", list(map(_stringify, that.methods))),

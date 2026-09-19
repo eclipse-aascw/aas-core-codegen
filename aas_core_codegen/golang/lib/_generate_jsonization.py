@@ -5,7 +5,7 @@ from typing import Tuple, Optional, List, Set, Union
 
 from icontract import ensure, require
 
-from aas_core_codegen import intermediate, naming, specific_implementations
+from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
     Error,
     Stripped,
@@ -1786,12 +1786,6 @@ def _determine_item_serializer_wrappers(
 
     item_type_annotations = []  # type: List[intermediate.TypeAnnotationUnion]
     for cls in symbol_table.concrete_classes:
-        if cls.is_implementation_specific:
-            # NOTE (mristin):
-            # The serialization of an implementation-specific class comes from
-            # a snippet, so we do not know and do not generate anything for it.
-            continue
-
         for prop in cls.properties:
             type_anno = intermediate.beneath_optional(prop.type_annotation)
 
@@ -2301,7 +2295,6 @@ func ToJsonable(
 # fmt: on
 def generate(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
     repo_url: Stripped,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code for JSON de/serialization."""
@@ -2461,26 +2454,9 @@ func mustDeserializationError(err error) *DeserializationError {{
         elif isinstance(our_type, intermediate.ConcreteClass):
             blocks.append(_generate_class_from_jsonable(cls=our_type))
 
-            if our_type.is_implementation_specific:
-                implementation_key = specific_implementations.ImplementationKey(
-                    f"Jsonization/{our_type.name}_from_map.go"
-                )
-
-                implementation = spec_impls.get(implementation_key, None)
-                if implementation is None:
-                    errors.append(
-                        Error(
-                            our_type.parsed.node,
-                            f"The jsonization snippet is missing "
-                            f"for the implementation-specific "
-                            f"class {our_type.name}: {implementation_key}",
-                        )
-                    )
-                    continue
-            else:
-                blocks.append(
-                    _generate_concrete_class_from_map_without_dispatch(cls=our_type)
-                )
+            blocks.append(
+                _generate_concrete_class_from_map_without_dispatch(cls=our_type)
+            )
         elif isinstance(our_type, intermediate.NamedUnion):
             blocks.append(_generate_named_union_from_jsonable(named_union=our_type))
         else:
@@ -2618,27 +2594,7 @@ func mustSerializationError(err error) *SerializationError {{
         blocks.append(_generate_enumeration_to_jsonable(enum))
 
     for cls in symbol_table.concrete_classes:
-        if cls.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Jsonization/{cls.name}_to_map.go"
-            )
-
-            implementation = spec_impls.get(implementation_key, None)
-            if implementation is None:
-                errors.append(
-                    Error(
-                        cls.parsed.node,
-                        f"The jsonization snippet is missing "
-                        f"for the implementation-specific "
-                        f"class {cls.name}: {implementation_key}",
-                    )
-                )
-                continue
-
-            blocks.append(Stripped(implementation))
-        else:
-            blocks.append(_generate_cls_to_map(cls))
-
+        blocks.append(_generate_cls_to_map(cls))
     blocks.append(_generate_to_jsonable(symbol_table))
 
     blocks.append(Stripped("// endregion"))

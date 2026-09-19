@@ -2,7 +2,6 @@ UnverifiedSymbolTable(
   our_types=[
     ConcreteClass(
       name='Something',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(

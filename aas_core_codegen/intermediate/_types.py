@@ -1183,13 +1183,8 @@ class Constructor(SignatureLike):
     #: constructors are not possible.
     inlined_statements: Final[Sequence[construction.AssignArgument]]
 
-    #: If set, the constructor is implementation-specific, and we need to provide
-    #: a snippet for it.
-    is_implementation_specific: Final[bool]
-
     def __init__(
         self,
-        is_implementation_specific: bool,
         arguments: Sequence[Argument],
         contracts: Contracts,
         description: Optional[DescriptionOfSignature],
@@ -1206,8 +1201,6 @@ class Constructor(SignatureLike):
             contracts=contracts,
             parsed=parsed,
         )
-
-        self.is_implementation_specific = is_implementation_specific
 
         self.statements = statements
         self.inlined_statements = inlined_statements
@@ -1385,10 +1378,6 @@ class ConstrainedPrimitive:
     #: Which primitive type is constrained
     constrainee: PrimitiveType
 
-    #: If set, this class is implementation-specific, and we need to provide a snippet
-    #: for each implementation target
-    is_implementation_specific: Final[bool]
-
     # region Invariants
 
     # NOTE (mristin):
@@ -1501,7 +1490,6 @@ class ConstrainedPrimitive:
         ancestors: Sequence["ConstrainedPrimitive"],
         descendants: Sequence["ConstrainedPrimitive"],
         constrainee: PrimitiveType,
-        is_implementation_specific: bool,
         invariants: Sequence[Invariant],
         description: Optional[DescriptionOfOurType],
         parsed: parse.Class,
@@ -1511,7 +1499,6 @@ class ConstrainedPrimitive:
         self._set_ancestors(ancestors)
         self._set_descendants(descendants)
         self.constrainee = constrainee
-        self.is_implementation_specific = is_implementation_specific
         self._set_invariants(invariants)
         self.description = description
         self.parsed = parsed
@@ -1675,10 +1662,6 @@ class Class(DBC):
     _ancestor_id_set: FrozenSet[IdOfClass]
 
     # endregion
-
-    #: If set, this class is implementation-specific, and we need to provide a snippet
-    #: for each implementation target
-    is_implementation_specific: Final[bool]
 
     #: Interface of the class. If it is a concrete class with no descendants, there is
     #: no interface available.
@@ -1917,7 +1900,6 @@ class Class(DBC):
         ancestors: Sequence["ClassUnion"],
         interface: Optional["Interface"],
         descendants: Sequence["ClassUnion"],
-        is_implementation_specific: bool,
         properties: Sequence[Property],
         methods: Sequence["MethodUnion"],
         constructor: Constructor,
@@ -1932,7 +1914,6 @@ class Class(DBC):
         self._set_ancestors(ancestors)
         self.interface = interface
         self._set_descendants(descendants)
-        self.is_implementation_specific = is_implementation_specific
         self._set_properties(properties)
         self._set_methods(methods)
         self.constructor = constructor
@@ -2192,7 +2173,6 @@ class AbstractClass(Class):
         ancestors: Sequence["ClassUnion"],
         interface: "Interface",
         descendants: Sequence["ClassUnion"],
-        is_implementation_specific: bool,
         properties: Sequence[Property],
         methods: Sequence["MethodUnion"],
         constructor: Constructor,
@@ -2209,7 +2189,6 @@ class AbstractClass(Class):
             ancestors=ancestors,
             interface=interface,
             descendants=descendants,
-            is_implementation_specific=is_implementation_specific,
             properties=properties,
             methods=methods,
             constructor=constructor,

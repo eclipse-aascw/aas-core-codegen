@@ -11,7 +11,6 @@ from typing import (
 from icontract import ensure, require
 
 from aas_core_codegen import intermediate
-from aas_core_codegen import specific_implementations
 from aas_core_codegen.common import (
     Error,
     Stripped,
@@ -248,7 +247,6 @@ public class {builder_name} {{
 def generate(
     symbol_table: intermediate.SymbolTable,
     package: java_common.PackageIdentifier,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[List[java_common.JavaFile]], Optional[List[Error]]]:
     """
     Generate the code for builders for model classes.

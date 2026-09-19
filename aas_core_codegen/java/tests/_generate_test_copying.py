@@ -17,19 +17,6 @@ from aas_core_codegen.java.common import INDENT as I, INDENT2 as II, INDENT3 as 
 
 def _generate_shallow_equals(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the code for a static shallow ``Equals`` method."""
-    if cls.is_implementation_specific:
-        raise AssertionError(
-            f"(empwilli):"
-            f"the class {cls.name!r} is implementation specific. "
-            f"at the moment, we assume that all classes are not "
-            f"implementation-specific, so that we can automatically generate the "
-            f"shallow-equals methods. this way we can dispense of the whole "
-            f"snippet/specific-implementation loading logic in "
-            f"the unit test generation. please notify the developers if you see this, "
-            f"so that we can add the logic for implementation-specific classes "
-            f"to this generation script."
-        )
-
     exprs = []  # type: List[str]
     for prop in cls.properties:
         prop_name = java_naming.method_name(Identifier(f"get_{prop.name}"))
@@ -66,19 +53,6 @@ private static Boolean {cls_name_java}ShallowEquals(
 
 def _generate_transform_as_deep_equals(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the transform method that checks for deep equality."""
-    if cls.is_implementation_specific:
-        raise AssertionError(
-            f"(empwilli): "
-            f"The class {cls.name!r} is implementation specific. "
-            f"At the moment, we assume that all classes are not "
-            f"implementation-specific, so that we can automatically generate the "
-            f"shallow-equals methods. This way we can dispense of the whole "
-            f"snippet/specific-implementation loading logic in "
-            f"the unit test generation. Please notify the developers if you see this, "
-            f"so that we can add the logic for implementation-specific classes "
-            f"to this generation script."
-        )
-
     cls_name = java_naming.class_name(cls.name)
 
     exprs = []  # type: List[Stripped]
@@ -351,19 +325,6 @@ def _generate_deep_equals_transformer(
     blocks = []  # type: List[Stripped]
 
     for concrete_cls in symbol_table.concrete_classes:
-        if concrete_cls.is_implementation_specific:
-            raise AssertionError(
-                f"(empwilli): "
-                f"The class {concrete_cls.name!r} is implementation specific. "
-                f"At the moment, we assume that all classes are not "
-                f"implementation-specific, so that we can automatically generate the "
-                f"deep-equals methods. This way we can dispense of the whole "
-                f"snippet/specific-implementation loading logic in "
-                f"the unit test generation. Please notify the developers if you see "
-                f"this, so that we can add the logic for implementation-specific "
-                f"classes to this generation script."
-            )
-
         blocks.append(_generate_transform_as_deep_equals(cls=concrete_cls))
 
     if len(symbol_table.named_unions) > 0:
@@ -389,19 +350,6 @@ private static class _DeepEqualiser extends AbstractTransformerWithContext<IClas
 
 def _generate_deep_equals(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the code for a static deep ``Equals`` method."""
-    if cls.is_implementation_specific:
-        raise AssertionError(
-            f"(empwilli): "
-            f"The class {cls.name!r} is implementation specific. "
-            f"At the moment, we assume that all classes are not "
-            f"implementation-specific, so that we can automatically generate the "
-            f"shallow-equals methods. This way we can dispense of the whole "
-            f"snippet/specific-implementation loading logic in "
-            f"the unit test generation. Please notify the developers if you see this, "
-            f"so that we can add the logic for implementation-specific classes "
-            f"to this generation script."
-        )
-
     cls_name = java_naming.class_name(cls.name)
 
     return Stripped(

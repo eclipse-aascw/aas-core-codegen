@@ -5,7 +5,7 @@ from typing import List, Tuple, Optional, Sequence, Final, Mapping
 
 from icontract import ensure, require
 
-from aas_core_codegen import intermediate, specific_implementations, naming
+from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
     Stripped,
     indent_but_first_line,
@@ -4253,23 +4253,8 @@ std::tie(
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_from_sequence(
     cls: intermediate.ConcreteClass,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the de-serialization of a sequence of XML elements as properties."""
-    if cls.is_implementation_specific:
-        implementation_key = specific_implementations.ImplementationKey(
-            f"xmlization/{cls.name}_from_sequence.cpp"
-        )
-
-        code = spec_impls.get(implementation_key, None)
-        if code is None:
-            return None, Error(
-                cls.parsed.node,
-                f"The implementation is missing for the XML de-serialization "
-                f"of {cls.name!r}: {implementation_key}",
-            )
-        return code, None
-
     function_name = cpp_naming.function_name(Identifier(f"{cls.name}_from_sequence"))
 
     blocks = [
@@ -6271,27 +6256,12 @@ common::optional<SerializationError> {function_name}(
 
 def _generate_serialize_cls_as_sequence_implementation(
     cls: intermediate.ConcreteClass,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """
     Generate the impl. to serialize an instance as a sequence of XML elements.
 
     Each XML element corresponds to a property.
     """
-    if cls.is_implementation_specific:
-        implementation_key = specific_implementations.ImplementationKey(
-            f"xmlization/serialize_{cls.name}_as_sequence.cpp"
-        )
-
-        code = spec_impls.get(implementation_key, None)
-        if code is None:
-            return None, Error(
-                cls.parsed.node,
-                f"The implementation is missing for the XML serialization "
-                f"of {cls.name!r}: {implementation_key}",
-            )
-        return code, None
-
     blocks = []  # type: List[Stripped]
     if len(cls.properties) > 0:
         blocks.append(Stripped("common::optional<SerializationError> error;"))
@@ -7079,7 +7049,6 @@ def _type_annotation_contains_list_of_instances(
 # fmt: on
 def generate_implementation(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
     library_namespace: Stripped,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate implementation for XML de/serialization."""
@@ -7227,7 +7196,7 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
     errors = []  # type: List[Error]
 
     for concrete_cls in symbol_table.concrete_classes:
-        block, error = _generate_from_sequence(cls=concrete_cls, spec_impls=spec_impls)
+        block, error = _generate_from_sequence(cls=concrete_cls)
         if error is not None:
             errors.append(error)
         else:
@@ -7375,9 +7344,7 @@ common::optional<SerializationError> CheckOstreamState(
 
     for cls in symbol_table.classes:
         if isinstance(cls, intermediate.ConcreteClass):
-            block, error = _generate_serialize_cls_as_sequence_implementation(
-                cls=cls, spec_impls=spec_impls
-            )
+            block, error = _generate_serialize_cls_as_sequence_implementation(cls=cls)
             if error is not None:
                 errors.append(error)
             else:

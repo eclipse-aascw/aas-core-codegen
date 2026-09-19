@@ -1,0 +1,1 @@
+Constructors can not be implementation-specific. Only the verification functions and the methods can be.

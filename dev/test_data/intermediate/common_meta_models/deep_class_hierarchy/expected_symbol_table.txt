@@ -6,7 +6,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Node',
         name='Node',
@@ -71,7 +70,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -102,7 +100,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Node'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to ConcreteClass Branch',
         name='Branch',
@@ -183,7 +180,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -223,7 +219,6 @@ SymbolTable(
         'Reference to AbstractClass Node',
         'Reference to ConcreteClass Branch'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to ConcreteClass Leaf',
         name='Leaf',
@@ -318,7 +313,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -364,7 +358,6 @@ SymbolTable(
         'Reference to ConcreteClass Branch',
         'Reference to ConcreteClass Leaf'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -451,7 +444,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -498,7 +490,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -551,7 +542,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -590,7 +580,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -643,7 +632,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(

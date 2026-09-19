@@ -1,0 +1,1 @@
+Classes can not be implementation-specific. Mark the methods of the class, or the verification functions called in its invariants, as implementation-specific instead.

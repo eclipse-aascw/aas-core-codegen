@@ -7,7 +7,7 @@ from typing import Final, List, Mapping, MutableMapping, Optional, Set, Tuple
 
 from icontract import ensure, require
 
-from aas_core_codegen import intermediate, naming, specific_implementations
+from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
     assert_never,
     Error,
@@ -2121,7 +2121,6 @@ case {implementer_xml_name_literal}: {{
 
 def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the implementation for deserialization functions."""
     needed = _collect_needed(symbol_table)
@@ -2185,42 +2184,22 @@ def _generate_deserialize_impl(
 
     for cls in symbol_table.classes:
         if isinstance(cls, intermediate.ConcreteClass):
-            if cls.is_implementation_specific:
-                implementation_key = specific_implementations.ImplementationKey(
-                    f"Xmlization/DeserializeImplementation/"
-                    f"{cls.name}_from_sequence.java"
+            (
+                block,
+                generation_errors,
+            ) = _generate_deserialize_impl_cls_from_sequence(cls=cls)
+            if generation_errors is not None:
+                errors.append(
+                    Error(
+                        cls.parsed.node,
+                        f"Failed to generate the XML deserialization code "
+                        f"for the class {cls.name}",
+                        generation_errors,
+                    )
                 )
-
-                implementation = spec_impls.get(implementation_key, None)
-                if implementation is None:
-                    errors.append(
-                        Error(
-                            cls.parsed.node,
-                            f"The xmlization snippet is missing "
-                            f"for the implementation-specific "
-                            f"class {cls.name}: {implementation_key}",
-                        )
-                    )
-                else:
-                    blocks.append(implementation)
             else:
-                (
-                    block,
-                    generation_errors,
-                ) = _generate_deserialize_impl_cls_from_sequence(cls=cls)
-                if generation_errors is not None:
-                    errors.append(
-                        Error(
-                            cls.parsed.node,
-                            f"Failed to generate the XML deserialization code "
-                            f"for the class {cls.name}",
-                            generation_errors,
-                        )
-                    )
-                else:
-                    assert block is not None
-                    blocks.append(block)
-
+                assert block is not None
+                blocks.append(block)
         if cls.interface is not None:
             blocks.append(
                 _generate_deserialize_impl_interface_from_element(
@@ -2971,7 +2950,6 @@ public void {visit_name}(
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_visitor(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a visitor which serializes instances of the meta-model to XML."""
     errors = []  # type: List[Error]
@@ -3034,27 +3012,7 @@ def _generate_visitor(
     # so we do not need to handle them separately.
 
     for cls in symbol_table.concrete_classes:
-        if cls.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Xmlization/VisitorWithWriter/{cls.name}_to_sequence.java"
-            )
-
-            implementation = spec_impls.get(implementation_key, None)
-            if implementation is None:
-                errors.append(
-                    Error(
-                        cls.parsed.node,
-                        f"The xmlization snippet is missing "
-                        f"for the implementation-specific "
-                        f"class {cls.name}: {implementation_key}",
-                    )
-                )
-                continue
-
-            blocks.append(implementation)
-        else:
-            blocks.append(_generate_class_as_sequence(cls=cls))
-
+        blocks.append(_generate_class_as_sequence(cls=cls))
         # NOTE (mristin):
         # Writing the element around the sequence is the same for every
         # class, implementation-specific or not, so it is never snippeted.
@@ -3200,7 +3158,6 @@ public static class Serialize
 def generate(
     symbol_table: intermediate.SymbolTable,
     package: java_common.PackageIdentifier,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[List[java_common.JavaFile]], Optional[List[Error]]]:
     """
     Generate the code for XML de/serialization.
@@ -3239,7 +3196,7 @@ def generate(
     # region Deserialization Implementation
 
     deserialize_impl_block, deserialize_impl_errors = _generate_deserialize_impl(
-        symbol_table=symbol_table, spec_impls=spec_impls
+        symbol_table=symbol_table
     )
     if deserialize_impl_errors is not None:
         errors.extend(deserialize_impl_errors)
@@ -3256,9 +3213,7 @@ def generate(
 
     # region Visitor
 
-    visitor_block, visitor_errors = _generate_visitor(
-        symbol_table=symbol_table, spec_impls=spec_impls
-    )
+    visitor_block, visitor_errors = _generate_visitor(symbol_table=symbol_table)
     if visitor_errors is not None:
         errors.extend(visitor_errors)
 

@@ -665,9 +665,6 @@ def _generate_imports_for_class(
 
     The ``package`` defines the root Java package.
     """
-    if cls.is_implementation_specific:
-        return Stripped("")
-
     imports = [
         Stripped(f"{package}.common.*"),
         Stripped(f"{package}.visitation.IVisitor"),
@@ -909,8 +906,6 @@ Iterable<{items_type}> {method_name}();"""
     return Stripped(writer.getvalue()), None
 
 
-@require(lambda cls: not cls.is_implementation_specific)
-@require(lambda cls: not cls.constructor.is_implementation_specific)
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_mandatory_constructor(
     cls: intermediate.ConcreteClass,
@@ -1042,8 +1037,6 @@ this.{prop_name} = ({arg_name} != null)
     return Stripped("\n".join(blocks)), None
 
 
-@require(lambda cls: not cls.is_implementation_specific)
-@require(lambda cls: not cls.constructor.is_implementation_specific)
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_full_constructor(
     cls: intermediate.ConcreteClass,
@@ -1238,41 +1231,23 @@ private {prop_type} {prop_name};"""
 
     # region Constructor
 
-    if cls.constructor.is_implementation_specific:
-        implementation_key = specific_implementations.ImplementationKey(
-            f"Types/{cls.name}/{cls.name}.java"
-        )
-        implementation = spec_impls.get(implementation_key, None)
+    mandatory_constructor_block, error = _generate_mandatory_constructor(cls=cls)
 
-        if implementation is None:
-            errors.append(
-                Error(
-                    cls.parsed.node,
-                    f"The implementation of the implementation-specific constructor "
-                    f"is missing: {implementation_key}",
-                )
-            )
-        else:
-            blocks.append(implementation)
+    if error is not None:
+        errors.append(error)
     else:
-        mandatory_constructor_block, error = _generate_mandatory_constructor(cls=cls)
+        if mandatory_constructor_block != "":
+            assert mandatory_constructor_block is not None
+            blocks.append(mandatory_constructor_block)
 
-        if error is not None:
-            errors.append(error)
-        else:
-            if mandatory_constructor_block != "":
-                assert mandatory_constructor_block is not None
-                blocks.append(mandatory_constructor_block)
+    full_constructor_block, error = _generate_full_constructor(cls=cls)
 
-        full_constructor_block, error = _generate_full_constructor(cls=cls)
-
-        if error is not None:
-            errors.append(error)
-        else:
-            if full_constructor_block != "":
-                assert full_constructor_block is not None
-                blocks.append(full_constructor_block)
-
+    if error is not None:
+        errors.append(error)
+    else:
+        if full_constructor_block != "":
+            assert full_constructor_block is not None
+            blocks.append(full_constructor_block)
     # endregion
 
     # region Getters and setters
@@ -2074,122 +2049,92 @@ def _generate_structure(
 
         return files, None
 
-    if isinstance(our_type, intermediate.Class) and our_type.is_implementation_specific:
-        implementation_key = specific_implementations.ImplementationKey(
-            f"Types/{our_type.name}.java"
-        )
+    if isinstance(our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)):
+        imports = _generate_imports_for_interface(cls=our_type, package=package)
 
-        imports = _generate_imports_for_class(cls=our_type, package=package)
-
-        code = spec_impls.get(implementation_key, None)
-        if code is None:
+        code, error = _generate_interface(cls=our_type, package=package)
+        if error is not None:
             return None, Error(
                 our_type.parsed.node,
-                f"The implementation is missing "
-                f"for the implementation-specific class: {implementation_key}",
+                f"Failed to generate the interface code for "
+                f"the class {our_type.name!r}",
+                [error],
             )
 
-        structure_name = java_naming.class_name(our_type.name)
+        assert code is not None
+
+        structure_name = java_naming.interface_name(our_type.name)
+
+        file_name = java_common.interface_package_path(structure_name)
 
         package_name = java_common.PackageIdentifier(
-            f"{package}.types.{java_common.CLASS_PKG}"
+            f"{package}.types.{java_common.INTERFACE_PKG}"
         )
 
         java_source = _generate_java_file(
-            file_name=structure_name, imports=imports, code=code, package=package_name
+            file_name=file_name, imports=imports, code=code, package=package_name
         )
 
         files.append(java_source)
-    else:
-        if isinstance(
-            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-        ):
-            imports = _generate_imports_for_interface(cls=our_type, package=package)
 
-            code, error = _generate_interface(cls=our_type, package=package)
+        if isinstance(our_type, intermediate.ConcreteClass):
+            imports = _generate_imports_for_class(cls=our_type, package=package)
+
+            code, error = _generate_class(
+                cls=our_type, spec_impls=spec_impls, package=package
+            )
             if error is not None:
                 return None, Error(
                     our_type.parsed.node,
-                    f"Failed to generate the interface code for "
+                    f"Failed to generate the class code for "
                     f"the class {our_type.name!r}",
                     [error],
                 )
 
             assert code is not None
 
-            structure_name = java_naming.interface_name(our_type.name)
+            structure_name = java_naming.class_name(our_type.name)
 
-            file_name = java_common.interface_package_path(structure_name)
+            file_name = java_common.class_package_path(structure_name)
 
             package_name = java_common.PackageIdentifier(
-                f"{package}.types.{java_common.INTERFACE_PKG}"
+                f"{package}.types.{java_common.CLASS_PKG}"
             )
 
             java_source = _generate_java_file(
-                file_name=file_name, imports=imports, code=code, package=package_name
+                file_name=file_name,
+                imports=imports,
+                code=code,
+                package=package_name,
             )
 
             files.append(java_source)
-
-            if isinstance(our_type, intermediate.ConcreteClass):
-                imports = _generate_imports_for_class(cls=our_type, package=package)
-
-                code, error = _generate_class(
-                    cls=our_type, spec_impls=spec_impls, package=package
-                )
-                if error is not None:
-                    return None, Error(
-                        our_type.parsed.node,
-                        f"Failed to generate the class code for "
-                        f"the class {our_type.name!r}",
-                        [error],
-                    )
-
-                assert code is not None
-
-                structure_name = java_naming.class_name(our_type.name)
-
-                file_name = java_common.class_package_path(structure_name)
-
-                package_name = java_common.PackageIdentifier(
-                    f"{package}.types.{java_common.CLASS_PKG}"
-                )
-
-                java_source = _generate_java_file(
-                    file_name=file_name,
-                    imports=imports,
-                    code=code,
-                    package=package_name,
-                )
-
-                files.append(java_source)
-        elif isinstance(our_type, intermediate.Enumeration):
-            code, error = _generate_enum(enum=our_type, package=package)
-            if error is not None:
-                return None, Error(
-                    our_type.parsed.node,
-                    f"Failed to generate the code for "
-                    f"the enumeration {our_type.name!r}",
-                    [error],
-                )
-
-            assert code is not None
-            structure_name = java_naming.enum_name(our_type.name)
-
-            file_name = java_common.enum_package_path(structure_name)
-
-            package_name = java_common.PackageIdentifier(
-                f"{package}.types.{java_common.ENUM_PKG}"
+    elif isinstance(our_type, intermediate.Enumeration):
+        code, error = _generate_enum(enum=our_type, package=package)
+        if error is not None:
+            return None, Error(
+                our_type.parsed.node,
+                f"Failed to generate the code for "
+                f"the enumeration {our_type.name!r}",
+                [error],
             )
 
-            java_source = _generate_java_file(
-                file_name=file_name, imports=None, code=code, package=package_name
-            )
+        assert code is not None
+        structure_name = java_naming.enum_name(our_type.name)
 
-            files.append(java_source)
-        else:
-            assert_never(our_type)
+        file_name = java_common.enum_package_path(structure_name)
 
+        package_name = java_common.PackageIdentifier(
+            f"{package}.types.{java_common.ENUM_PKG}"
+        )
+
+        java_source = _generate_java_file(
+            file_name=file_name, imports=None, code=code, package=package_name
+        )
+
+        files.append(java_source)
+    else:
+        assert_never(our_type)
     return files, None
 
 

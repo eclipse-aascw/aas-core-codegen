@@ -1,7 +1,12 @@
 class Something:
+    x: int
+
     @implementation_specific
-    def __init__(self) -> None:
-        pass
+    def do_something(self) -> int:
+        return self.x
+
+    def __init__(self, x: int) -> None:
+        self.x = x
 
 
 __version__ = "dummy"

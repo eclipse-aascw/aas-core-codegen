@@ -1638,7 +1638,6 @@ def _to_constrained_primitive(
             ancestors=[],
             descendants=[],
             constrainee=constrainee,
-            is_implementation_specific=parsed.is_implementation_specific,
             invariants=invariants,
             description=description,
             parsed=parsed,
@@ -1669,7 +1668,6 @@ def _extract_constructor(
     """
     contracts = Contracts(preconditions=[], snapshots=[], postconditions=[])
     arguments = []  # type: List[Argument]
-    init_is_implementation_specific = False
     description = None  # type: Optional[DescriptionOfSignature]
 
     errors = []  # type: List[Error]
@@ -1677,10 +1675,6 @@ def _extract_constructor(
     parsed_class_init = parsed_class.methods_by_name.get(Identifier("__init__"), None)
     if parsed_class_init is not None:
         arguments = _to_arguments(parsed=parsed_class_init.arguments)
-
-        init_is_implementation_specific = isinstance(
-            parsed_class_init, parse.ImplementationSpecificMethod
-        )
 
         contracts = _to_contracts(parsed_class_init.contracts)
 
@@ -1695,7 +1689,6 @@ def _extract_constructor(
         return None, errors
 
     constructor = Constructor(
-        is_implementation_specific=init_is_implementation_specific,
         arguments=arguments,
         contracts=contracts,
         description=description,
@@ -1832,7 +1825,6 @@ def _to_class(
             ancestors=[],
             interface=_MaybeInterfacePlaceholder(),  # type: ignore
             descendants=[],
-            is_implementation_specific=parsed.is_implementation_specific,
             properties=properties,
             methods=methods,
             constructor=constructor,

@@ -2543,19 +2543,6 @@ def generate_implementation(
         )
 
     for cls in symbol_table.concrete_classes:
-        if cls.is_implementation_specific:
-            errors.append(
-                Error(
-                    cls.parsed.node,
-                    f"NOTE (mristin): "
-                    f"The class {cls.name!r} is marked as implementation specific. "
-                    f"However, we currently do not generate the C++ iteration code "
-                    f"over implementation-specific classes. Please contact "
-                    f"the developers if you need this feature.",
-                )
-            )
-            continue
-
         blocks.extend(_generate_iteration_over_cls(cls=cls))
 
     blocks.append(_generate_always_done_iterator())

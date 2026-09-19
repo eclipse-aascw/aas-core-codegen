@@ -2,17 +2,52 @@ UnverifiedSymbolTable(
   our_types=[
     ConcreteClass(
       name='Something',
-      is_implementation_specific=False,
       inheritances=[],
-      properties=[],
+      properties=[
+        Property(
+          name='x',
+          type_annotation=AtomicTypeAnnotation(
+            identifier='int',
+            node=...),
+          description=None,
+          json_name=None,
+          xml_name=None,
+          node=...)],
       methods=[
         ImplementationSpecificMethod(
+          name='do_something',
+          verification=False,
+          arguments=[
+            Argument(
+              name='self',
+              type_annotation=SelfTypeAnnotation(),
+              default=None,
+              node=...)],
+          returns=AtomicTypeAnnotation(
+            identifier='int',
+            node=...),
+          description=None,
+          contracts=Contracts(
+            preconditions=[],
+            snapshots=[],
+            postconditions=[]),
+          non_mutating=False,
+          node=...,
+          arguments_by_name=...),
+        ConstructorToBeUnderstood(
           name='__init__',
           verification=False,
           arguments=[
             Argument(
               name='self',
               type_annotation=SelfTypeAnnotation(),
+              default=None,
+              node=...),
+            Argument(
+              name='x',
+              type_annotation=AtomicTypeAnnotation(
+                identifier='int',
+                node=...),
               default=None,
               node=...)],
           returns=None,
@@ -23,7 +58,8 @@ UnverifiedSymbolTable(
             postconditions=[]),
           non_mutating=False,
           node=...,
-          arguments_by_name=...)],
+          arguments_by_name=...,
+          body=...)],
       invariants=[],
       serialization=None,
       description=None,

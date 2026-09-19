@@ -5,7 +5,7 @@ from typing import Tuple, Optional, List
 
 from icontract import ensure, require
 
-from aas_core_codegen import intermediate, specific_implementations
+from aas_core_codegen import intermediate
 from aas_core_codegen.common import (
     Error,
     Stripped,
@@ -592,12 +592,9 @@ func Wrap[E any](
 # fmt: on
 def generate(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
     repo_url: Stripped,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code for enhancing model classes."""
-    errors = []  # type: List[Error]
-
     aastypes_url_literal = golang_common.string_literal(f"{repo_url}/types")
     aascommon_url_literal = golang_common.string_literal(f"{repo_url}/common")
 
@@ -633,26 +630,8 @@ type enhanced[E any] interface {{
         blocks.append(_generate_self_union_and_wrap_union())
 
     for cls in symbol_table.concrete_classes:
-        if cls.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Enhancing/{cls.name}.go"
-            )
-
-            implementation = spec_impls.get(implementation_key, None)
-            if implementation is None:
-                errors.append(
-                    Error(
-                        cls.parsed.node,
-                        f"The enhancing snippet is missing "
-                        f"for the implementation-specific "
-                        f"class {cls.name}: {implementation_key}",
-                    )
-                )
-                continue
-        else:
-            blocks.extend(_generate_enhanced_struct_and_its_methods(cls=cls))
-            blocks.append(_generate_wrap_for_cls(cls=cls))
-
+        blocks.extend(_generate_enhanced_struct_and_its_methods(cls=cls))
+        blocks.append(_generate_wrap_for_cls(cls=cls))
     blocks.append(_generate_wrap(symbol_table=symbol_table))
     blocks.extend(
         [

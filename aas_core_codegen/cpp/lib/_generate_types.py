@@ -1552,18 +1552,6 @@ def generate_implementation(
     errors = []  # type: List[Error]
 
     for concrete_cls in symbol_table.concrete_classes:
-        if concrete_cls.is_implementation_specific:
-            errors.append(
-                Error(
-                    concrete_cls.parsed.node,
-                    f"We currently do not support implementation-specific classes "
-                    f"in the C++ generator, but the class {concrete_cls.name!r} has "
-                    f"been marked as implementation-specific. If you need "
-                    f"this feature, please contact the developers.",
-                )
-            )
-            continue
-
         cls_blocks, error = _generate_class_implementation(
             cls=concrete_cls, spec_impls=spec_impls
         )

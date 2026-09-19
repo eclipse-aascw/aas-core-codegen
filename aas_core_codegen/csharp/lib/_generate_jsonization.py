@@ -6,7 +6,7 @@ from typing import Final, List, Mapping, Optional, Sequence, Set, Tuple
 
 from icontract import ensure, require
 
-from aas_core_codegen import intermediate, naming, specific_implementations
+from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
     Error,
     Stripped,
@@ -1159,7 +1159,6 @@ internal static Aas.{name} {name}From(
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the implementation of the deserialization."""
     errors = []  # type: List[Error]
@@ -1221,33 +1220,13 @@ def _generate_deserialize_impl(
                 )
 
             if isinstance(our_type, intermediate.ConcreteClass):
-                if our_type.is_implementation_specific:
-                    implementation_key = specific_implementations.ImplementationKey(
-                        f"Jsonization/DeserializeImplementation/{our_type.name}_from.cs"
-                    )
-
-                    implementation = spec_impls.get(implementation_key, None)
-                    if implementation is None:
-                        errors.append(
-                            Error(
-                                our_type.parsed.node,
-                                f"The jsonization snippet is missing "
-                                f"for the implementation-specific "
-                                f"class {our_type.name}: {implementation_key}",
-                            )
-                        )
-                        continue
-
-                    blocks.append(spec_impls[implementation_key])
+                block, cls_errors = _generate_from_method_for_class(cls=our_type)
+                if cls_errors is not None:
+                    errors.extend(cls_errors)
+                    continue
                 else:
-                    block, cls_errors = _generate_from_method_for_class(cls=our_type)
-                    if cls_errors is not None:
-                        errors.extend(cls_errors)
-                        continue
-                    else:
-                        assert block is not None
-                        blocks.append(block)
-
+                    assert block is not None
+                    blocks.append(block)
         elif isinstance(our_type, intermediate.NamedUnion):
             blocks.append(_generate_from_method_for_named_union(named_union=our_type))
 
@@ -2043,7 +2022,6 @@ public override Nodes.JsonObject {transform_name}(
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transformer(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a transformer which transforms instances of the meta-model to JSON."""
     errors = []  # type: List[Error]
@@ -2180,35 +2158,15 @@ private static Nodes.JsonValue ToJsonValue(double that)
             pass
 
         elif isinstance(our_type, intermediate.ConcreteClass):
-            if our_type.is_implementation_specific:
-                implementation_key = specific_implementations.ImplementationKey(
-                    f"Jsonization/Transformer/transform_{our_type.name}.cs"
-                )
-
-                implementation = spec_impls.get(implementation_key, None)
-                if implementation is None:
-                    errors.append(
-                        Error(
-                            our_type.parsed.node,
-                            f"The jsonization snippet is missing "
-                            f"for the implementation-specific "
-                            f"class {our_type.name}: {implementation_key}",
-                        )
-                    )
-                    continue
-
-                blocks.append(spec_impls[implementation_key])
+            block, cls_errors = _generate_transform_for_class(
+                cls=our_type,
+                ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
+            )
+            if cls_errors is not None:
+                errors.extend(cls_errors)
             else:
-                block, cls_errors = _generate_transform_for_class(
-                    cls=our_type,
-                    ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
-                )
-                if cls_errors is not None:
-                    errors.extend(cls_errors)
-                else:
-                    assert block is not None
-                    blocks.append(block)
-
+                assert block is not None
+                blocks.append(block)
         elif isinstance(our_type, intermediate.NamedUnion):
             # A named union is never double-dispatched here directly -- it
             # is unwrapped by the single shared ``TransformIUnion`` instead
@@ -2358,7 +2316,6 @@ public static class Serialize
 def generate(
     symbol_table: intermediate.SymbolTable,
     namespace: csharp_common.NamespaceIdentifier,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """
     Generate code for JSON de/serialization.
@@ -2368,7 +2325,7 @@ def generate(
     errors = []  # type: List[Error]
 
     deserialize_impl_block, deserialize_impl_errors = _generate_deserialize_impl(
-        symbol_table=symbol_table, spec_impls=spec_impls
+        symbol_table=symbol_table
     )
     if deserialize_impl_errors is not None:
         errors.extend(deserialize_impl_errors)
@@ -2376,7 +2333,7 @@ def generate(
     deserialize_block = _generate_deserialize(symbol_table=symbol_table)
 
     transformer_block, transformer_errors = _generate_transformer(
-        symbol_table=symbol_table, spec_impls=spec_impls
+        symbol_table=symbol_table
     )
     if transformer_errors is not None:
         errors.extend(transformer_errors)

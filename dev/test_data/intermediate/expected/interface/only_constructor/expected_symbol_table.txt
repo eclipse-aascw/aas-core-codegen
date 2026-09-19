@@ -6,7 +6,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass SomethingAbstract',
         name='SomethingAbstract',
@@ -62,7 +61,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(

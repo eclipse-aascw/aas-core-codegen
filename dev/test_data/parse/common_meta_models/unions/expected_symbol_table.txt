@@ -2,7 +2,6 @@ UnverifiedSymbolTable(
   our_types=[
     ConcreteClass(
       name='Structural_first',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -69,7 +68,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Structural_second',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -142,7 +140,6 @@ UnverifiedSymbolTable(
       node=...),
     AbstractClass(
       name='Mixed_abstract_member',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[],
       methods=[],
@@ -154,7 +151,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Mixed_abstract_descendant_one',
-      is_implementation_specific=False,
       inheritances=[
         'Mixed_abstract_member'],
       properties=[
@@ -222,7 +218,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Mixed_abstract_descendant_two',
-      is_implementation_specific=False,
       inheritances=[
         'Mixed_abstract_member'],
       properties=[
@@ -290,7 +285,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Mixed_concrete_with_descendants',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -358,7 +352,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Mixed_concrete_with_descendants_child',
-      is_implementation_specific=False,
       inheritances=[
         'Mixed_concrete_with_descendants'],
       properties=[
@@ -433,7 +426,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Mixed_concrete_leaf',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -507,7 +499,6 @@ UnverifiedSymbolTable(
       node=...),
     ConcreteClass(
       name='Model_typed_first',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -575,7 +566,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Model_typed_second',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -649,7 +639,6 @@ UnverifiedSymbolTable(
       node=...),
     ConcreteClass(
       name='Something',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(

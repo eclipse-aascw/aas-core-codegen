@@ -22,7 +22,6 @@ SymbolTable(
         'Reference to ConstrainedPrimitive Version_type'],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -70,7 +69,6 @@ SymbolTable(
         'Reference to ConstrainedPrimitive Version_type'],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -118,7 +116,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description='The value must match the pattern of xs:dateTime with the time zone fixed to UTC.',
@@ -160,7 +157,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description='The value must match the pattern of xs:duration.',
@@ -190,7 +186,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='BYTEARRAY',
-      is_implementation_specific=False,
       invariants=[],
       invariant_id_set=...,
       description=DescriptionOfOurType(
@@ -212,7 +207,6 @@ SymbolTable(
         'Reference to ConstrainedPrimitive Path_type'],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -281,7 +275,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -352,7 +345,6 @@ SymbolTable(
         'Reference to ConstrainedPrimitive Qualifier_type'],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -421,7 +413,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -502,7 +493,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -583,7 +573,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -652,7 +641,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -718,7 +706,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description='The value must represent a value language tag conformant to BCP 47.',
@@ -752,7 +739,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -844,7 +830,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -917,7 +902,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -985,7 +969,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -1019,7 +1002,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description="Constraint AASd-130: An attribute with data type 'string' shall consist of these characters only: ^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.",
@@ -1106,7 +1088,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Has_semantics',
         name='Has_semantics',
@@ -1307,7 +1288,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -1413,7 +1393,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Has_semantics'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -1623,7 +1602,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -1818,7 +1796,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Has_extensions',
         name='Has_extensions',
@@ -1957,7 +1934,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -2049,7 +2025,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Has_extensions'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Referable',
         name='Referable',
@@ -2411,7 +2386,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -2661,7 +2635,6 @@ SymbolTable(
         'Reference to AbstractClass Has_extensions',
         'Reference to AbstractClass Referable'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Identifiable',
         name='Identifiable',
@@ -2960,7 +2933,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -3232,7 +3204,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Has_kind',
         name='Has_kind',
@@ -3344,7 +3315,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -3380,7 +3350,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Has_data_specification',
         name='Has_data_specification',
@@ -3523,7 +3492,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -3593,7 +3561,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Has_data_specification'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -3760,7 +3727,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -3893,7 +3859,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Qualifiable',
         name='Qualifiable',
@@ -4042,7 +4007,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -4190,7 +4154,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Has_semantics'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -4417,7 +4380,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -4608,7 +4570,6 @@ SymbolTable(
         'Reference to AbstractClass Identifiable',
         'Reference to AbstractClass Has_data_specification'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -4963,7 +4924,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -5364,7 +5324,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -5534,7 +5493,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -5798,7 +5756,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -5867,7 +5824,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -5951,7 +5907,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Has_semantics'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -6104,7 +6059,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -6277,7 +6231,6 @@ SymbolTable(
         'Reference to AbstractClass Has_data_specification',
         'Reference to AbstractClass Qualifiable'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -6724,7 +6677,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -7402,7 +7354,6 @@ SymbolTable(
         'Reference to AbstractClass Has_data_specification',
         'Reference to AbstractClass Qualifiable'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Submodel_element',
         name='Submodel_element',
@@ -7797,7 +7748,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -8204,7 +8154,6 @@ SymbolTable(
         'Reference to AbstractClass Qualifiable',
         'Reference to AbstractClass Submodel_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to ConcreteClass Relationship_element',
         name='Relationship_element',
@@ -8617,7 +8566,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -9124,7 +9072,6 @@ SymbolTable(
         'Reference to AbstractClass Qualifiable',
         'Reference to AbstractClass Submodel_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -9599,7 +9546,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -10349,7 +10295,6 @@ SymbolTable(
         'Reference to AbstractClass Qualifiable',
         'Reference to AbstractClass Submodel_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -10702,7 +10647,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -11193,7 +11137,6 @@ SymbolTable(
         'Reference to AbstractClass Qualifiable',
         'Reference to AbstractClass Submodel_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Data_element',
         name='Data_element',
@@ -11614,7 +11557,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -12038,7 +11980,6 @@ SymbolTable(
         'Reference to AbstractClass Submodel_element',
         'Reference to AbstractClass Data_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -12465,7 +12406,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -12946,7 +12886,6 @@ SymbolTable(
         'Reference to AbstractClass Submodel_element',
         'Reference to AbstractClass Data_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -13356,7 +13295,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -13852,7 +13790,6 @@ SymbolTable(
         'Reference to AbstractClass Submodel_element',
         'Reference to AbstractClass Data_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -14280,7 +14217,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -14786,7 +14722,6 @@ SymbolTable(
         'Reference to AbstractClass Submodel_element',
         'Reference to AbstractClass Data_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -15167,7 +15102,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -15594,7 +15528,6 @@ SymbolTable(
         'Reference to AbstractClass Submodel_element',
         'Reference to AbstractClass Data_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -16001,7 +15934,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -16437,7 +16369,6 @@ SymbolTable(
         'Reference to AbstractClass Submodel_element',
         'Reference to AbstractClass Data_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -16838,7 +16769,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -17273,7 +17203,6 @@ SymbolTable(
         'Reference to AbstractClass Submodel_element',
         'Reference to ConcreteClass Relationship_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -17670,7 +17599,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -18146,7 +18074,6 @@ SymbolTable(
         'Reference to AbstractClass Qualifiable',
         'Reference to AbstractClass Submodel_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -18583,7 +18510,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -19324,7 +19250,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -19554,7 +19479,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -19722,7 +19646,6 @@ SymbolTable(
         'Reference to AbstractClass Qualifiable',
         'Reference to AbstractClass Submodel_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Event_element',
         name='Event_element',
@@ -20065,7 +19988,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -20456,7 +20378,6 @@ SymbolTable(
         'Reference to AbstractClass Submodel_element',
         'Reference to AbstractClass Event_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -21007,7 +20928,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -21547,7 +21467,6 @@ SymbolTable(
         'Reference to AbstractClass Qualifiable',
         'Reference to AbstractClass Submodel_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -21962,7 +21881,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -22499,7 +22417,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -22539,7 +22456,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -22597,7 +22513,6 @@ SymbolTable(
         'Reference to AbstractClass Qualifiable',
         'Reference to AbstractClass Submodel_element'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -22919,7 +22834,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -23310,7 +23224,6 @@ SymbolTable(
         'Reference to AbstractClass Identifiable',
         'Reference to AbstractClass Has_data_specification'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -23618,7 +23531,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -24255,7 +24167,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -24352,7 +24263,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -25136,7 +25046,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -25207,7 +25116,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -25591,7 +25499,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Abstract_lang_string',
         name='Abstract_lang_string',
@@ -25709,7 +25616,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -25754,7 +25660,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Abstract_lang_string'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -25815,7 +25720,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -25874,7 +25778,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Abstract_lang_string'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -25935,7 +25838,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -25992,7 +25894,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -26104,7 +26005,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -26254,7 +26154,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=Interface(
         base='Reference to AbstractClass Data_specification_content',
         name='Data_specification_content',
@@ -26302,7 +26201,6 @@ SymbolTable(
           postconditions=[]),
         parsed=None,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[],
         inlined_statements=[]),
       invariants=[],
@@ -26337,7 +26235,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -26398,7 +26295,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -26649,7 +26545,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -26752,7 +26647,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -26839,7 +26733,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -26901,7 +26794,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -26946,7 +26838,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -26990,7 +26881,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(
@@ -27046,7 +26936,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Abstract_lang_string'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -27107,7 +26996,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -27167,7 +27055,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Abstract_lang_string'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -27228,7 +27115,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -27287,7 +27173,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Abstract_lang_string'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -27348,7 +27233,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             CallSuperConstructor(
@@ -27407,7 +27291,6 @@ SymbolTable(
       ancestors=[
         'Reference to AbstractClass Data_specification_content'],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -27765,7 +27648,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(

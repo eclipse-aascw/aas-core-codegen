@@ -1,1 +1,0 @@
-Abstract classes can not be implementation-specific at the same time (otherwise we can not convert them to interfaces etc.)
