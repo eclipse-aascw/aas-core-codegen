@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Real XML-RPC has a ``<nil/>`` extension element to represent a null value,
+    but our JSONValue explicitly has no null variant, so ``<nil/>`` is
+    deliberately left out of the subset we support and must be rejected here.
+-->
+<something xmlns="https://dummy.com">
+    <value><nil/></value>
+    <values><data/></values>
+    <mapping/>
+    <mappingWithConstrainedKey>
+        <member>
+            <name>a</name>
+            <value><double>1</double></value>
+        </member>
+    </mappingWithConstrainedKey>
+</something>
