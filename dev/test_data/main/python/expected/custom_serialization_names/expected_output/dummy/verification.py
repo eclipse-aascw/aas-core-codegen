@@ -21,6 +21,7 @@ Here is an example how to verify an instance of :py:class:`dummy.types.QueryCond
 # Do NOT edit or append.
 
 
+import collections.abc
 import math
 import re
 import struct
