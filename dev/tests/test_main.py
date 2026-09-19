@@ -917,6 +917,18 @@ class Test_typescript(_TestCase):
             case_name="implementation_specific",
         )
 
+    def test_expected_json_types(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.TYPESCRIPT,
+            case_name="json_types",
+        )
+
+    def test_expected_json_types_in_collections(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.TYPESCRIPT,
+            case_name="json_types_in_collections",
+        )
+
     def test_expected_list_of_classes(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.TYPESCRIPT,

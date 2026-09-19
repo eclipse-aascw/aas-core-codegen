@@ -67,6 +67,20 @@ def atomic_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> Identif
     if primitive_type is not None:
         return MONIKER_BY_PRIMITIVE_TYPE[primitive_type]
 
+    # NOTE (mristin):
+    # A JSON-able type is no type of the meta-model, so it needs a moniker of
+    # its own, for the same reason as a primitive above. The initial is
+    # *lower-case* so that it can never be confused for one of our types, which
+    # all go through ``capitalized_camel_case``.
+    if isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        return Identifier("jsonValue")
+
+    if isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        return Identifier("jsonArray")
+
+    if isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        return Identifier("jsonObject")
+
     assert isinstance(
         type_annotation, intermediate.OurTypeAnnotation
     ), f"Expected an atomic type annotation, but got: {type_annotation}"
@@ -394,6 +408,29 @@ def generate_type(
         ]
 
         return Stripped(f"[{', '.join(item_types)}]")
+
+    elif isinstance(
+        type_annotation,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # The three JSON-able aliases are declared in the types module, next to
+        # the classes whose properties are annotated with them.
+        json_name: Identifier
+        if isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+            json_name = Identifier("JsonValue")
+        elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+            json_name = Identifier("JsonArray")
+        else:
+            json_name = Identifier("JsonObject")
+
+        return Stripped(
+            json_name if types_module is None else f"{types_module}.{json_name}"
+        )
 
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value = generate_type(

@@ -24,6 +24,7 @@ from aas_core_codegen.typescript.common import (
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
+    INDENT5 as IIIII,
 )
 
 
@@ -916,6 +917,16 @@ def _parse_function_for_atomic_value(
 
         else:
             assert_never(our_type)
+
+    elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        function_name = "jsonValueFromJsonable"
+
+    elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        function_name = "jsonArrayFromJsonable"
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        function_name = "jsonObjectFromJsonable"
+
     else:
         assert_never(type_annotation)
 
@@ -977,10 +988,7 @@ def _generate_parse_call_for_property(prop: intermediate.Property) -> Stripped:
     """
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
-    if isinstance(
-        type_anno,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-    ):
+    if isinstance(type_anno, intermediate.AtomicTypeAnnotationAsTuple):
         parse_function = _parse_function_for_atomic_value(type_anno)
 
         return Stripped(
@@ -1489,6 +1497,20 @@ def _jsonable_type_of_atomic(type_anno: intermediate.AtomicTypeAnnotation) -> St
         else:
             assert_never(primitive_type)
 
+    # NOTE (mristin):
+    # A JSON-able value goes on the wire as itself, whatever shape it happens
+    # to have. ``JsonValue`` here is the jsonization module's own alias for
+    # a value of a JSON document, and not ``AasTypes.JsonValue``, but the two
+    # describe the very same thing.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("JsonValue")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("Array<JsonValue>")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("JsonObject")
+
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
     ), f"Expected an atomic type annotation, but got: {type_anno}"
@@ -1499,6 +1521,250 @@ def _jsonable_type_of_atomic(type_anno: intermediate.AtomicTypeAnnotation) -> St
         return Stripped("string")
 
     return Stripped("JsonObject")
+
+
+def _generate_json_able_helpers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the de/serialization of the JSON-able values, if the model uses them.
+
+    A JSON-able value needs no conversion at all -- it already *is* a value of
+    a JSON document. It does need to be checked, since neither its TypeScript
+    type nor a `JsonValue` coming off `JSON.parse` rules out a `null` or
+    a non-finite number, and it needs to be copied, so that the instance and
+    the document it came from do not share a mutable object.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * Convert `jsonable` to a JSON-able value.
+ *
+ * @remarks
+ * The result is a deep, independent copy of `jsonable`, so that the parsed
+ * instance and the document it came from do not share a mutable object.
+ *
+ * @param jsonable - to be parsed
+ * @param path - JSON path to `jsonable`, written into the messages
+ * @returns the parsed value, or an error
+ */
+function jsonValueFromJsonable(
+{I}jsonable: JsonValue,
+{I}path = "$"
+): AasCommon.Either<AasTypes.JsonValue, DeserializationError> {{
+{I}if (jsonable === null || jsonable === undefined) {{
+{II}return newDeserializationError<AasTypes.JsonValue>(
+{III}`Expected a JSON-able value at ${{path}}, but got: ${{jsonable}}`
+{II});
+{I}}}
+
+{I}switch (typeof jsonable) {{
+{II}case "boolean":
+{II}case "string":
+{III}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{IIII}jsonable, null
+{III});
+
+{II}case "number":
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number. `JSON.parse`
+{III}// never gives us one, but the caller may well have put the value
+{III}// together programmatically.
+{III}if (!Number.isFinite(jsonable)) {{
+{IIII}return newDeserializationError<AasTypes.JsonValue>(
+{IIIII}`Expected a JSON-able value at ${{path}}, but got the number ` +
+{IIIII}`${{jsonable}}, which is neither finite nor representable in JSON`
+{IIII});
+{III}}}
+{III}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{IIII}jsonable, null
+{III});
+
+{II}case "object":
+{III}break;
+
+{II}default:
+{III}return newDeserializationError<AasTypes.JsonValue>(
+{IIII}`Expected a JSON-able value (a boolean, a number, a string, ` +
+{IIIII}`an array or an object) at ${{path}}, but got: ${{typeof jsonable}}`
+{III});
+{I}}}
+
+{I}if (Array.isArray(jsonable)) {{
+{II}const items = new Array<AasTypes.JsonValue>(jsonable.length);
+{II}for (let i = 0; i < jsonable.length; i++) {{
+{III}const parsed = jsonValueFromJsonable(jsonable[i], `${{path}}[${{i}}]`);
+{III}if (parsed.error !== null) {{
+{IIII}return parsed;
+{III}}}
+{III}items[i] = parsed.mustValue();
+{II}}}
+{II}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{III}items, null
+{II});
+{I}}}
+
+{I}const members: AasTypes.JsonObject = {{}};
+{I}for (const key of Object.keys(jsonable)) {{
+{II}const parsed = jsonValueFromJsonable(
+{III}(jsonable as JsonObject)[key], `${{path}}.${{key}}`
+{II});
+{II}if (parsed.error !== null) {{
+{III}return parsed;
+{II}}}
+{II}members[key] = parsed.mustValue();
+{I}}}
+
+{I}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{II}members, null
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Convert `jsonable` to a JSON-able array.
+ *
+ * @param jsonable - to be parsed
+ * @returns the parsed array, or an error
+ */
+function jsonArrayFromJsonable(
+{I}jsonable: JsonValue
+): AasCommon.Either<AasTypes.JsonArray, DeserializationError> {{
+{I}if (!Array.isArray(jsonable)) {{
+{II}return newDeserializationError<AasTypes.JsonArray>(
+{III}`Expected a JSON-able array, but got: ${{typeof jsonable}}`
+{II});
+{I}}}
+
+{I}const parsed = jsonValueFromJsonable(jsonable);
+{I}if (parsed.error !== null) {{
+{II}return newDeserializationError<AasTypes.JsonArray>(
+{III}parsed.error.message
+{II});
+{I}}}
+
+{I}return new AasCommon.Either<AasTypes.JsonArray, DeserializationError>(
+{II}parsed.mustValue() as AasTypes.JsonArray, null
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Convert `jsonable` to a JSON-able object.
+ *
+ * @param jsonable - to be parsed
+ * @returns the parsed object, or an error
+ */
+function jsonObjectFromJsonable(
+{I}jsonable: JsonValue
+): AasCommon.Either<AasTypes.JsonObject, DeserializationError> {{
+{I}if (
+{II}jsonable === null
+{II}|| jsonable === undefined
+{II}|| typeof jsonable !== "object"
+{II}|| Array.isArray(jsonable)
+{I}) {{
+{II}return newDeserializationError<AasTypes.JsonObject>(
+{III}`Expected a JSON-able object, but got: ${{typeof jsonable}}`
+{II});
+{I}}}
+
+{I}const parsed = jsonValueFromJsonable(jsonable);
+{I}if (parsed.error !== null) {{
+{II}return newDeserializationError<AasTypes.JsonObject>(
+{III}parsed.error.message
+{II});
+{I}}}
+
+{I}return new AasCommon.Either<AasTypes.JsonObject, DeserializationError>(
+{II}parsed.mustValue() as AasTypes.JsonObject, null
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Serialize `that` as a JSON-able value.
+ *
+ * @remarks
+ * The result is a deep, independent copy of `that`, so that the serialized
+ * document and the instance it came from do not share a mutable object.
+ *
+ * @param that - to be serialized
+ * @returns `that`, as a value of a JSON document
+ * @throws {{@link SerializationError}} if `that` is not JSON-able
+ */
+function jsonValueToJsonable(that: AasTypes.JsonValue): JsonValue {{
+{I}if (that === null || that === undefined) {{
+{II}throw new SerializationError(
+{III}`Expected a JSON-able value, but got: ${{that}}`
+{II});
+{I}}}
+
+{I}switch (typeof that) {{
+{II}case "boolean":
+{II}case "string":
+{III}return that;
+
+{II}case "number":
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number, so neither is
+{III}// a JSON-able value, even though a TypeScript `number` holds either.
+{III}if (!Number.isFinite(that)) {{
+{IIII}throw new SerializationError(
+{IIIII}`Expected a JSON-able value, but got the number ${{that}}, ` +
+{IIIII}`which is neither finite nor representable in JSON`
+{IIII});
+{III}}}
+{III}return that;
+
+{II}case "object":
+{III}break;
+
+{II}default:
+{III}throw new SerializationError(
+{IIII}`Expected a JSON-able value (a boolean, a number, a string, ` +
+{IIIII}`an array or an object), but got: ${{typeof that}}`
+{III});
+{I}}}
+
+{I}if (Array.isArray(that)) {{
+{II}const items = new Array<JsonValue>(that.length);
+{II}for (let i = 0; i < that.length; i++) {{
+{III}try {{
+{IIII}items[i] = jsonValueToJsonable(that[i]);
+{III}}} catch (error) {{
+{IIII}if (error instanceof SerializationError) {{
+{IIIII}error.prependIndex(i);
+{IIII}}}
+{IIII}throw error;
+{III}}}
+{II}}}
+{II}return items;
+{I}}}
+
+{I}const members: JsonObject = {{}};
+{I}for (const key of Object.keys(that)) {{
+{II}try {{
+{III}members[key] = jsonValueToJsonable((that as AasTypes.JsonObject)[key]);
+{II}}} catch (error) {{
+{III}if (error instanceof SerializationError) {{
+{IIII}error.prependProperty(key);
+{III}}}
+{III}throw error;
+{II}}}
+{I}}}
+
+{I}return members;
+}}"""
+        ),
+    ]
 
 
 def _generate_serialize_call(
@@ -1533,6 +1799,22 @@ def _generate_serialize_call(
 
         else:
             assert_never(primitive_type)
+
+    # NOTE (mristin):
+    # A JSON-able value is almost JSON-able as it comes, but not quite -- its
+    # type rules out neither a non-finite number nor a non-string key -- so it
+    # is checked and copied, see ``jsonValueToJsonable``. All three shapes go
+    # through the one function: an array and an object are only JSON-able
+    # values whose top-level shape is already known.
+    if isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        return Stripped(f"jsonValueToJsonable({access_expression})")
 
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
@@ -1790,10 +2072,7 @@ def _generate_serialize_property(
 
     value_expression: Stripped
 
-    if isinstance(
-        type_anno,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-    ):
+    if isinstance(type_anno, intermediate.AtomicTypeAnnotationAsTuple):
         value_expression = _generate_serialize_call(access_expression, type_anno)
 
     elif isinstance(type_anno, intermediate.ListTypeAnnotation) and (
@@ -2479,6 +2758,12 @@ function newDeserializationError<T>(
     blocks.append(_generate_serialization_error())
 
     blocks.extend(_generate_number_serializers(number_types))
+
+    # NOTE (mristin):
+    # The JSON-able helpers come here, and not next to the parsers above, as
+    # one of the four serializes and needs ``SerializationError``, which is
+    # declared just above.
+    blocks.extend(_generate_json_able_helpers(symbol_table=symbol_table))
 
     for enumeration in _collect_enumerations_to_serialize(symbol_table):
         blocks.append(_generate_serialize_enumeration(enumeration=enumeration))
