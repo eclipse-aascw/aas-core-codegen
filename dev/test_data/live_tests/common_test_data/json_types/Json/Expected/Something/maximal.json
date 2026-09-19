@@ -1,0 +1,22 @@
+{
+  "value": true,
+  "values": [
+    1.0,
+    "two",
+    false
+  ],
+  "mapping": {
+    "a": 1.0
+  },
+  "mappingWithConstrainedKey": {
+    "nonEmptyKey": "some value"
+  },
+  "optionalValue": {
+    "nested": [
+      1.0,
+      2.0
+    ]
+  },
+  "optionalValues": [],
+  "optionalMapping": {}
+}
