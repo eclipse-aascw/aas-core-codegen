@@ -188,6 +188,31 @@ that.{prop_name}.Count == casted.{prop_name}.Count
                     )
                 else:
                     assert_never(type_anno.items.our_type)
+
+            elif isinstance(
+                type_anno.items,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # We compare the canonical JSON text of each item instead of
+                # the ``Nodes.JsonNode`` instances themselves, which would
+                # only ever be reference-equal -- the same reasoning as for
+                # a JSON-able property, see further below.
+                expr = Stripped(
+                    f"""\
+that.{prop_name}.Count == casted.{prop_name}.Count
+&& (
+{I}that.{prop_name}
+{II}.Zip(
+{III}casted.{prop_name},
+{III}(left, right) => left.ToJsonString() == right.ToJsonString())
+{II}.All(item => item))"""
+                )
+
             else:
                 raise NotImplementedError(
                     f"(mristin): We handle only lists of atomic values in the deep "
@@ -280,6 +305,28 @@ Transform(
                         )
                     else:
                         assert_never(item_type_anno.our_type)
+
+                elif isinstance(
+                    item_type_anno,
+                    (
+                        intermediate.JsonValueTypeAnnotation,
+                        intermediate.JsonArrayTypeAnnotation,
+                        intermediate.JsonObjectTypeAnnotation,
+                    ),
+                ):
+                    # NOTE (mristin):
+                    # We compare the canonical JSON text instead of the
+                    # ``Nodes.JsonNode`` instances themselves, which would
+                    # only ever be reference-equal -- the same reasoning as
+                    # for a JSON-able property, see further below.
+                    item_exprs.append(
+                        Stripped(
+                            f"""\
+{item_that}.ToJsonString()
+{I}== {item_casted}.ToJsonString()"""
+                        )
+                    )
+
                 else:
                     # NOTE (mristin):
                     # This branch is unreachable in practice (``item_type_anno`` is
@@ -305,6 +352,23 @@ Transform(
             item_exprs_writer.write(")")
 
             expr = Stripped(item_exprs_writer.getvalue())
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # We compare the canonical JSON text instead of the
+            # ``Nodes.JsonNode`` instances themselves, which would only ever
+            # be reference-equal (never overridden to compare by value).
+            expr = Stripped(
+                f"""\
+that.{prop_name}.ToJsonString() == casted.{prop_name}.ToJsonString()"""
+            )
 
         else:
             # noinspection PyTypeChecker
