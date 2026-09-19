@@ -1,6 +1,6 @@
 """Provide common functions shared among different Java code generation modules."""
 
-from typing import Final, List, Mapping, cast, Optional, Sequence
+from typing import Final, Iterable, List, Mapping, cast, Optional, Sequence
 import re
 
 from icontract import ensure, require
@@ -113,6 +113,43 @@ def tuple_type(item_types: Sequence[Stripped]) -> Stripped:
 
 
 # fmt: off
+#: Import the Jackson node types which a JSON-able value is represented by
+JSON_IMPORTS: Final[Sequence[Stripped]] = [
+    Stripped("com.fasterxml.jackson.databind.JsonNode"),
+    Stripped("com.fasterxml.jackson.databind.node.ArrayNode"),
+    Stripped("com.fasterxml.jackson.databind.node.ObjectNode"),
+]
+
+
+def json_imports_if_necessary(
+    type_annotations: Iterable[intermediate.TypeAnnotationUnion],
+) -> List[Stripped]:
+    """
+    Give the Jackson imports if any of ``type_annotations`` is JSON-able.
+
+    A JSON-able value is spelled as a Jackson node (see
+    :py:func:`generate_type`), and Jackson lives outside our own packages, so
+    every generated file which mentions one has to import it. All three are
+    imported together: a file which holds one shape usually holds the others
+    too, and an unused import is no error in Java.
+    """
+    for type_annotation in type_annotations:
+        for nested in intermediate.over_type_annotation_and_nested_type_annotations(
+            type_annotation
+        ):
+            if isinstance(
+                nested,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                return list(JSON_IMPORTS)
+
+    return []
+
+
 @require(
     lambda our_type_qualifier:
     not (our_type_qualifier is not None)
@@ -188,6 +225,27 @@ def generate_type(
             ]
         )
 
+    elif isinstance(
+        type_annotation,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # A JSON-able value is a Jackson node, which the jsonization already
+        # uses as the representation of a JSON document. Unlike our own types,
+        # these live in Jackson's own packages, so ``our_type_qualifier`` is
+        # deliberately *not* applied to them.
+        if isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+            return Stripped("JsonNode")
+
+        if isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+            return Stripped("ArrayNode")
+
+        return Stripped("ObjectNode")
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value = generate_type(
             type_annotation=type_annotation.value, our_type_qualifier=our_type_qualifier
@@ -256,6 +314,20 @@ def leaf_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
     primitive_type = intermediate.try_primitive_type(type_anno)
     if primitive_type is not None:
         return PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
+
+    # NOTE (mristin):
+    # A JSON-able type is no type of the meta-model, so it needs a moniker of
+    # its own, for the same reason as a primitive above. The initial is
+    # *lower-case* so that it can never be confused for one of our types, which
+    # all go through ``capitalized_camel_case``.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return "jsonValue"
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return "jsonArray"
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return "jsonObject"
 
     assert isinstance(type_anno, intermediate.OurTypeAnnotation), (
         f"Expected a primitive, a constrained primitive or one of our types, "

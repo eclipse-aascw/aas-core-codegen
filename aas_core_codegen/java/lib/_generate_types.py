@@ -498,6 +498,20 @@ Stream.concat(
 {I}{indent_but_first_line(item_stream_expr, I)})"""
                 )
 
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            raise AssertionError(
+                f"A JSON-able value is plain data, never a reference to one of "
+                f"our own classes, so it can not have been determined "
+                f"descendable: {type_anno}"
+            )
+
         else:
             assert_never(type_anno)
 
@@ -637,6 +651,12 @@ def _generate_imports_for_interface(
         Stripped("java.util.List"),
     ]  # type: List[Stripped]
 
+    imports.extend(
+        java_common.json_imports_if_necessary(
+            prop.type_annotation for prop in cls.properties
+        )
+    )
+
     if len(cls.inheritances) == 0:
         import_name = Stripped(f"{package}.types.{java_common.INTERFACE_PKG}.IClass")
         imports.append(import_name)
@@ -679,6 +699,12 @@ def _generate_imports_for_class(
         Stripped("java.util.Optional"),
         Stripped("java.util.Objects"),
     ]  # type: List[Stripped]
+
+    imports.extend(
+        java_common.json_imports_if_necessary(
+            prop.type_annotation for prop in cls.properties
+        )
+    )
 
     if _has_descendable_properties(cls):
         imports.extend(

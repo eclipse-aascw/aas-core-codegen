@@ -453,6 +453,13 @@ def _generate_enhanced(
             Stripped(f"import {package}.types.model.*;"),
         ]  # type: List[Stripped]
 
+        imports.extend(
+            Stripped(f"import {json_import};")
+            for json_import in java_common.json_imports_if_necessary(
+                prop.type_annotation for prop in cls.properties
+            )
+        )
+
         blocks = [
             java_common.WARNING,
             Stripped(f"package {package}.enhancing;"),
@@ -644,7 +651,8 @@ if (that.{getter_name}().isPresent()) {{
                 ),
             ):
                 # We can not enhance lists of primitives, constrained
-                # primitives or enumeration literals; nothing to do here.
+                # primitives, enumeration literals or JSON-able values;
+                # nothing to do here.
                 continue
 
             item_type = java_common.generate_type(type_anno.items)
@@ -811,6 +819,20 @@ if (that.{getter_name}().isPresent()) {{
                 )
 
             wrap_stmt = Stripped(writer.getvalue())
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # A JSON-able value is plain data, never one of our own classes,
+            # so there is nothing to enhance.
+            continue
+
         else:
             assert_never(type_anno.our_type)
 
@@ -864,6 +886,13 @@ def _generate_wrapper(
         Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.visitation.AbstractTransformer;"),
     ]  # type: List[Stripped]
+
+    if intermediate.uses_json_types(symbol_table):
+        imports.extend(
+            Stripped(f"import {json_import};")
+            for json_import in java_common.JSON_IMPORTS
+        )
+
     body = [
         Stripped(
             "private final Function<IClass, Optional<EnhancementT>> "
