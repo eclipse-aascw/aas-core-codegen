@@ -900,148 +900,95 @@ def generate(
     )
 
     for our_type in symbol_table.our_types:
-        if (
-            isinstance(
-                our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-            )
-            and our_type.is_implementation_specific
-        ):
-            implementation_key = specific_implementations.ImplementationKey(
-                f"{our_type.name}.json"
-            )
-
-            code = spec_impls.get(implementation_key, None)
-            if code is None:
-                errors.append(
-                    Error(
-                        our_type.parsed.node,
-                        f"The implementation is missing "
-                        f"for the implementation-specific class: {implementation_key}",
-                    )
-                )
-                continue
-
-            try:
-                # noinspection PyTypeChecker
-                extension = json.loads(code, object_pairs_hook=collections.OrderedDict)
-            except Exception as err:
-                errors.append(
-                    Error(
-                        our_type.parsed.node,
-                        f"Failed to parse the JSON out of "
-                        f"the specific implementation {implementation_key}: {err}",
-                    )
-                )
-                continue
-
-            if not isinstance(extension, dict):
-                errors.append(
-                    Error(
-                        our_type.parsed.node,
-                        f"Expected the implementation-specific snippet "
-                        f"at {implementation_key} to be a JSON object, "
-                        f"but got: {type(extension)}",
-                    )
-                )
-                continue
-
+        if isinstance(our_type, intermediate.Enumeration):
             update_error = definitions.update_for(
-                our_type=our_type, extension=extension
+                our_type=our_type,
+                extension=_define_for_enumeration(enumeration=our_type),
+            )
+            if update_error is not None:
+                errors.append(update_error)
+
+        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+            # NOTE (mristin):
+            # We in-line the constraints from the constrained primitives directly
+            # in the properties. We do not want to introduce separate definitions
+            # for them as that would make it more difficult for downstream code
+            # generators to generate meaningful code (*e.g.*, code generators for
+            # OpenAPI3).
+            continue
+
+        elif isinstance(
+            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+        ):
+            if len(our_type.concrete_descendants) > 0:
+                # region Inheritable
+                inheritable, definition_errors = _generate_inheritable_definition(
+                    cls=our_type,
+                    constraints_by_class=constraints_by_class,
+                    fix_pattern=fix_pattern,
+                )
+
+                if definition_errors is not None:
+                    errors.extend(definition_errors)
+                    continue
+
+                assert inheritable is not None
+                update_error = definitions.update_for(
+                    our_type=our_type, extension=inheritable
+                )
+                if update_error is not None:
+                    errors.append(update_error)
+                # endregion
+
+                # region Choice
+                if isinstance(our_type, intermediate.ConcreteClass) or (
+                    isinstance(our_type, intermediate.AbstractClass)
+                    and intermediate.runtime_id(our_type)
+                    in ids_of_our_types_in_properties
+                ):
+                    update_error = definitions.update_for(
+                        our_type=our_type,
+                        extension=_generate_choice_definition(cls=our_type),
+                    )
+                    if update_error is not None:
+                        errors.append(update_error)
+                # endregion
+
+            if isinstance(our_type, intermediate.ConcreteClass):
+                definition, definition_errors = _generate_concrete_definition(
+                    cls=our_type,
+                    constraints_by_class=constraints_by_class,
+                    fix_pattern=fix_pattern,
+                )
+                if definition_errors is not None:
+                    errors.extend(definition_errors)
+                    continue
+
+                assert definition is not None
+
+                update_error = definitions.update_for(
+                    our_type=our_type, extension=definition
+                )
+                if update_error is not None:
+                    errors.append(update_error)
+            else:
+                assert isinstance(our_type, intermediate.AbstractClass)
+
+                # We do not generate any concrete definition for an abstract class.
+                pass
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            update_error = definitions.update_for(
+                our_type=our_type,
+                extension=_generate_choice_definition_for_named_union(
+                    named_union=our_type
+                ),
             )
             if update_error is not None:
                 errors.append(update_error)
 
         else:
-            if isinstance(our_type, intermediate.Enumeration):
-                update_error = definitions.update_for(
-                    our_type=our_type,
-                    extension=_define_for_enumeration(enumeration=our_type),
-                )
-                if update_error is not None:
-                    errors.append(update_error)
-
-            elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-                # NOTE (mristin):
-                # We in-line the constraints from the constrained primitives directly
-                # in the properties. We do not want to introduce separate definitions
-                # for them as that would make it more difficult for downstream code
-                # generators to generate meaningful code (*e.g.*, code generators for
-                # OpenAPI3).
-                continue
-
-            elif isinstance(
-                our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-            ):
-                if len(our_type.concrete_descendants) > 0:
-                    # region Inheritable
-                    inheritable, definition_errors = _generate_inheritable_definition(
-                        cls=our_type,
-                        constraints_by_class=constraints_by_class,
-                        fix_pattern=fix_pattern,
-                    )
-
-                    if definition_errors is not None:
-                        errors.extend(definition_errors)
-                        continue
-
-                    assert inheritable is not None
-                    update_error = definitions.update_for(
-                        our_type=our_type, extension=inheritable
-                    )
-                    if update_error is not None:
-                        errors.append(update_error)
-                    # endregion
-
-                    # region Choice
-                    if isinstance(our_type, intermediate.ConcreteClass) or (
-                        isinstance(our_type, intermediate.AbstractClass)
-                        and intermediate.runtime_id(our_type)
-                        in ids_of_our_types_in_properties
-                    ):
-                        update_error = definitions.update_for(
-                            our_type=our_type,
-                            extension=_generate_choice_definition(cls=our_type),
-                        )
-                        if update_error is not None:
-                            errors.append(update_error)
-                    # endregion
-
-                if isinstance(our_type, intermediate.ConcreteClass):
-                    definition, definition_errors = _generate_concrete_definition(
-                        cls=our_type,
-                        constraints_by_class=constraints_by_class,
-                        fix_pattern=fix_pattern,
-                    )
-                    if definition_errors is not None:
-                        errors.extend(definition_errors)
-                        continue
-
-                    assert definition is not None
-
-                    update_error = definitions.update_for(
-                        our_type=our_type, extension=definition
-                    )
-                    if update_error is not None:
-                        errors.append(update_error)
-                else:
-                    assert isinstance(our_type, intermediate.AbstractClass)
-
-                    # We do not generate any concrete definition for an abstract class.
-                    pass
-
-            elif isinstance(our_type, intermediate.NamedUnion):
-                update_error = definitions.update_for(
-                    our_type=our_type,
-                    extension=_generate_choice_definition_for_named_union(
-                        named_union=our_type
-                    ),
-                )
-                if update_error is not None:
-                    errors.append(update_error)
-
-            else:
-                assert_never(our_type)
-
+            assert_never(our_type)
     if len(errors) > 0:
         return None, errors
 

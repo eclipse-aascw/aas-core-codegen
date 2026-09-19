@@ -2,7 +2,6 @@ UnverifiedSymbolTable(
   our_types=[
     AbstractClass(
       name='Some_abstract_class',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[],
       methods=[],
@@ -14,7 +13,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Some_concrete_class',
-      is_implementation_specific=False,
       inheritances=[
         'Some_abstract_class'],
       properties=[],
@@ -27,7 +25,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Another_concrete_class',
-      is_implementation_specific=False,
       inheritances=[
         'Some_abstract_class'],
       properties=[],
@@ -40,7 +37,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Yet_another_class',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[],
       methods=[],
@@ -58,7 +54,6 @@ UnverifiedSymbolTable(
       node=...),
     ConcreteClass(
       name='Something',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(

@@ -6,7 +6,7 @@ from typing import Tuple, Optional, List
 
 from icontract import ensure
 
-from aas_core_codegen import intermediate, specific_implementations
+from aas_core_codegen import intermediate
 from aas_core_codegen.common import (
     Error,
     Stripped,
@@ -122,35 +122,12 @@ public IClass {transform_name}(
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_shallow_copier(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transformer which makes shallow copies."""
-    errors = []  # type: List[Error]
-
     blocks = []  # type: List[Stripped]
 
     for cls in symbol_table.concrete_classes:
-        if cls.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Copying/ShallowCopier/transform_{cls.name}.java"
-            )
-
-            implementation = spec_impls.get(implementation_key, None)
-            if implementation is None:
-                errors.append(
-                    Error(
-                        cls.parsed.node,
-                        f"The snippet for making shallow copies is missing "
-                        f"for the implementation-specific "
-                        f"class {cls.name}: {implementation_key}",
-                    )
-                )
-                continue
-
-            blocks.append(spec_impls[implementation_key])
-        else:
-            blocks.append(_generate_shallow_copy_transform_method(cls=cls))
-
+        blocks.append(_generate_shallow_copy_transform_method(cls=cls))
     writer = io.StringIO()
     writer.write(
         """\
@@ -498,35 +475,12 @@ public IClass {transform_name} (
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_deep_copier(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transformer which makes deep copies."""
-    errors = []  # type: List[Error]
-
     blocks = []  # type: List[Stripped]
 
     for cls in symbol_table.concrete_classes:
-        if cls.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Copying/DeepCopier/transform_{cls.name}.java"
-            )
-
-            implementation = spec_impls.get(implementation_key, None)
-            if implementation is None:
-                errors.append(
-                    Error(
-                        cls.parsed.node,
-                        f"This snippet for making deep copies is missing "
-                        f"for the implementation-specific "
-                        f"class {cls.name}: {implementation_key}",
-                    )
-                )
-                continue
-
-            blocks.append(spec_impls[implementation_key])
-        else:
-            blocks.append(_generate_deep_copy_transform_method(cls=cls))
-
+        blocks.append(_generate_deep_copy_transform_method(cls=cls))
     writer = io.StringIO()
     writer.write(
         """\
@@ -552,7 +506,6 @@ private static class _DeepCopier extends AbstractTransformer<IClass> {
 def generate(
     symbol_table: intermediate.SymbolTable,
     package: java_common.PackageIdentifier,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[List[java_common.JavaFile]], Optional[List[Error]]]:
     """
     Generate code for copying instances in memory.
@@ -617,7 +570,7 @@ public static <T extends IClass> T deep(T that) {{
         copy_blocks.append(_generate_union_deep_copy_helper())
 
     shallow_copier_block, shallow_errors = _generate_shallow_copier(
-        symbol_table=symbol_table, spec_impls=spec_impls
+        symbol_table=symbol_table
     )
     if shallow_errors is not None:
         errors.extend(shallow_errors)
@@ -625,9 +578,7 @@ public static <T extends IClass> T deep(T that) {{
         assert shallow_copier_block is not None
         copy_blocks.append(shallow_copier_block)
 
-    deep_copier_block, deep_errors = _generate_deep_copier(
-        symbol_table=symbol_table, spec_impls=spec_impls
-    )
+    deep_copier_block, deep_errors = _generate_deep_copier(symbol_table=symbol_table)
     if deep_errors is not None:
         errors.extend(deep_errors)
     else:

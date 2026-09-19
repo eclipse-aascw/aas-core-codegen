@@ -587,10 +587,6 @@ class Class(DBC):
     #: Name of the class
     name: Final[Identifier]
 
-    #: If set, the class is implementation-specific, and we need to provide a snippet
-    #: for it
-    is_implementation_specific: Final[bool]
-
     #: List of all the ancestor classes
     inheritances: Final[Sequence[Identifier]]
 
@@ -649,7 +645,6 @@ class Class(DBC):
     def __init__(
         self,
         name: Identifier,
-        is_implementation_specific: bool,
         inheritances: Sequence[Identifier],
         properties: Sequence[Property],
         methods: Sequence["MethodUnion"],
@@ -659,7 +654,6 @@ class Class(DBC):
         node: ast.ClassDef,
     ) -> None:
         self.name = name
-        self.is_implementation_specific = is_implementation_specific
         self.inheritances = inheritances
         self.properties = properties
         self.methods = methods

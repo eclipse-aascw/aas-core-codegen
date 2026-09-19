@@ -2,7 +2,6 @@ UnverifiedSymbolTable(
   our_types=[
     AbstractClass(
       name='Node',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -50,7 +49,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Branch',
-      is_implementation_specific=False,
       inheritances=[
         'Node'],
       properties=[
@@ -105,7 +103,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Leaf',
-      is_implementation_specific=False,
       inheritances=[
         'Branch'],
       properties=[
@@ -167,7 +164,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Blossom',
-      is_implementation_specific=False,
       inheritances=[
         'Leaf'],
       properties=[
@@ -236,7 +232,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Something',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -299,7 +294,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Container',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(

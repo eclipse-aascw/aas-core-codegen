@@ -8,7 +8,6 @@ UnverifiedSymbolTable(
       node=...),
     ConcreteClass(
       name='Some_class',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[],
       methods=[],
@@ -20,7 +19,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Another_class',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[],
       methods=[],
@@ -32,7 +30,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Something',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(

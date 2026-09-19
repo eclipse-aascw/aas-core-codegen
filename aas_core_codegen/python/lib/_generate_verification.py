@@ -1213,7 +1213,6 @@ def {transform_name}(
 def _generate_transformer(
     symbol_table: intermediate.SymbolTable,
     base_environment: intermediate_type_inference.Environment,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a transformer to double-dispatch an instance to errors."""
     errors = []  # type: List[Error]
@@ -1224,36 +1223,16 @@ def _generate_transformer(
     # so we do not need to handle them separately.
 
     for cls in symbol_table.concrete_classes:
-        if cls.is_implementation_specific:
-            transform_key = specific_implementations.ImplementationKey(
-                f"Verification/transform_{cls.name}.py"
-            )
-
-            implementation = spec_impls.get(transform_key, None)
-            if implementation is None:
-                errors.append(
-                    Error(
-                        cls.parsed.node,
-                        f"The transformation snippet is missing "
-                        f"for the implementation-specific "
-                        f"class {cls.name}: {transform_key}",
-                    )
-                )
-                continue
-
-            blocks.append(spec_impls[transform_key])
+        block, cls_errors = _generate_transform_for_class(
+            cls=cls,
+            symbol_table=symbol_table,
+            base_environment=base_environment,
+        )
+        if cls_errors is not None:
+            errors.extend(cls_errors)
         else:
-            block, cls_errors = _generate_transform_for_class(
-                cls=cls,
-                symbol_table=symbol_table,
-                base_environment=base_environment,
-            )
-            if cls_errors is not None:
-                errors.extend(cls_errors)
-            else:
-                assert block is not None
-                blocks.append(block)
-
+            assert block is not None
+            blocks.append(block)
     if len(errors) > 0:
         return None, errors
 
@@ -1617,7 +1596,6 @@ class Error:
     transformer_block, transformer_errors = _generate_transformer(
         symbol_table=symbol_table,
         base_environment=base_environment,
-        spec_impls=spec_impls,
     )
     if transformer_errors is not None:
         errors.extend(transformer_errors)

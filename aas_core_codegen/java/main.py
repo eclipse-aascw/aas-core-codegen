@@ -127,7 +127,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: java_lib.generate_copying(
                 symbol_table=context.symbol_table,
                 package=package,
-                spec_impls=context.spec_impls,
             ),
         ),
         (
@@ -135,7 +134,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: java_lib.generate_enhancing(
                 symbol_table=context.symbol_table,
                 package=package,
-                spec_impls=context.spec_impls,
             ),
         ),
         (
@@ -143,7 +141,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: java_lib.generate_generation(
                 symbol_table=context.symbol_table,
                 package=package,
-                spec_impls=context.spec_impls,
             ),
         ),
         (
@@ -151,7 +148,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: java_lib.generate_jsonization(
                 symbol_table=context.symbol_table,
                 package=package,
-                spec_impls=context.spec_impls,
             ),
         ),
         (
@@ -191,7 +187,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: java_lib.generate_xmlization(
                 symbol_table=context.symbol_table,
                 package=package,
-                spec_impls=context.spec_impls,
             ),
         ),
         (

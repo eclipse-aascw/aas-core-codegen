@@ -5,7 +5,7 @@ from typing import Tuple, Optional, List, Set, Union
 
 from icontract import ensure, require
 
-from aas_core_codegen import intermediate, naming, specific_implementations
+from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
     Error,
     Stripped,
@@ -3314,7 +3314,6 @@ func Marshal(
 # fmt: on
 def generate(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
     repo_url: Stripped,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code for XML de/serialization."""
@@ -3421,25 +3420,7 @@ const Namespace = {namespace_literal}"""
                 blocks.append(_generate_read_dispatched(our_type=our_type))
 
         elif isinstance(our_type, intermediate.ConcreteClass):
-            if our_type.is_implementation_specific:
-                implementation_key = specific_implementations.ImplementationKey(
-                    f"Xmlization/read_{our_type.name}_as_sequence.go"
-                )
-
-                implementation = spec_impls.get(implementation_key, None)
-                if implementation is None:
-                    errors.append(
-                        Error(
-                            our_type.parsed.node,
-                            f"The xmlization snippet is missing "
-                            f"for the implementation-specific "
-                            f"class {our_type.name}: {implementation_key}",
-                        )
-                    )
-                    continue
-            else:
-                blocks.append(_generate_read_as_sequence(cls=our_type))
-
+            blocks.append(_generate_read_as_sequence(cls=our_type))
             if intermediate.runtime_id(our_type) in requirements.dispatched_type_ids:
                 blocks.append(_generate_read_dispatched(our_type=our_type))
 
@@ -3514,31 +3495,13 @@ const Namespace = {namespace_literal}"""
             pass
 
         elif isinstance(our_type, intermediate.ConcreteClass):
-            if our_type.is_implementation_specific:
-                implementation_key = specific_implementations.ImplementationKey(
-                    f"Xmlization/write_{our_type.name}_as_sequence.go"
-                )
+            block, block_errors = _generate_write_as_sequence(cls=our_type)
+            if block_errors is not None:
+                errors.extend(block_errors)
+                continue
 
-                implementation = spec_impls.get(implementation_key, None)
-                if implementation is None:
-                    errors.append(
-                        Error(
-                            our_type.parsed.node,
-                            f"The xmlization snippet is missing "
-                            f"for the implementation-specific "
-                            f"class {our_type.name}: {implementation_key}",
-                        )
-                    )
-                    continue
-            else:
-                block, block_errors = _generate_write_as_sequence(cls=our_type)
-                if block_errors is not None:
-                    errors.extend(block_errors)
-                    continue
-
-                assert block is not None
-                blocks.append(block)
-
+            assert block is not None
+            blocks.append(block)
         elif isinstance(our_type, intermediate.NamedUnion):
             # NOTE (mristin):
             # A named union is serialized at its call sites through

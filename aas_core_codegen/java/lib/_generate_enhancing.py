@@ -4,9 +4,9 @@ import io
 import textwrap
 from typing import Tuple, Optional, List
 
-from icontract import ensure, require
+from icontract import ensure
 
-from aas_core_codegen import intermediate, specific_implementations
+from aas_core_codegen import intermediate
 from aas_core_codegen.common import (
     Error,
     Identifier,
@@ -254,7 +254,6 @@ public class Enhancer<EnhancementT> extends Unwrapper<EnhancementT> {{
 
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-@require(lambda cls: not cls.is_implementation_specific)
 def _generate_enhanced_class(
     cls: intermediate.ConcreteClass,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
@@ -425,7 +424,6 @@ public class {enhanced_name}<EnhancementT>
 def _generate_enhanced(
     symbol_table: intermediate.SymbolTable,
     package: java_common.PackageIdentifier,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[List[java_common.JavaFile]], Optional[List[Error]]]:
     files = []  # type: List[java_common.JavaFile]
 
@@ -434,69 +432,43 @@ def _generate_enhanced(
     for cls in symbol_table.concrete_classes:
         cls_name = java_naming.class_name(cls.name)
 
-        if cls.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Enhancing/Enhanced/{cls.name}.java"
-            )
+        code, error = _generate_enhanced_class(cls=cls)
+        if error is not None:
+            errors.append(error)
+            continue
 
-            code = spec_impls.get(implementation_key, None)
-            if code is None:
-                errors.append(
-                    Error(
-                        cls.parsed.node,
-                        f"The implementation is missing "
-                        f"for the implementation-specific class: {implementation_key}",
-                    )
-                )
-                continue
+        assert code is not None
 
-            assert code is not None
+        imports = [
+            Stripped("import java.lang.Iterable;"),
+            Stripped("import java.util.Optional;"),
+            Stripped("import java.util.List;"),
+            Stripped(f"import {package}.common.*;"),
+            Stripped(f"import {package}.visitation.IVisitor;"),
+            Stripped(f"import {package}.visitation.IVisitorWithContext;"),
+            Stripped(f"import {package}.visitation.ITransformer;"),
+            Stripped(f"import {package}.visitation.ITransformerWithContext;"),
+            Stripped(f"import {package}.types.enums.*;"),
+            Stripped(f"import {package}.types.impl.*;"),
+            Stripped(f"import {package}.types.model.*;"),
+        ]  # type: List[Stripped]
 
-            files.append(
-                java_common.JavaFile(
-                    f"{cls_name}.java",
-                    f"{code}\n",
-                ),
-            )
-        else:
-            code, error = _generate_enhanced_class(cls=cls)
-            if error is not None:
-                errors.append(error)
-                continue
+        blocks = [
+            java_common.WARNING,
+            Stripped(f"package {package}.enhancing;"),
+            Stripped("\n".join(imports)),
+            code,
+            java_common.WARNING,
+        ]  # type: List[Stripped]
 
-            assert code is not None
+        code = Stripped("\n\n".join(blocks))
 
-            imports = [
-                Stripped("import java.lang.Iterable;"),
-                Stripped("import java.util.Optional;"),
-                Stripped("import java.util.List;"),
-                Stripped(f"import {package}.common.*;"),
-                Stripped(f"import {package}.visitation.IVisitor;"),
-                Stripped(f"import {package}.visitation.IVisitorWithContext;"),
-                Stripped(f"import {package}.visitation.ITransformer;"),
-                Stripped(f"import {package}.visitation.ITransformerWithContext;"),
-                Stripped(f"import {package}.types.enums.*;"),
-                Stripped(f"import {package}.types.impl.*;"),
-                Stripped(f"import {package}.types.model.*;"),
-            ]  # type: List[Stripped]
-
-            blocks = [
-                java_common.WARNING,
-                Stripped(f"package {package}.enhancing;"),
-                Stripped("\n".join(imports)),
-                code,
-                java_common.WARNING,
-            ]  # type: List[Stripped]
-
-            code = Stripped("\n\n".join(blocks))
-
-            files.append(
-                java_common.JavaFile(
-                    f"Enhanced{cls_name}.java",
-                    f"{code}\n",
-                ),
-            )
-
+        files.append(
+            java_common.JavaFile(
+                f"Enhanced{cls_name}.java",
+                f"{code}\n",
+            ),
+        )
     if len(errors) > 0:
         return None, errors
 
@@ -534,7 +506,6 @@ private <T extends IUnion<T>> T transform(T that) {{
     )
 
 
-@require(lambda cls: not cls.is_implementation_specific)
 def _generate_transform(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the transform method to wrap the instance with an enhancement."""
     blocks = [
@@ -880,10 +851,8 @@ public IClass {transform_name}(
 def _generate_wrapper(
     symbol_table: intermediate.SymbolTable,
     package: java_common.PackageIdentifier,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[java_common.JavaFile], Optional[List[Error]]]:
     """Generate the transformer that wraps an instance with the enhancement."""
-    errors = []  # type: List[Error]
     imports = [
         Stripped("import java.util.List;"),
         Stripped("import java.util.Optional;"),
@@ -911,25 +880,6 @@ _Wrapper(
     ]  # type: List[Stripped]
 
     for cls in symbol_table.concrete_classes:
-        if cls.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Enhancing/Wrap/{cls.name}.java"
-            )
-
-            code = spec_impls.get(implementation_key, None)
-            if code is None:
-                errors.append(
-                    Error(
-                        cls.parsed.node,
-                        f"The implementation is missing "
-                        f"for the implementation-specific class: {implementation_key}",
-                    )
-                )
-                continue
-
-            body.append(code)
-            continue
-
         body.append(_generate_transform(cls=cls))
 
     if len(symbol_table.named_unions) > 0:
@@ -975,7 +925,6 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
 def generate(
     symbol_table: intermediate.SymbolTable,
     package: java_common.PackageIdentifier,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[List[java_common.JavaFile]], Optional[List[Error]]]:
     """
     Generate code for enhancing model classes.
@@ -989,9 +938,7 @@ def generate(
         _generate_enhancer_class(package),
     ]  # type: List[java_common.JavaFile]
 
-    enhanced_files, enhanced_errors = _generate_enhanced(
-        symbol_table, package, spec_impls
-    )
+    enhanced_files, enhanced_errors = _generate_enhanced(symbol_table, package)
 
     if enhanced_errors is not None:
         errors.extend(enhanced_errors)
@@ -1000,7 +947,7 @@ def generate(
 
         java_files.extend(enhanced_files)
 
-    wrapper_file, wrapper_errors = _generate_wrapper(symbol_table, package, spec_impls)
+    wrapper_file, wrapper_errors = _generate_wrapper(symbol_table, package)
 
     if wrapper_errors is not None:
         errors.extend(wrapper_errors)

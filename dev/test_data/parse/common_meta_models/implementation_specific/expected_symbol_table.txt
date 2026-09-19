@@ -18,7 +18,6 @@ UnverifiedSymbolTable(
       literals_by_name=...),
     AbstractClass(
       name='Item',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(
@@ -102,7 +101,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Box',
-      is_implementation_specific=False,
       inheritances=[
         'Item'],
       properties=[
@@ -248,7 +246,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Bag',
-      is_implementation_specific=False,
       inheritances=[
         'Item'],
       properties=[
@@ -311,7 +308,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Container',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(

@@ -2,7 +2,6 @@ UnverifiedSymbolTable(
   our_types=[
     AbstractClass(
       name='Another_grand_parent',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[],
       methods=[],
@@ -14,7 +13,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Grand_parent',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[],
       methods=[],
@@ -26,7 +24,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Parent',
-      is_implementation_specific=False,
       inheritances=[
         'Grand_parent',
         'Another_grand_parent'],
@@ -40,7 +37,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     AbstractClass(
       name='Another_parent',
-      is_implementation_specific=False,
       inheritances=[
         'Grand_parent',
         'Another_grand_parent'],
@@ -54,7 +50,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Something',
-      is_implementation_specific=False,
       inheritances=[
         'Parent',
         'Another_parent'],

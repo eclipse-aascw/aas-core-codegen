@@ -18,7 +18,6 @@ UnverifiedSymbolTable(
       literals_by_name=...),
     ConcreteClass(
       name='Something',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(

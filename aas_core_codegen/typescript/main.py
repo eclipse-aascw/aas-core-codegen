@@ -107,7 +107,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             src_rel_path / "jsonization.ts",
             lambda: typescript_lib.generate_jsonization(
                 symbol_table=context.symbol_table,
-                spec_impls=context.spec_impls,
             ),
         ),
         (

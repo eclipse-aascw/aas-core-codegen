@@ -129,7 +129,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: python_lib.generate_jsonization(
                 symbol_table=context.symbol_table,
                 qualified_module_name=qualified_module_name,
-                spec_impls=context.spec_impls,
             ),
         ),
         (
@@ -160,7 +159,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: python_lib.generate_xmlization(
                 symbol_table=context.symbol_table,
                 qualified_module_name=qualified_module_name,
-                spec_impls=context.spec_impls,
             ),
         ),
         (

@@ -117,7 +117,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: csharp_lib.generate_copying(
                 symbol_table=context.symbol_table,
                 namespace=namespace,
-                spec_impls=context.spec_impls,
             ),
         ),
         (
@@ -125,7 +124,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: csharp_lib.generate_enhancing(
                 symbol_table=context.symbol_table,
                 namespace=namespace,
-                spec_impls=context.spec_impls,
             ),
         ),
         (
@@ -133,7 +131,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: csharp_lib.generate_jsonization(
                 symbol_table=context.symbol_table,
                 namespace=namespace,
-                spec_impls=context.spec_impls,
             ),
         ),
         (
@@ -173,7 +170,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: csharp_lib.generate_xmlization(
                 symbol_table=context.symbol_table,
                 namespace=namespace,
-                spec_impls=context.spec_impls,
             ),
         ),
         (

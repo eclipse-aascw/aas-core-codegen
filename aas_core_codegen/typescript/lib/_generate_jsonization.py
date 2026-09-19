@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from icontract import ensure, require
 
-from aas_core_codegen import intermediate, naming, specific_implementations
+from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
     Error,
     Stripped,
@@ -593,13 +593,7 @@ def _generate_dispatch_case(cls: intermediate.ConcreteClass) -> Stripped:
         naming.json_model_type(cls.name)
     )
 
-    if cls.is_implementation_specific:
-        callee = typescript_naming.function_name(
-            Identifier(f"{cls.name}_from_jsonable")
-        )
-    else:
-        callee = _parse_properties_function_name(cls)
-
+    callee = _parse_properties_function_name(cls)
     return Stripped(
         f"""\
 case {model_type_literal}:
@@ -801,17 +795,9 @@ if (modelType !== undefined) {{
         # model type -- that is why it is told apart structurally in the first
         # place -- so it has nothing left to dispatch on, and ``jsonObject`` has
         # already been cast.
-        if implementer.is_implementation_specific:
-            implementer_call = Stripped(
-                f"""\
-{typescript_naming.function_name(
-    Identifier(f"{implementer.name}_from_jsonable")
-)}(jsonObject)"""
-            )
-        else:
-            implementer_call = Stripped(
-                f"{_parse_properties_function_name(implementer)}(jsonObject)"
-            )
+        implementer_call = Stripped(
+            f"{_parse_properties_function_name(implementer)}(jsonObject)"
+        )
 
         conditions = [
             f"jsonObject[{typescript_common.string_literal(json_name)}] "
@@ -2256,7 +2242,6 @@ function numberToJsonable(that: number): number {{
 # fmt: on
 def generate(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code for JSON de/serialization."""
     ids_of_types_reaching_a_number = (
@@ -2470,29 +2455,10 @@ function newDeserializationError<T>(
                 _generate_dispatch_from_jsonable(interface=our_type.interface)
             )
         elif isinstance(our_type, intermediate.ConcreteClass):
-            if our_type.is_implementation_specific:
-                implementation_key = specific_implementations.ImplementationKey(
-                    f"Jsonization/{our_type.name}_from_jsonable.ts"
-                )
+            blocks.append(_generate_parse_properties_of_class(cls=our_type))
 
-                implementation = spec_impls.get(implementation_key, None)
-                if implementation is None:
-                    errors.append(
-                        Error(
-                            our_type.parsed.node,
-                            f"The jsonization snippet is missing "
-                            f"for the implementation-specific "
-                            f"class {our_type.name}: {implementation_key}",
-                        )
-                    )
-                    continue
-
-                blocks.append(implementation)
-            else:
-                blocks.append(_generate_parse_properties_of_class(cls=our_type))
-
-                if len(our_type.concrete_descendants) == 0:
-                    blocks.append(_generate_concrete_class_from_jsonable(cls=our_type))
+            if len(our_type.concrete_descendants) == 0:
+                blocks.append(_generate_concrete_class_from_jsonable(cls=our_type))
 
             if len(our_type.concrete_descendants) > 0:
                 assert our_type.interface is not None
@@ -2518,35 +2484,15 @@ function newDeserializationError<T>(
         blocks.append(_generate_serialize_enumeration(enumeration=enumeration))
 
     for concrete_cls in symbol_table.concrete_classes:
-        if concrete_cls.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Jsonization/{_serialize_function_name(concrete_cls)}.ts"
+        blocks.append(
+            _generate_serialize_class(
+                cls=concrete_cls,
+                ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
+                ids_of_types_reaching_an_enumeration=(
+                    ids_of_types_reaching_an_enumeration
+                ),
             )
-
-            implementation = spec_impls.get(implementation_key, None)
-            if implementation is None:
-                errors.append(
-                    Error(
-                        concrete_cls.parsed.node,
-                        f"The jsonization snippet is missing "
-                        f"for the implementation-specific "
-                        f"class {concrete_cls.name}: {implementation_key}",
-                    )
-                )
-                continue
-
-            blocks.append(implementation)
-        else:
-            blocks.append(
-                _generate_serialize_class(
-                    cls=concrete_cls,
-                    ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
-                    ids_of_types_reaching_an_enumeration=(
-                        ids_of_types_reaching_an_enumeration
-                    ),
-                )
-            )
-
+        )
     for composed_type_anno in _collect_composed_type_annotations(symbol_table):
         if isinstance(composed_type_anno, intermediate.ListTypeAnnotation):
             items_type_anno = composed_type_anno.items

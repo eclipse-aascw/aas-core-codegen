@@ -2,7 +2,6 @@ UnverifiedSymbolTable(
   our_types=[
     ConcreteClass(
       name='ConstrainedBool',
-      is_implementation_specific=False,
       inheritances=[
         'bool'],
       properties=[],
@@ -22,7 +21,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='PositiveInt',
-      is_implementation_specific=False,
       inheritances=[
         'int'],
       properties=[],
@@ -48,7 +46,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='PositiveFloat',
-      is_implementation_specific=False,
       inheritances=[
         'float'],
       properties=[],
@@ -74,7 +71,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='NonEmptyString',
-      is_implementation_specific=False,
       inheritances=[
         'str'],
       properties=[],
@@ -104,7 +100,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='NonEmptyBytes',
-      is_implementation_specific=False,
       inheritances=[
         'bytearray'],
       properties=[],
@@ -134,7 +129,6 @@ UnverifiedSymbolTable(
       methods_by_name=...),
     ConcreteClass(
       name='Something',
-      is_implementation_specific=False,
       inheritances=[],
       properties=[
         Property(

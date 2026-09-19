@@ -1103,7 +1103,6 @@ public Stream<Reporting.Error> {transform_name}(
 def _generate_transformer(
     symbol_table: intermediate.SymbolTable,
     base_environment: intermediate_type_inference.Environment,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a transformer to double-dispatch an instance to errors."""
     errors = []  # type: List[Error]
@@ -1123,36 +1122,16 @@ def _generate_transformer(
             pass
 
         elif isinstance(our_type, intermediate.ConcreteClass):
-            if our_type.is_implementation_specific:
-                transform_key = specific_implementations.ImplementationKey(
-                    f"Verification/transform_{our_type.name}.java"
-                )
-
-                implementation = spec_impls.get(transform_key, None)
-                if implementation is None:
-                    errors.append(
-                        Error(
-                            our_type.parsed.node,
-                            f"The transformation snippet is missing "
-                            f"for the implementation-specific "
-                            f"class {our_type.name}: {transform_key}",
-                        )
-                    )
-                    continue
-
-                blocks.append(spec_impls[transform_key])
+            block, cls_errors = _generate_transform_for_class(
+                cls=our_type,
+                symbol_table=symbol_table,
+                base_environment=base_environment,
+            )
+            if cls_errors is not None:
+                errors.extend(cls_errors)
             else:
-                block, cls_errors = _generate_transform_for_class(
-                    cls=our_type,
-                    symbol_table=symbol_table,
-                    base_environment=base_environment,
-                )
-                if cls_errors is not None:
-                    errors.extend(cls_errors)
-                else:
-                    assert block is not None
-                    blocks.append(block)
-
+                assert block is not None
+                blocks.append(block)
         elif isinstance(our_type, intermediate.NamedUnion):
             # A named union is never double-dispatched here directly -- it
             # is unwrapped by its own ``verifyToErrorStream`` overload
@@ -1390,7 +1369,6 @@ private static final _Transformer transformer = new _Transformer();"""
     transformer_block, transformer_errors = _generate_transformer(
         symbol_table=symbol_table,
         base_environment=base_environment,
-        spec_impls=spec_impls,
     )
     if transformer_errors is not None:
         errors.extend(transformer_errors)

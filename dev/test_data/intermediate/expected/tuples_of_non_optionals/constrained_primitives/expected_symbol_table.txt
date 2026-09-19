@@ -9,7 +9,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='INT',
-      is_implementation_specific=False,
       invariants=[
         Invariant(
           description='Larger than zero',
@@ -34,7 +33,6 @@ SymbolTable(
       inheritance_id_set=...,
       ancestors=[],
       ancestor_id_set=...,
-      is_implementation_specific=False,
       interface=None,
       descendant_id_set=...,
       descendants=[],
@@ -82,7 +80,6 @@ SymbolTable(
           postconditions=[]),
         parsed=...,
         arguments_by_name=...,
-        is_implementation_specific=False,
         statements=[
           textwrap.dedent("""\
             AssignArgument(

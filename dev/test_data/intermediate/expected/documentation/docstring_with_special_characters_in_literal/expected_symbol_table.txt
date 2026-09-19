@@ -9,7 +9,6 @@ SymbolTable(
       descendants=[],
       descendant_id_set=...,
       constrainee='STR',
-      is_implementation_specific=False,
       invariants=[],
       invariant_id_set=...,
       description=DescriptionOfOurType(

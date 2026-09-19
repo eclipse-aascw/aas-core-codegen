@@ -876,8 +876,6 @@ func ({receiver} *{struct_name}) Descend(
     )
 
 
-@require(lambda cls: not cls.is_implementation_specific)
-@require(lambda cls: not cls.constructor.is_implementation_specific)
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_constructor(
     cls: intermediate.ClassUnion,
@@ -1346,7 +1344,6 @@ func {function_name}(
     )
 
 
-@require(lambda cls: not cls.is_implementation_specific)
 def _generate_struct(cls: intermediate.ConcreteClass) -> Stripped:
     blocks = []  # type: List[Stripped]
 
@@ -1370,7 +1367,6 @@ type {struct_name} struct {{
     )
 
 
-@require(lambda cls: not cls.is_implementation_specific)
 @ensure(lambda result: (result[0] is None) ^ (result[1] is None))
 def _generate_struct_methods(
     cls: intermediate.ConcreteClass,
@@ -1488,32 +1484,14 @@ func ({receiver} *{struct_name}) {model_type_getter}(
 
     # region Constructor
 
-    if cls.constructor.is_implementation_specific:
-        implementation_key = specific_implementations.ImplementationKey(
-            f"Types/{cls.name}/{cls.name}.go"
-        )
-        implementation = spec_impls.get(implementation_key, None)
+    constructor_block, error = _generate_constructor(cls=cls)
 
-        if implementation is None:
-            errors.append(
-                Error(
-                    cls.parsed.node,
-                    f"The implementation of the implementation-specific constructor "
-                    f"is missing: {implementation_key}",
-                )
-            )
-        else:
-            methods.append(implementation)
+    if error is not None:
+        errors.append(error)
     else:
-        constructor_block, error = _generate_constructor(cls=cls)
+        assert constructor_block is not None
 
-        if error is not None:
-            errors.append(error)
-        else:
-            assert constructor_block is not None
-
-            methods.append(constructor_block)
-
+        methods.append(constructor_block)
     # endregion
 
     if len(errors) > 0:
@@ -1832,53 +1810,34 @@ type IClass interface {{
         elif isinstance(
             our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
         ):
-            if our_type.is_implementation_specific:
-                implementation_key = specific_implementations.ImplementationKey(
-                    f"Types/{our_type.name}.go"
-                )
-
-                block = spec_impls.get(implementation_key, None)
-                if block is None:
-                    errors.append(
-                        Error(
-                            our_type.parsed.node,
-                            f"The implementation is missing "
-                            f"for the implementation-specific "
-                            f"class: {implementation_key}",
-                        )
-                    )
-                else:
-                    blocks.append(block)
+            block, error = _generate_interface(cls=our_type)
+            if error is not None:
+                errors.append(error)
             else:
-                block, error = _generate_interface(cls=our_type)
-                if error is not None:
-                    errors.append(error)
-                else:
-                    assert block is not None
-                    blocks.append(block)
+                assert block is not None
+                blocks.append(block)
 
-                block, error = _generate_is_interface(
-                    cls=our_type, symbol_table=symbol_table
+            block, error = _generate_is_interface(
+                cls=our_type, symbol_table=symbol_table
+            )
+            if error is not None:
+                errors.append(error)
+            else:
+                assert block is not None
+                blocks.append(block)
+
+            if isinstance(our_type, intermediate.ConcreteClass):
+                block = _generate_struct(cls=our_type)
+                blocks.append(block)
+
+                methods, error = _generate_struct_methods(
+                    cls=our_type, spec_impls=spec_impls
                 )
                 if error is not None:
                     errors.append(error)
                 else:
-                    assert block is not None
-                    blocks.append(block)
-
-                if isinstance(our_type, intermediate.ConcreteClass):
-                    block = _generate_struct(cls=our_type)
-                    blocks.append(block)
-
-                    methods, error = _generate_struct_methods(
-                        cls=our_type, spec_impls=spec_impls
-                    )
-                    if error is not None:
-                        errors.append(error)
-                    else:
-                        assert methods is not None
-                        blocks.extend(methods)
-
+                    assert methods is not None
+                    blocks.extend(methods)
         elif isinstance(our_type, intermediate.NamedUnion):
             blocks.append(_generate_named_union_struct(named_union=our_type))
 

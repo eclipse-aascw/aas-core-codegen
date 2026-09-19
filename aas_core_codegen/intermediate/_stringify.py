@@ -486,9 +486,6 @@ def _stringify_constructor(
             stringify_mod.PropertyEllipsis("parsed", that.parsed),
             stringify_mod.PropertyEllipsis("arguments_by_name", that.arguments_by_name),
             stringify_mod.Property(
-                "is_implementation_specific", that.is_implementation_specific
-            ),
-            stringify_mod.Property(
                 "statements", list(map(construction.dump, that.statements))
             ),
             stringify_mod.Property(
@@ -600,9 +597,6 @@ def _stringify_constrained_primitive(
             ),
             stringify_mod.PropertyEllipsis("descendant_id_set", that.descendant_id_set),
             stringify_mod.Property("constrainee", that.constrainee.name),
-            stringify_mod.Property(
-                "is_implementation_specific", that.is_implementation_specific
-            ),
             stringify_mod.Property("invariants", list(map(stringify, that.invariants))),
             stringify_mod.PropertyEllipsis("invariant_id_set", that.invariant_id_set),
             stringify_mod.Property("description", stringify(that.description)),
@@ -640,9 +634,6 @@ def _stringify_a_class(that: Class) -> stringify_mod.Entity:
                 ],
             ),
             stringify_mod.PropertyEllipsis("ancestor_id_set", that.ancestor_id_set),
-            stringify_mod.Property(
-                "is_implementation_specific", that.is_implementation_specific
-            ),
             stringify_mod.Property("interface", stringify(that.interface)),
             stringify_mod.PropertyEllipsis("descendant_id_set", that.descendant_id_set),
             stringify_mod.Property(

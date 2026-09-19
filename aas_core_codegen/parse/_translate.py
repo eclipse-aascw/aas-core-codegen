@@ -1668,6 +1668,21 @@ def _function_def_to_method(
     # endregion
 
     if is_implementation_specific:
+        if name == "__init__":
+            # NOTE (mristin):
+            # A constructor can not be implementation-specific. Its body is not
+            # only transpiled into the constructor of the target language, but
+            # also in-lined into the constructors of all the descendants, which
+            # a snippet can not provide.
+            return (
+                None,
+                Error(
+                    node,
+                    "Constructors can not be implementation-specific. Only "
+                    "the verification functions and the methods can be.",
+                ),
+            )
+
         return (
             ImplementationSpecificMethod(
                 name=Identifier(name),
@@ -2215,7 +2230,6 @@ def _classdef_to_our_type(
     invariants = []  # type: List[Invariant]
 
     is_abstract = False
-    is_implementation_specific = False
 
     serialization = None  # type: Optional[Serialization]
 
@@ -2230,7 +2244,22 @@ def _classdef_to_our_type(
             if decorator is _ClassMarker.ABSTRACT:
                 is_abstract = True
             elif decorator is _ClassMarker.IMPLEMENTATION_SPECIFIC:
-                is_implementation_specific = True
+                # NOTE (mristin):
+                # Only the verification functions and the methods can be
+                # implementation-specific. A class can not: we would have to
+                # provide a snippet not only for the class itself, but also for
+                # its de/serialization, its verification, its iteration and so
+                # on, in every single target, which turned out to be too
+                # cumbersome and too ill-defined to maintain.
+                underlying_errors.append(
+                    Error(
+                        decorator_node,
+                        "Classes can not be implementation-specific. Mark "
+                        "the methods of the class, or the verification functions "
+                        "called in its invariants, as implementation-specific "
+                        "instead.",
+                    )
+                )
             elif decorator is _ClassMarker.TEMPLATE:
                 # NOTE (mristin):
                 # We ignore the template marker at this moment. However, we will most
@@ -2272,17 +2301,6 @@ def _classdef_to_our_type(
     invariants = list(reversed(invariants))
 
     # endregion
-
-    if is_abstract and is_implementation_specific:
-        return (
-            None,
-            Error(
-                node,
-                "Abstract classes can not be implementation-specific "
-                "at the same time "
-                "(otherwise we can not convert them to interfaces etc.)",
-            ),
-        )
 
     description = None  # type: Optional[Description]
 
@@ -2387,7 +2405,6 @@ def _classdef_to_our_type(
     return (
         factory_for_class(
             name=Identifier(node.name),
-            is_implementation_specific=is_implementation_specific,
             inheritances=inheritances,
             properties=properties,
             methods=methods,

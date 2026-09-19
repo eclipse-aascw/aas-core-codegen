@@ -16,7 +16,7 @@ from typing import (
 
 from icontract import ensure, require
 
-from aas_core_codegen import intermediate, specific_implementations, naming
+from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
     Error,
     Stripped,
@@ -2220,29 +2220,7 @@ Write :paramref:`that` enclosed in the :paramref:`name` element."""
         )
     ]
 
-    if cls.is_implementation_specific:
-        docstring_blocks.append(
-            Stripped(
-                f"""\
-The content is written by :py:func:`{_cls_sequence_writer_name(cls)}`, which comes
-from an implementation-specific snippet. The element is therefore never collapsed
-to an empty one: what an instance of this class writes does not follow from its
-properties, so we can not tell in advance that it writes nothing.
-
-For the same reason, a failure in the snippet is attributed to :paramref:`that`
-as a whole, and not to one of its properties."""
-            )
-        )
-
-        body_blocks.append(
-            Stripped(
-                f"""\
-serializer._write_start_element(name)
-{_cls_sequence_writer_name(cls)}(that, serializer)
-serializer._write_end_element(name)"""
-            )
-        )
-    elif len(cls.properties) == 0:
+    if len(cls.properties) == 0:
         docstring_blocks.append(
             Stripped(
                 """\
@@ -4072,7 +4050,6 @@ def _collect_needed_helpers(seeds: AbstractSet[str]) -> Set[str]:
 def generate(
     symbol_table: intermediate.SymbolTable,
     qualified_module_name: python_common.QualifiedModuleName,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """
     Generate code for XML de/serialization.
@@ -4372,9 +4349,6 @@ def _with_elements_cleared_after_yield(
     readers_map_blocks = []  # type: List[Stripped]
 
     for concrete_cls in symbol_table.concrete_classes:
-        if concrete_cls.is_implementation_specific:
-            continue
-
         for prop in concrete_cls.properties:
             registry.register_content_reader(prop.type_annotation)
 
@@ -4419,32 +4393,7 @@ def _with_elements_cleared_after_yield(
             reader_blocks.append(_generate_read_cls_as_element(cls=our_type))
 
         elif isinstance(our_type, intermediate.ConcreteClass):
-            if our_type.is_implementation_specific:
-                implementation_key = specific_implementations.ImplementationKey(
-                    f"Xmlization/read_{our_type.name}_as_sequence.py"
-                )
-
-                implementation = spec_impls.get(implementation_key, None)
-                if implementation is None:
-                    errors.append(
-                        Error(
-                            our_type.parsed.node,
-                            f"The xmlization snippet is missing "
-                            f"for the implementation-specific "
-                            f"class {our_type.name}: {implementation_key}",
-                        )
-                    )
-                    continue
-
-                # NOTE (mristin):
-                # The snippet is expected to define the function which reads
-                # the instance as a sequence of the XML-encoded properties. Everything
-                # around it -- the dispatch on the element tag and the public
-                # functions -- is generated as for any other class.
-                reader_blocks.append(implementation)
-            else:
-                reader_blocks.append(_generate_read_as_sequence(cls=our_type))
-
+            reader_blocks.append(_generate_read_as_sequence(cls=our_type))
             reader_blocks.append(_generate_read_cls_as_element(cls=our_type))
 
         elif isinstance(our_type, intermediate.NamedUnion):
@@ -4488,10 +4437,7 @@ def _with_elements_cleared_after_yield(
     registry.note_needed_helper("_read_dispatched")
     registry.note_needed_helper("_read_instance_from_iterparse")
 
-    if any(
-        not concrete_cls.is_implementation_specific
-        for concrete_cls in symbol_table.concrete_classes
-    ):
+    if len(symbol_table.concrete_classes) > 0:
         registry.note_needed_helper("_read_properties")
 
     if any(
@@ -4501,18 +4447,6 @@ def _with_elements_cleared_after_yield(
         registry.note_needed_helper("_read_named_element")
 
     helper_blocks = _generate_reading_helpers()
-
-    # NOTE (mristin):
-    # We can not see inside a snippet, so we do not know which of the shared helpers
-    # it calls. As soon as a meta-model has an implementation-specific class, we
-    # therefore generate all of them, instead of letting the snippet fail with
-    # a ``NameError`` at the time of the reading.
-    if any(
-        concrete_cls.is_implementation_specific
-        for concrete_cls in symbol_table.concrete_classes
-    ):
-        for helper_name in helper_blocks:
-            registry.note_needed_helper(helper_name)
 
     needed_helpers = _collect_needed_helpers(registry.needed_helpers)
 
@@ -4558,24 +4492,10 @@ _ContentReader = Callable[
         # The content of an implementation-specific class is written by a snippet,
         # so the writers which its properties would need are never called. We skip
         # it here, as the reading side does, and the snippet is on its own.
-        if concrete_cls.is_implementation_specific:
-            continue
-
         for prop in concrete_cls.properties:
             writer_registry.register_property_writer(prop.type_annotation)
 
     writing_helper_blocks = _generate_writing_helpers()
-
-    # NOTE (mristin):
-    # As on the reading side, we can not see inside a snippet, so all the shared
-    # helpers are generated as soon as a meta-model has an implementation-specific
-    # class.
-    if any(
-        concrete_cls.is_implementation_specific
-        for concrete_cls in symbol_table.concrete_classes
-    ):
-        for helper_name in writing_helper_blocks:
-            writer_registry.note_needed_helper(helper_name)
 
     # NOTE (mristin):
     # An instance is nested in the element of a property, and the element of a class
@@ -4757,31 +4677,6 @@ _ElementWriter = Callable[
     blocks.extend(writer_registry.blocks)
 
     for concrete_cls in symbol_table.concrete_classes:
-        if concrete_cls.is_implementation_specific:
-            implementation_key = specific_implementations.ImplementationKey(
-                f"Xmlization/write_{concrete_cls.name}_as_sequence.py"
-            )
-
-            implementation = spec_impls.get(implementation_key, None)
-            if implementation is None:
-                errors.append(
-                    Error(
-                        concrete_cls.parsed.node,
-                        f"The xmlization snippet is missing "
-                        f"for the implementation-specific "
-                        f"class {concrete_cls.name}: {implementation_key}",
-                    )
-                )
-                continue
-
-            # NOTE (mristin):
-            # The snippet is expected to define the function which writes the content
-            # of the element, the properties of the instance. The element around it is
-            # framed by the generated writer, so that the snippet needs to know
-            # nothing about the element tag or about the namespace which only the very
-            # first element specifies.
-            blocks.append(implementation)
-
         blocks.append(_generate_write_cls_as_element(cls=concrete_cls))
 
     if len(errors) > 0:

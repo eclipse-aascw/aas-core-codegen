@@ -110,7 +110,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             base_rel_path / "enhancing/enhancing.go",
             lambda: golang_lib.generate_enhancing(
                 symbol_table=context.symbol_table,
-                spec_impls=context.spec_impls,
                 repo_url=repo_url,
             ),
         ),
@@ -118,7 +117,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             base_rel_path / "jsonization/jsonization.go",
             lambda: golang_lib.generate_jsonization(
                 symbol_table=context.symbol_table,
-                spec_impls=context.spec_impls,
                 repo_url=repo_url,
             ),
         ),
@@ -152,7 +150,6 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             base_rel_path / "xmlization/xmlization.go",
             lambda: golang_lib.generate_xmlization(
                 symbol_table=context.symbol_table,
-                spec_impls=context.spec_impls,
                 repo_url=repo_url,
             ),
         ),

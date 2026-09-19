@@ -6,7 +6,7 @@ from typing import List, Tuple, Optional, Iterable, Final, Mapping, Union, Liter
 
 from icontract import ensure, require
 
-from aas_core_codegen import intermediate, specific_implementations, naming
+from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
     Stripped,
     indent_but_first_line,
@@ -1904,7 +1904,6 @@ if (json.contains({json_prop_literal})) {{
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_concretely_deserialize_implementation(
     cls: intermediate.ConcreteClass,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """
     Generate the concrete deserialization for the class ``cls``.
@@ -1912,20 +1911,6 @@ def _generate_concretely_deserialize_implementation(
     It is assumed that the dispatch has been already effectuated to this generated
     function, so no further dispatch should be performed.
     """
-    if cls.is_implementation_specific:
-        implementation_key = specific_implementations.ImplementationKey(
-            f"jsonization/deserialize_{cls.name}.cpp"
-        )
-
-        code = spec_impls.get(implementation_key, None)
-        if code is None:
-            return None, Error(
-                cls.parsed.node,
-                f"The implementation is missing for the JSON deserialization "
-                f"of {cls.name!r}: {implementation_key}",
-            )
-        return code, None
-
     interface_name = cpp_naming.interface_name(cls.name)
 
     if len(cls.ancestors) == 0:
@@ -3881,23 +3866,8 @@ if (that.{getter}().has_value()) {{
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_serialize_cls(
     cls: intermediate.ConcreteClass,
-    spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the serialization function for the class ``cls``."""
-    if cls.is_implementation_specific:
-        implementation_key = specific_implementations.ImplementationKey(
-            f"jsonization/serialize_{cls.name}.cpp"
-        )
-
-        code = spec_impls.get(implementation_key, None)
-        if code is None:
-            return None, Error(
-                cls.parsed.node,
-                f"The implementation is missing for the JSON serialization "
-                f"of {cls.name!r}: {implementation_key}",
-            )
-        return code, None
-
     blocks = [
         Stripped(
             """\
@@ -4217,7 +4187,6 @@ def _type_annotation_contains_list(
 # fmt: on
 def generate_implementation(
     symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
     library_namespace: Stripped,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate implementation for JSON de/serialization."""
@@ -4301,7 +4270,6 @@ def generate_implementation(
         if isinstance(cls, intermediate.ConcreteClass):
             deserialize_block, error = _generate_concretely_deserialize_implementation(
                 cls=cls,
-                spec_impls=spec_impls,
             )
             if error is not None:
                 errors.append(error)
@@ -4386,7 +4354,7 @@ struct SerializationError {{
         )
 
     for cls in symbol_table.concrete_classes:
-        serialize_block, error = _generate_serialize_cls(cls=cls, spec_impls=spec_impls)
+        serialize_block, error = _generate_serialize_cls(cls=cls)
         if error is not None:
             errors.append(error)
         else:
