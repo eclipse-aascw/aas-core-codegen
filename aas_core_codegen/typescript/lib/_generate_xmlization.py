@@ -23,6 +23,7 @@ from aas_core_codegen.typescript.common import (
     INDENT3 as III,
     INDENT4 as IIII,
     INDENT5 as IIIII,
+    INDENT6 as IIIIII,
 )
 
 
@@ -1043,6 +1044,515 @@ def _write_sequence_function_name_for_concrete_class(
     a ``ContentWriter``, so this function needs no wrapper to serve as one.
     """
     return Identifier(f"write{typescript_naming.class_name(cls.name)}AsSequence")
+
+
+def _generate_xml_rpc_parsers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the parsers of the XML-RPC subset, if the model uses JSON-able types.
+
+    JSON prescribes no XML representation of its own, so we borrow the subset of
+    XML-RPC which covers exactly what a JSON-able value can be: `<boolean>`,
+    `<double>`, `<string>`, `<array>` and `<struct>`.
+
+    The path *within* a JSON-able value goes into the message rather than into
+    the structured `Path` of the error: a `PropertySegment` names a property of
+    one of our classes and an `IndexSegment` an item of one of our lists, and
+    a member of an open JSON object is neither.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * Match a numeral of the `<double>` lexical space.
+ *
+ * @remarks
+ * This is the numeric part of the lexical space of `xs:double`, and
+ * deliberately not its three named literals -- `INF`, `-INF` and `NaN` --
+ * since a JSON number can be none of them.
+ */
+const xmlRpcDoubleRe = new RegExp(
+{I}"^(\\\\+|-)?([0-9]+(\\\\.[0-9]*)?|\\\\.[0-9]+)([Ee](\\\\+|-)?[0-9]+)?$"
+);"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Parse the content of an element holding a JSON-able value.
+ *
+ * @remarks
+ * The content is a single discriminator element -- `<boolean>`, `<double>`,
+ * `<string>`, `<array>` or `<struct>` -- which says what the value is.
+ *
+ * @param cursor - to read from
+ * @returns parsed JSON-able value, or an error
+ */
+function parse_jsonValue(
+{I}cursor: XmlCursor
+): AasCommon.Either<AasTypes.JsonValue, DeserializationError> {{
+{I}const startTagOrError = readNextOpenTag(cursor);
+{I}if (startTagOrError.error !== null) {{
+{II}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{III}null, startTagOrError.error
+{II});
+{I}}}
+
+{I}const localName = localNameOfTag(startTagOrError.mustValue().tag);
+{I}cursor.advance();
+
+{I}return parseElementContent(
+{II}cursor, localName, parseXmlRpcDiscriminator(localName)
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Give out the parser of the content of the discriminator `localName`.
+ *
+ * @param localName - local name of the discriminator element
+ * @returns the parser of its content
+ */
+function parseXmlRpcDiscriminator(
+{I}localName: string
+): ContentParser<AasTypes.JsonValue> {{
+{I}switch (localName) {{
+{II}case "boolean":
+{III}return parseXmlRpcBoolean;
+{II}case "double":
+{III}return parseXmlRpcDouble;
+{II}case "string":
+{III}return parseXmlRpcString;
+{II}case "array":
+{III}return parse_jsonArray;
+{II}case "struct":
+{III}return parse_jsonObject;
+{II}default:
+{III}return () =>
+{IIII}newDeserializationError<AasTypes.JsonValue>(
+{IIIII}`Expected a discriminator element (one of 'boolean', 'double', ` +
+{IIIIII}`'string', 'array' or 'struct'), but got: '${{localName}}'`
+{IIII});
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Parse the content of a `<boolean>` element.
+ *
+ * @remarks
+ * Real XML-RPC tooling writes and expects a strict `1`/`0`, and not
+ * the `true`/`false` which `xs:boolean` and the rest of this module use.
+ *
+ * @param cursor - to read from
+ * @returns parsed boolean, or an error
+ */
+function parseXmlRpcBoolean(
+{I}cursor: XmlCursor
+): AasCommon.Either<AasTypes.JsonValue, DeserializationError> {{
+{I}// NOTE (mristin):
+{I}// `whiteSpace` is fixed to `collapse` for every atomic XSD type but
+{I}// a string, so a pretty-printed `<boolean>` has to be read as well.
+{I}const text = collapseWhitespace(parseTextContent(cursor));
+
+{I}if (text === "1") {{
+{II}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{III}true, null
+{II});
+{I}}}
+{I}if (text === "0") {{
+{II}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{III}false, null
+{II});
+{I}}}
+
+{I}return newDeserializationError<AasTypes.JsonValue>(
+{II}`Expected '0' or '1' as the text of a 'boolean' element, ` +
+{III}`but got: '${{text}}'`
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Parse the content of a `<double>` element.
+ *
+ * @param cursor - to read from
+ * @returns parsed number, or an error
+ */
+function parseXmlRpcDouble(
+{I}cursor: XmlCursor
+): AasCommon.Either<AasTypes.JsonValue, DeserializationError> {{
+{I}// NOTE (mristin):
+{I}// See the note in `parseXmlRpcBoolean` on why the whitespace is
+{I}// collapsed here.
+{I}const text = collapseWhitespace(parseTextContent(cursor));
+
+{I}// NOTE (mristin):
+{I}// The lexical form is matched before the text is converted. `Number`
+{I}// reads far more than we admit here: a hexadecimal literal, so "0x10"
+{I}// would come out as 16, an empty text, which would come out as 0, and
+{I}// the spellings "Infinity" and "-Infinity".
+{I}//
+{I}// Mind that the numeral excludes "INF", "-INF" and "NaN" on purpose,
+{I}// unlike `xs:double`, which names all three. A `<double>` carries
+{I}// a JSON number, and JSON knows neither an infinity nor a not-a-number,
+{I}// so there is no JSON-able value for such a text to parse into.
+{I}if (!xmlRpcDoubleRe.test(text)) {{
+{II}return newDeserializationError<AasTypes.JsonValue>(
+{III}`Expected a number as the text of a 'double' element, ` +
+{IIII}`but got: '${{text}}'`
+{II});
+{I}}}
+
+{I}const value = Number(text);
+
+{I}// NOTE (mristin):
+{I}// A literal too large for a `number` gives an infinity, which is no
+{I}// JSON-able value either, so it is refused rather than rounded.
+{I}if (!Number.isFinite(value)) {{
+{II}return newDeserializationError<AasTypes.JsonValue>(
+{III}`Expected a number representable as a JSON-able value as the text ` +
+{IIII}`of a 'double' element, but got a value which rounds to ` +
+{IIII}`an infinity: '${{text}}'`
+{II});
+{I}}}
+
+{I}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{II}value, null
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Parse the content of a `<string>` element.
+ *
+ * @remarks
+ * `xs:string` is `preserve` and not `collapse`, so a `<string>` keeps its
+ * whitespace, unlike a `<boolean>` or a `<double>`.
+ *
+ * @param cursor - to read from
+ * @returns parsed string
+ */
+function parseXmlRpcString(
+{I}cursor: XmlCursor
+): AasCommon.Either<AasTypes.JsonValue, DeserializationError> {{
+{I}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{II}parseTextContent(cursor), null
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Parse the content of an element holding a JSON-able array.
+ *
+ * @remarks
+ * The content is a single `<data>` element holding a `<value>` per item.
+ *
+ * @param cursor - to read from
+ * @returns parsed JSON-able array, or an error
+ */
+function parse_jsonArray(
+{I}cursor: XmlCursor
+): AasCommon.Either<AasTypes.JsonArray, DeserializationError> {{
+{I}return parseNamedElement(cursor, "data", (dataCursor) => {{
+{II}const items = new Array<AasTypes.JsonValue>();
+
+{II}// eslint-disable-next-line no-constant-condition
+{II}while (true) {{
+{III}dataCursor.skipIgnorable();
+{III}const token = dataCursor.current();
+{III}if (token === null || !(token instanceof OpenTagToken)) {{
+{IIII}break;
+{III}}}
+
+{III}const itemOrError = parseNamedElement(
+{IIII}dataCursor, "value", parse_jsonValue
+{III});
+{III}if (itemOrError.error !== null) {{
+{IIII}return new AasCommon.Either<AasTypes.JsonArray, DeserializationError>(
+{IIIII}null,
+{IIIII}new DeserializationError(
+{IIIIII}`At the index ${{items.length}}: ${{itemOrError.error.message}}`,
+{IIIIII}itemOrError.error.path
+{IIIII})
+{IIII});
+{III}}}
+
+{III}items.push(itemOrError.mustValue());
+{II}}}
+
+{II}return new AasCommon.Either<AasTypes.JsonArray, DeserializationError>(
+{III}items, null
+{II});
+{I}}});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Parse the content of an element holding a JSON-able object.
+ *
+ * @remarks
+ * The content is a `<member>` per key, each holding a `<name>` and
+ * a `<value>`.
+ *
+ * @param cursor - to read from
+ * @returns parsed JSON-able object, or an error
+ */
+function parse_jsonObject(
+{I}cursor: XmlCursor
+): AasCommon.Either<AasTypes.JsonObject, DeserializationError> {{
+{I}const members: AasTypes.JsonObject = {{}};
+
+{I}// eslint-disable-next-line no-constant-condition
+{I}while (true) {{
+{II}cursor.skipIgnorable();
+{II}const token = cursor.current();
+{II}if (token === null || !(token instanceof OpenTagToken)) {{
+{III}break;
+{II}}}
+
+{II}const memberOrError = parseNamedElement(
+{III}cursor, "member", parseXmlRpcMember
+{II});
+{II}if (memberOrError.error !== null) {{
+{III}return new AasCommon.Either<AasTypes.JsonObject, DeserializationError>(
+{IIII}null, memberOrError.error
+{III});
+{II}}}
+
+{II}const [key, value] = memberOrError.mustValue();
+
+{II}// NOTE (mristin):
+{II}// A repeated member name is refused, just as a repeated property element
+{II}// is refused elsewhere in this module. Letting the later member win would
+{II}// silently accept a document which says two different things about
+{II}// the same key.
+{II}if (Object.prototype.hasOwnProperty.call(members, key)) {{
+{III}return newDeserializationError<AasTypes.JsonObject>(
+{IIII}`The member '${{key}}' occurred more than once`
+{III});
+{II}}}
+
+{II}members[key] = value;
+{I}}}
+
+{I}return new AasCommon.Either<AasTypes.JsonObject, DeserializationError>(
+{II}members, null
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Parse the content of a `<member>` element as a key and a JSON-able value.
+ *
+ * @param cursor - to read from
+ * @returns the member's name and its parsed value, or an error
+ */
+function parseXmlRpcMember(
+{I}cursor: XmlCursor
+): AasCommon.Either<[string, AasTypes.JsonValue], DeserializationError> {{
+{I}const keyOrError = parseNamedElement(cursor, "name", (nameCursor) =>
+{II}new AasCommon.Either<string, DeserializationError>(
+{III}parseTextContent(nameCursor), null
+{II})
+{I});
+{I}if (keyOrError.error !== null) {{
+{II}return new AasCommon.Either<
+{III}[string, AasTypes.JsonValue], DeserializationError
+{II}>(null, keyOrError.error);
+{I}}}
+{I}const key = keyOrError.mustValue();
+
+{I}const valueOrError = parseNamedElement(cursor, "value", parse_jsonValue);
+{I}if (valueOrError.error !== null) {{
+{II}// NOTE (mristin):
+{II}// A member of an open JSON object is no property of one of our classes,
+{II}// so it gets no segment of its own -- the key goes into the message
+{II}// instead.
+{II}return new AasCommon.Either<
+{III}[string, AasTypes.JsonValue], DeserializationError
+{II}>(
+{III}null,
+{III}new DeserializationError(
+{IIII}`In the member '${{key}}': ${{valueOrError.error.message}}`,
+{IIII}valueOrError.error.path
+{III})
+{II});
+{I}}}
+
+{I}return new AasCommon.Either<
+{II}[string, AasTypes.JsonValue], DeserializationError
+{I}>([key, valueOrError.mustValue()], null);
+}}"""
+        ),
+    ]
+
+
+def _generate_xml_rpc_writers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the writers of the XML-RPC subset, if the model uses JSON-able types.
+
+    These mirror :py:func:`_generate_xml_rpc_parsers` -- see the note there on
+    the grammar which we borrow.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * Write `value` as the content of an element holding a JSON-able value.
+ *
+ * @remarks
+ * The content is a single discriminator element which says what the value is.
+ *
+ * @param parts - to write to
+ * @param value - to be serialized
+ * @throws {{@link SerializationError}} if `value` is not JSON-able
+ */
+function write_jsonValue(
+{I}parts: Array<string>,
+{I}value: AasTypes.JsonValue
+): void {{
+{I}if (value === null || value === undefined) {{
+{II}throw new SerializationError(
+{III}`Expected a JSON-able value, but got: ${{value}}`
+{II});
+{I}}}
+
+{I}switch (typeof value) {{
+{II}case "boolean":
+{III}// NOTE (mristin):
+{III}// Real XML-RPC tooling writes and expects a strict `1`/`0`, and not
+{III}// the `true`/`false` which `xs:boolean` and the rest of this module
+{III}// use.
+{III}parts.push(value ? "<boolean>1</boolean>" : "<boolean>0</boolean>");
+{III}return;
+
+{II}case "number":
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number, so neither is
+{III}// a JSON-able value, and `parseXmlRpcDouble` refuses to read either
+{III}// back.
+{III}if (!Number.isFinite(value)) {{
+{IIII}throw new SerializationError(
+{IIIII}`Expected a JSON-able value, but got the number ${{value}}, ` +
+{IIIII}`which is neither finite nor representable in JSON`
+{IIII});
+{III}}}
+{III}parts.push(`<double>${{value}}</double>`);
+{III}return;
+
+{II}case "string":
+{III}parts.push(`<string>${{escapeXmlText(value)}}</string>`);
+{III}return;
+
+{II}case "object":
+{III}break;
+
+{II}default:
+{III}throw new SerializationError(
+{IIII}`Expected a JSON-able value (a boolean, a number, a string, ` +
+{IIIII}`an array or an object), but got: ${{typeof value}}`
+{III});
+{I}}}
+
+{I}if (Array.isArray(value)) {{
+{II}parts.push("<array>");
+{II}write_jsonArray(parts, value);
+{II}parts.push("</array>");
+{II}return;
+{I}}}
+
+{I}parts.push("<struct>");
+{I}write_jsonObject(parts, value as AasTypes.JsonObject);
+{I}parts.push("</struct>");
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Write `value` as the content of an element holding a JSON-able array.
+ *
+ * @remarks
+ * The content is a single `<data>` element holding a `<value>` per item.
+ *
+ * @param parts - to write to
+ * @param value - to be serialized
+ * @throws {{@link SerializationError}} if `value` is not JSON-able
+ */
+function write_jsonArray(
+{I}parts: Array<string>,
+{I}value: AasTypes.JsonArray
+): void {{
+{I}parts.push("<data>");
+{I}for (let i = 0; i < value.length; i++) {{
+{II}parts.push("<value>");
+{II}try {{
+{III}write_jsonValue(parts, value[i]);
+{II}}} catch (error) {{
+{III}if (error instanceof SerializationError) {{
+{IIII}error.path.prepend(new IndexSegment(i));
+{III}}}
+{III}throw error;
+{II}}}
+{II}parts.push("</value>");
+{I}}}
+{I}parts.push("</data>");
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Write `value` as the content of an element holding a JSON-able object.
+ *
+ * @remarks
+ * The content is a `<member>` per key, each holding a `<name>` and a
+ * `<value>`.
+ *
+ * @param parts - to write to
+ * @param value - to be serialized
+ * @throws {{@link SerializationError}} if `value` is not JSON-able
+ */
+function write_jsonObject(
+{I}parts: Array<string>,
+{I}value: AasTypes.JsonObject
+): void {{
+{I}for (const key of Object.keys(value)) {{
+{II}parts.push("<member>");
+{II}parts.push(`<name>${{escapeXmlText(key)}}</name>`);
+{II}parts.push("<value>");
+{II}try {{
+{III}write_jsonValue(parts, value[key]);
+{II}}} catch (error) {{
+{III}if (error instanceof SerializationError) {{
+{IIII}// NOTE (mristin):
+{IIII}// A member of an open JSON object is no property of one of our
+{IIII}// classes, so it gets a name segment of the JSON key, which is
+{IIII}// the closest the path vocabulary has to offer.
+{IIII}error.path.prepend(new NameSegment(key));
+{III}}}
+{III}throw error;
+{II}}}
+{II}parts.push("</value>");
+{II}parts.push("</member>");
+{I}}}
+}}"""
+        ),
+    ]
 
 
 def _content_writer_name(
@@ -2475,6 +2985,13 @@ function duplicatePropertyError(localName: string): DeserializationError {{
     for arity in intermediate.tuple_arities(symbol_table=symbol_table):
         blocks.append(_generate_parse_tuple_function(arity))
         blocks.append(_generate_write_tuple_function(arity))
+
+    # NOTE (mristin):
+    # JSON prescribes no XML representation of its own, so a JSON-able value is
+    # de/serialized over a subset of XML-RPC, which the following functions
+    # implement once for the whole module.
+    blocks.extend(_generate_xml_rpc_parsers(symbol_table=symbol_table))
+    blocks.extend(_generate_xml_rpc_writers(symbol_table=symbol_table))
 
     # NOTE (mristin):
     # We compose the parsers first, so that we know which of them a meta-model

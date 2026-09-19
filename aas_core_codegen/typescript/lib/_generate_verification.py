@@ -35,6 +35,7 @@ from aas_core_codegen.typescript.common import (
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
+    INDENT5 as IIIII,
 )
 
 
@@ -904,6 +905,24 @@ for (const error of this.transformWithContext(
             else:
                 assert_never(type_anno.items.our_type)
 
+        elif isinstance(
+            type_anno.items,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            json_item_verify_function: str
+            if isinstance(type_anno.items, intermediate.JsonValueTypeAnnotation):
+                json_item_verify_function = "verifyJsonValue"
+            elif isinstance(type_anno.items, intermediate.JsonArrayTypeAnnotation):
+                json_item_verify_function = "verifyJsonArray"
+            else:
+                json_item_verify_function = "verifyJsonObject"
+
+            item_error_generation_expr = Stripped(f"{json_item_verify_function}(item)")
+
         else:
             raise NotImplementedError(
                 "(mristin) We currently generate only the code to verify lists of "
@@ -1008,6 +1027,30 @@ for (const error of this.transformWithContext(
 
                 else:
                     assert_never(item_type_anno.our_type)
+
+            elif isinstance(
+                item_type_anno,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                item_verify_function: str
+                if isinstance(item_type_anno, intermediate.JsonValueTypeAnnotation):
+                    item_verify_function = "verifyJsonValue"
+                elif isinstance(item_type_anno, intermediate.JsonArrayTypeAnnotation):
+                    item_verify_function = "verifyJsonArray"
+                else:
+                    item_verify_function = "verifyJsonObject"
+
+                for_error_of_item = Stripped(
+                    f"""\
+for (const error of {item_verify_function}(
+{II}{item_access})
+) {{"""
+                )
+
             else:
                 assert_never(item_type_anno)
 
@@ -1031,6 +1074,73 @@ for (const error of this.transformWithContext(
 {II})
 {I});
 {I}yield error;
+}}"""
+                )
+            )
+
+    elif isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        json_verify_function: str
+        if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+            json_verify_function = "verifyJsonValue"
+        elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+            json_verify_function = "verifyJsonArray"
+        else:
+            json_verify_function = "verifyJsonObject"
+
+        stmts.append(
+            Stripped(
+                f"""\
+for (const error of {json_verify_function}(that.{prop_name})) {{
+{I}error.path.prepend(
+{II}new PropertySegment(
+{III}that,
+{III}{prop_name_literal}
+{II})
+{I});
+{I}yield error;
+}}"""
+            )
+        )
+
+        if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation) and isinstance(
+            type_anno.key, intermediate.OurTypeAnnotation
+        ):
+            # NOTE (mristin):
+            # The key is a constrained primitive -- the only other option,
+            # a bare ``str``, has nothing to verify -- so we reuse
+            # the already-generated verification function of that constrained
+            # primitive instead of generating any new check here.
+            key_verify_function = typescript_naming.function_name(
+                Identifier(f"verify_{type_anno.key.our_type.name}")
+            )
+
+            stmts.append(
+                Stripped(
+                    f"""\
+for (const key of Object.keys(that.{prop_name})) {{
+{I}for (const error of {key_verify_function}(key)) {{
+{II}// NOTE (mristin):
+{II}// A member of an open JSON object is no property of one of our
+{II}// classes, so it gets no segment of its own -- the key goes into
+{II}// the message instead, as it does in `verifyJsonValue`.
+{II}const keyError = new VerificationError(
+{III}`In the member ${{JSON.stringify(key)}}: ${{error.message}}`
+{II});
+{II}keyError.path.prepend(
+{III}new PropertySegment(
+{IIII}that,
+{IIII}{prop_name_literal}
+{III})
+{II});
+{II}yield keyError;
+{I}}}
 }}"""
                 )
             )
@@ -1213,6 +1323,140 @@ if (context === true) {{
     writer.write("\n}")
 
     return Stripped(writer.getvalue()), None
+
+
+def _generate_verify_json_value(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the functions verifying that a value is JSON-able.
+
+    A JSON-able value is, recursively, exactly as JSON itself is defined, but
+    its TypeScript type rules out neither of the two ways of not being one:
+    a non-finite number and a ``null``, which `strictNullChecks` catches at
+    the boundary but not inside a value handed over as `any` by a JavaScript
+    caller. Both are reported here, at any depth.
+
+    The path *within* a JSON-able value is written into the message instead of
+    into the structured `Path` of the error. A `PropertySegment` points at
+    a property of one of our classes and an `IndexSegment` at an item of one
+    of our lists, and neither a member of an open JSON object nor an item of
+    an open JSON array is either of those. The structured path therefore ends
+    at the property which holds the JSON-able value, and the message says
+    where inside it the culprit sits.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * Verify that `value` is a JSON-able value, at any depth.
+ *
+ * @param value - to be verified
+ * @param path - JSON path to `value`, written into the messages
+ * @returns errors, if any
+ */
+export function *verifyJsonValue(
+{I}value: AasTypes.JsonValue,
+{I}path = "$"
+): IterableIterator<VerificationError> {{
+{I}if (value === null || value === undefined) {{
+{II}yield new VerificationError(
+{III}`Expected a JSON-able value at ${{path}}, but got: ${{value}}`
+{II});
+{II}return;
+{I}}}
+
+{I}switch (typeof value) {{
+{II}case "boolean":
+{II}case "string":
+{III}return;
+
+{II}case "number":
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number, so neither is
+{III}// a JSON-able value, even though a TypeScript `number` holds either.
+{III}if (!Number.isFinite(value)) {{
+{IIII}yield new VerificationError(
+{IIIII}`Expected a JSON-able value at ${{path}}, but got the number ` +
+{IIIII}`${{value}}, which is neither finite nor representable in JSON`
+{IIII});
+{III}}}
+{III}return;
+
+{II}case "object":
+{III}break;
+
+{II}default:
+{III}yield new VerificationError(
+{IIII}`Expected a JSON-able value (a boolean, a number, a string, ` +
+{IIIII}`an array or an object) at ${{path}}, but got: ${{typeof value}}`
+{III});
+{III}return;
+{I}}}
+
+{I}if (Array.isArray(value)) {{
+{II}for (let i = 0; i < value.length; i++) {{
+{III}yield* verifyJsonValue(value[i], `${{path}}[${{i}}]`);
+{II}}}
+{II}return;
+{I}}}
+
+{I}for (const key of Object.keys(value)) {{
+{II}yield* verifyJsonValue(value[key], `${{path}}.${{key}}`);
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Verify that `value` is a JSON-able array.
+ *
+ * @param value - to be verified
+ * @returns errors, if any
+ */
+export function *verifyJsonArray(
+{I}value: AasTypes.JsonArray
+): IterableIterator<VerificationError> {{
+{I}if (!Array.isArray(value)) {{
+{II}yield new VerificationError(
+{III}`Expected a JSON-able array, but got: ${{typeof value}}`
+{II});
+{II}return;
+{I}}}
+
+{I}yield* verifyJsonValue(value);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Verify that `value` is a JSON-able object.
+ *
+ * @param value - to be verified
+ * @returns errors, if any
+ */
+export function *verifyJsonObject(
+{I}value: AasTypes.JsonObject
+): IterableIterator<VerificationError> {{
+{I}if (
+{II}value === null
+{II}|| value === undefined
+{II}|| typeof value !== "object"
+{II}|| Array.isArray(value)
+{I}) {{
+{II}yield new VerificationError(
+{III}`Expected a JSON-able object, but got: ${{typeof value}}`
+{II});
+{II}return;
+{I}}}
+
+{I}yield* verifyJsonValue(value);
+}}"""
+        ),
+    ]
 
 
 def _generate_transformer(
@@ -1619,6 +1863,8 @@ export class VerificationError {{
         else:
             # noinspection PyTypeChecker
             assert_never(verification)
+
+    blocks.extend(_generate_verify_json_value(symbol_table=symbol_table))
 
     transformer_block, transformer_errors = _generate_transformer(
         symbol_table=symbol_table,

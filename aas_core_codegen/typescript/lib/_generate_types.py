@@ -674,6 +674,19 @@ for (const {loop_var} of this.{prop_name}) {{
                     # noinspection PyTypeChecker
                     assert_never(type_anno.items.our_type)
 
+            elif isinstance(
+                type_anno.items,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # A JSON-able value is plain data, never a reference to one of
+                # our own classes, so there is nothing to descend into.
+                continue
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno.items)
@@ -706,6 +719,19 @@ for (const {loop_var} of this.{prop_name}) {{
 
             if len(prop_blocks) == 0:
                 continue
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # A JSON-able value is plain data, never a reference to one of our
+            # own classes, so there is nothing to descend into.
+            continue
 
         else:
             # noinspection PyTypeChecker
@@ -2220,6 +2246,55 @@ class TypeMatcher extends AbstractTransformerWithContext<
     return Stripped(writer.getvalue())
 
 
+def _generate_json_aliases(symbol_table: intermediate.SymbolTable) -> List[Stripped]:
+    """
+    Generate the aliases of the JSON-able types, if the model uses them.
+
+    They live here, next to the classes whose properties are annotated with
+    them: a property's type belongs to the types module, and every other
+    module already imports it.
+
+    Unlike Python, TypeScript resolves a recursive type alias, so the item and
+    the value types can be spelled out instead of being widened to ``any``.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * Represent a value which JSON can carry.
+ *
+ * This is, recursively, exactly as JSON itself is defined: a boolean,
+ * a number, a string, an array of JSON-able values or an object of JSON-able
+ * values with string keys -- never a `null`, and never a non-finite number,
+ * which JSON can not represent at all.
+ */
+export type JsonValue =
+{I}| boolean
+{I}| number
+{I}| string
+{I}| JsonArray
+{I}| JsonObject;"""
+        ),
+        Stripped(
+            """\
+/**
+ * Represent a JSON-able value which is known to be an array.
+ */
+export type JsonArray = Array<JsonValue>;"""
+        ),
+        Stripped(
+            """\
+/**
+ * Represent a JSON-able value which is known to be an object.
+ */
+export type JsonObject = { [key: string]: JsonValue };"""
+        ),
+    ]
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -2257,6 +2332,7 @@ def generate(
     blocks.extend(
         [
             typescript_common.WARNING,
+            *_generate_json_aliases(symbol_table=symbol_table),
             _generate_model_type_enum(symbol_table=symbol_table),
             _generate_over_model_type_enum(symbol_table=symbol_table),
             Stripped(
