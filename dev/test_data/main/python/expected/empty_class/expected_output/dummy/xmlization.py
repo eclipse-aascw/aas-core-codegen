@@ -75,6 +75,7 @@ Here is another code example where we serialize the instance:
 
 
 import base64
+import collections.abc
 import enum
 import io
 import math

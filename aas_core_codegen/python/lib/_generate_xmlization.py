@@ -943,14 +943,39 @@ def _is_encoded_as_text(type_annotation: intermediate.TypeAnnotationUnion) -> bo
     """
     Check whether a value of the ``type_annotation`` is encoded as an element's text.
 
-    The primitives and the enumerations are; the instances are encoded as child
-    elements instead.
+    The primitives and the enumerations are; the instances and the JSON-able values
+    are encoded as child elements instead.
     """
     if intermediate.try_primitive_type(type_annotation) is not None:
         return True
 
     return isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
         type_annotation.our_type, intermediate.Enumeration
+    )
+
+
+def _is_enclosed_in_a_prescribed_element(
+    type_annotation: intermediate.TypeAnnotationUnion,
+) -> bool:
+    """
+    Check whether a value of the ``type_annotation`` needs the tag prescribed for it.
+
+    An instance element is self-describing -- its tag *is* its model type -- so it
+    carries its own tag wherever it occurs. Everything else is written into an
+    element whose tag comes from the position instead (``v`` in a list, ``v1``,
+    ``v2``, *etc.* in a tuple), and that tag therefore has to be checked against
+    what the enclosing element prescribes.
+    """
+    if _is_encoded_as_text(type_annotation):
+        return True
+
+    return isinstance(
+        type_annotation,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
     )
 
 
@@ -976,6 +1001,15 @@ def _content_reader_name(
 
     if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
         raise AssertionError("Expected to handle this case before")
+
+    elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Identifier("_read_xml_rpc_value_content")
+
+    elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Identifier("_read_xml_rpc_array_body")
+
+    elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Identifier("_read_xml_rpc_struct_body")
 
     elif isinstance(type_anno, intermediate.OurTypeAnnotation):
         our_type = type_anno.our_type
@@ -1052,7 +1086,7 @@ def _element_reader_name(
     """
     type_anno = intermediate.beneath_optional(type_annotation)
 
-    if _is_encoded_as_text(type_anno):
+    if _is_enclosed_in_a_prescribed_element(type_anno):
         return Identifier(
             f"_read_{python_common.atomic_moniker(type_anno)}__at_{expected_tag}"
         )
@@ -1157,7 +1191,7 @@ def {name}(
         # NOTE (mristin):
         # An instance element is self-describing, so it is read by the function which
         # is generated together with the class, and there is nothing to register.
-        if _is_encoded_as_text(type_annotation):
+        if _is_enclosed_in_a_prescribed_element(type_annotation):
             self._register_at_tag_reader(type_annotation, expected_tag=expected_tag)
 
     def _register_list_reader(
@@ -1336,6 +1370,16 @@ def {name}(
 
         if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
             raise AssertionError("Expected to handle this case before")
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            self.note_needed_helper(_content_reader_name(type_anno))
 
         elif isinstance(type_anno, intermediate.OurTypeAnnotation):
             our_type = type_anno.our_type
@@ -1863,6 +1907,24 @@ def _element_writer_call(
     if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
         raise AssertionError("Expected to handle this case before")
 
+    elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return (
+            Identifier("_write_json_value_as_element"),
+            [prop_literal, value, "serializer"],
+        )
+
+    elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return (
+            Identifier("_write_json_array_as_element"),
+            [prop_literal, value, "serializer"],
+        )
+
+    elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return (
+            Identifier("_write_json_object_as_element"),
+            [prop_literal, value, "serializer"],
+        )
+
     elif isinstance(type_anno, intermediate.OurTypeAnnotation):
         our_type = type_anno.our_type
 
@@ -1919,7 +1981,7 @@ def _element_writer_call(
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
         items_type_anno = intermediate.beneath_optional(type_anno.items)
 
-        if not _is_encoded_as_text(items_type_anno):
+        if not _is_enclosed_in_a_prescribed_element(items_type_anno):
             return (
                 Identifier("_write_list_of_instances"),
                 [prop_literal, value, "serializer"],
@@ -1930,6 +1992,12 @@ def _element_writer_call(
             write_item = Identifier(
                 _WRITE_FUNCTION_BY_PRIMITIVE_TYPE[items_primitive_type]
             )
+        elif isinstance(items_type_anno, intermediate.JsonValueTypeAnnotation):
+            write_item = Identifier("_write_json_value_as_element")
+        elif isinstance(items_type_anno, intermediate.JsonArrayTypeAnnotation):
+            write_item = Identifier("_write_json_array_as_element")
+        elif isinstance(items_type_anno, intermediate.JsonObjectTypeAnnotation):
+            write_item = Identifier("_write_json_object_as_element")
         else:
             assert isinstance(items_type_anno, intermediate.OurTypeAnnotation)
             assert isinstance(items_type_anno.our_type, intermediate.Enumeration)
@@ -2024,9 +2092,9 @@ class _WriterRegistry:
 
             # NOTE (mristin):
             # An instance is self-describing -- the element tag *is* its model type --
-            # so it writes its own element and the positional tag plays no role. Only
-            # a value encoded as text needs the tag which its position prescribes.
-            if not _is_encoded_as_text(item_type_anno):
+            # so it writes its own element and the positional tag plays no role.
+            # Everything else needs the tag which its position prescribes.
+            if not _is_enclosed_in_a_prescribed_element(item_type_anno):
                 write = Stripped(f"serializer.visit({item_value})")
             else:
                 self.register_property_writer(item_type_anno)
@@ -2107,6 +2175,15 @@ def {name}(
         if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
             raise AssertionError("Expected to handle this case before")
 
+        elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+            self.note_needed_helper("_write_json_value_as_element")
+
+        elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+            self.note_needed_helper("_write_json_array_as_element")
+
+        elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+            self.note_needed_helper("_write_json_object_as_element")
+
         elif isinstance(type_anno, intermediate.OurTypeAnnotation):
             our_type = type_anno.our_type
 
@@ -2149,7 +2226,7 @@ def {name}(
                     "if you need this feature."
                 )
 
-            if not _is_encoded_as_text(items_type_anno):
+            if not _is_enclosed_in_a_prescribed_element(items_type_anno):
                 self.note_needed_helper("_write_list_of_instances")
                 return
 
@@ -2718,6 +2795,51 @@ _HELPER_DEPENDENCIES = {
     "_write_float_as_element": [],
     "_write_str_as_element": [],
     "_write_bytes_as_element": [],
+    "_read_xml_rpc_value_content": [
+        "_raise_if_has_tail_or_attrib",
+        "_read_end_element",
+        "_read_xml_rpc_discriminator",
+    ],
+    "_read_xml_rpc_discriminator": [
+        "_parse_element_tag",
+        "_collapse_whitespace",
+        "_read_text_from_element",
+        "_read_str_from_element_text",
+        "_read_xml_rpc_array_body",
+        "_read_xml_rpc_struct_body",
+    ],
+    "_read_xml_rpc_array_body": [
+        "_parse_element_tag",
+        "_raise_if_has_tail_or_attrib",
+        "_read_end_element",
+        "_read_list_of_items",
+        "_read_xml_rpc_value_in_named_element",
+    ],
+    "_read_xml_rpc_value_in_named_element": [
+        "_parse_element_tag",
+        "_read_xml_rpc_value_content",
+    ],
+    "_read_xml_rpc_struct_body": [
+        "_parse_element_tag",
+        "_raise_if_has_tail_or_attrib",
+        "_read_xml_rpc_member",
+    ],
+    "_read_xml_rpc_member": [
+        "_parse_element_tag",
+        "_raise_if_has_tail_or_attrib",
+        "_read_end_element",
+        "_read_str_from_element_text",
+        "_read_xml_rpc_value_in_named_element",
+    ],
+    "_write_json_value_as_element": ["_write_xml_rpc_discriminator"],
+    "_write_json_array_as_element": ["_write_xml_rpc_array_body"],
+    "_write_json_object_as_element": ["_write_xml_rpc_struct_body"],
+    "_write_xml_rpc_discriminator": [
+        "_write_xml_rpc_array_body",
+        "_write_xml_rpc_struct_body",
+    ],
+    "_write_xml_rpc_array_body": ["_write_xml_rpc_discriminator"],
+    "_write_xml_rpc_struct_body": ["_write_xml_rpc_discriminator"],
 }  # type: Mapping[str, Sequence[str]]
 
 
@@ -3653,6 +3775,386 @@ def _read_enum_from_element_text(
 
 {I}return literal"""
         ),
+        "_read_xml_rpc_value_content": Stripped(
+            f'''\
+def _read_xml_rpc_value_content(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.JsonValue:
+{I}"""
+{I}Read the content of :paramref:`element` as a JSON-able value.
+
+{I}The content is a single discriminator element -- ``<boolean>``,
+{I}``<double>``, ``<string>``, ``<array>`` or ``<struct>`` -- which says what
+{I}the value is. This is the XML-RPC subset which we borrow to give
+{I}a JSON-able value an XML representation; JSON itself prescribes none.
+
+{I}The end element corresponding to :paramref:`element` will be read as well.
+
+{I}:param element: start element enclosing the discriminator
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed JSON-able value
+{I}"""
+{I}_raise_if_has_tail_or_attrib(element)
+
+{I}if element.text is not None and len(element.text.strip()) != 0:
+{II}raise DeserializationException(
+{III}f"Expected only a discriminator element and whitespace text, "
+{III}f"but got text: {{element.text!r}}"
+{II})
+
+{I}next_event_element = next(iterator, None)
+{I}if next_event_element is None:
+{II}raise DeserializationException(
+{III}"Expected a discriminator element, but got the end-of-input"
+{II})
+
+{I}next_event, discriminator = next_event_element
+{I}if next_event != 'start':
+{II}raise DeserializationException(
+{III}f"Expected a start element of a discriminator "
+{III}f"(one of <boolean>, <double>, <string>, <array> or <struct>), "
+{III}f"but got event {{next_event!r}} and element {{discriminator.tag!r}}"
+{II})
+
+{I}result = _read_xml_rpc_discriminator(discriminator, iterator)
+
+{I}_read_end_element(element, iterator)
+
+{I}return result'''
+        ),
+        "_read_xml_rpc_discriminator": Stripped(
+            f'''\
+#: Match a numeral of the ``<double>`` lexical space.
+#:
+#: This is the numeric part of the lexical space of ``xs:double``, and
+#: deliberately not its three named literals -- ``INF``, ``-INF`` and ``NaN``
+#: -- since a JSON number can be none of them.
+#:
+#: Mind the explicit ``[0-9]``: ``\\d`` would match a digit of any script, so
+#: the Arabic-Indic ``\u06f5`` would pass, and :py:func:`float` would read it
+#: as 5.
+#:
+#: See: https://www.w3.org/TR/xmlschema-2/#double
+_XML_RPC_DOUBLE_RE = re.compile(
+{I}r"(\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?"
+)
+
+
+def _read_xml_rpc_discriminator(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.JsonValue:
+{I}"""
+{I}Read :paramref:`element` as one of the five XML-RPC discriminators.
+
+{I}The end element corresponding to :paramref:`element` will be read as well.
+
+{I}:param element: start element of the discriminator
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed JSON-able value
+{I}"""
+{I}tag_wo_ns = _parse_element_tag(element)
+
+{I}if tag_wo_ns == 'boolean':
+{II}# NOTE (mristin):
+{II}# Real XML-RPC tooling writes and expects a strict ``1``/``0``, and not
+{II}# the ``true``/``false`` which ``xs:boolean`` and the rest of this
+{II}# module use.
+{II}text = _collapse_whitespace(_read_text_from_element(element, iterator))
+{II}if text == '1':
+{III}return True
+{II}if text == '0':
+{III}return False
+
+{II}raise DeserializationException(
+{III}f"Expected \\"0\\" or \\"1\\" as the text of a <boolean> element, "
+{III}f"but got: {{text!r}}"
+{II})
+
+{I}if tag_wo_ns == 'double':
+{II}text = _collapse_whitespace(_read_text_from_element(element, iterator))
+
+{II}# NOTE (mristin):
+{II}# The lexical form is matched before the text is converted. ``float``
+{II}# reads far more than we admit here: a hexadecimal significand, so
+{II}# "0x10" would come out as 16, an underscore separator, and
+{II}# the spellings "inf", "infinity" and "nan".
+{II}#
+{II}# Mind that the numeral excludes "INF", "-INF" and "NaN" on purpose,
+{II}# unlike ``xs:double``, which names all three. A <double> carries
+{II}# a JSON number, and JSON knows neither an infinity nor
+{II}# a not-a-number, so there is no JSON-able value for such a text
+{II}# to de-serialize into.
+{II}if _XML_RPC_DOUBLE_RE.fullmatch(text) is None:
+{III}raise DeserializationException(
+{IIII}f"Expected a number as the text of a <double> element, "
+{IIII}f"but got: {{text!r}}"
+{III})
+
+{II}# NOTE (mristin):
+{II}# A numeral with neither a fraction nor an exponent gives an ``int``,
+{II}# and anything else a ``float``. Python is the only one of our targets
+{II}# which tells the two apart -- the others have a single number type --
+{II}# and a JSON document does tell them apart as well, so reading every
+{II}# <double> as a ``float`` would silently turn the 1 of a JSON document
+{II}# into a 1.0 on the way through XML, and back again.
+{II}number = (
+{III}int(text)
+{III}if '.' not in text and 'e' not in text and 'E' not in text
+{III}else float(text)
+{II})  # type: Union[int, float]
+
+{II}# NOTE (mristin):
+{II}# A literal too large for a ``float`` gives an infinity, which is no
+{II}# JSON-able value either, so it is refused rather than rounded.
+{II}# An ``int`` is unbounded in Python, so only a ``float`` can overflow.
+{II}if isinstance(number, float) and not math.isfinite(number):
+{III}raise DeserializationException(
+{IIII}f"Expected a number representable as a JSON-able value as "
+{IIII}f"the text of a <double> element, but got a value which "
+{IIII}f"rounds to an infinity: {{text!r}}"
+{III})
+
+{II}return number
+
+{I}if tag_wo_ns == 'string':
+{II}# NOTE (mristin):
+{II}# ``xs:string`` is ``preserve`` and not ``collapse``, so a <string>
+{II}# keeps its whitespace, unlike a <boolean> or a <double>.
+{II}return _read_str_from_element_text(element, iterator)
+
+{I}if tag_wo_ns == 'array':
+{II}return _read_xml_rpc_array_body(element, iterator)
+
+{I}if tag_wo_ns == 'struct':
+{II}return _read_xml_rpc_struct_body(element, iterator)
+
+{I}raise DeserializationException(
+{II}f"Expected a discriminator element "
+{II}f"(one of <boolean>, <double>, <string>, <array> or <struct>), "
+{II}f"but got: {{tag_wo_ns!r}}"
+{I})'''
+        ),
+        "_read_xml_rpc_array_body": Stripped(
+            f'''\
+def _read_xml_rpc_array_body(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.JsonArray:
+{I}"""
+{I}Read the content of :paramref:`element` as a ``<data>`` of ``<value>``'s.
+
+{I}The end element corresponding to :paramref:`element` will be read as well.
+
+{I}:param element: start element enclosing the ``<data>``
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed JSON-able array
+{I}"""
+{I}_raise_if_has_tail_or_attrib(element)
+
+{I}if element.text is not None and len(element.text.strip()) != 0:
+{II}raise DeserializationException(
+{III}f"Expected only a <data> element and whitespace text, "
+{III}f"but got text: {{element.text!r}}"
+{II})
+
+{I}next_event_element = next(iterator, None)
+{I}if next_event_element is None:
+{II}raise DeserializationException(
+{III}"Expected a <data> element, but got the end-of-input"
+{II})
+
+{I}next_event, data_element = next_event_element
+{I}if next_event != 'start' or _parse_element_tag(data_element) != 'data':
+{II}raise DeserializationException(
+{III}f"Expected a start element <data>, but got event {{next_event!r}} "
+{III}f"and element {{data_element.tag!r}}"
+{II})
+
+{I}result = _read_list_of_items(
+{II}data_element,
+{II}iterator,
+{II}_read_xml_rpc_value_in_named_element
+{I})  # type: List[Any]
+
+{I}_read_end_element(element, iterator)
+
+{I}return result'''
+        ),
+        "_read_xml_rpc_value_in_named_element": Stripped(
+            f'''\
+def _read_xml_rpc_value_in_named_element(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.JsonValue:
+{I}"""
+{I}Read :paramref:`element`, which has to be a ``<value>``, as a JSON-able value.
+
+{I}The end element corresponding to :paramref:`element` will be read as well.
+
+{I}:param element: start element, expected to be a ``<value>``
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed JSON-able value
+{I}"""
+{I}tag_wo_ns = _parse_element_tag(element)
+{I}if tag_wo_ns != 'value':
+{II}raise DeserializationException(
+{III}f"Expected a start element <value>, but got: {{tag_wo_ns!r}}"
+{II})
+
+{I}return _read_xml_rpc_value_content(element, iterator)'''
+        ),
+        "_read_xml_rpc_struct_body": Stripped(
+            f'''\
+def _read_xml_rpc_struct_body(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.JsonObject:
+{I}"""
+{I}Read the content of :paramref:`element` as a sequence of ``<member>``'s.
+
+{I}The end element corresponding to :paramref:`element` will be read as well.
+
+{I}:param element: start element enclosing the members
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed JSON-able object
+{I}"""
+{I}_raise_if_has_tail_or_attrib(element)
+
+{I}if element.text is not None and len(element.text.strip()) != 0:
+{II}raise DeserializationException(
+{III}f"Expected only <member> elements and whitespace text, "
+{III}f"but got text: {{element.text!r}}"
+{II})
+
+{I}result = dict()  # type: Dict[str, Any]
+
+{I}while True:
+{II}next_event_element = next(iterator, None)
+{II}if next_event_element is None:
+{III}raise DeserializationException(
+{IIII}f"Expected a <member> element or the end element corresponding "
+{IIII}f"to {{element.tag}}, but got the end-of-input"
+{III})
+
+{II}next_event, member_element = next_event_element
+{II}if next_event == 'end' and member_element.tag == element.tag:
+{III}break
+
+{II}if next_event != 'start' or _parse_element_tag(member_element) != 'member':
+{III}raise DeserializationException(
+{IIII}f"Expected a start element <member>, but got "
+{IIII}f"event {{next_event!r}} and element {{member_element.tag!r}}"
+{III})
+
+{II}key, value = _read_xml_rpc_member(member_element, iterator)
+
+{II}# NOTE (mristin):
+{II}# A repeated <member> name is refused, just as a repeated property
+{II}# element is refused elsewhere in this module. Letting the later
+{II}# member win would silently accept a document which says two
+{II}# different things about the same key.
+{II}if key in result:
+{III}raise DeserializationException(
+{IIII}f"The member {{key!r}} occurred more than once"
+{III})
+
+{II}result[key] = value
+
+{I}return result'''
+        ),
+        "_read_xml_rpc_member": Stripped(
+            f'''\
+def _read_xml_rpc_member(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> Tuple[str, aas_types.JsonValue]:
+{I}"""
+{I}Read :paramref:`element`, a ``<member>``, as a key and a JSON-able value.
+
+{I}The end element corresponding to :paramref:`element` will be read as well.
+
+{I}:param element: start element of the ``<member>``
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: the member's name and its parsed value
+{I}"""
+{I}_raise_if_has_tail_or_attrib(element)
+
+{I}if element.text is not None and len(element.text.strip()) != 0:
+{II}raise DeserializationException(
+{III}f"Expected only a <name> and a <value> element and whitespace text, "
+{III}f"but got text: {{element.text!r}}"
+{II})
+
+{I}name_event_element = next(iterator, None)
+{I}if name_event_element is None:
+{II}raise DeserializationException(
+{III}"Expected a <name> element, but got the end-of-input"
+{II})
+
+{I}name_event, name_element = name_event_element
+{I}if name_event != 'start' or _parse_element_tag(name_element) != 'name':
+{II}raise DeserializationException(
+{III}f"Expected a start element <name>, but got event {{name_event!r}} "
+{III}f"and element {{name_element.tag!r}}"
+{II})
+
+{I}key = _read_str_from_element_text(name_element, iterator)
+
+{I}value_event_element = next(iterator, None)
+{I}if value_event_element is None:
+{II}raise DeserializationException(
+{III}"Expected a <value> element, but got the end-of-input"
+{II})
+
+{I}value_event, value_element = value_event_element
+{I}if value_event != 'start':
+{II}raise DeserializationException(
+{III}f"Expected a start element <value>, but got event {{value_event!r}} "
+{III}f"and element {{value_element.tag!r}}"
+{II})
+
+{I}# NOTE (mristin):
+{I}# A member of an open JSON object is no property of one of our classes,
+{I}# so it gets no segment of its own -- the key goes into the message
+{I}# instead. The structured path ends at the property which holds
+{I}# the JSON-able value.
+{I}try:
+{II}value = _read_xml_rpc_value_in_named_element(value_element, iterator)
+{I}except DeserializationException as exception:
+{II}raise DeserializationException(
+{III}f"In the member {{key!r}}: {{exception.cause}}"
+{II}) from exception
+
+{I}_read_end_element(element, iterator)
+
+{I}return key, value'''
+        ),
     }
 
 
@@ -3993,6 +4495,226 @@ def _write_list_of_items(
 {I}except Exception as exception:
 {II}_attribute_to_property(exception, prop_name)"""
         ),
+        "_write_json_value_as_element": Stripped(
+            f'''\
+def _write_json_value_as_element(
+{I}name: str,
+{I}prop_name: Optional[str],
+{I}value: aas_types.JsonValue,
+{I}serializer: '_Serializer'
+) -> None:
+{I}"""
+{I}Write the :paramref:`value` of a JSON-able value enclosed in
+{I}the :paramref:`name` element.
+
+{I}:param name: of the corresponding element tag
+{I}:param prop_name:
+{II}name of the property, as spelled in Python, whose value is written, or
+{II}``None`` if the access to the value is recorded by an enclosing writer
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}:raise: :py:class:`SerializationException` if the value could not be written
+{I}"""
+{I}try:
+{II}serializer._write_start_element(name)
+{II}_write_xml_rpc_discriminator(value, serializer)
+{II}serializer._write_end_element(name)
+{I}except Exception as exception:
+{II}_attribute_to_property(exception, prop_name)'''
+        ),
+        "_write_json_array_as_element": Stripped(
+            f'''\
+def _write_json_array_as_element(
+{I}name: str,
+{I}prop_name: Optional[str],
+{I}value: aas_types.JsonArray,
+{I}serializer: '_Serializer'
+) -> None:
+{I}"""
+{I}Write the :paramref:`value` of a JSON-able array enclosed in
+{I}the :paramref:`name` element.
+
+{I}The ``<array>`` discriminator is the :paramref:`name` element itself, so
+{I}only its ``<data>`` is written here.
+
+{I}:param name: of the corresponding element tag
+{I}:param prop_name:
+{II}name of the property, as spelled in Python, whose value is written, or
+{II}``None`` if the access to the value is recorded by an enclosing writer
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}:raise: :py:class:`SerializationException` if the value could not be written
+{I}"""
+{I}try:
+{II}serializer._write_start_element(name)
+{II}_write_xml_rpc_array_body(value, serializer)
+{II}serializer._write_end_element(name)
+{I}except Exception as exception:
+{II}_attribute_to_property(exception, prop_name)'''
+        ),
+        "_write_json_object_as_element": Stripped(
+            f'''\
+def _write_json_object_as_element(
+{I}name: str,
+{I}prop_name: Optional[str],
+{I}value: aas_types.JsonObject,
+{I}serializer: '_Serializer'
+) -> None:
+{I}"""
+{I}Write the :paramref:`value` of a JSON-able object enclosed in
+{I}the :paramref:`name` element.
+
+{I}The ``<struct>`` discriminator is the :paramref:`name` element itself, so
+{I}only its ``<member>``'s are written here.
+
+{I}:param name: of the corresponding element tag
+{I}:param prop_name:
+{II}name of the property, as spelled in Python, whose value is written, or
+{II}``None`` if the access to the value is recorded by an enclosing writer
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}:raise: :py:class:`SerializationException` if the value could not be written
+{I}"""
+{I}try:
+{II}serializer._write_start_element(name)
+{II}_write_xml_rpc_struct_body(value, serializer)
+{II}serializer._write_end_element(name)
+{I}except Exception as exception:
+{II}_attribute_to_property(exception, prop_name)'''
+        ),
+        "_write_xml_rpc_discriminator": Stripped(
+            f'''\
+def _write_xml_rpc_discriminator(
+{I}value: aas_types.JsonValue,
+{I}serializer: '_Serializer'
+) -> None:
+{I}"""
+{I}Write :paramref:`value` as one of the five XML-RPC discriminators.
+
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}:raise: :py:class:`SerializationException` if the value could not be written
+{I}"""
+{I}# NOTE (mristin):
+{I}# A ``bool`` is an ``int`` in Python, so it has to be checked first --
+{I}# otherwise every boolean would be written as a number.
+{I}if isinstance(value, bool):
+{II}# NOTE (mristin):
+{II}# Real XML-RPC tooling writes and expects a strict ``1``/``0``, and not
+{II}# the ``true``/``false`` which ``xs:boolean`` and the rest of this
+{II}# module use.
+{II}serializer._write_start_element('boolean')
+{II}serializer.stream.write('1' if value else '0')
+{II}serializer._write_end_element('boolean')
+{II}return
+
+{I}if isinstance(value, (int, float)):
+{II}# NOTE (mristin):
+{II}# JSON knows neither an infinity nor a not-a-number, so neither is
+{II}# a JSON-able value, and ``_read_xml_rpc_discriminator`` refuses to
+{II}# read either back.
+{II}if not math.isfinite(value):
+{III}raise SerializationException(
+{IIII}f"Expected a JSON-able value, but got the number {{value}}, "
+{IIII}f"which is neither finite nor representable in JSON"
+{III})
+
+{II}serializer._write_start_element('double')
+
+{II}# NOTE (mristin):
+{II}# ``str`` keeps an ``int`` free of the fraction which a ``float``
+{II}# carries, so the number comes back as the very same kind it went
+{II}# out as -- see the note in ``_read_xml_rpc_discriminator``.
+{II}if value == 0 and isinstance(value, float) and math.copysign(1.0, value) < 0.0:
+{III}serializer.stream.write('-0.0')
+{II}else:
+{III}serializer.stream.write(str(value))
+
+{II}serializer._write_end_element('double')
+{II}return
+
+{I}if isinstance(value, str):
+{II}serializer._write_start_element('string')
+{II}serializer.stream.write(
+{III}value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+{II})
+{II}serializer._write_end_element('string')
+{II}return
+
+{I}if isinstance(value, (dict, collections.abc.Mapping)):
+{II}serializer._write_start_element('struct')
+{II}_write_xml_rpc_struct_body(value, serializer)
+{II}serializer._write_end_element('struct')
+{II}return
+
+{I}if isinstance(value, (list, tuple)) or (
+{II}isinstance(value, collections.abc.Sequence)
+{II}and not isinstance(value, (str, bytes, bytearray))
+{I}):
+{II}serializer._write_start_element('array')
+{II}_write_xml_rpc_array_body(value, serializer)
+{II}serializer._write_end_element('array')
+{II}return
+
+{I}raise SerializationException(
+{II}f"Expected a JSON-able value (a boolean, a number, a string, an array "
+{II}f"or an object), but got: {{type(value)}}"
+{I})'''
+        ),
+        "_write_xml_rpc_array_body": Stripped(
+            f'''\
+def _write_xml_rpc_array_body(
+{I}value: aas_types.JsonArray,
+{I}serializer: '_Serializer'
+) -> None:
+{I}"""
+{I}Write the ``<data>`` of the JSON-able array :paramref:`value`.
+
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}:raise: :py:class:`SerializationException` if the value could not be written
+{I}"""
+{I}serializer._write_start_element('data')
+{I}for item in value:
+{II}serializer._write_start_element('value')
+{II}_write_xml_rpc_discriminator(item, serializer)
+{II}serializer._write_end_element('value')
+{I}serializer._write_end_element('data')'''
+        ),
+        "_write_xml_rpc_struct_body": Stripped(
+            f'''\
+def _write_xml_rpc_struct_body(
+{I}value: aas_types.JsonObject,
+{I}serializer: '_Serializer'
+) -> None:
+{I}"""
+{I}Write the ``<member>``'s of the JSON-able object :paramref:`value`.
+
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}:raise: :py:class:`SerializationException` if the value could not be written
+{I}"""
+{I}for key, item in value.items():
+{II}if not isinstance(key, str):
+{III}raise SerializationException(
+{IIII}f"Expected only string keys in a JSON-able object, but got "
+{IIII}f"a key of type: {{type(key)}}"
+{III})
+
+{II}serializer._write_start_element('member')
+
+{II}serializer._write_start_element('name')
+{II}serializer.stream.write(
+{III}key.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+{II})
+{II}serializer._write_end_element('name')
+
+{II}serializer._write_start_element('value')
+{II}_write_xml_rpc_discriminator(item, serializer)
+{II}serializer._write_end_element('value')
+
+{II}serializer._write_end_element('member')'''
+        ),
     }
 
 
@@ -4069,6 +4791,7 @@ def generate(
         Stripped(
             f"""\
 import base64
+import collections.abc
 import enum
 import io
 import math

@@ -27,6 +27,7 @@ from aas_core_codegen.python.common import (
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
+    INDENT5 as IIIII,
 )
 from aas_core_codegen.intermediate import type_inference as intermediate_type_inference
 from aas_core_codegen.parse import tree as parse_tree, retree as parse_retree
@@ -946,6 +947,28 @@ for error in self.transform(
                 # noinspection PyTypeChecker
                 assert_never(type_anno.items.our_type)
 
+        elif isinstance(
+            type_anno.items,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            if isinstance(type_anno.items, intermediate.JsonValueTypeAnnotation):
+                item_verify_function = Identifier("_verify_json_value")
+            elif isinstance(type_anno.items, intermediate.JsonArrayTypeAnnotation):
+                item_verify_function = Identifier("_verify_json_array")
+            else:
+                item_verify_function = Identifier("_verify_json_object")
+
+            for_error = Stripped(
+                f"""\
+for error in {item_verify_function}(
+{II}{loop_variable}
+)"""
+            )
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno.items)
@@ -1069,6 +1092,29 @@ for error in self.transform(
                 else:
                     # noinspection PyTypeChecker
                     assert_never(item_type_anno.our_type)
+
+            elif isinstance(
+                item_type_anno,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                if isinstance(item_type_anno, intermediate.JsonValueTypeAnnotation):
+                    item_verify_function = Identifier("_verify_json_value")
+                elif isinstance(item_type_anno, intermediate.JsonArrayTypeAnnotation):
+                    item_verify_function = Identifier("_verify_json_array")
+                else:
+                    item_verify_function = Identifier("_verify_json_object")
+
+                for_error_in_verification = Stripped(
+                    f"""\
+for error in {item_verify_function}(
+{II}{item_access}
+)"""
+                )
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(item_type_anno)
@@ -1093,6 +1139,72 @@ for error in self.transform(
 {II})
 {I})
 {I}yield error"""
+                )
+            )
+
+    elif isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+            verify_function = Identifier("_verify_json_value")
+        elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+            verify_function = Identifier("_verify_json_array")
+        else:
+            verify_function = Identifier("_verify_json_object")
+
+        stmts.append(
+            Stripped(
+                f"""\
+for error in {verify_function}(
+{II}that.{prop_name}
+):
+{I}error.path._prepend(
+{II}PropertySegment(
+{III}that,
+{III}{prop_name_literal}
+{II})
+{I})
+{I}yield error"""
+            )
+        )
+
+        if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation) and isinstance(
+            type_anno.key, intermediate.OurTypeAnnotation
+        ):
+            # NOTE (mristin):
+            # The key is a constrained primitive -- the only other option,
+            # a bare ``str``, has nothing to verify -- so we reuse the
+            # already-generated verification function of that constrained
+            # primitive instead of generating any new check here.
+            key_verify_function = python_naming.function_name(
+                Identifier(f"verify_{type_anno.key.our_type.name}")
+            )
+
+            stmts.append(
+                Stripped(
+                    f"""\
+for key in that.{prop_name}:
+{I}for error in {key_verify_function}(key):
+{II}# NOTE (mristin):
+{II}# A member of an open JSON object is no property of one of our
+{II}# classes, so it gets no segment of its own -- the key goes into
+{II}# the message instead, as it does in ``_verify_json_value``.
+{II}#
+{II}# The error of a constrained primitive carries an empty path, so
+{II}# nothing is lost by making a new one here.
+{II}key_error = Error(f"In the member {{key!r}}: {{error.cause}}")
+{II}key_error.path._prepend(
+{III}PropertySegment(
+{IIII}that,
+{IIII}{prop_name_literal}
+{III})
+{II})
+{II}yield key_error"""
                 )
             )
 
@@ -1208,6 +1320,135 @@ def {transform_name}(
         writer.write(textwrap.indent(stmt, I))
 
     return Stripped(writer.getvalue()), None
+
+
+def _generate_verify_json_value() -> List[Stripped]:
+    """
+    Generate the functions verifying that a value is JSON-able.
+
+    A JSON-able value is, recursively, exactly as JSON itself is defined, but
+    its Python type rules out none of the three ways of not being one: a
+    ``None``, a non-finite number and a non-string key in an object. Each is
+    reported here, at any depth.
+
+    The path *within* the JSON-able value is written into the message instead
+    of into the structured :py:class:`Path` of the error. A
+    :py:class:`PropertySegment` points at a property of one of our classes and
+    an :py:class:`IndexSegment` at an item of one of our lists, and neither
+    a member of an open JSON object nor an item of an open JSON array is
+    either of those. The structured path therefore ends at the property which
+    holds the JSON-able value, and the message says where inside it the
+    culprit sits.
+    """
+    return [
+        Stripped(
+            f'''\
+def _verify_json_value(
+{I}value: aas_types.JsonValue,
+{I}path: str = '$'
+) -> Iterator[Error]:
+{I}"""
+{I}Verify that :paramref:`value` is a JSON-able value, at any depth.
+
+{I}:param value: to be verified
+{I}:param path:
+{II}JSON path to :paramref:`value`, written into the messages so that
+{II}the culprit can be located within the JSON-able value
+{I}:yield: errors, if any
+{I}"""
+{I}# NOTE (mristin):
+{I}# A ``bool`` is an ``int`` in Python, so it has to be checked first --
+{I}# otherwise every boolean would be taken for a number.
+{I}if isinstance(value, bool):
+{II}return
+
+{I}if isinstance(value, int):
+{II}return
+
+{I}if isinstance(value, float):
+{II}# NOTE (mristin):
+{II}# JSON knows neither an infinity nor a not-a-number, so neither is
+{II}# a JSON-able value, even though a Python ``float`` is happy to hold
+{II}# either.
+{II}if not math.isfinite(value):
+{III}yield Error(
+{IIII}f"Expected a JSON-able value at {{path}}, but got the number "
+{IIII}f"{{value}}, which is neither finite nor representable in JSON"
+{III})
+
+{II}return
+
+{I}if isinstance(value, str):
+{II}return
+
+{I}if isinstance(value, (dict, collections.abc.Mapping)):
+{II}for key, item_value in value.items():
+{III}if not isinstance(key, str):
+{IIII}yield Error(
+{IIIII}f"Expected only string keys in the JSON-able object at "
+{IIIII}f"{{path}}, but got a key of type: {{type(key)}}"
+{IIII})
+{IIII}continue
+
+{III}yield from _verify_json_value(item_value, f'{{path}}.{{key}}')
+
+{II}return
+
+{I}if isinstance(value, (list, tuple)) or (
+{II}isinstance(value, collections.abc.Sequence)
+{II}and not isinstance(value, (str, bytes, bytearray))
+{I}):
+{II}for i, item_value in enumerate(value):
+{III}yield from _verify_json_value(item_value, f'{{path}}[{{i}}]')
+
+{II}return
+
+{I}yield Error(
+{II}f"Expected a JSON-able value (a boolean, a number, a string, an array "
+{II}f"or an object) at {{path}}, but got: {{type(value)}}"
+{I})'''
+        ),
+        Stripped(
+            f'''\
+def _verify_json_array(
+{I}value: aas_types.JsonArray
+) -> Iterator[Error]:
+{I}"""
+{I}Verify that :paramref:`value` is a JSON-able array.
+
+{I}:param value: to be verified
+{I}:yield: errors, if any
+{I}"""
+{I}if isinstance(value, (str, bytes, bytearray)) or not isinstance(
+{II}value, (list, tuple, collections.abc.Sequence)
+{I}):
+{II}yield Error(
+{III}f"Expected a JSON-able array, but got: {{type(value)}}"
+{II})
+{II}return
+
+{I}yield from _verify_json_value(value)'''
+        ),
+        Stripped(
+            f'''\
+def _verify_json_object(
+{I}value: aas_types.JsonObject
+) -> Iterator[Error]:
+{I}"""
+{I}Verify that :paramref:`value` is a JSON-able object.
+
+{I}:param value: to be verified
+{I}:yield: errors, if any
+{I}"""
+{I}if not isinstance(value, (dict, collections.abc.Mapping)):
+{II}yield Error(
+{III}f"Expected a JSON-able object, but got: {{type(value)}}"
+{II})
+{II}return
+
+{I}yield from _verify_json_value(value)'''
+        ),
+    ]
 
 
 def _generate_transformer(
@@ -1424,6 +1665,7 @@ def generate(
         python_common.WARNING,
         Stripped(
             f"""\
+import collections.abc
 import math
 import re
 import struct
@@ -1592,6 +1834,9 @@ class Error:
 
         else:
             assert_never(verification)
+
+    if intermediate.uses_json_types(symbol_table):
+        blocks.extend(_generate_verify_json_value())
 
     transformer_block, transformer_errors = _generate_transformer(
         symbol_table=symbol_table,

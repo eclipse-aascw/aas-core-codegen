@@ -32,6 +32,7 @@ from aas_core_codegen.python.common import (
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
+    INDENT5 as IIIII,
 )
 
 
@@ -74,6 +75,15 @@ def _parser_name(type_annotation: intermediate.TypeAnnotationUnion) -> Identifie
 
     if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
         raise AssertionError("Expected to handle this case before")
+
+    elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Identifier("_json_value_from_jsonable")
+
+    elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Identifier("_json_array_from_jsonable")
+
+    elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Identifier("_json_object_from_jsonable")
 
     elif isinstance(type_anno, intermediate.OurTypeAnnotation):
         our_type = type_anno.our_type
@@ -293,6 +303,16 @@ def {name}(
         if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
             raise AssertionError("Expected to handle this case before")
 
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            self.note_needed_helper(_parser_name(type_anno))
+
         elif isinstance(type_anno, intermediate.OurTypeAnnotation):
             # NOTE (mristin):
             # An enumeration, a class and a named union are parsed by the function
@@ -322,6 +342,9 @@ _HELPER_DEPENDENCIES = {
     "_bytes_from_jsonable": [],
     "_try_to_cast_to_array_like": [],
     "_list_from_jsonable": ["_try_to_cast_to_array_like"],
+    "_json_value_from_jsonable": ["_try_to_cast_to_array_like"],
+    "_json_array_from_jsonable": ["_json_value_from_jsonable"],
+    "_json_object_from_jsonable": ["_json_value_from_jsonable"],
 }  # type: Mapping[str, Sequence[str]]
 
 
@@ -641,6 +664,129 @@ def _list_from_jsonable(
 
 {II}result.append(item)
 
+{I}return result'''
+        ),
+        "_json_value_from_jsonable": Stripped(
+            f'''\
+def _json_value_from_jsonable(
+{I}jsonable: Jsonable
+) -> aas_types.JsonValue:
+{I}"""
+{I}Parse :paramref:`jsonable` as a JSON-able value.
+
+{I}A JSON-able value is, recursively, exactly as JSON itself is defined:
+{I}a boolean, a number, a string, an array of JSON-able values or an object
+{I}of JSON-able values with string keys. A ``None`` is rejected at any
+{I}depth, as the JSON ``null`` has no representation as a JSON-able value,
+{I}and so are an infinity and a not-a-number, which JSON can not represent
+{I}at all.
+
+{I}The result is a new structure, and never :paramref:`jsonable` itself, so
+{I}that the parsed instance does not alias the document it came from.
+
+{I}:param jsonable: JSON-able structure to be parsed
+{I}:return: parsed JSON-able value
+{I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+{I}"""
+{I}# NOTE (mristin):
+{I}# A ``bool`` is an ``int`` in Python, so it has to be checked first --
+{I}# otherwise every boolean would come out as a number.
+{I}if isinstance(jsonable, bool):
+{II}return jsonable
+
+{I}if isinstance(jsonable, int):
+{II}return jsonable
+
+{I}if isinstance(jsonable, float):
+{II}# NOTE (mristin):
+{II}# JSON knows neither an infinity nor a not-a-number. A conformant
+{II}# parser never gives us one, but :paramref:`jsonable` may well have
+{II}# been put together programmatically.
+{II}if not math.isfinite(jsonable):
+{III}raise DeserializationException(
+{IIII}f"Expected a JSON-able value, but got the number {{jsonable}}, "
+{IIII}f"which is neither finite nor representable in JSON"
+{III})
+
+{II}return jsonable
+
+{I}if isinstance(jsonable, str):
+{II}return jsonable
+
+{I}if isinstance(jsonable, (dict, collections.abc.Mapping)):
+{II}mapping = dict()  # type: Dict[str, Any]
+{II}for key, jsonable_value in jsonable.items():
+{III}if not isinstance(key, str):
+{IIII}raise DeserializationException(
+{IIIII}f"Expected only string keys in a JSON-able object, but got "
+{IIIII}f"a key of type: {{type(key)}}"
+{IIII})
+
+{III}try:
+{IIII}mapping[key] = _json_value_from_jsonable(jsonable_value)
+{III}except DeserializationException as exception:
+{IIII}exception.path._prepend(PropertySegment(jsonable, key))
+{IIII}raise
+
+{II}return mapping
+
+{I}array_like = _try_to_cast_to_array_like(jsonable)
+{I}if array_like is not None:
+{II}items = []  # type: List[Any]
+{II}for i, jsonable_item in enumerate(array_like):
+{III}try:
+{IIII}items.append(_json_value_from_jsonable(jsonable_item))
+{III}except DeserializationException as exception:
+{IIII}exception.path._prepend(IndexSegment(array_like, i))
+{IIII}raise
+
+{II}return items
+
+{I}raise DeserializationException(
+{II}f"Expected a JSON-able value (a boolean, a number, a string, an array "
+{II}f"or an object), but got: {{type(jsonable)}}"
+{I})'''
+        ),
+        "_json_array_from_jsonable": Stripped(
+            f'''\
+def _json_array_from_jsonable(
+{I}jsonable: Jsonable
+) -> aas_types.JsonArray:
+{I}"""
+{I}Parse :paramref:`jsonable` as a JSON-able array.
+
+{I}:param jsonable: JSON-able structure to be parsed
+{I}:return: parsed JSON-able array
+{I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+{I}"""
+{I}if _try_to_cast_to_array_like(jsonable) is None:
+{II}raise DeserializationException(
+{III}f"Expected a JSON-able array, but got: {{type(jsonable)}}"
+{II})
+
+{I}result = _json_value_from_jsonable(jsonable)
+{I}assert isinstance(result, list)
+{I}return result'''
+        ),
+        "_json_object_from_jsonable": Stripped(
+            f'''\
+def _json_object_from_jsonable(
+{I}jsonable: Jsonable
+) -> aas_types.JsonObject:
+{I}"""
+{I}Parse :paramref:`jsonable` as a JSON-able object.
+
+{I}:param jsonable: JSON-able structure to be parsed
+{I}:return: parsed JSON-able object
+{I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+{I}"""
+{I}if not isinstance(jsonable, (dict, collections.abc.Mapping)):
+{II}raise DeserializationException(
+{III}f"Expected a JSON-able object, but got: {{type(jsonable)}}"
+{II})
+
+{I}result = _json_value_from_jsonable(jsonable)
+{I}assert isinstance(result, dict)
 {I}return result'''
         ),
     }
@@ -1508,6 +1654,88 @@ def _tuple_serializer_name(
     )
 
 
+def _generate_json_value_to_jsonable() -> Stripped:
+    """Generate the function serializing a JSON-able value."""
+    return Stripped(
+        f'''\
+def _json_value_to_jsonable(
+{I}value: aas_types.JsonValue
+) -> MutableJsonable:
+{I}"""
+{I}Serialize :paramref:`value` as a JSON-able structure.
+
+{I}A JSON-able value is almost JSON-able as it comes, but not quite: its type
+{I}rules out neither a ``None``, which the JSON ``null`` gives no
+{I}representation for, nor an infinity and a not-a-number, which JSON can not
+{I}represent at all, nor a non-string key in an object. Each is refused here,
+{I}at any depth.
+
+{I}The result is a new structure, and never :paramref:`value` itself, so that
+{I}the serialized document does not alias the instance it came from.
+
+{I}:param value: to be serialized
+{I}:return: :paramref:`value`, as a JSON-able structure
+{I}:raise: :py:class:`SerializationException` if :paramref:`value` is not JSON-able
+{I}"""
+{I}# NOTE (mristin):
+{I}# A ``bool`` is an ``int`` in Python, so it has to be checked first --
+{I}# otherwise every boolean would come out as a number.
+{I}if isinstance(value, bool):
+{II}return value
+
+{I}if isinstance(value, int):
+{II}return value
+
+{I}if isinstance(value, float):
+{II}if not math.isfinite(value):
+{III}raise SerializationException(
+{IIII}f"Expected a JSON-able value, but got the number {{value}}, "
+{IIII}f"which is neither finite nor representable in JSON"
+{III})
+
+{II}return value
+
+{I}if isinstance(value, str):
+{II}return value
+
+{I}if isinstance(value, (dict, collections.abc.Mapping)):
+{II}mapping = dict()  # type: Dict[str, Any]
+{II}for key, item_value in value.items():
+{III}if not isinstance(key, str):
+{IIII}raise SerializationException(
+{IIIII}f"Expected only string keys in a JSON-able object, but got "
+{IIIII}f"a key of type: {{type(key)}}"
+{IIII})
+
+{III}try:
+{IIII}mapping[key] = _json_value_to_jsonable(item_value)
+{III}except SerializationException as exception:
+{IIII}exception._prepend_property(key)
+{IIII}raise
+
+{II}return mapping
+
+{I}if isinstance(value, (list, tuple)) or (
+{II}isinstance(value, collections.abc.Sequence)
+{II}and not isinstance(value, (str, bytes, bytearray))
+{I}):
+{II}items = []  # type: List[Any]
+{II}for i, item_value in enumerate(value):
+{III}try:
+{IIII}items.append(_json_value_to_jsonable(item_value))
+{III}except SerializationException as exception:
+{IIII}exception._prepend_index(i)
+{IIII}raise
+
+{II}return items
+
+{I}raise SerializationException(
+{II}f"Expected a JSON-able value (a boolean, a number, a string, an array "
+{II}f"or an object), but got: {{type(value)}}"
+{I})'''
+    )
+
+
 def _generate_atomic_serialization(
     access_expression: Stripped, type_anno: intermediate.AtomicTypeAnnotation
 ) -> Stripped:
@@ -1549,6 +1777,25 @@ def _generate_atomic_serialization(
 
     if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
         raise AssertionError("Expected to handle this case before")
+
+    elif isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # All three shapes are serialized by one function: an array and an
+        # object are only JSON-able values whose top-level shape is already
+        # known, and the function gives back whatever it is given.
+        return Stripped(
+            f"""\
+_json_value_to_jsonable(
+{I}{access_expression}
+)"""
+        )
 
     elif isinstance(type_anno, intermediate.OurTypeAnnotation):
         our_type = type_anno.our_type
@@ -1660,6 +1907,7 @@ class _SerializerRegistry:
         self._bytes_are_encoded = False
         self._ids_of_types_reaching_a_number = ids_of_types_reaching_a_number
         self._checked_numbers = set()  # type: Set[intermediate.PrimitiveType]
+        self._json_values_are_serialized = False
 
     @property
     def blocks(self) -> List[Stripped]:
@@ -1676,9 +1924,18 @@ class _SerializerRegistry:
         """Give out the number types which occur anywhere in the meta-model."""
         return self._checked_numbers
 
+    @property
+    def json_values_are_serialized(self) -> bool:
+        """Check whether a JSON-able value occurs anywhere in the meta-model."""
+        return self._json_values_are_serialized
+
     def note_bytes_are_encoded(self) -> None:
         """Note that a byte array is encoded somewhere in the meta-model."""
         self._bytes_are_encoded = True
+
+    def note_json_values_are_serialized(self) -> None:
+        """Note that a JSON-able value is serialized somewhere in the meta-model."""
+        self._json_values_are_serialized = True
 
     def _add(self, name: Identifier, block: Stripped) -> None:
         """Register the ``block`` which defines the serializer ``name``."""
@@ -1893,6 +2150,16 @@ def {name}(
 
         if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
             raise AssertionError("Expected to handle this case before")
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            self.note_json_values_are_serialized()
 
         elif isinstance(type_anno, intermediate.OurTypeAnnotation):
             # NOTE (mristin):
@@ -2225,6 +2492,8 @@ def generate(
         if (
             "_float_from_jsonable" in needed_helpers
             or intermediate.PrimitiveType.FLOAT in serializer_registry.checked_numbers
+            or "_json_value_from_jsonable" in needed_helpers
+            or serializer_registry.json_values_are_serialized
         )
         else ""
     )
@@ -2487,6 +2756,9 @@ _Parser = Callable[
     blocks.append(_generate_serialization_exception())
 
     blocks.extend(_generate_number_serializers(serializer_registry.checked_numbers))
+
+    if serializer_registry.json_values_are_serialized:
+        blocks.append(_generate_json_value_to_jsonable())
 
     if serializer_registry.bytes_are_encoded:
         blocks.append(_generate_bytes_to_base64_str())
