@@ -1,0 +1,8 @@
+{
+  "label": "a [labelled] bag",
+  "tags": [
+    "light",
+    "heavy"
+  ],
+  "modelType": "Bag"
+}

@@ -1,0 +1,1 @@
+<container xmlns="https://dummy.com"><names><v>first</v><v>second</v></names><items><box><label>a [labelled] box</label><color>Red</color></box><bag><label>a bag</label><tags><v>light</v></tags></bag></items></container>

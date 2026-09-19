@@ -278,6 +278,12 @@ class Test_cpp(_TestCase):
             target=aas_core_codegen.main.Target.CPP, case_name="enum"
         )
 
+    def test_expected_implementation_specific(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CPP,
+            case_name="implementation_specific",
+        )
+
     def test_expected_list_of_classes(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.CPP, case_name="list_of_classes"
@@ -359,6 +365,12 @@ class Test_csharp(_TestCase):
             target=aas_core_codegen.main.Target.CSHARP, case_name="enum"
         )
 
+    def test_expected_implementation_specific(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CSHARP,
+            case_name="implementation_specific",
+        )
+
     def test_expected_list_of_classes(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.CSHARP, case_name="list_of_classes"
@@ -438,6 +450,12 @@ class Test_golang(_TestCase):
     def test_expected_enum(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.GOLANG, case_name="enum"
+        )
+
+    def test_expected_implementation_specific(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.GOLANG,
+            case_name="implementation_specific",
         )
 
     def test_expected_list_of_classes(self) -> None:
@@ -526,6 +544,12 @@ class Test_java(_TestCase):
             target=aas_core_codegen.main.Target.JAVA, case_name="enum"
         )
 
+    def test_expected_implementation_specific(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.JAVA,
+            case_name="implementation_specific",
+        )
+
     def test_expected_list_of_classes(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.JAVA, case_name="list_of_classes"
@@ -606,6 +630,12 @@ class Test_jsonschema(_TestCase):
     def test_expected_enum(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.JSONSCHEMA, case_name="enum"
+        )
+
+    def test_expected_implementation_specific(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.JSONSCHEMA,
+            case_name="implementation_specific",
         )
 
     def test_expected_list_of_classes(self) -> None:
@@ -725,6 +755,12 @@ class Test_python(_TestCase):
             target=aas_core_codegen.main.Target.PYTHON, case_name="enum"
         )
 
+    def test_expected_implementation_specific(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.PYTHON,
+            case_name="implementation_specific",
+        )
+
     def test_expected_list_of_classes(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.PYTHON, case_name="list_of_classes"
@@ -814,6 +850,12 @@ class Test_typescript(_TestCase):
             case_name="enum",
         )
 
+    def test_expected_implementation_specific(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.TYPESCRIPT,
+            case_name="implementation_specific",
+        )
+
     def test_expected_list_of_classes(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.TYPESCRIPT,
@@ -896,6 +938,12 @@ class Test_xsd(_TestCase):
     def test_expected_enum(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.XSD, case_name="enum"
+        )
+
+    def test_expected_implementation_specific(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.XSD,
+            case_name="implementation_specific",
         )
 
     def test_expected_list_of_classes(self) -> None:

@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "title": "DummyForTest",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "#/definitions/Container"
+    }
+  ],
+  "$id": "https://dummy.com",
+  "definitions": {
+    "Bag": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Item"
+        },
+        {
+          "properties": {
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "modelType": {
+              "const": "Bag"
+            }
+          },
+          "required": [
+            "tags"
+          ]
+        }
+      ]
+    },
+    "Box": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Item"
+        },
+        {
+          "properties": {
+            "color": {
+              "$ref": "#/definitions/Color"
+            },
+            "modelType": {
+              "const": "Box"
+            }
+          }
+        }
+      ]
+    },
+    "Color": {
+      "type": "string",
+      "enum": [
+        "Green",
+        "Red"
+      ]
+    },
+    "Container": {
+      "type": "object",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Item_choice"
+          }
+        }
+      },
+      "required": [
+        "names",
+        "items"
+      ]
+    },
+    "Item": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "modelType": {
+          "$ref": "#/definitions/ModelType"
+        }
+      },
+      "required": [
+        "label",
+        "modelType"
+      ]
+    },
+    "Item_choice": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/Bag"
+        },
+        {
+          "$ref": "#/definitions/Box"
+        }
+      ]
+    },
+    "ModelType": {
+      "type": "string",
+      "enum": [
+        "Bag",
+        "Box"
+      ]
+    }
+  }
+}
