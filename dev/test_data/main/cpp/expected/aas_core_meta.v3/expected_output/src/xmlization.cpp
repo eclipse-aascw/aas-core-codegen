@@ -5,36 +5,19 @@
 #include "aas_core/aas_3_0/wstringification.hpp"
 #include "aas_core/aas_3_0/xmlization.hpp"
 
-#pragma warning(push, 0)
-#include <expat.h>
+#include "xml_common.hpp"
 
+#pragma warning(push, 0)
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
-#include <iomanip>
-#include <locale>
 #include <memory>
 #include <limits>
-#include <sstream>
 #include <unordered_map>
 #include <string>
 #include <vector>
 #pragma warning(pop)
-
-static_assert(
-  !std::is_same<XML_Char, wchar_t>::value,
-  "Expected Expat to be compiled with UTF-8 support, i.e., that character is "
-  "stored as char internally, "
-  "but Expat was compiled to store characters internally as UTF-16."
-);
-
-static_assert(
-  std::is_same<XML_Char, char>::value,
-  "Expected Expat to be compiled with UTF-8 support, i.e., that "
-  "character is stored as char internally, "
-  "but it was not."
-);
 
 namespace aas_core {
 namespace aas_3_0 {
@@ -247,896 +230,6 @@ DeserializationError::DeserializationError(
 
 // endregion DeserializationError
 
-enum class NodeKind : std::uint32_t {
-  // Nodes of the kind `Bof` represent the beginning-of-input, before any read.
-  Bof = 0,
-  Start = 1,
-  Stop = 2,
-  Text = 3,
-  // Nodes of the kind `Eof` represent the end-of-input.
-  Eof = 4,
-  // Nodes of the kind `Error` represent low-level errors in the XML parsing.
-  Error = 5
-};  // enum class NodeKind
-
-const std::unordered_map<
-  NodeKind,
-  std::string
-> kNodeKindToHumanReadableString = {
-  {NodeKind::Bof, "a beginning-of-input"},
-  {NodeKind::Start, "a start element"},
-  {NodeKind::Stop, "a stop element"},
-  {NodeKind::Text, "a text"},
-  {NodeKind::Eof, "an end-of-input"},
-  {NodeKind::Error, "an error"},
-};
-
-const std::string& NodeKindToHumanReadableString(NodeKind kind) {
-  auto it = kNodeKindToHumanReadableString.find(kind);
-  if (it == kNodeKindToHumanReadableString.end()) {
-    throw std::invalid_argument(
-      common::Concat(
-        "Unexpected node kind: ",
-        std::to_string(
-          static_cast<std::uint32_t>(kind)
-        )
-      )
-    );
-  }
-
-  return it->second;
-}
-
-// region Nodes
-
-/**
- * Model a node in an XML document.
- */
-class INode {
- public:
-  /**
-   * @return the kind of the node, used instead of much slower RTTI.
-   */
-  virtual NodeKind kind() const = 0;
-  virtual ~INode() = default;
-};  // class INode
-
-/**
- * Model the beginning of the input, before anything was read.
- */
-class BofNode : public INode {
- public:
-  NodeKind kind() const override { return NodeKind::Bof; }
-
-  ~BofNode() override = default;
-}; // class StartNode
-
-/**
- * Model a start of an XML element.
- */
-class StartNode : public INode {
- public:
-  explicit StartNode(
-    std::string a_name
-  ) :
-    name(std::move(a_name)) {
-    // Intentionally empty.
-  }
-
-  NodeKind kind() const override { return NodeKind::Start; }
-
-  /**
-   * Name of the start element, stripped of the expected XML namespace
-   */
-  const std::string name;
-
-  ~StartNode() override = default;
-};  // class StartNode
-
-/**
- * Model a stop of an XML element.
- */
-class StopNode : public INode {
- public:
-  explicit StopNode(
-    std::string a_name
-  ) :
-    name(std::move(a_name)) {
-    // Intentionally empty.
-  }
-
-  NodeKind kind() const override { return NodeKind::Stop; }
-
-  /**
-   * Name of the stop element, stripped of the expected XML namespace
-   */
-  const std::string name;
-
-  ~StopNode() override = default;
-};  // class StopNode
-
-/**
- * Model a text node.
- */
-class TextNode : public INode {
- public:
-  explicit TextNode(
-    std::string a_text
-  ) :
-    text(std::move(a_text)) {
-    // Intentionally empty.
-  }
-
-  NodeKind kind() const override { return NodeKind::Text; }
-
-  /**
-   * UTF-8 encoded XML text somewhere within an XML element
-   */
-  const std::string text;
-
-  ~TextNode() override = default;
-};  // class TextNode
-
-/**
- * Model an end-of-input.
- */
-class EofNode : public INode {
- public:
-  NodeKind kind() const override { return NodeKind::Eof; }
-
-  ~EofNode() override = default;
-};  // class EofNode
-
-/**
- * Model a low-level XML parsing error.
- */
-class ErrorNode : public INode {
- public:
-  ErrorNode(
-    size_t a_line,
-    size_t a_column,
-    std::string a_cause
-  ) :
-    line(a_line),
-    column(a_column),
-    cause(std::move(a_cause)) {
-    // Intentionally empty.
-  }
-
-  NodeKind kind() const override { return NodeKind::Error; }
-
-  const size_t line;
-  const size_t column;
-
-  // Cause of the error as UTF-8 encoded string
-  const std::string cause;
-
-  ~ErrorNode() override = default;
-};  // class ErrorNode
-
-// endregion Nodes
-
-// region Reading
-
-// region class Reader
-
-/**
- * Structure the data passed over to Expat XML reader.
- */
-struct OurData {
-  bool additional_attributes;
-  size_t buffer_size;
-  XML_Parser parser;
-
-  std::deque<std::unique_ptr<INode> >& node_buffer;
-
-  bool stopped = false;
-
-  OurData(
-    bool the_additional_attributes,
-    size_t a_buffer_size,
-    XML_Parser a_parser,
-    std::deque<std::unique_ptr<INode> >& a_node_buffer
-  ) :
-    additional_attributes(the_additional_attributes),
-    buffer_size(a_buffer_size), parser(a_parser),
-    node_buffer(a_node_buffer) {
-    // Intentionally empty.
-  }
-};  // struct OurData
-
-/**
- * \brief Read XML in form of nodes, whereas text nodes are fragmented.
- *
- * We need a more abstract approach since the Expat library is too low-level
- * to parse complex models.
- *
- * Expat does not read the whole content of a text node in memory, but
- * we need to process the whole text during the XML de-serialization. Hence,
- * we keep on reading until we read the complete text. This has repercussions
- * on memory usage, as the the text will be held in three copies(one copy in
- * the Expat buffer, second copy in our internal buffer in which we
- * incrementally feed in the fragments, and the third copy is the final merged
- * text).
- */
-class Reader {
- public:
-  Reader(
-    std::istream& is,
-    const ReadingOptions& options
-  );
-
-  /**
-   * Set up the reader for the XML parsing and read the first node.
-   */
-  void Initialize();
-
-  /**
-   * Read the next node in the document.
-   */
-  void Read();
-
-  /**
-   * @return the node which has been read last
-   */
-  const INode& node() const;
-
-  /**
-   * @return the node which has been read last moved out of this reader
-   */
-  std::unique_ptr<INode> moved_node();
-
-  ~Reader();
-
- private:
-  const bool additional_attributes_;
-  const size_t buffer_size_;
-  std::istream& is_;
-
-  XML_Parser parser_;
-  std::unique_ptr<OurData> our_data_;
-
-  // Node buffer does not include the current node.
-  std::deque<std::unique_ptr<INode>> node_buffer_;
-
-  // Current node is never null.
-  std::unique_ptr<INode> current_;
-
-  // Set if the current node is end-of-input
-  bool eof_;
-
-  // Set if the current node is an error
-  bool error_;
-
-  void SetCurrentAndEofAndError(std::unique_ptr<INode> node);
-
-  // Re-usable buffer to keep a chunk of the data read from the input
-  std::vector<char> chunk_;
-};  // class Reader
-
-Reader::Reader(
-  std::istream& is,
-  const ReadingOptions& options
-) :
-  additional_attributes_(options.additional_attributes),
-  buffer_size_(options.buffer_size),
-  is_(is),
-  parser_(nullptr),
-  current_(common::make_unique<BofNode>()),
-  eof_(false),
-  error_(false) {
-  // Intentionally empty.
-}
-
-const char kNamespaceSeparator = '|';
-
-void XMLCALL OnStartElement(
-  void* user_data,
-  const char* name,
-  const char* attributes[]
-) {
-  auto our_data = static_cast<OurData*>(user_data);
-
-  // NOTE (mristin):
-  // Since Expat continues parsing and adding nodes even if the parsing is
-  // suspended (see the documentation of `XML_StopParser`), we have to ignore
-  // any further events.
-  if (our_data->stopped) {
-    return;
-  }
-
-  const std::string name_str(name);
-
-  size_t separator_i = name_str.find(kNamespaceSeparator);
-  if (separator_i == std::string::npos || separator_i == 0) {
-    std::string message = common::Concat(
-      "The namespace is missing in the start element <",
-      name_str,
-      ">"
-    );
-
-    our_data->node_buffer.emplace_back(
-      common::make_unique<ErrorNode>(
-        XML_GetCurrentLineNumber(our_data->parser),
-        XML_GetCurrentColumnNumber(our_data->parser),
-        message
-      )
-    );
-
-    XML_StopParser(our_data->parser, false);
-    our_data->stopped = true;
-    return;
-  }
-
-  if (name_str.compare(0, separator_i, kNamespace) != 0) {
-    std::string message = common::Concat(
-      "We expected the XML namespace ",
-      kNamespace,
-      ", but we got the namespace ",
-      name_str.substr(0, separator_i),
-      " in the start element <",
-      name_str.substr(separator_i + 1),
-      ">"
-    );
-
-    our_data->node_buffer.emplace_back(
-      common::make_unique<ErrorNode>(
-        XML_GetCurrentLineNumber(our_data->parser),
-        XML_GetCurrentColumnNumber(our_data->parser),
-        message
-      )
-    );
-
-    XML_StopParser(our_data->parser, false);
-    our_data->stopped = true;
-    return;
-  }
-
-  if (
-    attributes[0] != nullptr
-    && !(our_data->additional_attributes)
-  ) {
-    std::string message = common::Concat(
-      "Additional attributes are not allowed, "
-      "but the attribute ",
-      attributes[0],
-      " was read in the start element <",
-      name_str.substr(separator_i + 1),
-      ">"
-    );
-
-    our_data->node_buffer.emplace_back(
-      common::make_unique<ErrorNode>(
-        XML_GetCurrentLineNumber(our_data->parser),
-        XML_GetCurrentColumnNumber(our_data->parser),
-        message
-      )
-    );
-
-    XML_StopParser(our_data->parser, false);
-    our_data->stopped = true;
-    return;
-  }
-
-  our_data->node_buffer.emplace_back(
-    common::make_unique<StartNode>(
-      name_str.substr(separator_i + 1)
-    )
-  );
-}
-
-void XMLCALL OnStopElement(
-  void* user_data,
-  const char* name
-) {
-  auto* our_data = static_cast<OurData*>(user_data);
-
-  // NOTE (mristin):
-  // Since Expat continues parsing and adding nodes even if the parsing is
-  // suspended (see the documentation of `XML_StopParser`), we have to ignore
-  // any further events.
-  if (our_data->stopped) {
-    return;
-  }
-
-  const std::string name_str(name);
-
-  size_t separator_i = name_str.find(kNamespaceSeparator);
-  if (separator_i == std::string::npos || separator_i == 0) {
-    std::string message = common::Concat(
-      "The namespace is missing in the stop element </",
-      name_str,
-      ">"
-    );
-
-    our_data->node_buffer.emplace_back(
-      common::make_unique<ErrorNode>(
-        XML_GetCurrentLineNumber(our_data->parser),
-        XML_GetCurrentColumnNumber(our_data->parser),
-        message
-      )
-    );
-
-    XML_StopParser(our_data->parser, false);
-    our_data->stopped = true;
-    return;
-  }
-
-  if (name_str.compare(0, separator_i, kNamespace) != 0) {
-    std::string message = common::Concat(
-      "We expected the XML namespace ",
-      kNamespace,
-      ", but we got the namespace ",
-      name_str.substr(0, separator_i),
-      " in the stop element </",
-      name_str.substr(separator_i + 1),
-      ">"
-    );
-
-    our_data->node_buffer.emplace_back(
-      common::make_unique<ErrorNode>(
-        XML_GetCurrentLineNumber(our_data->parser),
-        XML_GetCurrentColumnNumber(our_data->parser),
-        message
-      )
-    );
-
-    XML_StopParser(our_data->parser, false);
-    our_data->stopped = true;
-    return;
-  }
-
-  our_data->node_buffer.emplace_back(
-    common::make_unique<StopNode>(
-      name_str.substr(separator_i + 1)
-    )
-  );
-}
-
-void XMLCALL OnText(
-  void* user_data,
-  const char* val,
-  int len
-) {
-  auto our_data = static_cast<OurData*>(user_data);
-
-  // NOTE (mristin):
-  // Since Expat continues parsing and adding nodes even if the parsing is
-  // suspended (see the documentation of `XML_StopParser`), we have to ignore
-  // any further events.
-  if (our_data->stopped) {
-    return;
-  }
-
-  our_data->node_buffer.emplace_back(
-    common::make_unique<TextNode>(
-      std::string(val, len)
-    )
-  );
-}
-
-void Reader::Initialize() {
-  // NOTE (mristin):
-  // We set up the underlying parser here instead of the constructor
-  // to avoid throwing exceptions in the constructor.
-
-  if (parser_ != nullptr) {
-    throw std::logic_error(
-      "You are trying to re-initialize an initialized XML reader."
-    );
-  }
-
-  if (
-    buffer_size_
-    > static_cast<size_t>(
-      (std::numeric_limits<int>::max)()
-    )
-  ) {
-    throw std::invalid_argument(
-      common::Concat(
-        "Expat library expects the buffer size as int, "
-        "but the given buffer size ",
-        std::to_string(buffer_size_),
-        " does not fit in an int as it is larger than the maximum int ",
-        std::to_string(std::numeric_limits<int>::max())
-      )
-    );
-  }
-
-  parser_ = XML_ParserCreateNS(nullptr, kNamespaceSeparator);
-  our_data_ = common::make_unique<OurData>(
-    additional_attributes_,
-    buffer_size_,
-    parser_,
-    node_buffer_
-  );
-
-  XML_SetUserData(parser_, our_data_.get());
-  XML_SetElementHandler(
-    parser_,
-    OnStartElement,
-    OnStopElement
-  );
-  XML_SetCharacterDataHandler(parser_, OnText);
-
-  chunk_.resize(buffer_size_);
-
-  Read();
-}
-
-void Reader::Read() {
-  if (parser_ == nullptr) {
-    throw std::logic_error(
-      "You are trying to read from an uninitialized XML reader"
-    );
-  }
-
-  if (eof_) {
-    throw std::logic_error(
-      "The XML reader reached the end-of-input, "
-      "but you called Read()"
-    );
-  }
-
-  if (error_) {
-    throw std::logic_error(
-      "There was an error while reading XML, "
-      "but you called Read() again"
-    );
-  }
-
-  while (node_buffer_.empty()) {
-    // NOTE (mristin):
-    // We read and parse the next chunk of input, until we parsed a whole node.
-    // The text, however, will be fragmented by Expat's design.
-
-    is_.read(&(chunk_[0]), buffer_size_);
-
-    const std::streamsize actual_bytes_read = is_.gcount();
-
-    if (is_.bad()) {
-      SetCurrentAndEofAndError(
-        common::make_unique<ErrorNode>(
-          0,
-          0,
-          "Failed to read from the input"
-        )
-      );
-      return;
-    }
-
-    if (actual_bytes_read == 0) {
-      if (is_.eof()) {
-        SetCurrentAndEofAndError(common::make_unique<EofNode>());
-        return;
-      } else {
-        SetCurrentAndEofAndError(
-          common::make_unique<ErrorNode>(
-            0,
-            0,
-            "Read zero bytes from the input, "
-            "but the input is neither eof() nor bad()"
-          )
-        );
-        return;
-      }
-    } else {
-      const bool done = is_.eof();
-
-      if (actual_bytes_read > std::numeric_limits<int>::max()) {
-        std::string message = common::Concat(
-          "Expat library expects the buffer size as int, ",
-          "but the actual number of bytes read ",
-          std::to_string(actual_bytes_read),
-          " does not fit in an int as it is larger than the maximum int ",
-          std::to_string(std::numeric_limits<int>::max())
-        );
-
-        throw std::runtime_error(message);
-      }
-
-      const auto actual_bytes_read_int = static_cast<int>(actual_bytes_read);
-
-      XML_Status status = XML_Parse(
-        parser_,
-        &(chunk_[0]),
-        actual_bytes_read_int,
-        done
-      );
-
-      if (status == XML_STATUS_ERROR) {
-        XML_Error error_code = XML_GetErrorCode(parser_);
-
-        if (error_code == XML_ERROR_ABORTED) {
-          if (node_buffer_.empty()) {
-            throw std::logic_error(
-              "The XML parsing was aborted, "
-              "so we expected an error node on the buffer, "
-              "but the buffer was empty"
-            );
-          }
-
-          if (node_buffer_.back()->kind() != NodeKind::Error) {
-            std::string message = common::Concat(
-              "The XML parsing was aborted, "
-              "so we expected an error node on the buffer, "
-              "but we got ",
-              NodeKindToHumanReadableString(node_buffer_.back()->kind())
-            );
-
-            throw std::logic_error(message);
-          }
-        } else {
-          const XML_LChar* error_str = XML_ErrorString(error_code);
-
-          node_buffer_.emplace_back(
-            common::make_unique<ErrorNode>(
-              XML_GetCurrentLineNumber(parser_),
-              XML_GetCurrentColumnNumber(parser_),
-              std::string(error_str)
-            )
-          );
-        }
-      } else {
-        if (done) {
-          node_buffer_.emplace_back(common::make_unique<EofNode>());
-        }
-      }
-    }
-  }
-
-  SetCurrentAndEofAndError(std::move(node_buffer_.front()));
-  node_buffer_.pop_front();
-}
-
-const INode& Reader::node() const {
-  return *current_;
-}
-
-std::unique_ptr<INode> Reader::moved_node() {
-  return std::move(current_);
-}
-
-Reader::~Reader() {
-  if (parser_ != nullptr) {
-    XML_ParserFree(parser_);
-  }
-}
-
-void Reader::SetCurrentAndEofAndError(
-  std::unique_ptr<INode> node
-) {
-  current_ = std::move(node);
-
-  #ifdef __clang__
-  #pragma clang diagnostic push
-  #pragma clang diagnostic ignored "-Wswitch"
-  #endif
-  switch (current_->kind()) {
-    case NodeKind::Eof:
-      eof_ = true;
-      break;
-    case NodeKind::Error:
-      error_ = true;
-      break;
-  }
-  #ifdef __clang__
-  #pragma clang diagnostic pop
-  #endif
-}
-
-// endregion class Reader
-
-// region class ReaderMergingText
-
-/**
- * \brief Read XML in forms of nodes, with text nodes read in whole.
- *
- * This is a reader on top of the \ref Reader which keeps the text fragments
- * in the buffer. We need to process the text in whole during the XML
- * de-serialization, so this buffering is necessary. However, this means that
- * the text is kept in four copies (one partial copy in Expat buffer,
- * another partial copy as fragmented text nodes in the underlying \ref Reader
- * instance, yet another copy in the internal buffer of this instance, and
- * finally the fourth copy as the merged complete text).
- */
-class ReaderMergingText {
- public:
-  ReaderMergingText(
-    std::istream& is,
-    const ReadingOptions& options
-  );
-
-  /**
-   * Set up the reader for the XML parsing and read the first node.
-   */
-  void Initialize();
-
-  /**
-   * Read the next node in the document.
-   */
-  void Read();
-
-  /**
-   * @return the node which has been read last
-   */
-  const INode& node() const;
-
-  /**
-   * @return set if the current node represents an error
-   */
-  bool error() const;
-
-  /**
-   * @return set if the current node represents an end-of-input
-   */
-  bool eof() const;
-
- private:
-  bool initialized_;
-  Reader reader_;
-
-  std::unique_ptr<INode> current_;
-  std::unique_ptr<INode> look_ahead_;
-
-  // Assuming that the underlying reader points to a text node,
-  // read all the consecutive text nodes and set the look-ahead node
-  void ReadAndMergeAllTextAndSetLookahead();
-
-  bool error_;
-  bool eof_;
-  void SetCurrentAndEofAndError(
-    std::unique_ptr<INode> node
-  );
-};  // class ReaderMergingText
-
-ReaderMergingText::ReaderMergingText(
-    std::istream& is,
-    const ReadingOptions& options
-) :
-  initialized_(false),
-  reader_(is, options),
-  current_(common::make_unique<BofNode>()),
-  error_(false),
-  eof_(false) {
-  // Intentionally empty.
-}
-
-void ReaderMergingText::Initialize() {
-  if (initialized_) {
-    throw std::logic_error(
-      "You are trying to initialize "
-      "an already initialized ReaderMergingText"
-    );
-  }
-
-  reader_.Initialize();
-
-  // NOTE (mristin):
-  // The `reader_` has already read a node. Hence, we need to parse it here
-  // separately from `ReaderMergingText::Read` method.
-
-  if (reader_.node().kind() != NodeKind::Text) {
-    SetCurrentAndEofAndError(reader_.moved_node());
-  } else {
-    ReadAndMergeAllTextAndSetLookahead();
-  }
-
-  initialized_ = true;
-}
-
-void ReaderMergingText::Read() {
-  if (!initialized_) {
-    throw std::logic_error(
-      "You are reading from an uninitialized ReaderMergingText"
-    );
-  }
-
-  if (eof()) {
-    throw std::logic_error(
-      "You are trying to read from a ReaderMergingText, "
-      "but it reached the end-of-input"
-    );
-  }
-
-  if (error()) {
-    throw std::logic_error(
-      "You are trying to read from a ReaderMergingText, "
-      "but an error already occurred"
-    );
-  }
-
-  if (look_ahead_ != nullptr) {
-    SetCurrentAndEofAndError(std::move(look_ahead_));
-    return;
-  }
-
-  reader_.Read();
-  if (reader_.node().kind() != NodeKind::Text) {
-    SetCurrentAndEofAndError(reader_.moved_node());
-  } else {
-    ReadAndMergeAllTextAndSetLookahead();
-  }
-}
-
-const INode& ReaderMergingText::node() const {
-  return *current_;
-}
-
-bool ReaderMergingText::error() const {
-  return error_;
-}
-
-bool ReaderMergingText::eof() const {
-  return eof_;
-}
-
-void ReaderMergingText::ReadAndMergeAllTextAndSetLookahead() {
-  if (reader_.node().kind() != NodeKind::Text) {
-    std::string message = common::Concat(
-      "Expected the current node in the reader "
-      "underlying ReaderMergingText to be a text, "
-      "but it was ",
-      NodeKindToHumanReadableString(reader_.node().kind())
-    );
-
-    throw std::logic_error(message);
-  }
-
-  std::deque<std::string> text_buffer;
-
-  while (reader_.node().kind() == NodeKind::Text) {
-    const TextNode& fragment_text_node(
-      static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const TextNode&
-      >(
-        reader_.node()
-      )
-    );
-
-    text_buffer.emplace_back(fragment_text_node.text);
-
-    reader_.Read();
-  }
-  look_ahead_ = reader_.moved_node();
-
-  size_t size = 0;
-  for (const std::string& fragment : text_buffer) {
-    size += fragment.size();
-  }
-
-  std::string text;
-  text.reserve(size);
-  while (!text_buffer.empty()) {
-    text.append(text_buffer.front());
-    text_buffer.pop_front();
-  }
-
-  SetCurrentAndEofAndError(common::make_unique<TextNode>(text));
-}
-
-void ReaderMergingText::SetCurrentAndEofAndError(std::unique_ptr<INode> node) {
-  current_ = std::move(node);
-
-  #ifdef __clang__
-  #pragma clang diagnostic push
-  #pragma clang diagnostic ignored "-Wswitch"
-  #endif
-  switch (current_->kind()) {
-    case NodeKind::Eof:eof_ = true;
-      break;
-    case NodeKind::Error:error_ = true;
-      break;
-  }
-  #ifdef __clang__
-  #pragma clang diagnostic pop
-  #endif
-}
-
-// endregion class ReaderMergingText
-
-// endregion Reading
-
 // region Forward declarations of de-serialization functions
 
 // NOTE (mristin):
@@ -1149,7 +242,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > HasSemanticsFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1158,7 +251,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ExtensionFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1171,7 +264,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ExtensionFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1180,7 +273,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > HasExtensionsFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1189,7 +282,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ReferableFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1198,7 +291,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > IdentifiableFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1207,7 +300,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > HasKindFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1216,7 +309,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > HasDataSpecificationFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1225,7 +318,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > AdministrativeInformationFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1238,7 +331,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > AdministrativeInformationFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1247,7 +340,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > QualifiableFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1256,7 +349,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > QualifierFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1269,7 +362,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > QualifierFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1278,7 +371,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > AssetAdministrationShellFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1291,7 +384,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > AssetAdministrationShellFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1300,7 +393,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > AssetInformationFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1313,7 +406,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > AssetInformationFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1322,7 +415,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ResourceFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1335,7 +428,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ResourceFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1344,7 +437,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > SpecificAssetIdFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1357,7 +450,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > SpecificAssetIdFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1366,7 +459,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > SubmodelFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1379,7 +472,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > SubmodelFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1388,7 +481,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > SubmodelElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1397,7 +490,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > RelationshipElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1410,7 +503,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > RelationshipElementFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1419,7 +512,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > SubmodelElementListFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1432,7 +525,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > SubmodelElementListFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1441,7 +534,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > SubmodelElementCollectionFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1454,7 +547,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > SubmodelElementCollectionFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1463,7 +556,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > DataElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1472,7 +565,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > PropertyFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1485,7 +578,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > PropertyFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1494,7 +587,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > MultiLanguagePropertyFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1507,7 +600,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > MultiLanguagePropertyFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1516,7 +609,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > RangeFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1529,7 +622,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > RangeFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1538,7 +631,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ReferenceElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1551,7 +644,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ReferenceElementFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1560,7 +653,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > BlobFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1573,7 +666,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > BlobFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1582,7 +675,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > FileFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1595,7 +688,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > FileFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1604,7 +697,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > AnnotatedRelationshipElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1617,7 +710,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > AnnotatedRelationshipElementFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1626,7 +719,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > EntityFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1639,7 +732,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > EntityFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1648,7 +741,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > EventPayloadFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1661,7 +754,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > EventPayloadFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1670,7 +763,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > EventElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1679,7 +772,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > BasicEventElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1692,7 +785,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > BasicEventElementFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1701,7 +794,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > OperationFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1714,7 +807,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > OperationFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1723,7 +816,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > OperationVariableFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1736,7 +829,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > OperationVariableFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1745,7 +838,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > CapabilityFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1758,7 +851,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > CapabilityFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1767,7 +860,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ConceptDescriptionFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1780,7 +873,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ConceptDescriptionFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1789,7 +882,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ReferenceFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1802,7 +895,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ReferenceFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1811,7 +904,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > KeyFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1824,7 +917,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > KeyFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1833,7 +926,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > AbstractLangStringFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1842,7 +935,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LangStringNameTypeFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1855,7 +948,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LangStringNameTypeFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1864,7 +957,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LangStringTextTypeFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1877,7 +970,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LangStringTextTypeFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1886,7 +979,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > EnvironmentFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1899,7 +992,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > EnvironmentFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1908,7 +1001,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > DataSpecificationContentFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1917,7 +1010,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > EmbeddedDataSpecificationFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1930,7 +1023,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > EmbeddedDataSpecificationFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1939,7 +1032,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LevelTypeFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1952,7 +1045,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LevelTypeFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1961,7 +1054,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ValueReferencePairFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1974,7 +1067,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ValueReferencePairFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -1983,7 +1076,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ValueListFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -1996,7 +1089,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ValueListFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -2005,7 +1098,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LangStringPreferredNameTypeIec61360FromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -2018,7 +1111,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LangStringPreferredNameTypeIec61360FromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -2027,7 +1120,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LangStringShortNameTypeIec61360FromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -2040,7 +1133,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LangStringShortNameTypeIec61360FromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -2049,7 +1142,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LangStringDefinitionTypeIec61360FromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -2062,7 +1155,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LangStringDefinitionTypeIec61360FromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 std::pair<
@@ -2071,7 +1164,7 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > DataSpecificationIec61360FromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 template <
@@ -2084,7 +1177,7 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > DataSpecificationIec61360FromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 );
 
 // endregion Forward declarations of de-serialization functions
@@ -2261,142 +1354,6 @@ common::optional<types::ModelType> ModelTypeFromElementName(
   return it->second;
 }
 
-std::string NodeToHumanReadableString(
-  const INode& node
-) {
-  switch (node.kind()) {
-    case NodeKind::Bof:
-      return "beginning-of-input";
-
-    case NodeKind::Start: {
-      const StartNode& start_node(
-        static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-          const StartNode&
-        >(node)
-      );
-
-      return common::Concat(
-        "a start node <",
-        start_node.name,
-        ">"
-      );
-    }
-
-    case NodeKind::Stop: {
-      const StopNode& stop_node(
-        static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-          const StopNode&
-        >(node)
-      );
-
-      return common::Concat(
-        "a stop node </",
-        stop_node.name,
-        ">"
-      );
-    }
-
-    case NodeKind::Text:
-      return "an XML text";
-
-    case NodeKind::Eof:
-      return "end-of-input";
-
-    case NodeKind::Error:
-      return "an XML error";
-
-    default:
-      throw std::invalid_argument(
-        common::Concat(
-          "Unexpected node kind: ",
-          std::to_string(
-            static_cast<uint32_t>(node.kind())
-          )
-        )
-      );
-  }
-}
-
-std::wstring NodeToHumanReadableWstring(
-  const INode& node
-) {
-  switch (node.kind()) {
-    case NodeKind::Bof:
-      return L"beginning-of-input";
-
-    case NodeKind::Start: {
-      const StartNode& start_node(
-        static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-          const StartNode&
-        >(node)
-      );
-
-      return common::Concat(
-        L"a start node <",
-        common::Utf8ToWstring(start_node.name),
-        L">"
-      );
-    }
-
-    case NodeKind::Stop: {
-      const StopNode& stop_node(
-        static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-          const StopNode&
-        >(node)
-      );
-
-      return common::Concat(
-        L"a stop node </",
-        common::Utf8ToWstring(stop_node.name),
-        L">"
-      );
-    }
-
-    case NodeKind::Text:
-      return L"an XML text";
-
-    case NodeKind::Eof:
-      return L"end-of-input";
-
-    case NodeKind::Error:
-      return L"an XML error";
-
-    default:
-      throw std::invalid_argument(
-        common::Concat(
-          "Unexpected node kind: ",
-          std::to_string(
-            static_cast<uint32_t>(node.kind())
-          )
-        )
-      );
-  }
-}
-
-/**
- * Check that the given node is a stop node and that its name corresponds to
- * the expected name.
- */
-bool IsStopNodeWithName(
-  const INode& node,
-  const std::string& expected_name
-) {
-  if (node.kind() != NodeKind::Stop) {
-    return false;
-  }
-
-  const std::string& name(
-    static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-      const StopNode&
-    >(node).name
-  );
-  if (name != expected_name) {
-    return false;
-  }
-
-  return true;
-}
-
 template <
   typename T
 >
@@ -2447,20 +1404,20 @@ DeserializationError DuplicatePropertyError(
 }
 
 DeserializationError DeserializationErrorFromReader(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
-  if (reader.node().kind() != NodeKind::Error) {
+  if (reader.node().kind() != xml_common::NodeKind::Error) {
     throw std::logic_error(
       common::Concat(
         "Expected an error node at the reader cursor, but got ",
-        NodeToHumanReadableString(reader.node())
+        xml_common::NodeToHumanReadableString(reader.node())
       )
     );
   }
 
   const auto error_node(
     static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-      const ErrorNode&
+      const xml_common::ErrorNode&
     >(reader.node())
   );
 
@@ -2478,13 +1435,13 @@ std::pair<
   common::optional<T>,
   common::optional<DeserializationError>
 > NoInstanceAndDeserializationErrorFromReader(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
-  if (reader.node().kind() != NodeKind::Error) {
+  if (reader.node().kind() != xml_common::NodeKind::Error) {
     throw std::logic_error(
       common::Concat(
         "Expected an error node at the reader cursor, but got ",
-        NodeToHumanReadableString(reader.node())
+        xml_common::NodeToHumanReadableString(reader.node())
       )
     );
   }
@@ -2530,10 +1487,10 @@ void PrependElementSegmentToDeserializationError(
 }
 
 common::optional<DeserializationError> CheckReaderAtEof(
-  const ReaderMergingText& reader
+  const xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in CheckReaderAtEof. "
       "CheckReaderAtEof expects no reader error at entry."
@@ -2541,11 +1498,11 @@ common::optional<DeserializationError> CheckReaderAtEof(
   }
   #endif
 
-  if (reader.node().kind() != NodeKind::Eof) {
+  if (reader.node().kind() != xml_common::NodeKind::Eof) {
     return common::make_optional<DeserializationError>(
       common::Concat(
         L"Expected end-of-input, but got ",
-        NodeToHumanReadableWstring(reader.node())
+        xml_common::NodeToHumanReadableWstring(reader.node())
       )
     );
   }
@@ -2561,14 +1518,14 @@ common::optional<DeserializationError> CheckReaderAtEof(
  * Return an error if the reader produced an error.
  */
 common::optional<DeserializationError> SkipBof(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
-  if (reader.node().kind() != NodeKind::Bof) {
+  if (reader.node().kind() != xml_common::NodeKind::Bof) {
     return common::nullopt;
   }
 
   reader.Read();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return DeserializationErrorFromReader(reader);
   }
 
@@ -2617,12 +1574,12 @@ bool IsWhitespace(const std::string& utf8_text) {
  * Return an error if the reader produced an error.
  */
 common::optional<DeserializationError> SkipWhitespace(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
-  while (reader.node().kind() == NodeKind::Text) {
-    const TextNode& text_node(
+  while (reader.node().kind() == xml_common::NodeKind::Text) {
+    const xml_common::TextNode& text_node(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const TextNode&
+        const xml_common::TextNode&
       >(
         reader.node()
       )
@@ -2635,7 +1592,7 @@ common::optional<DeserializationError> SkipWhitespace(
     reader.Read();
   }
 
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return DeserializationErrorFromReader(reader);
   }
 
@@ -2647,12 +1604,12 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > DeserializeClassFromElement(
-  ReaderMergingText& reader,
+  xml_common::ReaderMergingText& reader,
   const std::wstring& interface_name,
   const DispatchT& dispatch
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeClassFromElement. "
       "DeserializeClassFromElement expects no reader error at entry."
@@ -2676,7 +1633,7 @@ std::pair<
     >(std::move(*error));
   }
 
-  if (reader.node().kind() != NodeKind::Start) {
+  if (reader.node().kind() != xml_common::NodeKind::Start) {
     return NoInstanceAndDeserializationErrorWithCause<
       std::shared_ptr<T>
     >(
@@ -2684,14 +1641,14 @@ std::pair<
         L"Expected a start element opening an instance of ",
         interface_name,
         L", but got ",
-        NodeToHumanReadableWstring(reader.node())
+        xml_common::NodeToHumanReadableWstring(reader.node())
       )
     );
   }
 
   const std::string name(
     static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-      const StartNode&
+      const xml_common::StartNode&
     >(reader.node()).name
   );
 
@@ -2714,7 +1671,7 @@ std::pair<
   // We consume the start element.
   reader.Read();
 
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     auto noInstanceAndError = NoInstanceAndDeserializationErrorFromReader<
       std::shared_ptr<T>
     >(
@@ -2758,7 +1715,7 @@ std::pair<
     >(std::move(*error));
   }
 
-  if (!IsStopNodeWithName(reader.node(), name)) {
+  if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
     error = DeserializationError(
       common::Concat(
         L"Expected a stop element </",
@@ -2766,7 +1723,7 @@ std::pair<
         L"> closing an instance of ",
         interface_name,
         L", but got ",
-        NodeToHumanReadableWstring(reader.node())
+        xml_common::NodeToHumanReadableWstring(reader.node())
       )
     );
 
@@ -2783,7 +1740,7 @@ std::pair<
   // NOTE (mristin):
   // We consume the stop element.
   reader.Read();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     error = DeserializationErrorFromReader(reader);
 
     PrependElementSegmentToDeserializationError(
@@ -2807,13 +1764,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ClassFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IClass>(
     reader,
     L"IClass",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -2995,13 +1952,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > HasSemanticsFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IHasSemantics>(
     reader,
     L"IHasSemantics",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3103,13 +2060,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ExtensionFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IExtension>(
     reader,
     L"IExtension",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3143,13 +2100,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > HasExtensionsFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IHasExtensions>(
     reader,
     L"IHasExtensions",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3247,13 +2204,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ReferableFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IReferable>(
     reader,
     L"IReferable",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3351,13 +2308,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > IdentifiableFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IIdentifiable>(
     reader,
     L"IIdentifiable",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3399,13 +2356,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > HasKindFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IHasKind>(
     reader,
     L"IHasKind",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3439,13 +2396,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > HasDataSpecificationFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IHasDataSpecification>(
     reader,
     L"IHasDataSpecification",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3547,13 +2504,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > AdministrativeInformationFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IAdministrativeInformation>(
     reader,
     L"IAdministrativeInformation",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3587,13 +2544,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > QualifiableFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IQualifiable>(
     reader,
     L"IQualifiable",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3683,13 +2640,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > QualifierFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IQualifier>(
     reader,
     L"IQualifier",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3723,13 +2680,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > AssetAdministrationShellFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IAssetAdministrationShell>(
     reader,
     L"IAssetAdministrationShell",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3763,13 +2720,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > AssetInformationFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IAssetInformation>(
     reader,
     L"IAssetInformation",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3803,13 +2760,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ResourceFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IResource>(
     reader,
     L"IResource",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3843,13 +2800,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > SpecificAssetIdFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ISpecificAssetId>(
     reader,
     L"ISpecificAssetId",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3883,13 +2840,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > SubmodelFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ISubmodel>(
     reader,
     L"ISubmodel",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -3923,13 +2880,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > SubmodelElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ISubmodelElement>(
     reader,
     L"ISubmodelElement",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4015,13 +2972,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > RelationshipElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IRelationshipElement>(
     reader,
     L"IRelationshipElement",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4059,13 +3016,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > SubmodelElementListFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ISubmodelElementList>(
     reader,
     L"ISubmodelElementList",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4099,13 +3056,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > SubmodelElementCollectionFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ISubmodelElementCollection>(
     reader,
     L"ISubmodelElementCollection",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4139,13 +3096,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > DataElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IDataElement>(
     reader,
     L"IDataElement",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4199,13 +3156,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > PropertyFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IProperty>(
     reader,
     L"IProperty",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4239,13 +3196,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > MultiLanguagePropertyFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IMultiLanguageProperty>(
     reader,
     L"IMultiLanguageProperty",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4279,13 +3236,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > RangeFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IRange>(
     reader,
     L"IRange",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4319,13 +3276,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ReferenceElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IReferenceElement>(
     reader,
     L"IReferenceElement",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4359,13 +3316,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > BlobFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IBlob>(
     reader,
     L"IBlob",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4399,13 +3356,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > FileFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IFile>(
     reader,
     L"IFile",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4439,13 +3396,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > AnnotatedRelationshipElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IAnnotatedRelationshipElement>(
     reader,
     L"IAnnotatedRelationshipElement",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4479,13 +3436,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > EntityFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IEntity>(
     reader,
     L"IEntity",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4519,13 +3476,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > EventPayloadFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IEventPayload>(
     reader,
     L"IEventPayload",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4559,13 +3516,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > EventElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IEventElement>(
     reader,
     L"IEventElement",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4599,13 +3556,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > BasicEventElementFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IBasicEventElement>(
     reader,
     L"IBasicEventElement",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4639,13 +3596,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > OperationFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IOperation>(
     reader,
     L"IOperation",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4679,13 +3636,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > OperationVariableFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IOperationVariable>(
     reader,
     L"IOperationVariable",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4719,13 +3676,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > CapabilityFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ICapability>(
     reader,
     L"ICapability",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4759,13 +3716,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ConceptDescriptionFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IConceptDescription>(
     reader,
     L"IConceptDescription",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4799,13 +3756,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ReferenceFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IReference>(
     reader,
     L"IReference",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4839,13 +3796,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > KeyFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IKey>(
     reader,
     L"IKey",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4879,13 +3836,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > AbstractLangStringFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IAbstractLangString>(
     reader,
     L"IAbstractLangString",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4935,13 +3892,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LangStringNameTypeFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ILangStringNameType>(
     reader,
     L"ILangStringNameType",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -4975,13 +3932,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LangStringTextTypeFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ILangStringTextType>(
     reader,
     L"ILangStringTextType",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -5015,13 +3972,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > EnvironmentFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IEnvironment>(
     reader,
     L"IEnvironment",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -5055,13 +4012,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > DataSpecificationContentFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IDataSpecificationContent>(
     reader,
     L"IDataSpecificationContent",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -5095,13 +4052,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > EmbeddedDataSpecificationFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IEmbeddedDataSpecification>(
     reader,
     L"IEmbeddedDataSpecification",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -5135,13 +4092,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LevelTypeFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ILevelType>(
     reader,
     L"ILevelType",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -5175,13 +4132,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ValueReferencePairFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IValueReferencePair>(
     reader,
     L"IValueReferencePair",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -5215,13 +4172,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > ValueListFromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IValueList>(
     reader,
     L"IValueList",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -5255,13 +4212,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LangStringPreferredNameTypeIec61360FromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ILangStringPreferredNameTypeIec61360>(
     reader,
     L"ILangStringPreferredNameTypeIec61360",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -5295,13 +4252,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LangStringShortNameTypeIec61360FromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ILangStringShortNameTypeIec61360>(
     reader,
     L"ILangStringShortNameTypeIec61360",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -5335,13 +4292,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > LangStringDefinitionTypeIec61360FromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::ILangStringDefinitionTypeIec61360>(
     reader,
     L"ILangStringDefinitionTypeIec61360",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -5375,13 +4332,13 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > DataSpecificationIec61360FromElement(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   return DeserializeClassFromElement<types::IDataSpecificationIec61360>(
     reader,
     L"IDataSpecificationIec61360",
     [](
-      ReaderMergingText& a_reader,
+      xml_common::ReaderMergingText& a_reader,
       types::ModelType a_model_type,
       const std::string& a_name
     ) -> std::pair<
@@ -5411,231 +4368,6 @@ std::pair<
 
 // region De-serialize primitives
 
-/**
- * \brief Normalize \p text the way `whiteSpace="collapse"` prescribes.
- *
- * Every atomic XSD type except a string, and every type derived from one by
- * restriction, fixes `whiteSpace` to `collapse`, and a schema author can not
- * change it. A tab, a line feed and a carriage return each become a space,
- * a run of spaces becomes one space, and the leading and trailing spaces go.
- * Only the result of that is a lexical representation to be matched.
- *
- * Mind that this strips only the whitespace *around* the value: a space
- * within it survives as a single space, so `2  3` becomes `2 3`, which is
- * still no number.
- *
- * See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
- */
-std::string CollapseWhitespace(const std::string& text) {
-  std::string result;
-  result.reserve(text.size());
-
-  bool pending_space = false;
-  for (const char character : text) {
-    if (
-      character == ' '
-      || character == '\t'
-      || character == '\n'
-      || character == '\r'
-    ) {
-      // NOTE (mristin):
-      // A space is only worth keeping once something has come before it,
-      // which trims the leading ones, and it is written out only when
-      // something follows, which trims the trailing ones.
-      pending_space = !result.empty();
-    } else {
-      if (pending_space) {
-        result += ' ';
-        pending_space = false;
-      }
-      result += character;
-    }
-  }
-
-  return result;
-}
-
-/**
- * \brief Tell whether \p text is a numeral of the `xs:long` lexical space.
- *
- *     [-+]?[0-9]+
- *
- * The range is left to the parser, which refuses what does not fit
- * a 64-bit integer.
- *
- * See: https://www.w3.org/TR/xmlschema-2/#long
- */
-bool MatchesXsLongNumeral(const std::string& text) {
-  std::size_t cursor = 0;
-  const std::size_t size = text.size();
-
-  if (cursor < size && (text[cursor] == '+' || text[cursor] == '-')) {
-    ++cursor;
-  }
-
-  std::size_t digits = 0;
-  while (cursor < size && text[cursor] >= '0' && text[cursor] <= '9') {
-    ++cursor;
-    ++digits;
-  }
-
-  return digits > 0 && cursor == size;
-}
-
-/**
- * \brief Tell whether \p text is a numeral of the `xs:double` lexical space.
- *
- * The three named literals -- `INF`, `-INF` and `NaN` -- are matched by
- * the caller, so only the numeral is considered here:
- *
- *     (\+|-)? ( [0-9]+ (\.[0-9]*)? | \.[0-9]+ ) ([Ee](\+|-)?[0-9]+)?
- *
- * This is spelled out rather than left to `std::regex` so that no pattern has
- * to be compiled, and rather than left to `std::stod` because that one reads
- * far more than XSD admits.
- *
- * See: https://www.w3.org/TR/xmlschema-2/#double
- */
-bool MatchesXsDoubleNumeral(const std::string& text) {
-  std::size_t cursor = 0;
-  const std::size_t size = text.size();
-
-  if (cursor < size && (text[cursor] == '+' || text[cursor] == '-')) {
-    ++cursor;
-  }
-
-  std::size_t digits_before_the_point = 0;
-  while (cursor < size && text[cursor] >= '0' && text[cursor] <= '9') {
-    ++cursor;
-    ++digits_before_the_point;
-  }
-
-  std::size_t digits_after_the_point = 0;
-  if (cursor < size && text[cursor] == '.') {
-    ++cursor;
-    while (cursor < size && text[cursor] >= '0' && text[cursor] <= '9') {
-      ++cursor;
-      ++digits_after_the_point;
-    }
-  }
-
-  // NOTE (mristin):
-  // A numeral needs a digit somewhere, but on either side of the point will
-  // do: both "1." and ".5" are good xs:double numerals.
-  if (digits_before_the_point == 0 && digits_after_the_point == 0) {
-    return false;
-  }
-
-  if (cursor < size && (text[cursor] == 'e' || text[cursor] == 'E')) {
-    ++cursor;
-
-    if (cursor < size && (text[cursor] == '+' || text[cursor] == '-')) {
-      ++cursor;
-    }
-
-    std::size_t digits_in_the_exponent = 0;
-    while (cursor < size && text[cursor] >= '0' && text[cursor] <= '9') {
-      ++cursor;
-      ++digits_in_the_exponent;
-    }
-
-    if (digits_in_the_exponent == 0) {
-      return false;
-    }
-  }
-
-  return cursor == size;
-}
-
-/**
- * \brief Tell whether \p text is a lexical form of `xs:base64Binary`.
- *
- * The whitespace is expected to be gone already. What is left has to match
- * `(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=') | (B64 B04 '=='))?`
- * -- a length which is a multiple of four, the alphabet and nothing else,
- * an equals sign only at the very end, and, easily missed, a constrained
- * character *before* the padding, as the bits which the padding drops have to
- * be zero.
- *
- * The decoders do not agree on any of this, so every target does the same
- * check of its own and refuses the same texts.
- *
- * See: https://www.w3.org/TR/xmlschema-2/#base64Binary
- */
-bool MatchesXsBase64Binary(const std::string& text) {
-  if (text.size() % 4 != 0) {
-    return false;
-  }
-
-  if (text.empty()) {
-    return true;
-  }
-
-  std::size_t pads = 0;
-  if (text[text.size() - 1] == '=') {
-    pads = 1;
-    if (text[text.size() - 2] == '=') {
-      pads = 2;
-    }
-  }
-
-  for (std::size_t i = 0; i < text.size() - pads; ++i) {
-    const char character = text[i];
-    const bool in_alphabet(
-      (character >= 'A' && character <= 'Z')
-        || (character >= 'a' && character <= 'z')
-        || (character >= '0' && character <= '9')
-        || character == '+'
-        || character == '/'
-    );
-    if (!in_alphabet) {
-      return false;
-    }
-  }
-
-  // NOTE (mristin):
-  // Only these sixteen characters leave the two dropped bits at zero, and
-  // only these four leave the four dropped bits at zero.
-  if (pads == 1) {
-    return std::string("AEIMQUYcgkosw048").find(text[text.size() - 2])
-      != std::string::npos;
-  }
-
-  if (pads == 2) {
-    return std::string("AQgw").find(text[text.size() - 3])
-      != std::string::npos;
-  }
-
-  return true;
-}
-
-/**
- * \brief Drop every whitespace character of \p text.
- *
- * This is what `xs:base64Binary` needs: it allows whitespace between
- * the characters and not only around them, so collapsing is not enough --
- * the decoder accepts none of it.
- *
- * See: https://www.w3.org/TR/xmlschema-2/#base64Binary
- */
-std::string RemoveWhitespace(const std::string& text) {
-  std::string result;
-  result.reserve(text.size());
-
-  for (const char character : text) {
-    if (
-      character != ' '
-      && character != '\t'
-      && character != '\n'
-      && character != '\r'
-    ) {
-      result += character;
-    }
-  }
-
-  return result;
-}
-
 const std::unordered_map<
   std::string,
   bool
@@ -5650,10 +4382,10 @@ std::pair<
   common::optional<bool>,
   common::optional<DeserializationError>
 > DeserializeBool(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeBool. "
       "DeserializeBool expects no error node."
@@ -5661,19 +4393,19 @@ std::pair<
   }
   #endif
 
-  if (reader.node().kind() != NodeKind::Text) {
+  if (reader.node().kind() != xml_common::NodeKind::Text) {
     return NoInstanceAndDeserializationErrorWithCause<bool>(
       common::Concat(
         L"Expected to parse an xs:boolean from XML text, but got ",
-        NodeToHumanReadableWstring(reader.node())
+        xml_common::NodeToHumanReadableWstring(reader.node())
       )
     );
   }
 
   const std::string text(
-    CollapseWhitespace(
+    xml_common::CollapseWhitespace(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const TextNode&
+        const xml_common::TextNode&
       >(reader.node()).text
     )
   );
@@ -5693,7 +4425,7 @@ std::pair<
   // We consume the text node.
   reader.Read();
 
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return NoInstanceAndDeserializationErrorFromReader<bool>(reader);
   }
 
@@ -5707,10 +4439,10 @@ std::pair<
   common::optional<int64_t>,
   common::optional<DeserializationError>
 > DeserializeInt64(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeInt64. "
       "DeserializeInt64 expects no error node."
@@ -5718,19 +4450,19 @@ std::pair<
   }
   #endif
 
-  if (reader.node().kind() != NodeKind::Text) {
+  if (reader.node().kind() != xml_common::NodeKind::Text) {
     return NoInstanceAndDeserializationErrorWithCause<int64_t>(
       common::Concat(
         L"Expected to parse an xs:long from XML text, but got ",
-        NodeToHumanReadableWstring(reader.node())
+        xml_common::NodeToHumanReadableWstring(reader.node())
       )
     );
   }
 
   const std::string text(
-    CollapseWhitespace(
+    xml_common::CollapseWhitespace(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const TextNode&
+        const xml_common::TextNode&
       >(reader.node()).text
     )
   );
@@ -5740,7 +4472,7 @@ std::pair<
   // family reads far more than XSD admits: it stops at the first character it
   // can not use and answers with what it has read so far, so "0x10" comes out
   // as 0, "1abc" as 1, and "5.0" as 5.
-  if (!MatchesXsLongNumeral(text)) {
+  if (!xml_common::MatchesXsLongNumeral(text)) {
     return NoInstanceAndDeserializationErrorWithCause<int64_t>(
       common::Concat(
         L"Expected to parse an xs:long from text, "
@@ -5804,7 +4536,7 @@ std::pair<
   // We consume the text node.
   reader.Read();
 
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return NoInstanceAndDeserializationErrorFromReader<int64_t>(reader);
   }
 
@@ -5818,7 +4550,7 @@ std::pair<
   common::optional<double>,
   common::optional<DeserializationError>
 > DeserializeDouble(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   static_assert(
     sizeof(double) == 8,
@@ -5827,7 +4559,7 @@ std::pair<
   );
 
   #ifdef DEBUG
-  if (node.kind() == NodeKind::Error) {
+  if (node.kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeDouble. "
       "DeserializeDouble expects no error node."
@@ -5835,19 +4567,19 @@ std::pair<
   }
   #endif
 
-  if (reader.node().kind() != NodeKind::Text) {
+  if (reader.node().kind() != xml_common::NodeKind::Text) {
     return NoInstanceAndDeserializationErrorWithCause<double>(
       common::Concat(
         L"Expected to parse an xs:double from XML text, but got ",
-        NodeToHumanReadableWstring(reader.node())
+        xml_common::NodeToHumanReadableWstring(reader.node())
       )
     );
   }
 
   const std::string text(
-    CollapseWhitespace(
+    xml_common::CollapseWhitespace(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const TextNode&
+        const xml_common::TextNode&
       >(reader.node()).text
     )
   );
@@ -5874,7 +4606,7 @@ std::pair<
     // std::stod reads far more than XSD admits: a hexadecimal significand,
     // so "0x10" comes out as 16; a trailing remainder, so "1.0abc" comes
     // out as 1; and the spellings "inf", "infinity", "nan" and "NAN".
-    if (!MatchesXsDoubleNumeral(text)) {
+    if (!xml_common::MatchesXsDoubleNumeral(text)) {
       return NoInstanceAndDeserializationErrorWithCause<double>(
         common::Concat(
           L"Expected to parse an xs:double from text, "
@@ -5900,7 +4632,7 @@ std::pair<
   // We consume the text node.
   reader.Read();
 
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return NoInstanceAndDeserializationErrorFromReader<double>(reader);
   }
 
@@ -5914,10 +4646,10 @@ std::pair<
   common::optional<std::wstring>,
   common::optional<DeserializationError>
 > DeserializeWstring(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeWstring. "
       "DeserializeWstring expects no error node."
@@ -5926,24 +4658,24 @@ std::pair<
   #endif
 
   switch (reader.node().kind()) {
-    case NodeKind::Stop:
+    case xml_common::NodeKind::Stop:
       // Encountering a stop node means that the string is empty.
       return std::make_pair(std::wstring(), common::nullopt);
-    case NodeKind::Text:
+    case xml_common::NodeKind::Text:
       // We pass and continue decoding the text.
       break;
     default:
       return NoInstanceAndDeserializationErrorWithCause<std::wstring>(
         common::Concat(
           L"Expected to parse an xs:string from XML text, but got ",
-            NodeToHumanReadableWstring(reader.node())
+            xml_common::NodeToHumanReadableWstring(reader.node())
           )
         );
   }
 
   const std::string& text(
     static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-      const TextNode&
+      const xml_common::TextNode&
     >(reader.node()).text
   );
 
@@ -5953,7 +4685,7 @@ std::pair<
   // We consume the text node.
   reader.Read();
 
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return NoInstanceAndDeserializationErrorFromReader<std::wstring>(reader);
   }
 
@@ -5964,10 +4696,10 @@ std::pair<
   common::optional<std::vector<std::uint8_t> >,
   common::optional<DeserializationError>
 > DeserializeByteArray(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -5976,13 +4708,13 @@ std::pair<
   #endif
 
   switch (reader.node().kind()) {
-    case NodeKind::Stop:
+    case xml_common::NodeKind::Stop:
       // Encountering a stop node means empty byte array.
       return std::make_pair(
         std::vector<std::uint8_t>(),
         common::nullopt
       );
-    case NodeKind::Text:
+    case xml_common::NodeKind::Text:
       // We pass and continue decoding the byte array.
       break;
     default:
@@ -5991,20 +4723,20 @@ std::pair<
       >(
         common::Concat(
           L"Expected to parse an xs:base64Binary from XML text, but got ",
-            NodeToHumanReadableWstring(reader.node())
+            xml_common::NodeToHumanReadableWstring(reader.node())
           )
         );
   }
 
   const std::string text(
-    RemoveWhitespace(
+    xml_common::RemoveWhitespace(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const TextNode&
+        const xml_common::TextNode&
       >(reader.node()).text
     )
   );
 
-  if (!MatchesXsBase64Binary(text)) {
+  if (!xml_common::MatchesXsBase64Binary(text)) {
     return NoInstanceAndDeserializationErrorWithCause<
       std::vector<std::uint8_t>
     >(
@@ -6036,7 +4768,7 @@ std::pair<
   // We consume the text node.
   reader.Read();
 
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return NoInstanceAndDeserializationErrorFromReader<
       std::vector<std::uint8_t>
     >(reader);
@@ -6055,11 +4787,11 @@ std::pair<
   common::optional<std::vector<T> >,
   common::optional<DeserializationError>
 > DeserializeList(
-  ReaderMergingText& reader,
+  xml_common::ReaderMergingText& reader,
   const DeserializeT& deserialize_item
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeWstring. "
       "DeserializeWstring expects no error node."
@@ -6079,7 +4811,7 @@ std::pair<
 
   // If we encounter the stop element then we reached the end of the list. If this is
   // the first node we encounter then the list is empty, *i.e.*, contains no items.
-  if (reader.node().kind() == NodeKind::Stop) {
+  if (reader.node().kind() == xml_common::NodeKind::Stop) {
     return std::make_pair(
       std::vector<T>(),
       common::nullopt
@@ -6118,7 +4850,7 @@ std::pair<
 
       items.emplace_back(*item);
 
-      if (reader.node().kind() == NodeKind::Stop) {
+      if (reader.node().kind() == xml_common::NodeKind::Stop) {
         break;
       }
 
@@ -6152,10 +4884,10 @@ std::pair<
   common::optional<types::ModellingKind>,
   common::optional<DeserializationError>
 > DeserializeModellingKind(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -6206,10 +4938,10 @@ std::pair<
   common::optional<types::QualifierKind>,
   common::optional<DeserializationError>
 > DeserializeQualifierKind(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -6260,10 +4992,10 @@ std::pair<
   common::optional<types::AssetKind>,
   common::optional<DeserializationError>
 > DeserializeAssetKind(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -6314,10 +5046,10 @@ std::pair<
   common::optional<types::AasSubmodelElements>,
   common::optional<DeserializationError>
 > DeserializeAasSubmodelElements(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -6368,10 +5100,10 @@ std::pair<
   common::optional<types::EntityType>,
   common::optional<DeserializationError>
 > DeserializeEntityType(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -6422,10 +5154,10 @@ std::pair<
   common::optional<types::Direction>,
   common::optional<DeserializationError>
 > DeserializeDirection(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -6476,10 +5208,10 @@ std::pair<
   common::optional<types::StateOfEvent>,
   common::optional<DeserializationError>
 > DeserializeStateOfEvent(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -6530,10 +5262,10 @@ std::pair<
   common::optional<types::ReferenceTypes>,
   common::optional<DeserializationError>
 > DeserializeReferenceTypes(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -6584,10 +5316,10 @@ std::pair<
   common::optional<types::KeyTypes>,
   common::optional<DeserializationError>
 > DeserializeKeyTypes(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -6638,10 +5370,10 @@ std::pair<
   common::optional<types::DataTypeDefXsd>,
   common::optional<DeserializationError>
 > DeserializeDataTypeDefXsd(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -6692,10 +5424,10 @@ std::pair<
   common::optional<types::DataTypeIec61360>,
   common::optional<DeserializationError>
 > DeserializeDataTypeIec61360(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DeserializeByteArray. "
       "DeserializeByteArray expects no error node."
@@ -8478,10 +7210,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ExtensionFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in ExtensionFromSequence. "
       "ExtensionFromSequence expects no reader error at entry."
@@ -8536,26 +7268,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IExtension, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -8563,7 +7295,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -8724,14 +7456,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IExtension, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -8751,7 +7483,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -8809,10 +7541,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > AdministrativeInformationFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in AdministrativeInformationFromSequence. "
       "AdministrativeInformationFromSequence expects no reader error at entry."
@@ -8861,26 +7593,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IAdministrativeInformation, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -8888,7 +7620,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -9032,14 +7764,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IAdministrativeInformation, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -9059,7 +7791,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -9104,10 +7836,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > QualifierFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in QualifierFromSequence. "
       "QualifierFromSequence expects no reader error at entry."
@@ -9162,26 +7894,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IQualifier, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -9189,7 +7921,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -9359,14 +8091,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IQualifier, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -9386,7 +8118,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -9453,10 +8185,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > AssetAdministrationShellFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in AssetAdministrationShellFromSequence. "
       "AssetAdministrationShellFromSequence expects no reader error at entry."
@@ -9535,26 +8267,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IAssetAdministrationShell, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -9562,7 +8294,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -9802,14 +8534,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IAssetAdministrationShell, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -9829,7 +8561,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -9900,10 +8632,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > AssetInformationFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in AssetInformationFromSequence. "
       "AssetInformationFromSequence expects no reader error at entry."
@@ -9952,26 +8684,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IAssetInformation, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -9979,7 +8711,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -10123,14 +8855,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IAssetInformation, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -10150,7 +8882,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -10207,10 +8939,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ResourceFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in ResourceFromSequence. "
       "ResourceFromSequence expects no reader error at entry."
@@ -10247,26 +8979,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IResource, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -10274,7 +9006,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -10375,14 +9107,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IResource, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -10402,7 +9134,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -10456,10 +9188,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > SpecificAssetIdFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in SpecificAssetIdFromSequence. "
       "SpecificAssetIdFromSequence expects no reader error at entry."
@@ -10510,26 +9242,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of ISpecificAssetId, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -10537,7 +9269,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -10683,14 +9415,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of ISpecificAssetId, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -10710,7 +9442,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -10775,10 +9507,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > SubmodelFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in SubmodelFromSequence. "
       "SubmodelFromSequence expects no reader error at entry."
@@ -10869,26 +9601,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of ISubmodel, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -10896,7 +9628,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -11168,14 +9900,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of ISubmodel, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -11195,7 +9927,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -11260,10 +9992,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > RelationshipElementFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in RelationshipElementFromSequence. "
       "RelationshipElementFromSequence expects no reader error at entry."
@@ -11344,26 +10076,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IRelationshipElement, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -11371,7 +10103,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -11616,14 +10348,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IRelationshipElement, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -11643,7 +10375,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -11714,10 +10446,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > SubmodelElementListFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in SubmodelElementListFromSequence. "
       "SubmodelElementListFromSequence expects no reader error at entry."
@@ -11810,26 +10542,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of ISubmodelElementList, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -11837,7 +10569,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -12121,14 +10853,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of ISubmodelElementList, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -12148,7 +10880,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -12214,10 +10946,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > SubmodelElementCollectionFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in SubmodelElementCollectionFromSequence. "
       "SubmodelElementCollectionFromSequence expects no reader error at entry."
@@ -12300,26 +11032,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of ISubmodelElementCollection, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -12327,7 +11059,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -12561,14 +11293,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of ISubmodelElementCollection, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -12588,7 +11320,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -12638,10 +11370,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > PropertyFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in PropertyFromSequence. "
       "PropertyFromSequence expects no reader error at entry."
@@ -12726,26 +11458,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IProperty, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -12753,7 +11485,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -13008,14 +11740,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IProperty, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -13035,7 +11767,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -13099,10 +11831,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > MultiLanguagePropertyFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in MultiLanguagePropertyFromSequence. "
       "MultiLanguagePropertyFromSequence expects no reader error at entry."
@@ -13189,26 +11921,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IMultiLanguageProperty, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -13216,7 +11948,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -13464,14 +12196,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IMultiLanguageProperty, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -13491,7 +12223,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -13542,10 +12274,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > RangeFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in RangeFromSequence. "
       "RangeFromSequence expects no reader error at entry."
@@ -13628,26 +12360,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IRange, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -13655,7 +12387,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -13908,14 +12640,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IRange, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -13935,7 +12667,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -13999,10 +12731,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ReferenceElementFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in ReferenceElementFromSequence. "
       "ReferenceElementFromSequence expects no reader error at entry."
@@ -14083,26 +12815,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IReferenceElement, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -14110,7 +12842,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -14341,14 +13073,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IReferenceElement, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -14368,7 +13100,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -14418,10 +13150,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > BlobFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in BlobFromSequence. "
       "BlobFromSequence expects no reader error at entry."
@@ -14504,26 +13236,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IBlob, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -14531,7 +13263,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -14772,14 +13504,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IBlob, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -14799,7 +13531,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -14862,10 +13594,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > FileFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in FileFromSequence. "
       "FileFromSequence expects no reader error at entry."
@@ -14946,26 +13678,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IFile, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -14973,7 +13705,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -15214,14 +13946,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IFile, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -15241,7 +13973,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -15304,10 +14036,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > AnnotatedRelationshipElementFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in AnnotatedRelationshipElementFromSequence. "
       "AnnotatedRelationshipElementFromSequence expects no reader error at entry."
@@ -15394,26 +14126,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IAnnotatedRelationshipElement, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -15421,7 +14153,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -15683,14 +14415,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IAnnotatedRelationshipElement, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -15710,7 +14442,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -15782,10 +14514,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > EntityFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in EntityFromSequence. "
       "EntityFromSequence expects no reader error at entry."
@@ -15878,26 +14610,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IEntity, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -15905,7 +14637,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -16180,14 +14912,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IEntity, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -16207,7 +14939,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -16272,10 +15004,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > EventPayloadFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in EventPayloadFromSequence. "
       "EventPayloadFromSequence expects no reader error at entry."
@@ -16332,26 +15064,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IEventPayload, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -16359,7 +15091,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -16542,14 +15274,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IEventPayload, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -16569,7 +15301,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -16645,10 +15377,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > BasicEventElementFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in BasicEventElementFromSequence. "
       "BasicEventElementFromSequence expects no reader error at entry."
@@ -16743,26 +15475,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IBasicEventElement, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -16770,7 +15502,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -17087,14 +15819,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IBasicEventElement, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -17114,7 +15846,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -17199,10 +15931,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > OperationFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in OperationFromSequence. "
       "OperationFromSequence expects no reader error at entry."
@@ -17297,26 +16029,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IOperation, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -17324,7 +16056,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -17592,14 +16324,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IOperation, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -17619,7 +16351,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -17671,10 +16403,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > OperationVariableFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in OperationVariableFromSequence. "
       "OperationVariableFromSequence expects no reader error at entry."
@@ -17709,26 +16441,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IOperationVariable, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -17736,7 +16468,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -17825,14 +16557,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IOperationVariable, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -17852,7 +16584,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -17905,10 +16637,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > CapabilityFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in CapabilityFromSequence. "
       "CapabilityFromSequence expects no reader error at entry."
@@ -17985,26 +16717,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of ICapability, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -18012,7 +16744,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -18229,14 +16961,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of ICapability, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -18256,7 +16988,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -18305,10 +17037,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ConceptDescriptionFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in ConceptDescriptionFromSequence. "
       "ConceptDescriptionFromSequence expects no reader error at entry."
@@ -18381,26 +17113,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IConceptDescription, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -18408,7 +17140,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -18620,14 +17352,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IConceptDescription, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -18647,7 +17379,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -18708,10 +17440,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ReferenceFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in ReferenceFromSequence. "
       "ReferenceFromSequence expects no reader error at entry."
@@ -18756,26 +17488,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IReference, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -18783,7 +17515,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -18903,14 +17635,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IReference, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -18930,7 +17662,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -18993,10 +17725,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > KeyFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in KeyFromSequence. "
       "KeyFromSequence expects no reader error at entry."
@@ -19033,26 +17765,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IKey, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -19060,7 +17792,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -19161,14 +17893,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IKey, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -19188,7 +17920,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -19250,10 +17982,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LangStringNameTypeFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in LangStringNameTypeFromSequence. "
       "LangStringNameTypeFromSequence expects no reader error at entry."
@@ -19290,26 +18022,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of ILangStringNameType, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -19317,7 +18049,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -19418,14 +18150,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of ILangStringNameType, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -19445,7 +18177,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -19507,10 +18239,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LangStringTextTypeFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in LangStringTextTypeFromSequence. "
       "LangStringTextTypeFromSequence expects no reader error at entry."
@@ -19547,26 +18279,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of ILangStringTextType, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -19574,7 +18306,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -19675,14 +18407,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of ILangStringTextType, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -19702,7 +18434,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -19764,10 +18496,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > EnvironmentFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in EnvironmentFromSequence. "
       "EnvironmentFromSequence expects no reader error at entry."
@@ -19818,26 +18550,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IEnvironment, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -19845,7 +18577,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -19973,14 +18705,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IEnvironment, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -20000,7 +18732,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -20043,10 +18775,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > EmbeddedDataSpecificationFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in EmbeddedDataSpecificationFromSequence. "
       "EmbeddedDataSpecificationFromSequence expects no reader error at entry."
@@ -20083,26 +18815,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IEmbeddedDataSpecification, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -20110,7 +18842,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -20213,14 +18945,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IEmbeddedDataSpecification, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -20240,7 +18972,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -20302,10 +19034,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LevelTypeFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in LevelTypeFromSequence. "
       "LevelTypeFromSequence expects no reader error at entry."
@@ -20346,26 +19078,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of ILevelType, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -20373,7 +19105,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -20498,14 +19230,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of ILevelType, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -20525,7 +19257,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -20605,10 +19337,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ValueReferencePairFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in ValueReferencePairFromSequence. "
       "ValueReferencePairFromSequence expects no reader error at entry."
@@ -20645,26 +19377,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IValueReferencePair, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -20672,7 +19404,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -20775,14 +19507,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IValueReferencePair, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -20802,7 +19534,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -20864,10 +19596,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > ValueListFromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in ValueListFromSequence. "
       "ValueListFromSequence expects no reader error at entry."
@@ -20906,26 +19638,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IValueList, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -20933,7 +19665,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -21027,14 +19759,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IValueList, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -21054,7 +19786,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -21107,10 +19839,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LangStringPreferredNameTypeIec61360FromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in LangStringPreferredNameTypeIec61360FromSequence. "
       "LangStringPreferredNameTypeIec61360FromSequence expects no reader error at entry."
@@ -21147,26 +19879,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of ILangStringPreferredNameTypeIec61360, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -21174,7 +19906,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -21275,14 +20007,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of ILangStringPreferredNameTypeIec61360, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -21302,7 +20034,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -21364,10 +20096,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LangStringShortNameTypeIec61360FromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in LangStringShortNameTypeIec61360FromSequence. "
       "LangStringShortNameTypeIec61360FromSequence expects no reader error at entry."
@@ -21404,26 +20136,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of ILangStringShortNameTypeIec61360, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -21431,7 +20163,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -21532,14 +20264,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of ILangStringShortNameTypeIec61360, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -21559,7 +20291,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -21621,10 +20353,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > LangStringDefinitionTypeIec61360FromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in LangStringDefinitionTypeIec61360FromSequence. "
       "LangStringDefinitionTypeIec61360FromSequence expects no reader error at entry."
@@ -21661,26 +20393,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of ILangStringDefinitionTypeIec61360, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -21688,7 +20420,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -21789,14 +20521,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of ILangStringDefinitionTypeIec61360, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -21816,7 +20548,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -21878,10 +20610,10 @@ std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
 > DataSpecificationIec61360FromSequence(
-  ReaderMergingText& reader
+  xml_common::ReaderMergingText& reader
 ) {
   #ifdef DEBUG
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     throw std::logic_error(
       "Unexpected unhandled XML error in DataSpecificationIec61360FromSequence. "
       "DataSpecificationIec61360FromSequence expects no reader error at entry."
@@ -21956,26 +20688,26 @@ std::pair<
       );
     }
 
-    if (reader.node().kind() == NodeKind::Stop) {
+    if (reader.node().kind() == xml_common::NodeKind::Stop) {
       // NOTE (mristin):
       // We reached a closing element of an instance, so we know that
       // the sequence ended.
       break;
-    } else if (reader.node().kind() != NodeKind::Start) {
+    } else if (reader.node().kind() != xml_common::NodeKind::Start) {
       return NoInstanceAndDeserializationErrorWithCause<
         std::shared_ptr<T>
       >(
         common::Concat(
           L"Expected a start element opening a property "
           L"of IDataSpecificationIec61360, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
     }
 
     const std::string name(
       static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-        const StartNode&
+        const xml_common::StartNode&
       >(reader.node()).name
     );
 
@@ -21983,7 +20715,7 @@ std::pair<
     // We consume the start element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -22225,14 +20957,14 @@ std::pair<
       );
     }
 
-    if (!IsStopNodeWithName(reader.node(), name)) {
+    if (!xml_common::IsStopNodeWithName(reader.node(), name)) {
       error = DeserializationError(
         common::Concat(
           L"Expected a stop element </",
           common::Utf8ToWstring(name),
           L"> closing the property "
           L"of IDataSpecificationIec61360, but got ",
-          NodeToHumanReadableWstring(reader.node())
+          xml_common::NodeToHumanReadableWstring(reader.node())
         )
       );
 
@@ -22252,7 +20984,7 @@ std::pair<
     // We consume the stop element.
     reader.Read();
 
-    if (reader.node().kind() == NodeKind::Error) {
+    if (reader.node().kind() == xml_common::NodeKind::Error) {
       error = DeserializationErrorFromReader(reader);
 
       PrependElementSegmentToDeserializationError(
@@ -22313,10 +21045,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22363,10 +21100,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22413,10 +21155,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22463,10 +21210,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22513,10 +21265,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22563,10 +21320,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22613,10 +21375,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22663,10 +21430,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22713,10 +21485,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22763,10 +21540,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22813,10 +21595,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22863,10 +21650,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22913,10 +21705,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -22963,10 +21760,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23013,10 +21815,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23063,10 +21870,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23113,10 +21925,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23163,10 +21980,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23213,10 +22035,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23263,10 +22090,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23313,10 +22145,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23363,10 +22200,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23413,10 +22255,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23463,10 +22310,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23513,10 +22365,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23563,10 +22420,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23613,10 +22475,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23663,10 +22530,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23713,10 +22585,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23763,10 +22640,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23813,10 +22695,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23863,10 +22750,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23913,10 +22805,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -23963,10 +22860,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24013,10 +22915,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24063,10 +22970,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24113,10 +23025,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24163,10 +23080,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24213,10 +23135,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24263,10 +23190,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24313,10 +23245,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24363,10 +23300,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24413,10 +23355,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24463,10 +23410,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24513,10 +23465,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24563,10 +23520,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24613,10 +23575,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24663,10 +23630,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24713,10 +23685,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24763,10 +23740,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24813,10 +23795,15 @@ common::expected<
   std::istream& is,
   const ReadingOptions& options
 ) {
-  ReaderMergingText reader(is, options);
+  xml_common::ReaderMergingText reader(
+    is,
+    options.additional_attributes,
+    options.buffer_size,
+    kNamespace
+  );
 
   reader.Initialize();
-  if (reader.node().kind() == NodeKind::Error) {
+  if (reader.node().kind() == xml_common::NodeKind::Error) {
     return common::make_unexpected(
       DeserializationErrorFromReader(reader)
     );
@@ -24859,51 +23846,6 @@ common::expected<
 // endregion De-serialization
 
 // region Serialization
-
-/**
- * Represent a serialization error.
- *
- * We use this error internally to avoid unnecessary stack unwinding,
- * but throw the \ref SerializationException at the final site of
- * the serialization for the user.
- */
-struct SerializationError {
-  /**
-   * Human-readable description of the error
-   */
-  std::wstring cause;
-
-  /**
-   * Path to the value that caused the error
-   */
-  iteration::Path path;
-
-  explicit SerializationError(
-    std::wstring a_cause
-  ) :
-    cause(std::move(a_cause)) {
-    // Intentionally empty.
-  }
-};  // struct SerializationError
-
-const std::wstring kTheOutputStreamIsInABadState(
-  L"The output stream is in a bad state."
-    );
-
-/**
- * Check that the output stream is not in a bad state. If so, create an error.
- */
-common::optional<SerializationError> CheckOstreamState(
-  const std::ostream& os
-) {
-  if (os.bad()) {
-    return common::make_optional<SerializationError>(
-      kTheOutputStreamIsInABadState
-    );
-  }
-
-  return common::nullopt;
-}
 
 // region SerializationException
 
@@ -24954,714 +23896,9 @@ const iteration::Path& SerializationException::path() const noexcept {
 
 // endregion SerializationException
 
-// region SelfClosingWriter
-
-/**
- * \brief Write XML nodes to the UTF-8-encoded output stream.
- *
- * The start elements are put on hold until we observe a text, a stop element or
- * end-of-input. This allows us to continuously shorten the XML elements to self-closing
- * tags.
- *
- * The prefix is appended to each element name. If you do not need the prefix,
- * specify it as empty string. In most cases, you put a colon, `:` at the end of
- * the prefix.
- *
- * Each writing method captures any errors and obvious exceptions as
- * serialization errors.
- *
- * Use \ref error() to check if there is any error.
- */
-class SelfClosingWriter {
- public:
-  SelfClosingWriter(
-    std::ostream& os,
-    std::string prefix
-  );
-
-  /**
-   * Queue a start element for an eventual write.
-   */
-  void StartElement(
-    std::string name
-  );
-
-  /**
-   * Write a stop element.
-   *
-   * If there is a pending start element with no content, shorten it to
-   * a self-closing XML element.
-   */
-  void StopElement(
-    const std::string& name
-  );
-
-  /**
-   * \brief Serialize the given boolean to an xs:bool value.
-   *
-   * We explicitly write longer text, `true` and `false`, to make the values explicit,
-   * and not potentially confusing with numbers, in the XML.
-   */
-  void SerializeBool(
-    bool value
-  );
-
-  /**
-   * \brief Serialize the given number to an xs:long value.
-   *
-   * We do not check that the number is within a range representable as 64-bit
-   * floats, as the value can be de-serialized correctly from XML. However, this
-   * means that XML and JSON serializations are not interoperable. If you need
-   * interoperability, you have to ensure that range yourself (<i>e.g.</i>, through
-   * \ref validation, see also
-   * https://github.com/aas-core-works/aas-core-meta/issues/298).
-   */
-  void SerializeInt64(
-    int64_t value
-  );
-
-  /**
-   * \brief Serialize the given number to an xs:double value.
-   */
-  void SerializeDouble(
-    double value
-  );
-
-  /**
-   * \brief Write the text while escaping special characters for XML.
-   */
-  void SerializeWstring(
-    const std::wstring& text
-  );
-
-  /**
-   * \brief Write the text while escaping special characters for XML.
-   */
-  void SerializeString(
-    const std::string& text
-  );
-
-  /**
-   * \brief Encode bytes to Base64 and write them.
-   */
-  void SerializeByteArray(
-  const std::vector<std::uint8_t>& byte_array
-  );
-
-  /**
-   * Finish and flush any pending start nodes.
-   */
-  void Finish();
-
-  /**
-   * Get an error, if any, caught during the serialization.
-   */
-  const common::optional<SerializationError>& error() const;
-
-  /**
-   * Transfer the ownership of the error.
-   */
-  common::optional<SerializationError>&& move_error();
-
- private:
-  std::ostream& os_;
-  std::string prefix_;
-  common::optional<SerializationError> error_;
-  common::optional<std::string> pending_start_wo_text_;
-
-  /**
-   * \brief Escape the given text to XML.
-   *
-   * Return nothing if no escaping was needed.
-   */
-  static common::optional<std::wstring> EscapeForXml(
-    const std::wstring& text
-  );
-
-  /**
-   * \brief Escape the given text to XML.
-   *
-   * Return nothing if no escaping was needed.
-   */
-  static common::optional<std::string> EscapeForXml(
-    const std::string& text
-  );
-
-  void WritePendingStartElementIfAvailable();
-
-  /**
-   * Write the text without any XML escaping or flushing of pending start elements.
-   */
-  void WriteStringWithoutEscapingNorFlushing(
-    const std::string& text
-  );
-};  // class SelfClosingWriter
-
-SelfClosingWriter::SelfClosingWriter(
-  std::ostream& os,
-  std::string prefix
-) :
-  os_(os),
-  prefix_(std::move(prefix)) {
-  // Intentionally empty.
-}
-
-void SelfClosingWriter::StartElement(
-  std::string name
-) {
-  #ifdef DEBUG
-  if (error_.has_value()) {
-    throw std::logic_error(
-      "You are trying to queue a start element with a SelfClosingWriter "
-      "which caught an error."
-    );
-  #endif
-
-  WritePendingStartElementIfAvailable();
-  if (error_.has_value()) {
-  return;
-  }
-
-  pending_start_wo_text_ = std::move(name);
-}
-
-void SelfClosingWriter::StopElement(
-  const std::string& name
-) {
-  #ifdef DEBUG
-  if (error_.has_value()) {
-    throw std::logic_error(
-      "You are trying to write a stop element with a SelfClosingWriter "
-      "which caught an error before."
-    );
-  #endif
-
-  if (pending_start_wo_text_.has_value()) {
-    #ifdef DEBUG
-    if (*pending_start_wo_text_ != name) {
-      throw std::logic_error(
-        common::Concat(
-          "The start element <",
-          *pending_start_wo_text_,
-          "> is pending for writing, "
-          "but you are trying to write a stop element </",
-          name
-          ">"
-        )
-      );
-    }
-    #endif
-
-    pending_start_wo_text_ = common::nullopt;
-
-    WriteStringWithoutEscapingNorFlushing(
-      common::Concat(
-        "<",
-        prefix_,
-        name,
-        " />"
-      )
-    );
-  } else {
-    WritePendingStartElementIfAvailable();
-    if (error_.has_value()) {
-      return;
-    }
-
-    WriteStringWithoutEscapingNorFlushing(
-      common::Concat(
-        "</",
-        prefix_,
-        name,
-        ">"
-      )
-    );
-  }
-}
-
-void SelfClosingWriter::SerializeBool(
-  bool value
-) {
-  WritePendingStartElementIfAvailable();
-  if (error_.has_value()) {
-    return;
-  }
-
-  WriteStringWithoutEscapingNorFlushing(
-    value ? "true" : "false"
-  );
-}
-
-void SelfClosingWriter::SerializeInt64(
-  int64_t value
-) {
-  WritePendingStartElementIfAvailable();
-  if (error_.has_value()) {
-    return;
-  }
-
-  WriteStringWithoutEscapingNorFlushing(
-    std::to_string(value)
-  );
-}
-
-void SelfClosingWriter::SerializeDouble(
-  double value
-) {
-  WritePendingStartElementIfAvailable();
-  if (error_.has_value()) {
-    return;
-  }
-
-  // NOTE (mristin):
-  // We handle edge values infinity and not-a-number explicitly here
-  // as some C/C++ implementations might not convert them to XML-conformant
-  // strings.
-
-  if (std::isinf(value)) {
-    if (value < 0) {
-      WriteStringWithoutEscapingNorFlushing("-INF");
-    } else {
-      WriteStringWithoutEscapingNorFlushing("INF");
-    }
-  } else if(std::isnan(value)) {
-    WriteStringWithoutEscapingNorFlushing("NaN");
-  } else {
-    // NOTE (mristin):
-    // We have to use a stream to avoid trailing zeros. std::to_string always
-    // outputs trailing zeros up to a certain number of decimal places (usually 6).
-    //
-    // A stream left at its default precision is no good either: that is six
-    // *significant* digits, so 1.2345678901234567 would go out as 1.23457, and
-    // the value could never be read back. We have to write as many digits as it
-    // takes for the text to read back as the very same double, and no more.
-    //
-    // std::to_chars would give us exactly that in one call, but it is C++17,
-    // and the library has to compile as C++11. Seventeen significant digits
-    // always suffice, and fewer usually do, so the candidates are tried in
-    // turn and the first one which round-trips is kept. The stream strips
-    // the trailing zeros of each, so a short value stays short.
-    //
-    // The classic locale is imposed on both streams: a global locale with
-    // a decimal comma would otherwise write 1,2345, which no XML parser reads
-    // back as a number.
-    std::ostringstream oss;
-    oss.imbue(std::locale::classic());
-
-    for (int precision = 15; precision <= 17; ++precision) {
-      oss.str("");
-      oss.clear();
-      oss << std::setprecision(precision) << value;
-
-      std::istringstream iss(oss.str());
-      iss.imbue(std::locale::classic());
-      double round_tripped = 0.0;
-      iss >> round_tripped;
-
-      // NOTE (mristin):
-      // The failbit has to be consulted, and not only the value. On overflow
-      // the stream stores the largest representable double and *fails*, so
-      // comparing the value alone would accept a text which every correctly
-      // rounding parser reads as an infinity: 15 significant digits of
-      // the largest double give 1.79769313486232e+308, which lies above
-      // the overflow threshold.
-      if (!iss.fail() && round_tripped == value) {
-        break;
-      }
-    }
-
-    WriteStringWithoutEscapingNorFlushing(
-      oss.str()
-    );
-  }
-}
-
-void SelfClosingWriter::SerializeString(
-  const std::string& text
-) {
-  WritePendingStartElementIfAvailable();
-  if (error_.has_value()) {
-    return;
-  }
-
-  // NOTE (mristin):
-  // We optimize here for short and long texts, respectively.
-  // The main assumption is that the short texts can be escaped and converted
-  // in one go, while the longer texts need to be converted in chunks.
-
-  if (text.size() < 1024) {
-    common::optional<std::string> escaped = EscapeForXml(text);
-
-    if (escaped.has_value()) {
-      WriteStringWithoutEscapingNorFlushing(
-        *escaped
-      );
-      return;
-    } else {
-      WriteStringWithoutEscapingNorFlushing(
-        text
-      );
-      return;
-    }
-  }
-
-  size_t start = 0;
-  while (start < text.size()) {
-    const size_t end = std::min(start + 1024, text.size());
-    const size_t chunk_size = end - start;
-
-    // NOTE (mristin):
-    // We assume that making short copies of text substrings does not hurt
-    // the performance here, but makes the code more readable.
-
-    const std::string chunk = text.substr(start, chunk_size);
-
-    common::optional<std::string> escaped = EscapeForXml(chunk);
-
-    if (escaped.has_value()) {
-      WriteStringWithoutEscapingNorFlushing(
-        *escaped
-      );
-    } else {
-      WriteStringWithoutEscapingNorFlushing(
-        chunk
-      );
-    }
-
-    if (error_.has_value()) {
-      return;
-    }
-
-    start += chunk_size;
-  }
-}
-
-void SelfClosingWriter::SerializeWstring(
-  const std::wstring& text
-) {
-  WritePendingStartElementIfAvailable();
-  if (error_.has_value()) {
-    return;
-  }
-
-  // NOTE (mristin):
-  // We optimize here for short and long texts, respectively.
-  // The main assumption is that the short texts can be escaped and converted
-  // in one go, while the longer texts need to be converted in chunks.
-
-  if (text.size() < 1024) {
-    common::optional<std::wstring> escaped = EscapeForXml(text);
-
-    if (escaped.has_value()) {
-      WriteStringWithoutEscapingNorFlushing(
-        common::WstringToUtf8(*escaped)
-      );
-      return;
-    } else {
-      WriteStringWithoutEscapingNorFlushing(
-        common::WstringToUtf8(text)
-      );
-      return;
-    }
-  }
-
-  size_t start = 0;
-  while (start < text.size()) {
-    const size_t end = std::min(start + 1024, text.size());
-    const size_t chunk_size = end - start;
-
-    // NOTE (mristin):
-    // We assume that making short copies of text substrings does not hurt
-    // the performance here, but makes the code more readable.
-
-    const std::wstring chunk = text.substr(start, chunk_size);
-
-    common::optional<std::wstring> escaped = EscapeForXml(chunk);
-
-    if (escaped.has_value()) {
-      WriteStringWithoutEscapingNorFlushing(
-        common::WstringToUtf8(*escaped)
-      );
-    } else {
-      WriteStringWithoutEscapingNorFlushing(
-        common::WstringToUtf8(chunk)
-      );
-    }
-
-    if (error_.has_value()) {
-      return;
-    }
-
-    start += chunk_size;
-  }
-}
-
-void SelfClosingWriter::SerializeByteArray(
-  const std::vector<std::uint8_t>& byte_array
-) {
-  WritePendingStartElementIfAvailable();
-  if (error_.has_value()) {
-    return;
-  }
-
-  // NOTE (mristin):
-  // We optimize here for short and long byte arrays, respectively.
-  // The main assumption is that the short texts can be escaped and converted
-  // in one go, while the longer texts need to be converted in chunks.
-  //
-  // Optimally, we would write an encoding function such that it encodes directly
-  // to the output stream. As we lack the time resources for that at the moment,
-  // we go for the compromise with one pass and chunking, respectively.
-
-  if (byte_array.size() <= 1536) {
-    WriteStringWithoutEscapingNorFlushing(
-      stringification::Base64Encode(byte_array)
-    );
-    return;
-  }
-
-  // NOTE (mristin):
-  // We assume here that making copies of small sub-arrays does not hurt
-  // the performance, but makes the code substantially more readable.
-
-  size_t start = 0;
-  while (start < byte_array.size()) {
-    // NOTE (mristin):
-    // We pick a multiple of 3 for the chunk size in order to make the encoding
-    // of chunking identical to the output as we encoded all bytes at the same time.
-    //
-    // See: https://stackoverflow.com/questions/7920780/is-it-possible-to-base64-encode-a-file-in-chunks
-
-    const size_t end = std::min(start + 1536, byte_array.size());
-
-    const std::vector<std::uint8_t> chunk(
-      byte_array.begin() + start,
-      byte_array.begin() + end
-    );
-
-    WriteStringWithoutEscapingNorFlushing(
-      stringification::Base64Encode(chunk)
-    );
-    if (error_.has_value()) {
-      return;
-    }
-  }
-}
-
-void SelfClosingWriter::Finish() {
-  WritePendingStartElementIfAvailable();
-}
-
-const common::optional<SerializationError>& SelfClosingWriter::error() const {
-  return error_;
-}
-
-common::optional<SerializationError>&& SelfClosingWriter::move_error() {
-  return std::move(error_);
-}
-
-common::optional<std::wstring> SelfClosingWriter::EscapeForXml(
-  const std::wstring& text
-) {
-  size_t out_len = 0;
-
-  // NOTE (mristin):
-  // We use sizeof on *strings* instead of *wide strings* to get
-  // the number of *characters*. Otherwise, if we used wide strings,
-  // we would obtain the wrong number of characters as we would count
-  // bytes instead of characters with `sizeof`, which differ in wide strings
-  // due to encoding.
-
-  for (wchar_t character : text ) {
-    switch (character) {
-      case L'&': {
-        out_len += sizeof("&amp;");
-        break;
-      }
-      case L'<': {
-        out_len += sizeof("&lt;");
-        break;
-      }
-      case L'>': {
-        out_len += sizeof("&gt;");
-        break;
-      }
-      case L'"': {
-        out_len += sizeof("&quot;");
-        break;
-      }
-      case L'\'': {
-        out_len += sizeof("&apos;");
-        break;
-      }
-      default:
-        ++out_len;
-        break;
-    }
-  }
-
-  // NOTE (mristin):
-  // We assume here that XML encoding is always *longer* than
-  // the original text.
-
-  if (out_len == text.size()) {
-    return common::nullopt;
-  }
-
-  std::wstring out;
-  out.reserve(out_len);
-
-  for (wchar_t character : text ) {
-    switch (character) {
-      case L'&':
-        out.append(L"&amp;");
-        break;
-      case L'<':
-        out.append(L"&lt;");
-        break;
-      case L'>':
-        out.append(L"&gt;");
-        break;
-      case L'"':
-        out.append(L"&quot;");
-        break;
-      case L'\'':
-        out.append(L"&apos;");
-        break;
-      default:
-        out.push_back(character);
-        break;
-    }
-  }
-
-  return common::make_optional<std::wstring>(
-    std::move(out)
-  );
-}
-
-common::optional<std::string> SelfClosingWriter::EscapeForXml(
-  const std::string& text
-) {
-  size_t out_len = 0;
-
-  for (char character : text ) {
-    switch (character) {
-      case '&': {
-        out_len += sizeof("&amp;");
-        break;
-      }
-      case '<': {
-        out_len += sizeof("&lt;");
-        break;
-      }
-      case '>': {
-        out_len += sizeof("&gt;");
-        break;
-      }
-      case '"': {
-        out_len += sizeof("&quot;");
-        break;
-      }
-      case '\'': {
-        out_len += sizeof("&apos;");
-        break;
-      }
-      default:
-        ++out_len;
-        break;
-    }
-  }
-
-  // NOTE (mristin):
-  // We assume here that XML encoding is always *longer* than
-  // the original text.
-
-  if (out_len == text.size()) {
-    return common::nullopt;
-  }
-
-  std::string out;
-  out.reserve(out_len);
-
-  for (char character : text ) {
-    switch (character) {
-      case '&':
-        out.append("&amp;");
-        break;
-      case '<':
-        out.append("&lt;");
-        break;
-      case '>':
-        out.append("&gt;");
-        break;
-      case '"':
-        out.append("&quot;");
-        break;
-      case '\'':
-        out.append("&apos;");
-        break;
-      default:
-        out.push_back(character);
-        break;
-    }
-  }
-
-  return common::make_optional<std::string>(
-    std::move(out)
-  );
-}
-
-void SelfClosingWriter::WritePendingStartElementIfAvailable() {
-  if (!pending_start_wo_text_.has_value()) {
-    return;
-  }
-
-  WriteStringWithoutEscapingNorFlushing(
-    common::Concat(
-      "<",
-      prefix_,
-      *pending_start_wo_text_,
-      ">"
-    )
-  );
-
-  pending_start_wo_text_ = common::nullopt;
-}
-
-void SelfClosingWriter::WriteStringWithoutEscapingNorFlushing(
-  const std::string& text
-) {
-  #ifdef DEBUG
-  if (error_.has_value()) {
-    throw std::logic_error(
-      "You are trying to write to a SelfClosingWriter which "
-      "caught an error"
-    );
-  }
-  #endif
-
-  if (os_.bad()) {
-    error_ = common::make_optional<SerializationError>(
-      kTheOutputStreamIsInABadState
-    );
-    return;
-  }
-
-  os_ << text;
-
-  if (os_.bad()) {
-    error_ = common::make_optional<SerializationError>(
-      kTheOutputStreamIsInABadState
-    );
-    return;
-  }
-}
-
-// endregion SelfClosingWriter
-
-common::optional<SerializationError> SerializeBool(
+common::optional<xml_common::SerializationError> SerializeBool(
   bool value,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeBool(value);
   if (writer.error().has_value()) {
@@ -25671,9 +23908,9 @@ common::optional<SerializationError> SerializeBool(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeInt64(
+common::optional<xml_common::SerializationError> SerializeInt64(
   int64_t value,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeInt64(value);
   if (writer.error().has_value()) {
@@ -25683,9 +23920,9 @@ common::optional<SerializationError> SerializeInt64(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeDouble(
+common::optional<xml_common::SerializationError> SerializeDouble(
   double value,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeDouble(value);
   if (writer.error().has_value()) {
@@ -25695,9 +23932,9 @@ common::optional<SerializationError> SerializeDouble(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeWstring(
+common::optional<xml_common::SerializationError> SerializeWstring(
   const std::wstring& value,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeWstring(value);
   if (writer.error().has_value()) {
@@ -25707,9 +23944,9 @@ common::optional<SerializationError> SerializeWstring(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeByteArray(
+common::optional<xml_common::SerializationError> SerializeByteArray(
   const std::vector<std::uint8_t>& value,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeByteArray(value);
   if (writer.error().has_value()) {
@@ -25723,10 +23960,10 @@ common::optional<SerializationError> SerializeByteArray(
  * Serialize a property wrapped in its own named XML element.
  */
 template <typename T, typename SerializeT>
-common::optional<SerializationError> SerializePropertyAsElement(
+common::optional<xml_common::SerializationError> SerializePropertyAsElement(
   const std::string& name,
   const T& value,
-  SelfClosingWriter& writer,
+  xml_common::SelfClosingWriter& writer,
   iteration::Property property,
   const SerializeT& serialize_value
 ) {
@@ -25735,7 +23972,7 @@ common::optional<SerializationError> SerializePropertyAsElement(
     return writer.move_error();
   }
 
-  common::optional<SerializationError> error = serialize_value(value, writer);
+  common::optional<xml_common::SerializationError> error = serialize_value(value, writer);
   if (error.has_value()) {
     error->path.segments.emplace_front(
       common::make_unique<iteration::PropertySegment>(property)
@@ -25759,13 +23996,13 @@ common::optional<SerializationError> SerializePropertyAsElement(
  * Serialize a list of instances.
  */
 template <typename T, typename SerializeT>
-common::optional<SerializationError> SerializeListOfInstances(
+common::optional<xml_common::SerializationError> SerializeListOfInstances(
   const std::vector<T>& list,
-  SelfClosingWriter& writer,
+  xml_common::SelfClosingWriter& writer,
   const SerializeT& serialize_item
 ) {
   for (size_t i = 0; i < list.size(); ++i) {
-    common::optional<SerializationError> error = serialize_item(
+    common::optional<xml_common::SerializationError> error = serialize_item(
       list[i],
       writer
     );
@@ -25786,9 +24023,9 @@ common::optional<SerializationError> SerializeListOfInstances(
  * Serialize the literal of ModellingKind
  * to XML text.
  */
-common::optional<SerializationError> SerializeModellingKind(
+common::optional<xml_common::SerializationError> SerializeModellingKind(
   types::ModellingKind that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeString(
     stringification::to_string(
@@ -25806,9 +24043,9 @@ common::optional<SerializationError> SerializeModellingKind(
  * Serialize the literal of QualifierKind
  * to XML text.
  */
-common::optional<SerializationError> SerializeQualifierKind(
+common::optional<xml_common::SerializationError> SerializeQualifierKind(
   types::QualifierKind that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeString(
     stringification::to_string(
@@ -25826,9 +24063,9 @@ common::optional<SerializationError> SerializeQualifierKind(
  * Serialize the literal of AssetKind
  * to XML text.
  */
-common::optional<SerializationError> SerializeAssetKind(
+common::optional<xml_common::SerializationError> SerializeAssetKind(
   types::AssetKind that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeString(
     stringification::to_string(
@@ -25846,9 +24083,9 @@ common::optional<SerializationError> SerializeAssetKind(
  * Serialize the literal of AasSubmodelElements
  * to XML text.
  */
-common::optional<SerializationError> SerializeAasSubmodelElements(
+common::optional<xml_common::SerializationError> SerializeAasSubmodelElements(
   types::AasSubmodelElements that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeString(
     stringification::to_string(
@@ -25866,9 +24103,9 @@ common::optional<SerializationError> SerializeAasSubmodelElements(
  * Serialize the literal of EntityType
  * to XML text.
  */
-common::optional<SerializationError> SerializeEntityType(
+common::optional<xml_common::SerializationError> SerializeEntityType(
   types::EntityType that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeString(
     stringification::to_string(
@@ -25886,9 +24123,9 @@ common::optional<SerializationError> SerializeEntityType(
  * Serialize the literal of Direction
  * to XML text.
  */
-common::optional<SerializationError> SerializeDirection(
+common::optional<xml_common::SerializationError> SerializeDirection(
   types::Direction that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeString(
     stringification::to_string(
@@ -25906,9 +24143,9 @@ common::optional<SerializationError> SerializeDirection(
  * Serialize the literal of StateOfEvent
  * to XML text.
  */
-common::optional<SerializationError> SerializeStateOfEvent(
+common::optional<xml_common::SerializationError> SerializeStateOfEvent(
   types::StateOfEvent that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeString(
     stringification::to_string(
@@ -25926,9 +24163,9 @@ common::optional<SerializationError> SerializeStateOfEvent(
  * Serialize the literal of ReferenceTypes
  * to XML text.
  */
-common::optional<SerializationError> SerializeReferenceTypes(
+common::optional<xml_common::SerializationError> SerializeReferenceTypes(
   types::ReferenceTypes that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeString(
     stringification::to_string(
@@ -25946,9 +24183,9 @@ common::optional<SerializationError> SerializeReferenceTypes(
  * Serialize the literal of KeyTypes
  * to XML text.
  */
-common::optional<SerializationError> SerializeKeyTypes(
+common::optional<xml_common::SerializationError> SerializeKeyTypes(
   types::KeyTypes that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeString(
     stringification::to_string(
@@ -25966,9 +24203,9 @@ common::optional<SerializationError> SerializeKeyTypes(
  * Serialize the literal of DataTypeDefXsd
  * to XML text.
  */
-common::optional<SerializationError> SerializeDataTypeDefXsd(
+common::optional<xml_common::SerializationError> SerializeDataTypeDefXsd(
   types::DataTypeDefXsd that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeString(
     stringification::to_string(
@@ -25986,9 +24223,9 @@ common::optional<SerializationError> SerializeDataTypeDefXsd(
  * Serialize the literal of DataTypeIec61360
  * to XML text.
  */
-common::optional<SerializationError> SerializeDataTypeIec61360(
+common::optional<xml_common::SerializationError> SerializeDataTypeIec61360(
   types::DataTypeIec61360 that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   writer.SerializeString(
     stringification::to_string(
@@ -26010,15 +24247,15 @@ common::optional<SerializationError> SerializeDataTypeIec61360(
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeHasSemanticsAsElement(
+common::optional<xml_common::SerializationError> SerializeHasSemanticsAsElement(
   const types::IHasSemantics& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeHasSemanticsAsElement(const types::IHasSemantics&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeHasSemanticsPtrAsElement(
+/** @copybrief SerializeHasSemanticsAsElement(const types::IHasSemantics&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeHasSemanticsPtrAsElement(
   const std::shared_ptr<types::IHasSemantics>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26030,9 +24267,9 @@ common::optional<SerializationError> SerializeHasSemanticsPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeExtensionAsSequence(
+common::optional<xml_common::SerializationError> SerializeExtensionAsSequence(
   const types::IExtension& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26042,15 +24279,15 @@ common::optional<SerializationError> SerializeExtensionAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeExtensionAsElement(
+common::optional<xml_common::SerializationError> SerializeExtensionAsElement(
   const types::IExtension& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeExtensionAsElement(const types::IExtension&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeExtensionPtrAsElement(
+/** @copybrief SerializeExtensionAsElement(const types::IExtension&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeExtensionPtrAsElement(
   const std::shared_ptr<types::IExtension>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26061,15 +24298,15 @@ common::optional<SerializationError> SerializeExtensionPtrAsElement(
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeHasExtensionsAsElement(
+common::optional<xml_common::SerializationError> SerializeHasExtensionsAsElement(
   const types::IHasExtensions& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeHasExtensionsAsElement(const types::IHasExtensions&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeHasExtensionsPtrAsElement(
+/** @copybrief SerializeHasExtensionsAsElement(const types::IHasExtensions&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeHasExtensionsPtrAsElement(
   const std::shared_ptr<types::IHasExtensions>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26080,15 +24317,15 @@ common::optional<SerializationError> SerializeHasExtensionsPtrAsElement(
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeReferableAsElement(
+common::optional<xml_common::SerializationError> SerializeReferableAsElement(
   const types::IReferable& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeReferableAsElement(const types::IReferable&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeReferablePtrAsElement(
+/** @copybrief SerializeReferableAsElement(const types::IReferable&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeReferablePtrAsElement(
   const std::shared_ptr<types::IReferable>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26099,15 +24336,15 @@ common::optional<SerializationError> SerializeReferablePtrAsElement(
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeIdentifiableAsElement(
+common::optional<xml_common::SerializationError> SerializeIdentifiableAsElement(
   const types::IIdentifiable& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeIdentifiableAsElement(const types::IIdentifiable&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeIdentifiablePtrAsElement(
+/** @copybrief SerializeIdentifiableAsElement(const types::IIdentifiable&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeIdentifiablePtrAsElement(
   const std::shared_ptr<types::IIdentifiable>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26118,15 +24355,15 @@ common::optional<SerializationError> SerializeIdentifiablePtrAsElement(
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeHasKindAsElement(
+common::optional<xml_common::SerializationError> SerializeHasKindAsElement(
   const types::IHasKind& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeHasKindAsElement(const types::IHasKind&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeHasKindPtrAsElement(
+/** @copybrief SerializeHasKindAsElement(const types::IHasKind&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeHasKindPtrAsElement(
   const std::shared_ptr<types::IHasKind>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26137,15 +24374,15 @@ common::optional<SerializationError> SerializeHasKindPtrAsElement(
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeHasDataSpecificationAsElement(
+common::optional<xml_common::SerializationError> SerializeHasDataSpecificationAsElement(
   const types::IHasDataSpecification& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeHasDataSpecificationAsElement(const types::IHasDataSpecification&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeHasDataSpecificationPtrAsElement(
+/** @copybrief SerializeHasDataSpecificationAsElement(const types::IHasDataSpecification&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeHasDataSpecificationPtrAsElement(
   const std::shared_ptr<types::IHasDataSpecification>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26157,9 +24394,9 @@ common::optional<SerializationError> SerializeHasDataSpecificationPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeAdministrativeInformationAsSequence(
+common::optional<xml_common::SerializationError> SerializeAdministrativeInformationAsSequence(
   const types::IAdministrativeInformation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26169,15 +24406,15 @@ common::optional<SerializationError> SerializeAdministrativeInformationAsSequenc
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeAdministrativeInformationAsElement(
+common::optional<xml_common::SerializationError> SerializeAdministrativeInformationAsElement(
   const types::IAdministrativeInformation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeAdministrativeInformationAsElement(const types::IAdministrativeInformation&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeAdministrativeInformationPtrAsElement(
+/** @copybrief SerializeAdministrativeInformationAsElement(const types::IAdministrativeInformation&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeAdministrativeInformationPtrAsElement(
   const std::shared_ptr<types::IAdministrativeInformation>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26188,15 +24425,15 @@ common::optional<SerializationError> SerializeAdministrativeInformationPtrAsElem
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeQualifiableAsElement(
+common::optional<xml_common::SerializationError> SerializeQualifiableAsElement(
   const types::IQualifiable& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeQualifiableAsElement(const types::IQualifiable&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeQualifiablePtrAsElement(
+/** @copybrief SerializeQualifiableAsElement(const types::IQualifiable&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeQualifiablePtrAsElement(
   const std::shared_ptr<types::IQualifiable>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26208,9 +24445,9 @@ common::optional<SerializationError> SerializeQualifiablePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeQualifierAsSequence(
+common::optional<xml_common::SerializationError> SerializeQualifierAsSequence(
   const types::IQualifier& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26220,15 +24457,15 @@ common::optional<SerializationError> SerializeQualifierAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeQualifierAsElement(
+common::optional<xml_common::SerializationError> SerializeQualifierAsElement(
   const types::IQualifier& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeQualifierAsElement(const types::IQualifier&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeQualifierPtrAsElement(
+/** @copybrief SerializeQualifierAsElement(const types::IQualifier&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeQualifierPtrAsElement(
   const std::shared_ptr<types::IQualifier>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26240,9 +24477,9 @@ common::optional<SerializationError> SerializeQualifierPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeAssetAdministrationShellAsSequence(
+common::optional<xml_common::SerializationError> SerializeAssetAdministrationShellAsSequence(
   const types::IAssetAdministrationShell& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26252,15 +24489,15 @@ common::optional<SerializationError> SerializeAssetAdministrationShellAsSequence
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeAssetAdministrationShellAsElement(
+common::optional<xml_common::SerializationError> SerializeAssetAdministrationShellAsElement(
   const types::IAssetAdministrationShell& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeAssetAdministrationShellAsElement(const types::IAssetAdministrationShell&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeAssetAdministrationShellPtrAsElement(
+/** @copybrief SerializeAssetAdministrationShellAsElement(const types::IAssetAdministrationShell&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeAssetAdministrationShellPtrAsElement(
   const std::shared_ptr<types::IAssetAdministrationShell>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26272,9 +24509,9 @@ common::optional<SerializationError> SerializeAssetAdministrationShellPtrAsEleme
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeAssetInformationAsSequence(
+common::optional<xml_common::SerializationError> SerializeAssetInformationAsSequence(
   const types::IAssetInformation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26284,15 +24521,15 @@ common::optional<SerializationError> SerializeAssetInformationAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeAssetInformationAsElement(
+common::optional<xml_common::SerializationError> SerializeAssetInformationAsElement(
   const types::IAssetInformation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeAssetInformationAsElement(const types::IAssetInformation&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeAssetInformationPtrAsElement(
+/** @copybrief SerializeAssetInformationAsElement(const types::IAssetInformation&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeAssetInformationPtrAsElement(
   const std::shared_ptr<types::IAssetInformation>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26304,9 +24541,9 @@ common::optional<SerializationError> SerializeAssetInformationPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeResourceAsSequence(
+common::optional<xml_common::SerializationError> SerializeResourceAsSequence(
   const types::IResource& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26316,15 +24553,15 @@ common::optional<SerializationError> SerializeResourceAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeResourceAsElement(
+common::optional<xml_common::SerializationError> SerializeResourceAsElement(
   const types::IResource& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeResourceAsElement(const types::IResource&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeResourcePtrAsElement(
+/** @copybrief SerializeResourceAsElement(const types::IResource&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeResourcePtrAsElement(
   const std::shared_ptr<types::IResource>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26336,9 +24573,9 @@ common::optional<SerializationError> SerializeResourcePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeSpecificAssetIdAsSequence(
+common::optional<xml_common::SerializationError> SerializeSpecificAssetIdAsSequence(
   const types::ISpecificAssetId& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26348,15 +24585,15 @@ common::optional<SerializationError> SerializeSpecificAssetIdAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeSpecificAssetIdAsElement(
+common::optional<xml_common::SerializationError> SerializeSpecificAssetIdAsElement(
   const types::ISpecificAssetId& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeSpecificAssetIdAsElement(const types::ISpecificAssetId&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeSpecificAssetIdPtrAsElement(
+/** @copybrief SerializeSpecificAssetIdAsElement(const types::ISpecificAssetId&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeSpecificAssetIdPtrAsElement(
   const std::shared_ptr<types::ISpecificAssetId>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26368,9 +24605,9 @@ common::optional<SerializationError> SerializeSpecificAssetIdPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeSubmodelAsSequence(
+common::optional<xml_common::SerializationError> SerializeSubmodelAsSequence(
   const types::ISubmodel& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26380,15 +24617,15 @@ common::optional<SerializationError> SerializeSubmodelAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeSubmodelAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelAsElement(
   const types::ISubmodel& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeSubmodelAsElement(const types::ISubmodel&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeSubmodelPtrAsElement(
+/** @copybrief SerializeSubmodelAsElement(const types::ISubmodel&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeSubmodelPtrAsElement(
   const std::shared_ptr<types::ISubmodel>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26399,15 +24636,15 @@ common::optional<SerializationError> SerializeSubmodelPtrAsElement(
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeSubmodelElementAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementAsElement(
   const types::ISubmodelElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeSubmodelElementAsElement(const types::ISubmodelElement&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeSubmodelElementPtrAsElement(
+/** @copybrief SerializeSubmodelElementAsElement(const types::ISubmodelElement&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeSubmodelElementPtrAsElement(
   const std::shared_ptr<types::ISubmodelElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26419,9 +24656,9 @@ common::optional<SerializationError> SerializeSubmodelElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeRelationshipElementAsSequence(
+common::optional<xml_common::SerializationError> SerializeRelationshipElementAsSequence(
   const types::IRelationshipElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26432,15 +24669,15 @@ common::optional<SerializationError> SerializeRelationshipElementAsSequence(
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeRelationshipElementAsElement(
+common::optional<xml_common::SerializationError> SerializeRelationshipElementAsElement(
   const types::IRelationshipElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeRelationshipElementAsElement(const types::IRelationshipElement&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeRelationshipElementPtrAsElement(
+/** @copybrief SerializeRelationshipElementAsElement(const types::IRelationshipElement&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeRelationshipElementPtrAsElement(
   const std::shared_ptr<types::IRelationshipElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26452,9 +24689,9 @@ common::optional<SerializationError> SerializeRelationshipElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeSubmodelElementListAsSequence(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementListAsSequence(
   const types::ISubmodelElementList& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26464,15 +24701,15 @@ common::optional<SerializationError> SerializeSubmodelElementListAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeSubmodelElementListAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementListAsElement(
   const types::ISubmodelElementList& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeSubmodelElementListAsElement(const types::ISubmodelElementList&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeSubmodelElementListPtrAsElement(
+/** @copybrief SerializeSubmodelElementListAsElement(const types::ISubmodelElementList&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeSubmodelElementListPtrAsElement(
   const std::shared_ptr<types::ISubmodelElementList>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26484,9 +24721,9 @@ common::optional<SerializationError> SerializeSubmodelElementListPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeSubmodelElementCollectionAsSequence(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementCollectionAsSequence(
   const types::ISubmodelElementCollection& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26496,15 +24733,15 @@ common::optional<SerializationError> SerializeSubmodelElementCollectionAsSequenc
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeSubmodelElementCollectionAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementCollectionAsElement(
   const types::ISubmodelElementCollection& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeSubmodelElementCollectionAsElement(const types::ISubmodelElementCollection&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeSubmodelElementCollectionPtrAsElement(
+/** @copybrief SerializeSubmodelElementCollectionAsElement(const types::ISubmodelElementCollection&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeSubmodelElementCollectionPtrAsElement(
   const std::shared_ptr<types::ISubmodelElementCollection>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26515,15 +24752,15 @@ common::optional<SerializationError> SerializeSubmodelElementCollectionPtrAsElem
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeDataElementAsElement(
+common::optional<xml_common::SerializationError> SerializeDataElementAsElement(
   const types::IDataElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeDataElementAsElement(const types::IDataElement&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeDataElementPtrAsElement(
+/** @copybrief SerializeDataElementAsElement(const types::IDataElement&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeDataElementPtrAsElement(
   const std::shared_ptr<types::IDataElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26535,9 +24772,9 @@ common::optional<SerializationError> SerializeDataElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializePropertyAsSequence(
+common::optional<xml_common::SerializationError> SerializePropertyAsSequence(
   const types::IProperty& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26547,15 +24784,15 @@ common::optional<SerializationError> SerializePropertyAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializePropertyAsElement(
+common::optional<xml_common::SerializationError> SerializePropertyAsElement(
   const types::IProperty& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializePropertyAsElement(const types::IProperty&, SelfClosingWriter& */
-common::optional<SerializationError> SerializePropertyPtrAsElement(
+/** @copybrief SerializePropertyAsElement(const types::IProperty&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializePropertyPtrAsElement(
   const std::shared_ptr<types::IProperty>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26567,9 +24804,9 @@ common::optional<SerializationError> SerializePropertyPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeMultiLanguagePropertyAsSequence(
+common::optional<xml_common::SerializationError> SerializeMultiLanguagePropertyAsSequence(
   const types::IMultiLanguageProperty& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26579,15 +24816,15 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeMultiLanguagePropertyAsElement(
+common::optional<xml_common::SerializationError> SerializeMultiLanguagePropertyAsElement(
   const types::IMultiLanguageProperty& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeMultiLanguagePropertyAsElement(const types::IMultiLanguageProperty&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeMultiLanguagePropertyPtrAsElement(
+/** @copybrief SerializeMultiLanguagePropertyAsElement(const types::IMultiLanguageProperty&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeMultiLanguagePropertyPtrAsElement(
   const std::shared_ptr<types::IMultiLanguageProperty>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26599,9 +24836,9 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeRangeAsSequence(
+common::optional<xml_common::SerializationError> SerializeRangeAsSequence(
   const types::IRange& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26611,15 +24848,15 @@ common::optional<SerializationError> SerializeRangeAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeRangeAsElement(
+common::optional<xml_common::SerializationError> SerializeRangeAsElement(
   const types::IRange& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeRangeAsElement(const types::IRange&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeRangePtrAsElement(
+/** @copybrief SerializeRangeAsElement(const types::IRange&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeRangePtrAsElement(
   const std::shared_ptr<types::IRange>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26631,9 +24868,9 @@ common::optional<SerializationError> SerializeRangePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeReferenceElementAsSequence(
+common::optional<xml_common::SerializationError> SerializeReferenceElementAsSequence(
   const types::IReferenceElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26643,15 +24880,15 @@ common::optional<SerializationError> SerializeReferenceElementAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeReferenceElementAsElement(
+common::optional<xml_common::SerializationError> SerializeReferenceElementAsElement(
   const types::IReferenceElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeReferenceElementAsElement(const types::IReferenceElement&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeReferenceElementPtrAsElement(
+/** @copybrief SerializeReferenceElementAsElement(const types::IReferenceElement&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeReferenceElementPtrAsElement(
   const std::shared_ptr<types::IReferenceElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26663,9 +24900,9 @@ common::optional<SerializationError> SerializeReferenceElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeBlobAsSequence(
+common::optional<xml_common::SerializationError> SerializeBlobAsSequence(
   const types::IBlob& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26675,15 +24912,15 @@ common::optional<SerializationError> SerializeBlobAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeBlobAsElement(
+common::optional<xml_common::SerializationError> SerializeBlobAsElement(
   const types::IBlob& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeBlobAsElement(const types::IBlob&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeBlobPtrAsElement(
+/** @copybrief SerializeBlobAsElement(const types::IBlob&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeBlobPtrAsElement(
   const std::shared_ptr<types::IBlob>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26695,9 +24932,9 @@ common::optional<SerializationError> SerializeBlobPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeFileAsSequence(
+common::optional<xml_common::SerializationError> SerializeFileAsSequence(
   const types::IFile& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26707,15 +24944,15 @@ common::optional<SerializationError> SerializeFileAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeFileAsElement(
+common::optional<xml_common::SerializationError> SerializeFileAsElement(
   const types::IFile& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeFileAsElement(const types::IFile&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeFilePtrAsElement(
+/** @copybrief SerializeFileAsElement(const types::IFile&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeFilePtrAsElement(
   const std::shared_ptr<types::IFile>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26727,9 +24964,9 @@ common::optional<SerializationError> SerializeFilePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsSequence(
+common::optional<xml_common::SerializationError> SerializeAnnotatedRelationshipElementAsSequence(
   const types::IAnnotatedRelationshipElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26739,15 +24976,15 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsSequ
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsElement(
+common::optional<xml_common::SerializationError> SerializeAnnotatedRelationshipElementAsElement(
   const types::IAnnotatedRelationshipElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeAnnotatedRelationshipElementAsElement(const types::IAnnotatedRelationshipElement&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeAnnotatedRelationshipElementPtrAsElement(
+/** @copybrief SerializeAnnotatedRelationshipElementAsElement(const types::IAnnotatedRelationshipElement&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeAnnotatedRelationshipElementPtrAsElement(
   const std::shared_ptr<types::IAnnotatedRelationshipElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26759,9 +24996,9 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementPtrAsE
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeEntityAsSequence(
+common::optional<xml_common::SerializationError> SerializeEntityAsSequence(
   const types::IEntity& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26771,15 +25008,15 @@ common::optional<SerializationError> SerializeEntityAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeEntityAsElement(
+common::optional<xml_common::SerializationError> SerializeEntityAsElement(
   const types::IEntity& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeEntityAsElement(const types::IEntity&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeEntityPtrAsElement(
+/** @copybrief SerializeEntityAsElement(const types::IEntity&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeEntityPtrAsElement(
   const std::shared_ptr<types::IEntity>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26791,9 +25028,9 @@ common::optional<SerializationError> SerializeEntityPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeEventPayloadAsSequence(
+common::optional<xml_common::SerializationError> SerializeEventPayloadAsSequence(
   const types::IEventPayload& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26803,15 +25040,15 @@ common::optional<SerializationError> SerializeEventPayloadAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeEventPayloadAsElement(
+common::optional<xml_common::SerializationError> SerializeEventPayloadAsElement(
   const types::IEventPayload& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeEventPayloadAsElement(const types::IEventPayload&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeEventPayloadPtrAsElement(
+/** @copybrief SerializeEventPayloadAsElement(const types::IEventPayload&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeEventPayloadPtrAsElement(
   const std::shared_ptr<types::IEventPayload>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26822,15 +25059,15 @@ common::optional<SerializationError> SerializeEventPayloadPtrAsElement(
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeEventElementAsElement(
+common::optional<xml_common::SerializationError> SerializeEventElementAsElement(
   const types::IEventElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeEventElementAsElement(const types::IEventElement&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeEventElementPtrAsElement(
+/** @copybrief SerializeEventElementAsElement(const types::IEventElement&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeEventElementPtrAsElement(
   const std::shared_ptr<types::IEventElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26842,9 +25079,9 @@ common::optional<SerializationError> SerializeEventElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeBasicEventElementAsSequence(
+common::optional<xml_common::SerializationError> SerializeBasicEventElementAsSequence(
   const types::IBasicEventElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26854,15 +25091,15 @@ common::optional<SerializationError> SerializeBasicEventElementAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeBasicEventElementAsElement(
+common::optional<xml_common::SerializationError> SerializeBasicEventElementAsElement(
   const types::IBasicEventElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeBasicEventElementAsElement(const types::IBasicEventElement&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeBasicEventElementPtrAsElement(
+/** @copybrief SerializeBasicEventElementAsElement(const types::IBasicEventElement&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeBasicEventElementPtrAsElement(
   const std::shared_ptr<types::IBasicEventElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26874,9 +25111,9 @@ common::optional<SerializationError> SerializeBasicEventElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeOperationAsSequence(
+common::optional<xml_common::SerializationError> SerializeOperationAsSequence(
   const types::IOperation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26886,15 +25123,15 @@ common::optional<SerializationError> SerializeOperationAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeOperationAsElement(
+common::optional<xml_common::SerializationError> SerializeOperationAsElement(
   const types::IOperation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeOperationAsElement(const types::IOperation&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeOperationPtrAsElement(
+/** @copybrief SerializeOperationAsElement(const types::IOperation&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeOperationPtrAsElement(
   const std::shared_ptr<types::IOperation>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26906,9 +25143,9 @@ common::optional<SerializationError> SerializeOperationPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeOperationVariableAsSequence(
+common::optional<xml_common::SerializationError> SerializeOperationVariableAsSequence(
   const types::IOperationVariable& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26918,15 +25155,15 @@ common::optional<SerializationError> SerializeOperationVariableAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeOperationVariableAsElement(
+common::optional<xml_common::SerializationError> SerializeOperationVariableAsElement(
   const types::IOperationVariable& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeOperationVariableAsElement(const types::IOperationVariable&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeOperationVariablePtrAsElement(
+/** @copybrief SerializeOperationVariableAsElement(const types::IOperationVariable&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeOperationVariablePtrAsElement(
   const std::shared_ptr<types::IOperationVariable>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26938,9 +25175,9 @@ common::optional<SerializationError> SerializeOperationVariablePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeCapabilityAsSequence(
+common::optional<xml_common::SerializationError> SerializeCapabilityAsSequence(
   const types::ICapability& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26950,15 +25187,15 @@ common::optional<SerializationError> SerializeCapabilityAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeCapabilityAsElement(
+common::optional<xml_common::SerializationError> SerializeCapabilityAsElement(
   const types::ICapability& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeCapabilityAsElement(const types::ICapability&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeCapabilityPtrAsElement(
+/** @copybrief SerializeCapabilityAsElement(const types::ICapability&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeCapabilityPtrAsElement(
   const std::shared_ptr<types::ICapability>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26970,9 +25207,9 @@ common::optional<SerializationError> SerializeCapabilityPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeConceptDescriptionAsSequence(
+common::optional<xml_common::SerializationError> SerializeConceptDescriptionAsSequence(
   const types::IConceptDescription& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -26982,15 +25219,15 @@ common::optional<SerializationError> SerializeConceptDescriptionAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeConceptDescriptionAsElement(
+common::optional<xml_common::SerializationError> SerializeConceptDescriptionAsElement(
   const types::IConceptDescription& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeConceptDescriptionAsElement(const types::IConceptDescription&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeConceptDescriptionPtrAsElement(
+/** @copybrief SerializeConceptDescriptionAsElement(const types::IConceptDescription&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeConceptDescriptionPtrAsElement(
   const std::shared_ptr<types::IConceptDescription>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27002,9 +25239,9 @@ common::optional<SerializationError> SerializeConceptDescriptionPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeReferenceAsSequence(
+common::optional<xml_common::SerializationError> SerializeReferenceAsSequence(
   const types::IReference& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27014,15 +25251,15 @@ common::optional<SerializationError> SerializeReferenceAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeReferenceAsElement(
+common::optional<xml_common::SerializationError> SerializeReferenceAsElement(
   const types::IReference& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeReferenceAsElement(const types::IReference&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeReferencePtrAsElement(
+/** @copybrief SerializeReferenceAsElement(const types::IReference&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeReferencePtrAsElement(
   const std::shared_ptr<types::IReference>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27034,9 +25271,9 @@ common::optional<SerializationError> SerializeReferencePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeKeyAsSequence(
+common::optional<xml_common::SerializationError> SerializeKeyAsSequence(
   const types::IKey& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27046,15 +25283,15 @@ common::optional<SerializationError> SerializeKeyAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeKeyAsElement(
+common::optional<xml_common::SerializationError> SerializeKeyAsElement(
   const types::IKey& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeKeyAsElement(const types::IKey&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeKeyPtrAsElement(
+/** @copybrief SerializeKeyAsElement(const types::IKey&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeKeyPtrAsElement(
   const std::shared_ptr<types::IKey>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27065,15 +25302,15 @@ common::optional<SerializationError> SerializeKeyPtrAsElement(
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeAbstractLangStringAsElement(
+common::optional<xml_common::SerializationError> SerializeAbstractLangStringAsElement(
   const types::IAbstractLangString& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeAbstractLangStringAsElement(const types::IAbstractLangString&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeAbstractLangStringPtrAsElement(
+/** @copybrief SerializeAbstractLangStringAsElement(const types::IAbstractLangString&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeAbstractLangStringPtrAsElement(
   const std::shared_ptr<types::IAbstractLangString>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27085,9 +25322,9 @@ common::optional<SerializationError> SerializeAbstractLangStringPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLangStringNameTypeAsSequence(
+common::optional<xml_common::SerializationError> SerializeLangStringNameTypeAsSequence(
   const types::ILangStringNameType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27097,15 +25334,15 @@ common::optional<SerializationError> SerializeLangStringNameTypeAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeLangStringNameTypeAsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringNameTypeAsElement(
   const types::ILangStringNameType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeLangStringNameTypeAsElement(const types::ILangStringNameType&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeLangStringNameTypePtrAsElement(
+/** @copybrief SerializeLangStringNameTypeAsElement(const types::ILangStringNameType&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeLangStringNameTypePtrAsElement(
   const std::shared_ptr<types::ILangStringNameType>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27117,9 +25354,9 @@ common::optional<SerializationError> SerializeLangStringNameTypePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLangStringTextTypeAsSequence(
+common::optional<xml_common::SerializationError> SerializeLangStringTextTypeAsSequence(
   const types::ILangStringTextType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27129,15 +25366,15 @@ common::optional<SerializationError> SerializeLangStringTextTypeAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeLangStringTextTypeAsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringTextTypeAsElement(
   const types::ILangStringTextType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeLangStringTextTypeAsElement(const types::ILangStringTextType&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeLangStringTextTypePtrAsElement(
+/** @copybrief SerializeLangStringTextTypeAsElement(const types::ILangStringTextType&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeLangStringTextTypePtrAsElement(
   const std::shared_ptr<types::ILangStringTextType>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27149,9 +25386,9 @@ common::optional<SerializationError> SerializeLangStringTextTypePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeEnvironmentAsSequence(
+common::optional<xml_common::SerializationError> SerializeEnvironmentAsSequence(
   const types::IEnvironment& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27161,15 +25398,15 @@ common::optional<SerializationError> SerializeEnvironmentAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeEnvironmentAsElement(
+common::optional<xml_common::SerializationError> SerializeEnvironmentAsElement(
   const types::IEnvironment& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeEnvironmentAsElement(const types::IEnvironment&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeEnvironmentPtrAsElement(
+/** @copybrief SerializeEnvironmentAsElement(const types::IEnvironment&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeEnvironmentPtrAsElement(
   const std::shared_ptr<types::IEnvironment>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27180,15 +25417,15 @@ common::optional<SerializationError> SerializeEnvironmentPtrAsElement(
  * \param writer to be write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeDataSpecificationContentAsElement(
+common::optional<xml_common::SerializationError> SerializeDataSpecificationContentAsElement(
   const types::IDataSpecificationContent& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeDataSpecificationContentAsElement(const types::IDataSpecificationContent&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeDataSpecificationContentPtrAsElement(
+/** @copybrief SerializeDataSpecificationContentAsElement(const types::IDataSpecificationContent&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeDataSpecificationContentPtrAsElement(
   const std::shared_ptr<types::IDataSpecificationContent>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27200,9 +25437,9 @@ common::optional<SerializationError> SerializeDataSpecificationContentPtrAsEleme
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeEmbeddedDataSpecificationAsSequence(
+common::optional<xml_common::SerializationError> SerializeEmbeddedDataSpecificationAsSequence(
   const types::IEmbeddedDataSpecification& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27212,15 +25449,15 @@ common::optional<SerializationError> SerializeEmbeddedDataSpecificationAsSequenc
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeEmbeddedDataSpecificationAsElement(
+common::optional<xml_common::SerializationError> SerializeEmbeddedDataSpecificationAsElement(
   const types::IEmbeddedDataSpecification& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeEmbeddedDataSpecificationAsElement(const types::IEmbeddedDataSpecification&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeEmbeddedDataSpecificationPtrAsElement(
+/** @copybrief SerializeEmbeddedDataSpecificationAsElement(const types::IEmbeddedDataSpecification&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeEmbeddedDataSpecificationPtrAsElement(
   const std::shared_ptr<types::IEmbeddedDataSpecification>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27232,9 +25469,9 @@ common::optional<SerializationError> SerializeEmbeddedDataSpecificationPtrAsElem
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLevelTypeAsSequence(
+common::optional<xml_common::SerializationError> SerializeLevelTypeAsSequence(
   const types::ILevelType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27244,15 +25481,15 @@ common::optional<SerializationError> SerializeLevelTypeAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeLevelTypeAsElement(
+common::optional<xml_common::SerializationError> SerializeLevelTypeAsElement(
   const types::ILevelType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeLevelTypeAsElement(const types::ILevelType&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeLevelTypePtrAsElement(
+/** @copybrief SerializeLevelTypeAsElement(const types::ILevelType&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeLevelTypePtrAsElement(
   const std::shared_ptr<types::ILevelType>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27264,9 +25501,9 @@ common::optional<SerializationError> SerializeLevelTypePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeValueReferencePairAsSequence(
+common::optional<xml_common::SerializationError> SerializeValueReferencePairAsSequence(
   const types::IValueReferencePair& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27276,15 +25513,15 @@ common::optional<SerializationError> SerializeValueReferencePairAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeValueReferencePairAsElement(
+common::optional<xml_common::SerializationError> SerializeValueReferencePairAsElement(
   const types::IValueReferencePair& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeValueReferencePairAsElement(const types::IValueReferencePair&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeValueReferencePairPtrAsElement(
+/** @copybrief SerializeValueReferencePairAsElement(const types::IValueReferencePair&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeValueReferencePairPtrAsElement(
   const std::shared_ptr<types::IValueReferencePair>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27296,9 +25533,9 @@ common::optional<SerializationError> SerializeValueReferencePairPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeValueListAsSequence(
+common::optional<xml_common::SerializationError> SerializeValueListAsSequence(
   const types::IValueList& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27308,15 +25545,15 @@ common::optional<SerializationError> SerializeValueListAsSequence(
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeValueListAsElement(
+common::optional<xml_common::SerializationError> SerializeValueListAsElement(
   const types::IValueList& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeValueListAsElement(const types::IValueList&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeValueListPtrAsElement(
+/** @copybrief SerializeValueListAsElement(const types::IValueList&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeValueListPtrAsElement(
   const std::shared_ptr<types::IValueList>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27328,9 +25565,9 @@ common::optional<SerializationError> SerializeValueListPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLangStringPreferredNameTypeIec61360AsSequence(
+common::optional<xml_common::SerializationError> SerializeLangStringPreferredNameTypeIec61360AsSequence(
   const types::ILangStringPreferredNameTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27340,15 +25577,15 @@ common::optional<SerializationError> SerializeLangStringPreferredNameTypeIec6136
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeLangStringPreferredNameTypeIec61360AsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringPreferredNameTypeIec61360AsElement(
   const types::ILangStringPreferredNameTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeLangStringPreferredNameTypeIec61360AsElement(const types::ILangStringPreferredNameTypeIec61360&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeLangStringPreferredNameTypeIec61360PtrAsElement(
+/** @copybrief SerializeLangStringPreferredNameTypeIec61360AsElement(const types::ILangStringPreferredNameTypeIec61360&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeLangStringPreferredNameTypeIec61360PtrAsElement(
   const std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27360,9 +25597,9 @@ common::optional<SerializationError> SerializeLangStringPreferredNameTypeIec6136
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLangStringShortNameTypeIec61360AsSequence(
+common::optional<xml_common::SerializationError> SerializeLangStringShortNameTypeIec61360AsSequence(
   const types::ILangStringShortNameTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27372,15 +25609,15 @@ common::optional<SerializationError> SerializeLangStringShortNameTypeIec61360AsS
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeLangStringShortNameTypeIec61360AsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringShortNameTypeIec61360AsElement(
   const types::ILangStringShortNameTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeLangStringShortNameTypeIec61360AsElement(const types::ILangStringShortNameTypeIec61360&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeLangStringShortNameTypeIec61360PtrAsElement(
+/** @copybrief SerializeLangStringShortNameTypeIec61360AsElement(const types::ILangStringShortNameTypeIec61360&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeLangStringShortNameTypeIec61360PtrAsElement(
   const std::shared_ptr<types::ILangStringShortNameTypeIec61360>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27392,9 +25629,9 @@ common::optional<SerializationError> SerializeLangStringShortNameTypeIec61360Ptr
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLangStringDefinitionTypeIec61360AsSequence(
+common::optional<xml_common::SerializationError> SerializeLangStringDefinitionTypeIec61360AsSequence(
   const types::ILangStringDefinitionTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27404,15 +25641,15 @@ common::optional<SerializationError> SerializeLangStringDefinitionTypeIec61360As
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeLangStringDefinitionTypeIec61360AsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringDefinitionTypeIec61360AsElement(
   const types::ILangStringDefinitionTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeLangStringDefinitionTypeIec61360AsElement(const types::ILangStringDefinitionTypeIec61360&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeLangStringDefinitionTypeIec61360PtrAsElement(
+/** @copybrief SerializeLangStringDefinitionTypeIec61360AsElement(const types::ILangStringDefinitionTypeIec61360&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeLangStringDefinitionTypeIec61360PtrAsElement(
   const std::shared_ptr<types::ILangStringDefinitionTypeIec61360>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27424,9 +25661,9 @@ common::optional<SerializationError> SerializeLangStringDefinitionTypeIec61360Pt
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeDataSpecificationIec61360AsSequence(
+common::optional<xml_common::SerializationError> SerializeDataSpecificationIec61360AsSequence(
   const types::IDataSpecificationIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
 /**
@@ -27436,20 +25673,20 @@ common::optional<SerializationError> SerializeDataSpecificationIec61360AsSequenc
  * \param that instance to be serialized
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeDataSpecificationIec61360AsElement(
+common::optional<xml_common::SerializationError> SerializeDataSpecificationIec61360AsElement(
   const types::IDataSpecificationIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-/** @copybrief SerializeDataSpecificationIec61360AsElement(const types::IDataSpecificationIec61360&, SelfClosingWriter& */
-common::optional<SerializationError> SerializeDataSpecificationIec61360PtrAsElement(
+/** @copybrief SerializeDataSpecificationIec61360AsElement(const types::IDataSpecificationIec61360&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeDataSpecificationIec61360PtrAsElement(
   const std::shared_ptr<types::IDataSpecificationIec61360>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 );
 
-common::optional<SerializationError> SerializeHasSemanticsAsElement(
+common::optional<xml_common::SerializationError> SerializeHasSemanticsAsElement(
   const types::IHasSemantics& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -27592,9 +25829,9 @@ common::optional<SerializationError> SerializeHasSemanticsAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeHasSemanticsPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeHasSemanticsPtrAsElement(
   const std::shared_ptr<types::IHasSemantics>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeHasSemanticsAsElement(*that, writer);
 }
@@ -27608,11 +25845,11 @@ common::optional<SerializationError> SerializeHasSemanticsPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeExtensionAsSequence(
+common::optional<xml_common::SerializationError> SerializeExtensionAsSequence(
   const types::IExtension& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.semantic_id().has_value()) {
     error = SerializePropertyAsElement(
@@ -27635,7 +25872,7 @@ common::optional<SerializationError> SerializeExtensionAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -27690,7 +25927,7 @@ common::optional<SerializationError> SerializeExtensionAsSequence(
       iteration::Property::kRefersTo,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -27708,11 +25945,11 @@ common::optional<SerializationError> SerializeExtensionAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeExtensionAsElement(
+common::optional<xml_common::SerializationError> SerializeExtensionAsElement(
   const types::IExtension& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "extension"
@@ -27744,16 +25981,16 @@ common::optional<SerializationError> SerializeExtensionAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeExtensionPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeExtensionPtrAsElement(
   const std::shared_ptr<types::IExtension>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeExtensionAsElement(*that, writer);
 }
 
-common::optional<SerializationError> SerializeHasExtensionsAsElement(
+common::optional<xml_common::SerializationError> SerializeHasExtensionsAsElement(
   const types::IHasExtensions& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -27889,16 +26126,16 @@ common::optional<SerializationError> SerializeHasExtensionsAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeHasExtensionsPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeHasExtensionsPtrAsElement(
   const std::shared_ptr<types::IHasExtensions>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeHasExtensionsAsElement(*that, writer);
 }
 
-common::optional<SerializationError> SerializeReferableAsElement(
+common::optional<xml_common::SerializationError> SerializeReferableAsElement(
   const types::IReferable& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -28034,16 +26271,16 @@ common::optional<SerializationError> SerializeReferableAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeReferablePtrAsElement(
+common::optional<xml_common::SerializationError> SerializeReferablePtrAsElement(
   const std::shared_ptr<types::IReferable>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeReferableAsElement(*that, writer);
 }
 
-common::optional<SerializationError> SerializeIdentifiableAsElement(
+common::optional<xml_common::SerializationError> SerializeIdentifiableAsElement(
   const types::IIdentifiable& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -28081,16 +26318,16 @@ common::optional<SerializationError> SerializeIdentifiableAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeIdentifiablePtrAsElement(
+common::optional<xml_common::SerializationError> SerializeIdentifiablePtrAsElement(
   const std::shared_ptr<types::IIdentifiable>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeIdentifiableAsElement(*that, writer);
 }
 
-common::optional<SerializationError> SerializeHasKindAsElement(
+common::optional<xml_common::SerializationError> SerializeHasKindAsElement(
   const types::IHasKind& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -28114,16 +26351,16 @@ common::optional<SerializationError> SerializeHasKindAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeHasKindPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeHasKindPtrAsElement(
   const std::shared_ptr<types::IHasKind>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeHasKindAsElement(*that, writer);
 }
 
-common::optional<SerializationError> SerializeHasDataSpecificationAsElement(
+common::optional<xml_common::SerializationError> SerializeHasDataSpecificationAsElement(
   const types::IHasDataSpecification& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -28266,9 +26503,9 @@ common::optional<SerializationError> SerializeHasDataSpecificationAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeHasDataSpecificationPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeHasDataSpecificationPtrAsElement(
   const std::shared_ptr<types::IHasDataSpecification>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeHasDataSpecificationAsElement(*that, writer);
 }
@@ -28282,11 +26519,11 @@ common::optional<SerializationError> SerializeHasDataSpecificationPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeAdministrativeInformationAsSequence(
+common::optional<xml_common::SerializationError> SerializeAdministrativeInformationAsSequence(
   const types::IAdministrativeInformation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.embedded_data_specifications().has_value()) {
     error = SerializePropertyAsElement(
@@ -28296,7 +26533,7 @@ common::optional<SerializationError> SerializeAdministrativeInformationAsSequenc
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -28366,11 +26603,11 @@ common::optional<SerializationError> SerializeAdministrativeInformationAsSequenc
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeAdministrativeInformationAsElement(
+common::optional<xml_common::SerializationError> SerializeAdministrativeInformationAsElement(
   const types::IAdministrativeInformation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "administrativeInformation"
@@ -28402,16 +26639,16 @@ common::optional<SerializationError> SerializeAdministrativeInformationAsElement
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeAdministrativeInformationPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeAdministrativeInformationPtrAsElement(
   const std::shared_ptr<types::IAdministrativeInformation>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeAdministrativeInformationAsElement(*that, writer);
 }
 
-common::optional<SerializationError> SerializeQualifiableAsElement(
+common::optional<xml_common::SerializationError> SerializeQualifiableAsElement(
   const types::IQualifiable& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -28533,9 +26770,9 @@ common::optional<SerializationError> SerializeQualifiableAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeQualifiablePtrAsElement(
+common::optional<xml_common::SerializationError> SerializeQualifiablePtrAsElement(
   const std::shared_ptr<types::IQualifiable>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeQualifiableAsElement(*that, writer);
 }
@@ -28549,11 +26786,11 @@ common::optional<SerializationError> SerializeQualifiablePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeQualifierAsSequence(
+common::optional<xml_common::SerializationError> SerializeQualifierAsSequence(
   const types::IQualifier& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.semantic_id().has_value()) {
     error = SerializePropertyAsElement(
@@ -28576,7 +26813,7 @@ common::optional<SerializationError> SerializeQualifierAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -28655,11 +26892,11 @@ common::optional<SerializationError> SerializeQualifierAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeQualifierAsElement(
+common::optional<xml_common::SerializationError> SerializeQualifierAsElement(
   const types::IQualifier& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "qualifier"
@@ -28691,9 +26928,9 @@ common::optional<SerializationError> SerializeQualifierAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeQualifierPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeQualifierPtrAsElement(
   const std::shared_ptr<types::IQualifier>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeQualifierAsElement(*that, writer);
 }
@@ -28707,11 +26944,11 @@ common::optional<SerializationError> SerializeQualifierPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeAssetAdministrationShellAsSequence(
+common::optional<xml_common::SerializationError> SerializeAssetAdministrationShellAsSequence(
   const types::IAssetAdministrationShell& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -28721,7 +26958,7 @@ common::optional<SerializationError> SerializeAssetAdministrationShellAsSequence
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -28765,7 +27002,7 @@ common::optional<SerializationError> SerializeAssetAdministrationShellAsSequence
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -28783,7 +27020,7 @@ common::optional<SerializationError> SerializeAssetAdministrationShellAsSequence
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -28825,7 +27062,7 @@ common::optional<SerializationError> SerializeAssetAdministrationShellAsSequence
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -28867,7 +27104,7 @@ common::optional<SerializationError> SerializeAssetAdministrationShellAsSequence
       iteration::Property::kSubmodels,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -28885,11 +27122,11 @@ common::optional<SerializationError> SerializeAssetAdministrationShellAsSequence
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeAssetAdministrationShellAsElement(
+common::optional<xml_common::SerializationError> SerializeAssetAdministrationShellAsElement(
   const types::IAssetAdministrationShell& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "assetAdministrationShell"
@@ -28921,9 +27158,9 @@ common::optional<SerializationError> SerializeAssetAdministrationShellAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeAssetAdministrationShellPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeAssetAdministrationShellPtrAsElement(
   const std::shared_ptr<types::IAssetAdministrationShell>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeAssetAdministrationShellAsElement(*that, writer);
 }
@@ -28937,11 +27174,11 @@ common::optional<SerializationError> SerializeAssetAdministrationShellPtrAsEleme
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeAssetInformationAsSequence(
+common::optional<xml_common::SerializationError> SerializeAssetInformationAsSequence(
   const types::IAssetInformation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "assetKind",
@@ -28975,7 +27212,7 @@ common::optional<SerializationError> SerializeAssetInformationAsSequence(
       iteration::Property::kSpecificAssetIds,
       [](
         const std::vector<std::shared_ptr<types::ISpecificAssetId>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeSpecificAssetIdPtrAsElement);
       }
@@ -29019,11 +27256,11 @@ common::optional<SerializationError> SerializeAssetInformationAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeAssetInformationAsElement(
+common::optional<xml_common::SerializationError> SerializeAssetInformationAsElement(
   const types::IAssetInformation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "assetInformation"
@@ -29055,9 +27292,9 @@ common::optional<SerializationError> SerializeAssetInformationAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeAssetInformationPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeAssetInformationPtrAsElement(
   const std::shared_ptr<types::IAssetInformation>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeAssetInformationAsElement(*that, writer);
 }
@@ -29071,11 +27308,11 @@ common::optional<SerializationError> SerializeAssetInformationPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeResourceAsSequence(
+common::optional<xml_common::SerializationError> SerializeResourceAsSequence(
   const types::IResource& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "path",
@@ -29109,11 +27346,11 @@ common::optional<SerializationError> SerializeResourceAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeResourceAsElement(
+common::optional<xml_common::SerializationError> SerializeResourceAsElement(
   const types::IResource& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "resource"
@@ -29145,9 +27382,9 @@ common::optional<SerializationError> SerializeResourceAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeResourcePtrAsElement(
+common::optional<xml_common::SerializationError> SerializeResourcePtrAsElement(
   const std::shared_ptr<types::IResource>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeResourceAsElement(*that, writer);
 }
@@ -29161,11 +27398,11 @@ common::optional<SerializationError> SerializeResourcePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeSpecificAssetIdAsSequence(
+common::optional<xml_common::SerializationError> SerializeSpecificAssetIdAsSequence(
   const types::ISpecificAssetId& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.semantic_id().has_value()) {
     error = SerializePropertyAsElement(
@@ -29188,7 +27425,7 @@ common::optional<SerializationError> SerializeSpecificAssetIdAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -29241,11 +27478,11 @@ common::optional<SerializationError> SerializeSpecificAssetIdAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeSpecificAssetIdAsElement(
+common::optional<xml_common::SerializationError> SerializeSpecificAssetIdAsElement(
   const types::ISpecificAssetId& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "specificAssetId"
@@ -29277,9 +27514,9 @@ common::optional<SerializationError> SerializeSpecificAssetIdAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeSpecificAssetIdPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeSpecificAssetIdPtrAsElement(
   const std::shared_ptr<types::ISpecificAssetId>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeSpecificAssetIdAsElement(*that, writer);
 }
@@ -29293,11 +27530,11 @@ common::optional<SerializationError> SerializeSpecificAssetIdPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeSubmodelAsSequence(
+common::optional<xml_common::SerializationError> SerializeSubmodelAsSequence(
   const types::ISubmodel& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -29307,7 +27544,7 @@ common::optional<SerializationError> SerializeSubmodelAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -29351,7 +27588,7 @@ common::optional<SerializationError> SerializeSubmodelAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -29369,7 +27606,7 @@ common::optional<SerializationError> SerializeSubmodelAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -29437,7 +27674,7 @@ common::optional<SerializationError> SerializeSubmodelAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -29455,7 +27692,7 @@ common::optional<SerializationError> SerializeSubmodelAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -29473,7 +27710,7 @@ common::optional<SerializationError> SerializeSubmodelAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -29491,7 +27728,7 @@ common::optional<SerializationError> SerializeSubmodelAsSequence(
       iteration::Property::kSubmodelElements,
       [](
         const std::vector<std::shared_ptr<types::ISubmodelElement>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeSubmodelElementPtrAsElement);
       }
@@ -29509,11 +27746,11 @@ common::optional<SerializationError> SerializeSubmodelAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeSubmodelAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelAsElement(
   const types::ISubmodel& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "submodel"
@@ -29545,16 +27782,16 @@ common::optional<SerializationError> SerializeSubmodelAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeSubmodelPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelPtrAsElement(
   const std::shared_ptr<types::ISubmodel>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeSubmodelAsElement(*that, writer);
 }
 
-common::optional<SerializationError> SerializeSubmodelElementAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementAsElement(
   const types::ISubmodelElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -29669,9 +27906,9 @@ common::optional<SerializationError> SerializeSubmodelElementAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeSubmodelElementPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementPtrAsElement(
   const std::shared_ptr<types::ISubmodelElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeSubmodelElementAsElement(*that, writer);
 }
@@ -29685,11 +27922,11 @@ common::optional<SerializationError> SerializeSubmodelElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeRelationshipElementAsSequence(
+common::optional<xml_common::SerializationError> SerializeRelationshipElementAsSequence(
   const types::IRelationshipElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -29699,7 +27936,7 @@ common::optional<SerializationError> SerializeRelationshipElementAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -29743,7 +27980,7 @@ common::optional<SerializationError> SerializeRelationshipElementAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -29761,7 +27998,7 @@ common::optional<SerializationError> SerializeRelationshipElementAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -29792,7 +28029,7 @@ common::optional<SerializationError> SerializeRelationshipElementAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -29810,7 +28047,7 @@ common::optional<SerializationError> SerializeRelationshipElementAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -29828,7 +28065,7 @@ common::optional<SerializationError> SerializeRelationshipElementAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -29879,11 +28116,11 @@ common::optional<SerializationError> SerializeRelationshipElementAsSequence(
  * \param writer to write to
  * \return an error, if any
  */
-common::optional<SerializationError> SerializeConcreteRelationshipElementAsElement(
+common::optional<xml_common::SerializationError> SerializeConcreteRelationshipElementAsElement(
   const types::IRelationshipElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "relationshipElement"
@@ -29915,9 +28152,9 @@ common::optional<SerializationError> SerializeConcreteRelationshipElementAsEleme
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeRelationshipElementAsElement(
+common::optional<xml_common::SerializationError> SerializeRelationshipElementAsElement(
   const types::IRelationshipElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -29946,9 +28183,9 @@ common::optional<SerializationError> SerializeRelationshipElementAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeRelationshipElementPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeRelationshipElementPtrAsElement(
   const std::shared_ptr<types::IRelationshipElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeRelationshipElementAsElement(*that, writer);
 }
@@ -29962,11 +28199,11 @@ common::optional<SerializationError> SerializeRelationshipElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeSubmodelElementListAsSequence(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementListAsSequence(
   const types::ISubmodelElementList& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -29976,7 +28213,7 @@ common::optional<SerializationError> SerializeSubmodelElementListAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -30020,7 +28257,7 @@ common::optional<SerializationError> SerializeSubmodelElementListAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -30038,7 +28275,7 @@ common::optional<SerializationError> SerializeSubmodelElementListAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -30069,7 +28306,7 @@ common::optional<SerializationError> SerializeSubmodelElementListAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -30087,7 +28324,7 @@ common::optional<SerializationError> SerializeSubmodelElementListAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -30105,7 +28342,7 @@ common::optional<SerializationError> SerializeSubmodelElementListAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -30173,7 +28410,7 @@ common::optional<SerializationError> SerializeSubmodelElementListAsSequence(
       iteration::Property::kValue,
       [](
         const std::vector<std::shared_ptr<types::ISubmodelElement>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeSubmodelElementPtrAsElement);
       }
@@ -30191,11 +28428,11 @@ common::optional<SerializationError> SerializeSubmodelElementListAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeSubmodelElementListAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementListAsElement(
   const types::ISubmodelElementList& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "submodelElementList"
@@ -30227,9 +28464,9 @@ common::optional<SerializationError> SerializeSubmodelElementListAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeSubmodelElementListPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementListPtrAsElement(
   const std::shared_ptr<types::ISubmodelElementList>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeSubmodelElementListAsElement(*that, writer);
 }
@@ -30243,11 +28480,11 @@ common::optional<SerializationError> SerializeSubmodelElementListPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeSubmodelElementCollectionAsSequence(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementCollectionAsSequence(
   const types::ISubmodelElementCollection& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -30257,7 +28494,7 @@ common::optional<SerializationError> SerializeSubmodelElementCollectionAsSequenc
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -30301,7 +28538,7 @@ common::optional<SerializationError> SerializeSubmodelElementCollectionAsSequenc
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -30319,7 +28556,7 @@ common::optional<SerializationError> SerializeSubmodelElementCollectionAsSequenc
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -30350,7 +28587,7 @@ common::optional<SerializationError> SerializeSubmodelElementCollectionAsSequenc
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -30368,7 +28605,7 @@ common::optional<SerializationError> SerializeSubmodelElementCollectionAsSequenc
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -30386,7 +28623,7 @@ common::optional<SerializationError> SerializeSubmodelElementCollectionAsSequenc
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -30404,7 +28641,7 @@ common::optional<SerializationError> SerializeSubmodelElementCollectionAsSequenc
       iteration::Property::kValue,
       [](
         const std::vector<std::shared_ptr<types::ISubmodelElement>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeSubmodelElementPtrAsElement);
       }
@@ -30422,11 +28659,11 @@ common::optional<SerializationError> SerializeSubmodelElementCollectionAsSequenc
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeSubmodelElementCollectionAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementCollectionAsElement(
   const types::ISubmodelElementCollection& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "submodelElementCollection"
@@ -30458,16 +28695,16 @@ common::optional<SerializationError> SerializeSubmodelElementCollectionAsElement
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeSubmodelElementCollectionPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeSubmodelElementCollectionPtrAsElement(
   const std::shared_ptr<types::ISubmodelElementCollection>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeSubmodelElementCollectionAsElement(*that, writer);
 }
 
-common::optional<SerializationError> SerializeDataElementAsElement(
+common::optional<xml_common::SerializationError> SerializeDataElementAsElement(
   const types::IDataElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -30526,9 +28763,9 @@ common::optional<SerializationError> SerializeDataElementAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeDataElementPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeDataElementPtrAsElement(
   const std::shared_ptr<types::IDataElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeDataElementAsElement(*that, writer);
 }
@@ -30542,11 +28779,11 @@ common::optional<SerializationError> SerializeDataElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializePropertyAsSequence(
+common::optional<xml_common::SerializationError> SerializePropertyAsSequence(
   const types::IProperty& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -30556,7 +28793,7 @@ common::optional<SerializationError> SerializePropertyAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -30600,7 +28837,7 @@ common::optional<SerializationError> SerializePropertyAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -30618,7 +28855,7 @@ common::optional<SerializationError> SerializePropertyAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -30649,7 +28886,7 @@ common::optional<SerializationError> SerializePropertyAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -30667,7 +28904,7 @@ common::optional<SerializationError> SerializePropertyAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -30685,7 +28922,7 @@ common::optional<SerializationError> SerializePropertyAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -30740,11 +28977,11 @@ common::optional<SerializationError> SerializePropertyAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializePropertyAsElement(
+common::optional<xml_common::SerializationError> SerializePropertyAsElement(
   const types::IProperty& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "property"
@@ -30776,9 +29013,9 @@ common::optional<SerializationError> SerializePropertyAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializePropertyPtrAsElement(
+common::optional<xml_common::SerializationError> SerializePropertyPtrAsElement(
   const std::shared_ptr<types::IProperty>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializePropertyAsElement(*that, writer);
 }
@@ -30792,11 +29029,11 @@ common::optional<SerializationError> SerializePropertyPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeMultiLanguagePropertyAsSequence(
+common::optional<xml_common::SerializationError> SerializeMultiLanguagePropertyAsSequence(
   const types::IMultiLanguageProperty& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -30806,7 +29043,7 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -30850,7 +29087,7 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -30868,7 +29105,7 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -30899,7 +29136,7 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -30917,7 +29154,7 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -30935,7 +29172,7 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -30953,7 +29190,7 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyAsSequence(
       iteration::Property::kValue,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -30984,11 +29221,11 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeMultiLanguagePropertyAsElement(
+common::optional<xml_common::SerializationError> SerializeMultiLanguagePropertyAsElement(
   const types::IMultiLanguageProperty& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "multiLanguageProperty"
@@ -31020,9 +29257,9 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeMultiLanguagePropertyPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeMultiLanguagePropertyPtrAsElement(
   const std::shared_ptr<types::IMultiLanguageProperty>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeMultiLanguagePropertyAsElement(*that, writer);
 }
@@ -31036,11 +29273,11 @@ common::optional<SerializationError> SerializeMultiLanguagePropertyPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeRangeAsSequence(
+common::optional<xml_common::SerializationError> SerializeRangeAsSequence(
   const types::IRange& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -31050,7 +29287,7 @@ common::optional<SerializationError> SerializeRangeAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -31094,7 +29331,7 @@ common::optional<SerializationError> SerializeRangeAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -31112,7 +29349,7 @@ common::optional<SerializationError> SerializeRangeAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -31143,7 +29380,7 @@ common::optional<SerializationError> SerializeRangeAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -31161,7 +29398,7 @@ common::optional<SerializationError> SerializeRangeAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -31179,7 +29416,7 @@ common::optional<SerializationError> SerializeRangeAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -31234,11 +29471,11 @@ common::optional<SerializationError> SerializeRangeAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeRangeAsElement(
+common::optional<xml_common::SerializationError> SerializeRangeAsElement(
   const types::IRange& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "range"
@@ -31270,9 +29507,9 @@ common::optional<SerializationError> SerializeRangeAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeRangePtrAsElement(
+common::optional<xml_common::SerializationError> SerializeRangePtrAsElement(
   const std::shared_ptr<types::IRange>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeRangeAsElement(*that, writer);
 }
@@ -31286,11 +29523,11 @@ common::optional<SerializationError> SerializeRangePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeReferenceElementAsSequence(
+common::optional<xml_common::SerializationError> SerializeReferenceElementAsSequence(
   const types::IReferenceElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -31300,7 +29537,7 @@ common::optional<SerializationError> SerializeReferenceElementAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -31344,7 +29581,7 @@ common::optional<SerializationError> SerializeReferenceElementAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -31362,7 +29599,7 @@ common::optional<SerializationError> SerializeReferenceElementAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -31393,7 +29630,7 @@ common::optional<SerializationError> SerializeReferenceElementAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -31411,7 +29648,7 @@ common::optional<SerializationError> SerializeReferenceElementAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -31429,7 +29666,7 @@ common::optional<SerializationError> SerializeReferenceElementAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -31460,11 +29697,11 @@ common::optional<SerializationError> SerializeReferenceElementAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeReferenceElementAsElement(
+common::optional<xml_common::SerializationError> SerializeReferenceElementAsElement(
   const types::IReferenceElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "referenceElement"
@@ -31496,9 +29733,9 @@ common::optional<SerializationError> SerializeReferenceElementAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeReferenceElementPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeReferenceElementPtrAsElement(
   const std::shared_ptr<types::IReferenceElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeReferenceElementAsElement(*that, writer);
 }
@@ -31512,11 +29749,11 @@ common::optional<SerializationError> SerializeReferenceElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeBlobAsSequence(
+common::optional<xml_common::SerializationError> SerializeBlobAsSequence(
   const types::IBlob& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -31526,7 +29763,7 @@ common::optional<SerializationError> SerializeBlobAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -31570,7 +29807,7 @@ common::optional<SerializationError> SerializeBlobAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -31588,7 +29825,7 @@ common::optional<SerializationError> SerializeBlobAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -31619,7 +29856,7 @@ common::optional<SerializationError> SerializeBlobAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -31637,7 +29874,7 @@ common::optional<SerializationError> SerializeBlobAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -31655,7 +29892,7 @@ common::optional<SerializationError> SerializeBlobAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -31697,11 +29934,11 @@ common::optional<SerializationError> SerializeBlobAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeBlobAsElement(
+common::optional<xml_common::SerializationError> SerializeBlobAsElement(
   const types::IBlob& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "blob"
@@ -31733,9 +29970,9 @@ common::optional<SerializationError> SerializeBlobAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeBlobPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeBlobPtrAsElement(
   const std::shared_ptr<types::IBlob>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeBlobAsElement(*that, writer);
 }
@@ -31749,11 +29986,11 @@ common::optional<SerializationError> SerializeBlobPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeFileAsSequence(
+common::optional<xml_common::SerializationError> SerializeFileAsSequence(
   const types::IFile& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -31763,7 +30000,7 @@ common::optional<SerializationError> SerializeFileAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -31807,7 +30044,7 @@ common::optional<SerializationError> SerializeFileAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -31825,7 +30062,7 @@ common::optional<SerializationError> SerializeFileAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -31856,7 +30093,7 @@ common::optional<SerializationError> SerializeFileAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -31874,7 +30111,7 @@ common::optional<SerializationError> SerializeFileAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -31892,7 +30129,7 @@ common::optional<SerializationError> SerializeFileAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -31934,11 +30171,11 @@ common::optional<SerializationError> SerializeFileAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeFileAsElement(
+common::optional<xml_common::SerializationError> SerializeFileAsElement(
   const types::IFile& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "file"
@@ -31970,9 +30207,9 @@ common::optional<SerializationError> SerializeFileAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeFilePtrAsElement(
+common::optional<xml_common::SerializationError> SerializeFilePtrAsElement(
   const std::shared_ptr<types::IFile>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeFileAsElement(*that, writer);
 }
@@ -31986,11 +30223,11 @@ common::optional<SerializationError> SerializeFilePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsSequence(
+common::optional<xml_common::SerializationError> SerializeAnnotatedRelationshipElementAsSequence(
   const types::IAnnotatedRelationshipElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -32000,7 +30237,7 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsSequ
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -32044,7 +30281,7 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsSequ
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -32062,7 +30299,7 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsSequ
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -32093,7 +30330,7 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsSequ
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -32111,7 +30348,7 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsSequ
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -32129,7 +30366,7 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsSequ
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -32169,7 +30406,7 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsSequ
       iteration::Property::kAnnotations,
       [](
         const std::vector<std::shared_ptr<types::IDataElement>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeDataElementPtrAsElement);
       }
@@ -32187,11 +30424,11 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsSequ
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsElement(
+common::optional<xml_common::SerializationError> SerializeAnnotatedRelationshipElementAsElement(
   const types::IAnnotatedRelationshipElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "annotatedRelationshipElement"
@@ -32223,9 +30460,9 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementAsElem
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeAnnotatedRelationshipElementPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeAnnotatedRelationshipElementPtrAsElement(
   const std::shared_ptr<types::IAnnotatedRelationshipElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeAnnotatedRelationshipElementAsElement(*that, writer);
 }
@@ -32239,11 +30476,11 @@ common::optional<SerializationError> SerializeAnnotatedRelationshipElementPtrAsE
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeEntityAsSequence(
+common::optional<xml_common::SerializationError> SerializeEntityAsSequence(
   const types::IEntity& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -32253,7 +30490,7 @@ common::optional<SerializationError> SerializeEntityAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -32297,7 +30534,7 @@ common::optional<SerializationError> SerializeEntityAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -32315,7 +30552,7 @@ common::optional<SerializationError> SerializeEntityAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -32346,7 +30583,7 @@ common::optional<SerializationError> SerializeEntityAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -32364,7 +30601,7 @@ common::optional<SerializationError> SerializeEntityAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -32382,7 +30619,7 @@ common::optional<SerializationError> SerializeEntityAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -32400,7 +30637,7 @@ common::optional<SerializationError> SerializeEntityAsSequence(
       iteration::Property::kStatements,
       [](
         const std::vector<std::shared_ptr<types::ISubmodelElement>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeSubmodelElementPtrAsElement);
       }
@@ -32442,7 +30679,7 @@ common::optional<SerializationError> SerializeEntityAsSequence(
       iteration::Property::kSpecificAssetIds,
       [](
         const std::vector<std::shared_ptr<types::ISpecificAssetId>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeSpecificAssetIdPtrAsElement);
       }
@@ -32460,11 +30697,11 @@ common::optional<SerializationError> SerializeEntityAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeEntityAsElement(
+common::optional<xml_common::SerializationError> SerializeEntityAsElement(
   const types::IEntity& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "entity"
@@ -32496,9 +30733,9 @@ common::optional<SerializationError> SerializeEntityAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeEntityPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeEntityPtrAsElement(
   const std::shared_ptr<types::IEntity>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeEntityAsElement(*that, writer);
 }
@@ -32512,11 +30749,11 @@ common::optional<SerializationError> SerializeEntityPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeEventPayloadAsSequence(
+common::optional<xml_common::SerializationError> SerializeEventPayloadAsSequence(
   const types::IEventPayload& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "source",
@@ -32624,11 +30861,11 @@ common::optional<SerializationError> SerializeEventPayloadAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeEventPayloadAsElement(
+common::optional<xml_common::SerializationError> SerializeEventPayloadAsElement(
   const types::IEventPayload& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "eventPayload"
@@ -32660,16 +30897,16 @@ common::optional<SerializationError> SerializeEventPayloadAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeEventPayloadPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeEventPayloadPtrAsElement(
   const std::shared_ptr<types::IEventPayload>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeEventPayloadAsElement(*that, writer);
 }
 
-common::optional<SerializationError> SerializeEventElementAsElement(
+common::optional<xml_common::SerializationError> SerializeEventElementAsElement(
   const types::IEventElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -32693,9 +30930,9 @@ common::optional<SerializationError> SerializeEventElementAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeEventElementPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeEventElementPtrAsElement(
   const std::shared_ptr<types::IEventElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeEventElementAsElement(*that, writer);
 }
@@ -32709,11 +30946,11 @@ common::optional<SerializationError> SerializeEventElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeBasicEventElementAsSequence(
+common::optional<xml_common::SerializationError> SerializeBasicEventElementAsSequence(
   const types::IBasicEventElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -32723,7 +30960,7 @@ common::optional<SerializationError> SerializeBasicEventElementAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -32767,7 +31004,7 @@ common::optional<SerializationError> SerializeBasicEventElementAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -32785,7 +31022,7 @@ common::optional<SerializationError> SerializeBasicEventElementAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -32816,7 +31053,7 @@ common::optional<SerializationError> SerializeBasicEventElementAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -32834,7 +31071,7 @@ common::optional<SerializationError> SerializeBasicEventElementAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -32852,7 +31089,7 @@ common::optional<SerializationError> SerializeBasicEventElementAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -32968,11 +31205,11 @@ common::optional<SerializationError> SerializeBasicEventElementAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeBasicEventElementAsElement(
+common::optional<xml_common::SerializationError> SerializeBasicEventElementAsElement(
   const types::IBasicEventElement& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "basicEventElement"
@@ -33004,9 +31241,9 @@ common::optional<SerializationError> SerializeBasicEventElementAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeBasicEventElementPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeBasicEventElementPtrAsElement(
   const std::shared_ptr<types::IBasicEventElement>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeBasicEventElementAsElement(*that, writer);
 }
@@ -33020,11 +31257,11 @@ common::optional<SerializationError> SerializeBasicEventElementPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeOperationAsSequence(
+common::optional<xml_common::SerializationError> SerializeOperationAsSequence(
   const types::IOperation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -33034,7 +31271,7 @@ common::optional<SerializationError> SerializeOperationAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -33078,7 +31315,7 @@ common::optional<SerializationError> SerializeOperationAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -33096,7 +31333,7 @@ common::optional<SerializationError> SerializeOperationAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -33127,7 +31364,7 @@ common::optional<SerializationError> SerializeOperationAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -33145,7 +31382,7 @@ common::optional<SerializationError> SerializeOperationAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -33163,7 +31400,7 @@ common::optional<SerializationError> SerializeOperationAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -33181,7 +31418,7 @@ common::optional<SerializationError> SerializeOperationAsSequence(
       iteration::Property::kInputVariables,
       [](
         const std::vector<std::shared_ptr<types::IOperationVariable>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeOperationVariablePtrAsElement);
       }
@@ -33199,7 +31436,7 @@ common::optional<SerializationError> SerializeOperationAsSequence(
       iteration::Property::kOutputVariables,
       [](
         const std::vector<std::shared_ptr<types::IOperationVariable>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeOperationVariablePtrAsElement);
       }
@@ -33217,7 +31454,7 @@ common::optional<SerializationError> SerializeOperationAsSequence(
       iteration::Property::kInoutputVariables,
       [](
         const std::vector<std::shared_ptr<types::IOperationVariable>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeOperationVariablePtrAsElement);
       }
@@ -33235,11 +31472,11 @@ common::optional<SerializationError> SerializeOperationAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeOperationAsElement(
+common::optional<xml_common::SerializationError> SerializeOperationAsElement(
   const types::IOperation& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "operation"
@@ -33271,9 +31508,9 @@ common::optional<SerializationError> SerializeOperationAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeOperationPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeOperationPtrAsElement(
   const std::shared_ptr<types::IOperation>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeOperationAsElement(*that, writer);
 }
@@ -33287,11 +31524,11 @@ common::optional<SerializationError> SerializeOperationPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeOperationVariableAsSequence(
+common::optional<xml_common::SerializationError> SerializeOperationVariableAsSequence(
   const types::IOperationVariable& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "value",
@@ -33312,11 +31549,11 @@ common::optional<SerializationError> SerializeOperationVariableAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeOperationVariableAsElement(
+common::optional<xml_common::SerializationError> SerializeOperationVariableAsElement(
   const types::IOperationVariable& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "operationVariable"
@@ -33348,9 +31585,9 @@ common::optional<SerializationError> SerializeOperationVariableAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeOperationVariablePtrAsElement(
+common::optional<xml_common::SerializationError> SerializeOperationVariablePtrAsElement(
   const std::shared_ptr<types::IOperationVariable>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeOperationVariableAsElement(*that, writer);
 }
@@ -33364,11 +31601,11 @@ common::optional<SerializationError> SerializeOperationVariablePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeCapabilityAsSequence(
+common::optional<xml_common::SerializationError> SerializeCapabilityAsSequence(
   const types::ICapability& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -33378,7 +31615,7 @@ common::optional<SerializationError> SerializeCapabilityAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -33422,7 +31659,7 @@ common::optional<SerializationError> SerializeCapabilityAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -33440,7 +31677,7 @@ common::optional<SerializationError> SerializeCapabilityAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -33471,7 +31708,7 @@ common::optional<SerializationError> SerializeCapabilityAsSequence(
       iteration::Property::kSupplementalSemanticIds,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -33489,7 +31726,7 @@ common::optional<SerializationError> SerializeCapabilityAsSequence(
       iteration::Property::kQualifiers,
       [](
         const std::vector<std::shared_ptr<types::IQualifier>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeQualifierPtrAsElement);
       }
@@ -33507,7 +31744,7 @@ common::optional<SerializationError> SerializeCapabilityAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -33525,11 +31762,11 @@ common::optional<SerializationError> SerializeCapabilityAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeCapabilityAsElement(
+common::optional<xml_common::SerializationError> SerializeCapabilityAsElement(
   const types::ICapability& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "capability"
@@ -33561,9 +31798,9 @@ common::optional<SerializationError> SerializeCapabilityAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeCapabilityPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeCapabilityPtrAsElement(
   const std::shared_ptr<types::ICapability>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeCapabilityAsElement(*that, writer);
 }
@@ -33577,11 +31814,11 @@ common::optional<SerializationError> SerializeCapabilityPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeConceptDescriptionAsSequence(
+common::optional<xml_common::SerializationError> SerializeConceptDescriptionAsSequence(
   const types::IConceptDescription& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.extensions().has_value()) {
     error = SerializePropertyAsElement(
@@ -33591,7 +31828,7 @@ common::optional<SerializationError> SerializeConceptDescriptionAsSequence(
       iteration::Property::kExtensions,
       [](
         const std::vector<std::shared_ptr<types::IExtension>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeExtensionPtrAsElement);
       }
@@ -33635,7 +31872,7 @@ common::optional<SerializationError> SerializeConceptDescriptionAsSequence(
       iteration::Property::kDisplayName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringNameType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringNameTypePtrAsElement);
       }
@@ -33653,7 +31890,7 @@ common::optional<SerializationError> SerializeConceptDescriptionAsSequence(
       iteration::Property::kDescription,
       [](
         const std::vector<std::shared_ptr<types::ILangStringTextType>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringTextTypePtrAsElement);
       }
@@ -33695,7 +31932,7 @@ common::optional<SerializationError> SerializeConceptDescriptionAsSequence(
       iteration::Property::kEmbeddedDataSpecifications,
       [](
         const std::vector<std::shared_ptr<types::IEmbeddedDataSpecification>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeEmbeddedDataSpecificationPtrAsElement);
       }
@@ -33713,7 +31950,7 @@ common::optional<SerializationError> SerializeConceptDescriptionAsSequence(
       iteration::Property::kIsCaseOf,
       [](
         const std::vector<std::shared_ptr<types::IReference>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeReferencePtrAsElement);
       }
@@ -33731,11 +31968,11 @@ common::optional<SerializationError> SerializeConceptDescriptionAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeConceptDescriptionAsElement(
+common::optional<xml_common::SerializationError> SerializeConceptDescriptionAsElement(
   const types::IConceptDescription& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "conceptDescription"
@@ -33767,9 +32004,9 @@ common::optional<SerializationError> SerializeConceptDescriptionAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeConceptDescriptionPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeConceptDescriptionPtrAsElement(
   const std::shared_ptr<types::IConceptDescription>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeConceptDescriptionAsElement(*that, writer);
 }
@@ -33783,11 +32020,11 @@ common::optional<SerializationError> SerializeConceptDescriptionPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeReferenceAsSequence(
+common::optional<xml_common::SerializationError> SerializeReferenceAsSequence(
   const types::IReference& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "type",
@@ -33820,7 +32057,7 @@ common::optional<SerializationError> SerializeReferenceAsSequence(
     iteration::Property::kKeys,
     [](
       const std::vector<std::shared_ptr<types::IKey>>& a_list,
-      SelfClosingWriter& a_writer
+      xml_common::SelfClosingWriter& a_writer
     ) {
       return SerializeListOfInstances(a_list, a_writer, SerializeKeyPtrAsElement);
     }
@@ -33837,11 +32074,11 @@ common::optional<SerializationError> SerializeReferenceAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeReferenceAsElement(
+common::optional<xml_common::SerializationError> SerializeReferenceAsElement(
   const types::IReference& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "reference"
@@ -33873,9 +32110,9 @@ common::optional<SerializationError> SerializeReferenceAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeReferencePtrAsElement(
+common::optional<xml_common::SerializationError> SerializeReferencePtrAsElement(
   const std::shared_ptr<types::IReference>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeReferenceAsElement(*that, writer);
 }
@@ -33889,11 +32126,11 @@ common::optional<SerializationError> SerializeReferencePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeKeyAsSequence(
+common::optional<xml_common::SerializationError> SerializeKeyAsSequence(
   const types::IKey& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "type",
@@ -33925,11 +32162,11 @@ common::optional<SerializationError> SerializeKeyAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeKeyAsElement(
+common::optional<xml_common::SerializationError> SerializeKeyAsElement(
   const types::IKey& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "key"
@@ -33961,16 +32198,16 @@ common::optional<SerializationError> SerializeKeyAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeKeyPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeKeyPtrAsElement(
   const std::shared_ptr<types::IKey>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeKeyAsElement(*that, writer);
 }
 
-common::optional<SerializationError> SerializeAbstractLangStringAsElement(
+common::optional<xml_common::SerializationError> SerializeAbstractLangStringAsElement(
   const types::IAbstractLangString& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -34022,9 +32259,9 @@ common::optional<SerializationError> SerializeAbstractLangStringAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeAbstractLangStringPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeAbstractLangStringPtrAsElement(
   const std::shared_ptr<types::IAbstractLangString>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeAbstractLangStringAsElement(*that, writer);
 }
@@ -34038,11 +32275,11 @@ common::optional<SerializationError> SerializeAbstractLangStringPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLangStringNameTypeAsSequence(
+common::optional<xml_common::SerializationError> SerializeLangStringNameTypeAsSequence(
   const types::ILangStringNameType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "language",
@@ -34074,11 +32311,11 @@ common::optional<SerializationError> SerializeLangStringNameTypeAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLangStringNameTypeAsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringNameTypeAsElement(
   const types::ILangStringNameType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "langStringNameType"
@@ -34110,9 +32347,9 @@ common::optional<SerializationError> SerializeLangStringNameTypeAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLangStringNameTypePtrAsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringNameTypePtrAsElement(
   const std::shared_ptr<types::ILangStringNameType>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeLangStringNameTypeAsElement(*that, writer);
 }
@@ -34126,11 +32363,11 @@ common::optional<SerializationError> SerializeLangStringNameTypePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLangStringTextTypeAsSequence(
+common::optional<xml_common::SerializationError> SerializeLangStringTextTypeAsSequence(
   const types::ILangStringTextType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "language",
@@ -34162,11 +32399,11 @@ common::optional<SerializationError> SerializeLangStringTextTypeAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLangStringTextTypeAsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringTextTypeAsElement(
   const types::ILangStringTextType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "langStringTextType"
@@ -34198,9 +32435,9 @@ common::optional<SerializationError> SerializeLangStringTextTypeAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLangStringTextTypePtrAsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringTextTypePtrAsElement(
   const std::shared_ptr<types::ILangStringTextType>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeLangStringTextTypeAsElement(*that, writer);
 }
@@ -34214,11 +32451,11 @@ common::optional<SerializationError> SerializeLangStringTextTypePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeEnvironmentAsSequence(
+common::optional<xml_common::SerializationError> SerializeEnvironmentAsSequence(
   const types::IEnvironment& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   if (that.asset_administration_shells().has_value()) {
     error = SerializePropertyAsElement(
@@ -34228,7 +32465,7 @@ common::optional<SerializationError> SerializeEnvironmentAsSequence(
       iteration::Property::kAssetAdministrationShells,
       [](
         const std::vector<std::shared_ptr<types::IAssetAdministrationShell>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeAssetAdministrationShellPtrAsElement);
       }
@@ -34246,7 +32483,7 @@ common::optional<SerializationError> SerializeEnvironmentAsSequence(
       iteration::Property::kSubmodels,
       [](
         const std::vector<std::shared_ptr<types::ISubmodel>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeSubmodelPtrAsElement);
       }
@@ -34264,7 +32501,7 @@ common::optional<SerializationError> SerializeEnvironmentAsSequence(
       iteration::Property::kConceptDescriptions,
       [](
         const std::vector<std::shared_ptr<types::IConceptDescription>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeConceptDescriptionPtrAsElement);
       }
@@ -34282,11 +32519,11 @@ common::optional<SerializationError> SerializeEnvironmentAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeEnvironmentAsElement(
+common::optional<xml_common::SerializationError> SerializeEnvironmentAsElement(
   const types::IEnvironment& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "environment"
@@ -34318,16 +32555,16 @@ common::optional<SerializationError> SerializeEnvironmentAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeEnvironmentPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeEnvironmentPtrAsElement(
   const std::shared_ptr<types::IEnvironment>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeEnvironmentAsElement(*that, writer);
 }
 
-common::optional<SerializationError> SerializeDataSpecificationContentAsElement(
+common::optional<xml_common::SerializationError> SerializeDataSpecificationContentAsElement(
   const types::IDataSpecificationContent& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   // NOTE (mristin):
   // The dynamic casts are necessary due to virtual inheritance. Otherwise,
@@ -34351,9 +32588,9 @@ common::optional<SerializationError> SerializeDataSpecificationContentAsElement(
   };
 }
 
-common::optional<SerializationError> SerializeDataSpecificationContentPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeDataSpecificationContentPtrAsElement(
   const std::shared_ptr<types::IDataSpecificationContent>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeDataSpecificationContentAsElement(*that, writer);
 }
@@ -34367,11 +32604,11 @@ common::optional<SerializationError> SerializeDataSpecificationContentPtrAsEleme
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeEmbeddedDataSpecificationAsSequence(
+common::optional<xml_common::SerializationError> SerializeEmbeddedDataSpecificationAsSequence(
   const types::IEmbeddedDataSpecification& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "dataSpecification",
@@ -34403,11 +32640,11 @@ common::optional<SerializationError> SerializeEmbeddedDataSpecificationAsSequenc
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeEmbeddedDataSpecificationAsElement(
+common::optional<xml_common::SerializationError> SerializeEmbeddedDataSpecificationAsElement(
   const types::IEmbeddedDataSpecification& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "embeddedDataSpecification"
@@ -34439,9 +32676,9 @@ common::optional<SerializationError> SerializeEmbeddedDataSpecificationAsElement
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeEmbeddedDataSpecificationPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeEmbeddedDataSpecificationPtrAsElement(
   const std::shared_ptr<types::IEmbeddedDataSpecification>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeEmbeddedDataSpecificationAsElement(*that, writer);
 }
@@ -34455,11 +32692,11 @@ common::optional<SerializationError> SerializeEmbeddedDataSpecificationPtrAsElem
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLevelTypeAsSequence(
+common::optional<xml_common::SerializationError> SerializeLevelTypeAsSequence(
   const types::ILevelType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "min",
@@ -34513,11 +32750,11 @@ common::optional<SerializationError> SerializeLevelTypeAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLevelTypeAsElement(
+common::optional<xml_common::SerializationError> SerializeLevelTypeAsElement(
   const types::ILevelType& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "levelType"
@@ -34549,9 +32786,9 @@ common::optional<SerializationError> SerializeLevelTypeAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLevelTypePtrAsElement(
+common::optional<xml_common::SerializationError> SerializeLevelTypePtrAsElement(
   const std::shared_ptr<types::ILevelType>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeLevelTypeAsElement(*that, writer);
 }
@@ -34565,11 +32802,11 @@ common::optional<SerializationError> SerializeLevelTypePtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeValueReferencePairAsSequence(
+common::optional<xml_common::SerializationError> SerializeValueReferencePairAsSequence(
   const types::IValueReferencePair& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "value",
@@ -34601,11 +32838,11 @@ common::optional<SerializationError> SerializeValueReferencePairAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeValueReferencePairAsElement(
+common::optional<xml_common::SerializationError> SerializeValueReferencePairAsElement(
   const types::IValueReferencePair& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "valueReferencePair"
@@ -34637,9 +32874,9 @@ common::optional<SerializationError> SerializeValueReferencePairAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeValueReferencePairPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeValueReferencePairPtrAsElement(
   const std::shared_ptr<types::IValueReferencePair>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeValueReferencePairAsElement(*that, writer);
 }
@@ -34653,11 +32890,11 @@ common::optional<SerializationError> SerializeValueReferencePairPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeValueListAsSequence(
+common::optional<xml_common::SerializationError> SerializeValueListAsSequence(
   const types::IValueList& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "valueReferencePairs",
@@ -34666,7 +32903,7 @@ common::optional<SerializationError> SerializeValueListAsSequence(
     iteration::Property::kValueReferencePairs,
     [](
       const std::vector<std::shared_ptr<types::IValueReferencePair>>& a_list,
-      SelfClosingWriter& a_writer
+      xml_common::SelfClosingWriter& a_writer
     ) {
       return SerializeListOfInstances(a_list, a_writer, SerializeValueReferencePairPtrAsElement);
     }
@@ -34683,11 +32920,11 @@ common::optional<SerializationError> SerializeValueListAsSequence(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeValueListAsElement(
+common::optional<xml_common::SerializationError> SerializeValueListAsElement(
   const types::IValueList& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "valueList"
@@ -34719,9 +32956,9 @@ common::optional<SerializationError> SerializeValueListAsElement(
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeValueListPtrAsElement(
+common::optional<xml_common::SerializationError> SerializeValueListPtrAsElement(
   const std::shared_ptr<types::IValueList>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeValueListAsElement(*that, writer);
 }
@@ -34735,11 +32972,11 @@ common::optional<SerializationError> SerializeValueListPtrAsElement(
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLangStringPreferredNameTypeIec61360AsSequence(
+common::optional<xml_common::SerializationError> SerializeLangStringPreferredNameTypeIec61360AsSequence(
   const types::ILangStringPreferredNameTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "language",
@@ -34771,11 +33008,11 @@ common::optional<SerializationError> SerializeLangStringPreferredNameTypeIec6136
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLangStringPreferredNameTypeIec61360AsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringPreferredNameTypeIec61360AsElement(
   const types::ILangStringPreferredNameTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "langStringPreferredNameTypeIec61360"
@@ -34807,9 +33044,9 @@ common::optional<SerializationError> SerializeLangStringPreferredNameTypeIec6136
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLangStringPreferredNameTypeIec61360PtrAsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringPreferredNameTypeIec61360PtrAsElement(
   const std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeLangStringPreferredNameTypeIec61360AsElement(*that, writer);
 }
@@ -34823,11 +33060,11 @@ common::optional<SerializationError> SerializeLangStringPreferredNameTypeIec6136
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLangStringShortNameTypeIec61360AsSequence(
+common::optional<xml_common::SerializationError> SerializeLangStringShortNameTypeIec61360AsSequence(
   const types::ILangStringShortNameTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "language",
@@ -34859,11 +33096,11 @@ common::optional<SerializationError> SerializeLangStringShortNameTypeIec61360AsS
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLangStringShortNameTypeIec61360AsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringShortNameTypeIec61360AsElement(
   const types::ILangStringShortNameTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "langStringShortNameTypeIec61360"
@@ -34895,9 +33132,9 @@ common::optional<SerializationError> SerializeLangStringShortNameTypeIec61360AsE
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLangStringShortNameTypeIec61360PtrAsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringShortNameTypeIec61360PtrAsElement(
   const std::shared_ptr<types::ILangStringShortNameTypeIec61360>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeLangStringShortNameTypeIec61360AsElement(*that, writer);
 }
@@ -34911,11 +33148,11 @@ common::optional<SerializationError> SerializeLangStringShortNameTypeIec61360Ptr
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeLangStringDefinitionTypeIec61360AsSequence(
+common::optional<xml_common::SerializationError> SerializeLangStringDefinitionTypeIec61360AsSequence(
   const types::ILangStringDefinitionTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "language",
@@ -34947,11 +33184,11 @@ common::optional<SerializationError> SerializeLangStringDefinitionTypeIec61360As
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLangStringDefinitionTypeIec61360AsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringDefinitionTypeIec61360AsElement(
   const types::ILangStringDefinitionTypeIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "langStringDefinitionTypeIec61360"
@@ -34983,9 +33220,9 @@ common::optional<SerializationError> SerializeLangStringDefinitionTypeIec61360As
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeLangStringDefinitionTypeIec61360PtrAsElement(
+common::optional<xml_common::SerializationError> SerializeLangStringDefinitionTypeIec61360PtrAsElement(
   const std::shared_ptr<types::ILangStringDefinitionTypeIec61360>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeLangStringDefinitionTypeIec61360AsElement(*that, writer);
 }
@@ -34999,11 +33236,11 @@ common::optional<SerializationError> SerializeLangStringDefinitionTypeIec61360Pt
  * \param writer to write to
  * \return error, if any
  */
-common::optional<SerializationError> SerializeDataSpecificationIec61360AsSequence(
+common::optional<xml_common::SerializationError> SerializeDataSpecificationIec61360AsSequence(
   const types::IDataSpecificationIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   error = SerializePropertyAsElement(
     "preferredName",
@@ -35012,7 +33249,7 @@ common::optional<SerializationError> SerializeDataSpecificationIec61360AsSequenc
     iteration::Property::kPreferredName,
     [](
       const std::vector<std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>>& a_list,
-      SelfClosingWriter& a_writer
+      xml_common::SelfClosingWriter& a_writer
     ) {
       return SerializeListOfInstances(a_list, a_writer, SerializeLangStringPreferredNameTypeIec61360PtrAsElement);
     }
@@ -35029,7 +33266,7 @@ common::optional<SerializationError> SerializeDataSpecificationIec61360AsSequenc
       iteration::Property::kShortName,
       [](
         const std::vector<std::shared_ptr<types::ILangStringShortNameTypeIec61360>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringShortNameTypeIec61360PtrAsElement);
       }
@@ -35112,7 +33349,7 @@ common::optional<SerializationError> SerializeDataSpecificationIec61360AsSequenc
       iteration::Property::kDefinition,
       [](
         const std::vector<std::shared_ptr<types::ILangStringDefinitionTypeIec61360>>& a_list,
-        SelfClosingWriter& a_writer
+        xml_common::SelfClosingWriter& a_writer
       ) {
         return SerializeListOfInstances(a_list, a_writer, SerializeLangStringDefinitionTypeIec61360PtrAsElement);
       }
@@ -35182,11 +33419,11 @@ common::optional<SerializationError> SerializeDataSpecificationIec61360AsSequenc
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeDataSpecificationIec61360AsElement(
+common::optional<xml_common::SerializationError> SerializeDataSpecificationIec61360AsElement(
   const types::IDataSpecificationIec61360& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   writer.StartElement(
     "dataSpecificationIec61360"
@@ -35218,9 +33455,9 @@ common::optional<SerializationError> SerializeDataSpecificationIec61360AsElement
   return common::nullopt;
 }
 
-common::optional<SerializationError> SerializeDataSpecificationIec61360PtrAsElement(
+common::optional<xml_common::SerializationError> SerializeDataSpecificationIec61360PtrAsElement(
   const std::shared_ptr<types::IDataSpecificationIec61360>& that,
-  SelfClosingWriter& writer
+  xml_common::SelfClosingWriter& writer
 ) {
   return SerializeDataSpecificationIec61360AsElement(*that, writer);
 }
@@ -35234,17 +33471,17 @@ void Serialize(
     os << "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
     if (os.bad()) {
       throw SerializationException(
-        kTheOutputStreamIsInABadState
+        xml_common::kTheOutputStreamIsInABadState
       );
     }
   }
 
-  SelfClosingWriter writer(
+  xml_common::SelfClosingWriter writer(
     os,
     options.prefix
   );
 
-  common::optional<SerializationError> error;
+  common::optional<xml_common::SerializationError> error;
 
   // NOTE (mristin):
   // Instead of using `Serialize*AsElement`, we write the root XML element
@@ -35267,7 +33504,7 @@ void Serialize(
         os << "<extension>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35284,7 +33521,7 @@ void Serialize(
 
       os << "</extension>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35300,7 +33537,7 @@ void Serialize(
         os << "<administrativeInformation>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35317,7 +33554,7 @@ void Serialize(
 
       os << "</administrativeInformation>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35333,7 +33570,7 @@ void Serialize(
         os << "<qualifier>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35350,7 +33587,7 @@ void Serialize(
 
       os << "</qualifier>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35366,7 +33603,7 @@ void Serialize(
         os << "<assetAdministrationShell>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35383,7 +33620,7 @@ void Serialize(
 
       os << "</assetAdministrationShell>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35399,7 +33636,7 @@ void Serialize(
         os << "<assetInformation>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35416,7 +33653,7 @@ void Serialize(
 
       os << "</assetInformation>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35432,7 +33669,7 @@ void Serialize(
         os << "<resource>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35449,7 +33686,7 @@ void Serialize(
 
       os << "</resource>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35465,7 +33702,7 @@ void Serialize(
         os << "<specificAssetId>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35482,7 +33719,7 @@ void Serialize(
 
       os << "</specificAssetId>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35498,7 +33735,7 @@ void Serialize(
         os << "<submodel>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35515,7 +33752,7 @@ void Serialize(
 
       os << "</submodel>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35531,7 +33768,7 @@ void Serialize(
         os << "<relationshipElement>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35548,7 +33785,7 @@ void Serialize(
 
       os << "</relationshipElement>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35564,7 +33801,7 @@ void Serialize(
         os << "<submodelElementList>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35581,7 +33818,7 @@ void Serialize(
 
       os << "</submodelElementList>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35597,7 +33834,7 @@ void Serialize(
         os << "<submodelElementCollection>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35614,7 +33851,7 @@ void Serialize(
 
       os << "</submodelElementCollection>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35630,7 +33867,7 @@ void Serialize(
         os << "<property>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35647,7 +33884,7 @@ void Serialize(
 
       os << "</property>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35663,7 +33900,7 @@ void Serialize(
         os << "<multiLanguageProperty>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35680,7 +33917,7 @@ void Serialize(
 
       os << "</multiLanguageProperty>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35696,7 +33933,7 @@ void Serialize(
         os << "<range>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35713,7 +33950,7 @@ void Serialize(
 
       os << "</range>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35729,7 +33966,7 @@ void Serialize(
         os << "<referenceElement>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35746,7 +33983,7 @@ void Serialize(
 
       os << "</referenceElement>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35762,7 +33999,7 @@ void Serialize(
         os << "<blob>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35779,7 +34016,7 @@ void Serialize(
 
       os << "</blob>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35795,7 +34032,7 @@ void Serialize(
         os << "<file>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35812,7 +34049,7 @@ void Serialize(
 
       os << "</file>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35828,7 +34065,7 @@ void Serialize(
         os << "<annotatedRelationshipElement>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35845,7 +34082,7 @@ void Serialize(
 
       os << "</annotatedRelationshipElement>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35861,7 +34098,7 @@ void Serialize(
         os << "<entity>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35878,7 +34115,7 @@ void Serialize(
 
       os << "</entity>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35894,7 +34131,7 @@ void Serialize(
         os << "<eventPayload>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35911,7 +34148,7 @@ void Serialize(
 
       os << "</eventPayload>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35927,7 +34164,7 @@ void Serialize(
         os << "<basicEventElement>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35944,7 +34181,7 @@ void Serialize(
 
       os << "</basicEventElement>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35960,7 +34197,7 @@ void Serialize(
         os << "<operation>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35977,7 +34214,7 @@ void Serialize(
 
       os << "</operation>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -35993,7 +34230,7 @@ void Serialize(
         os << "<operationVariable>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36010,7 +34247,7 @@ void Serialize(
 
       os << "</operationVariable>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36026,7 +34263,7 @@ void Serialize(
         os << "<capability>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36043,7 +34280,7 @@ void Serialize(
 
       os << "</capability>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36059,7 +34296,7 @@ void Serialize(
         os << "<conceptDescription>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36076,7 +34313,7 @@ void Serialize(
 
       os << "</conceptDescription>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36092,7 +34329,7 @@ void Serialize(
         os << "<reference>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36109,7 +34346,7 @@ void Serialize(
 
       os << "</reference>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36125,7 +34362,7 @@ void Serialize(
         os << "<key>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36142,7 +34379,7 @@ void Serialize(
 
       os << "</key>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36158,7 +34395,7 @@ void Serialize(
         os << "<langStringNameType>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36175,7 +34412,7 @@ void Serialize(
 
       os << "</langStringNameType>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36191,7 +34428,7 @@ void Serialize(
         os << "<langStringTextType>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36208,7 +34445,7 @@ void Serialize(
 
       os << "</langStringTextType>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36224,7 +34461,7 @@ void Serialize(
         os << "<environment>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36241,7 +34478,7 @@ void Serialize(
 
       os << "</environment>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36257,7 +34494,7 @@ void Serialize(
         os << "<embeddedDataSpecification>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36274,7 +34511,7 @@ void Serialize(
 
       os << "</embeddedDataSpecification>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36290,7 +34527,7 @@ void Serialize(
         os << "<levelType>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36307,7 +34544,7 @@ void Serialize(
 
       os << "</levelType>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36323,7 +34560,7 @@ void Serialize(
         os << "<valueReferencePair>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36340,7 +34577,7 @@ void Serialize(
 
       os << "</valueReferencePair>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36356,7 +34593,7 @@ void Serialize(
         os << "<valueList>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36373,7 +34610,7 @@ void Serialize(
 
       os << "</valueList>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36389,7 +34626,7 @@ void Serialize(
         os << "<langStringPreferredNameTypeIec61360>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36406,7 +34643,7 @@ void Serialize(
 
       os << "</langStringPreferredNameTypeIec61360>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36422,7 +34659,7 @@ void Serialize(
         os << "<langStringShortNameTypeIec61360>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36439,7 +34676,7 @@ void Serialize(
 
       os << "</langStringShortNameTypeIec61360>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36455,7 +34692,7 @@ void Serialize(
         os << "<langStringDefinitionTypeIec61360>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36472,7 +34709,7 @@ void Serialize(
 
       os << "</langStringDefinitionTypeIec61360>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36488,7 +34725,7 @@ void Serialize(
         os << "<dataSpecificationIec61360>";
       }
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
@@ -36505,7 +34742,7 @@ void Serialize(
 
       os << "</dataSpecificationIec61360>";
 
-      error = CheckOstreamState(os);
+      error = xml_common::CheckOstreamState(os);
       if (error.has_value()) {
         break;
       }
