@@ -1,7 +1,7 @@
 """Generate code for XML de/serialization."""
 
 import io
-from typing import List, Tuple, Optional, Sequence, Final, Mapping
+from typing import List, Sequence, Final, Mapping
 
 from icontract import ensure, require
 
@@ -10,7 +10,6 @@ from aas_core_codegen.common import (
     Stripped,
     indent_but_first_line,
     Identifier,
-    Error,
     assert_never,
 )
 from aas_core_codegen.cpp import common as cpp_common, naming as cpp_naming
@@ -4250,10 +4249,9 @@ std::tie(
             assert_never(type_anno)
 
 
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_from_sequence(
     cls: intermediate.ConcreteClass,
-) -> Tuple[Optional[Stripped], Optional[Error]]:
+) -> Stripped:
     """Generate the de-serialization of a sequence of XML elements as properties."""
     function_name = cpp_naming.function_name(Identifier(f"{cls.name}_from_sequence"))
 
@@ -4628,9 +4626,8 @@ return std::make_pair(
 
     body = "\n\n".join(blocks)
 
-    return (
-        Stripped(
-            f"""\
+    return Stripped(
+        f"""\
 template <
 {I}typename T,
 {I}typename std::enable_if<
@@ -4645,8 +4642,6 @@ std::pair<
 ) {{
 {I}{indent_but_first_line(body, I)}
 }}"""
-        ),
-        None,
     )
 
 
@@ -6256,7 +6251,7 @@ common::optional<SerializationError> {function_name}(
 
 def _generate_serialize_cls_as_sequence_implementation(
     cls: intermediate.ConcreteClass,
-) -> Tuple[Optional[Stripped], Optional[Error]]:
+) -> Stripped:
     """
     Generate the impl. to serialize an instance as a sequence of XML elements.
 
@@ -6289,9 +6284,8 @@ if (writer.error().has_value()) {{
 
     body = Stripped("\n\n".join(blocks))
 
-    return (
-        Stripped(
-            f"""\
+    return Stripped(
+        f"""\
 /**
  * \\brief Serialize \\p that instance as a sequence of XML elements.
  *
@@ -6307,8 +6301,6 @@ common::optional<SerializationError> {function_name}(
 ) {{
 {I}{indent_but_first_line(body, I)}
 }}"""
-        ),
-        None,
     )
 
 
@@ -7040,17 +7032,16 @@ def _type_annotation_contains_list_of_instances(
 
 
 # fmt: off
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
     lambda result:
-    not (result[0] is not None) or result[0].endswith('\n'),
+    result.endswith('\n'),
     "Trailing newline mandatory for valid end-of-files"
 )
 # fmt: on
 def generate_implementation(
     symbol_table: intermediate.SymbolTable,
     library_namespace: Stripped,
-) -> Tuple[Optional[str], Optional[List[Error]]]:
+) -> str:
     """Generate implementation for XML de/serialization."""
     namespace = Stripped(f"{library_namespace}::{cpp_common.XMLIZATION_NAMESPACE}")
 
@@ -7193,15 +7184,8 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
 
     blocks.extend(_generate_property_enums_from_strings(symbol_table=symbol_table))
 
-    errors = []  # type: List[Error]
-
     for concrete_cls in symbol_table.concrete_classes:
-        block, error = _generate_from_sequence(cls=concrete_cls)
-        if error is not None:
-            errors.append(error)
-        else:
-            assert block is not None
-            blocks.append(block)
+        blocks.append(_generate_from_sequence(cls=concrete_cls))
 
     blocks.append(
         _generate_deserialize_from(
@@ -7344,12 +7328,7 @@ common::optional<SerializationError> CheckOstreamState(
 
     for cls in symbol_table.classes:
         if isinstance(cls, intermediate.ConcreteClass):
-            block, error = _generate_serialize_cls_as_sequence_implementation(cls=cls)
-            if error is not None:
-                errors.append(error)
-            else:
-                assert block is not None
-                blocks.append(block)
+            blocks.append(_generate_serialize_cls_as_sequence_implementation(cls=cls))
 
             blocks.append(_generate_concrete_serialize_cls_as_element(cls=cls))
 
@@ -7364,9 +7343,6 @@ common::optional<SerializationError> CheckOstreamState(
                 named_union=named_union
             )
         )
-
-    if len(errors) > 0:
-        return None, errors
 
     blocks.append(_generate_serialize_implementation(symbol_table=symbol_table))
 
@@ -7387,7 +7363,7 @@ common::optional<SerializationError> CheckOstreamState(
 
     writer.write("\n")
 
-    return writer.getvalue(), None
+    return writer.getvalue()
 
 
 assert generate_header.__doc__ is not None

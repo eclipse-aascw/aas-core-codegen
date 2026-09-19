@@ -154,9 +154,12 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
         ),
         (
             src_dir / "jsonization.cpp",
-            lambda: cpp_lib.generate_jsonization_implementation(
-                symbol_table=context.symbol_table,
-                library_namespace=library_namespace,
+            lambda: (
+                cpp_lib.generate_jsonization_implementation(
+                    symbol_table=context.symbol_table,
+                    library_namespace=library_namespace,
+                ),
+                None,
             ),
         ),
         (
@@ -292,9 +295,12 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
         ),
         (
             src_dir / "xmlization.cpp",
-            lambda: cpp_lib.generate_xmlization_implementation(
-                symbol_table=context.symbol_table,
-                library_namespace=library_namespace,
+            lambda: (
+                cpp_lib.generate_xmlization_implementation(
+                    symbol_table=context.symbol_table,
+                    library_namespace=library_namespace,
+                ),
+                None,
             ),
         ),
         (

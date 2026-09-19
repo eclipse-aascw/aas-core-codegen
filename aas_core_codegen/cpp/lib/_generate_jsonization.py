@@ -2,7 +2,7 @@
 
 import io
 import itertools
-from typing import List, Tuple, Optional, Iterable, Final, Mapping, Union, Literal
+from typing import List, Optional, Iterable, Final, Mapping, Union, Literal
 
 from icontract import ensure, require
 
@@ -11,7 +11,6 @@ from aas_core_codegen.common import (
     Stripped,
     indent_but_first_line,
     Identifier,
-    Error,
     assert_never,
 )
 from aas_core_codegen.cpp import common as cpp_common, naming as cpp_naming
@@ -1901,10 +1900,9 @@ if (json.contains({json_prop_literal})) {{
     return code
 
 
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_concretely_deserialize_implementation(
     cls: intermediate.ConcreteClass,
-) -> Tuple[Optional[Stripped], Optional[Error]]:
+) -> Stripped:
     """
     Generate the concrete deserialization for the class ``cls``.
 
@@ -2256,9 +2254,8 @@ std::set<std::string> {expected_properties} = {{
 }};"""
     )
 
-    return (
-        Stripped(
-            f"""\
+    return Stripped(
+        f"""\
 {expected_properties_definition}
 
 {prefix} {function_name}(
@@ -2267,8 +2264,6 @@ std::set<std::string> {expected_properties} = {{
 ) {{
 {I}{indent_but_first_line(body, I)}
 }}"""
-        ),
-        None,
     )
 
 
@@ -3863,10 +3858,9 @@ if (that.{getter}().has_value()) {{
     return code
 
 
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_serialize_cls(
     cls: intermediate.ConcreteClass,
-) -> Tuple[Optional[Stripped], Optional[Error]]:
+) -> Stripped:
     """Generate the serialization function for the class ``cls``."""
     blocks = [
         Stripped(
@@ -3945,9 +3939,8 @@ return std::make_pair<
 
     interface_name = cpp_naming.interface_name(cls.name)
 
-    return (
-        Stripped(
-            f"""\
+    return Stripped(
+        f"""\
 std::pair<
 {I}common::optional<nlohmann::json>,
 {I}common::optional<SerializationError>
@@ -3956,8 +3949,6 @@ std::pair<
 ) {{
 {I}{indent_but_first_line(blocks_joined, I)}
 }}"""
-        ),
-        None,
     )
 
 
@@ -4178,17 +4169,16 @@ def _type_annotation_contains_list(
 
 
 # fmt: off
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
     lambda result:
-    not (result[0] is not None) or result[0].endswith('\n'),
+    result.endswith('\n'),
     "Trailing newline mandatory for valid end-of-files"
 )
 # fmt: on
 def generate_implementation(
     symbol_table: intermediate.SymbolTable,
     library_namespace: Stripped,
-) -> Tuple[Optional[str], Optional[List[Error]]]:
+) -> str:
     """Generate implementation for JSON de/serialization."""
     namespace = Stripped(f"{library_namespace}::{cpp_common.JSONIZATION_NAMESPACE}")
 
@@ -4264,19 +4254,9 @@ def generate_implementation(
             )
         )
 
-    errors = []  # type: List[Error]
-
     for cls in symbol_table.classes:
         if isinstance(cls, intermediate.ConcreteClass):
-            deserialize_block, error = _generate_concretely_deserialize_implementation(
-                cls=cls,
-            )
-            if error is not None:
-                errors.append(error)
-                continue
-
-            assert deserialize_block is not None
-            blocks.append(deserialize_block)
+            blocks.append(_generate_concretely_deserialize_implementation(cls=cls))
 
         if len(cls.concrete_descendants) > 0:
             deserialize_dispatch_blocks = _generate_dispatch_deserialize_implementation(
@@ -4354,12 +4334,7 @@ struct SerializationError {{
         )
 
     for cls in symbol_table.concrete_classes:
-        serialize_block, error = _generate_serialize_cls(cls=cls)
-        if error is not None:
-            errors.append(error)
-        else:
-            assert serialize_block is not None
-            blocks.append(serialize_block)
+        blocks.append(_generate_serialize_cls(cls=cls))
 
     blocks.extend(_generate_serialize_iclass_implementation(symbol_table=symbol_table))
 
@@ -4387,7 +4362,7 @@ struct SerializationError {{
 
     writer.write("\n")
 
-    return writer.getvalue(), None
+    return writer.getvalue()
 
 
 assert generate_header.__doc__ is not None
