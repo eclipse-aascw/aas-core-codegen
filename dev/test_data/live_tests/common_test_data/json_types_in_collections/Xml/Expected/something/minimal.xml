@@ -1,0 +1,1 @@
+<something xmlns="https://dummy.com"><values><v><boolean>1</boolean></v></values><tupleWithJson><v1>hello</v1><v2><double>42</double></v2><v3><data><value><double>1</double></value><value><double>2</double></value></data></v3><v4><member><name>a</name><value><string>b</string></value></member></v4></tupleWithJson></something>

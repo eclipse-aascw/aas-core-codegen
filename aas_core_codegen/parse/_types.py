@@ -23,7 +23,24 @@ _MODULE_NAME = pathlib.Path(os.path.realpath(__file__)).parent.name
 PRIMITIVE_TYPES = {"bool", "int", "float", "str", "bytearray"}
 
 #: Built-in generic types
-GENERIC_TYPES = {Identifier("List"), Identifier("Optional"), Identifier("Tuple")}
+GENERIC_TYPES = {
+    Identifier("List"),
+    Identifier("Optional"),
+    Identifier("Tuple"),
+    Identifier("JSONObject"),
+}
+
+#: Name of the special atomic type annotation denoting an arbitrary, open
+#: JSON-able value -- a boolean, a number or a string, an open JSON-able
+#: array of such values, or an open, JSON-able object with string-like
+#: keys and values which are themselves JSON-able, all recursively, exactly
+#: as JSON itself is defined
+JSON_VALUE_TYPE_NAME = Identifier("JSONValue")
+
+#: Name of the special atomic type annotation denoting an open JSON-able
+#: array, *i.e.*, a homogeneous array whose items are themselves arbitrary
+#: JSON-able values (see :py:const:`JSON_VALUE_TYPE_NAME`)
+JSON_ARRAY_TYPE_NAME = Identifier("JSONArray")
 
 
 class AtomicTypeAnnotation:
