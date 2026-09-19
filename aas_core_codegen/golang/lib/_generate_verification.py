@@ -40,6 +40,9 @@ from aas_core_codegen.golang.common import (
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
+    INDENT5 as IIIII,
+    INDENT6 as IIIIII,
+    INDENT7 as IIIIIII,
 )
 
 
@@ -1056,6 +1059,49 @@ if abort {{
                 # noinspection PyTypeChecker
                 assert_never(type_anno.items.our_type)
 
+        elif isinstance(
+            type_anno.items,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            item_verify_function: str
+            item_verify_arguments: str
+            if isinstance(type_anno.items, intermediate.JsonValueTypeAnnotation):
+                item_verify_function = "verifyJsonValue"
+                item_verify_arguments = 'v,\n"$",'
+            elif isinstance(type_anno.items, intermediate.JsonArrayTypeAnnotation):
+                item_verify_function = "verifyJsonArray"
+                item_verify_arguments = "v,"
+            else:
+                item_verify_function = "verifyJsonObject"
+                item_verify_arguments = "v,"
+
+            loop_body = Stripped(
+                f"""\
+abort = {item_verify_function}(
+{I}{indent_but_first_line(Stripped(item_verify_arguments), I)}
+{I}func(err *VerificationError) bool {{
+{II}err.Path.PrependIndex(
+{III}&aasreporting.IndexSegment{{
+{IIII}Index: i,
+{III}}},
+{II})
+{II}err.Path.PrependName(
+{III}&aasreporting.NameSegment{{
+{IIII}Name: {prop_name_literal},
+{III}}},
+{II})
+{II}return onError(err)
+{I}}},
+)
+if abort {{
+{I}return
+}}"""
+            )
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno.items)
@@ -1194,12 +1240,143 @@ if abort {{
                     # noinspection PyTypeChecker
                     assert_never(item_type_anno.our_type)
 
+            elif isinstance(
+                item_type_anno,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                tuple_verify_function: str
+                tuple_verify_arguments: str
+                if isinstance(item_type_anno, intermediate.JsonValueTypeAnnotation):
+                    tuple_verify_function = "verifyJsonValue"
+                    tuple_verify_arguments = (
+                        f"that.{getter_name}().Item{i + 1},\n" '"$",'
+                    )
+                elif isinstance(item_type_anno, intermediate.JsonArrayTypeAnnotation):
+                    tuple_verify_function = "verifyJsonArray"
+                    tuple_verify_arguments = f"that.{getter_name}().Item{i + 1},"
+                else:
+                    tuple_verify_function = "verifyJsonObject"
+                    tuple_verify_arguments = f"that.{getter_name}().Item{i + 1},"
+
+                item_blocks.append(
+                    Stripped(
+                        f"""\
+abort = {tuple_verify_function}(
+{I}{indent_but_first_line(Stripped(tuple_verify_arguments), I)}
+{I}func(err *VerificationError) bool {{
+{II}err.Path.PrependIndex(
+{III}&aasreporting.IndexSegment{{
+{IIII}Index: {i},
+{III}}},
+{II})
+{II}err.Path.PrependName(
+{III}&aasreporting.NameSegment{{
+{IIII}Name: {prop_name_literal},
+{III}}},
+{II})
+
+{II}return onError(err)
+{I}}},
+)
+if abort {{
+{I}return
+}}"""
+                    )
+                )
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(item_type_anno)
 
         if len(item_blocks) > 0:
             block = Stripped("\n\n".join(item_blocks))
+
+    elif isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        json_verify_function: str
+        json_verify_arguments: str
+        if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+            json_verify_function = "verifyJsonValue"
+            json_verify_arguments = f'that.{getter_name}(),\n"$",'
+        elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+            json_verify_function = "verifyJsonArray"
+            json_verify_arguments = f"that.{getter_name}(),"
+        else:
+            json_verify_function = "verifyJsonObject"
+            json_verify_arguments = f"that.{getter_name}(),"
+
+        blocks_of_json = [
+            Stripped(
+                f"""\
+abort = {json_verify_function}(
+{I}{indent_but_first_line(Stripped(json_verify_arguments), I)}
+{I}func(err *VerificationError) bool {{
+{II}err.Path.PrependName(
+{III}&aasreporting.NameSegment{{
+{IIII}Name: {prop_name_literal},
+{III}}},
+{II})
+{II}return onError(err)
+{I}}},
+)
+if abort {{
+{I}return
+}}"""
+            )
+        ]
+
+        if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation) and isinstance(
+            type_anno.key, intermediate.OurTypeAnnotation
+        ):
+            # NOTE (mristin):
+            # The key is a constrained primitive -- the only other option,
+            # a bare ``str``, has nothing to verify -- so we reuse
+            # the already-generated verification function of that constrained
+            # primitive instead of generating any new check here.
+            key_verify_function = golang_naming.function_name(
+                Identifier(f"verify_{type_anno.key.our_type.name}")
+            )
+
+            blocks_of_json.append(
+                Stripped(
+                    f"""\
+for key := range that.{getter_name}() {{
+{I}abort = {key_verify_function}(
+{II}key,
+{II}func(err *VerificationError) bool {{
+{III}// NOTE (mristin):
+{III}// A member of an open JSON object is no property of one of our
+{III}// classes, so it gets no segment of its own -- the key goes into
+{III}// the message instead, as it does in verifyJsonValue.
+{III}keyErr := newVerificationError(
+{IIII}fmt.Sprintf("In the member %q: %s", key, err.Message),
+{III})
+{III}keyErr.Path.PrependName(
+{IIII}&aasreporting.NameSegment{{
+{IIIII}Name: {prop_name_literal},
+{IIII}}},
+{III})
+{III}return onError(keyErr)
+{II}}},
+{I})
+{I}if abort {{
+{II}return
+{I}}}
+}}"""
+                )
+            )
+
+        block = Stripped("\n\n".join(blocks_of_json))
 
     else:
         assert_never(type_anno)
@@ -1266,6 +1443,155 @@ if that.{getter_name}() != nil {{
         assert AssertionError(f"Unhandled case: {block=}, {optional=}, {is_reference=}")
 
     return block, None
+
+
+def _generate_verify_json_value(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the functions verifying that a value is JSON-able.
+
+    A JSON-able value is, recursively, exactly as JSON itself is defined, but
+    ``JsonValue`` is an ``any``, so it rules out none of the three ways of not
+    being one: a ``nil``, a non-finite number and a value of some other type
+    altogether. Each is reported here, at any depth.
+
+    The path *within* a JSON-able value is written into the message instead of
+    into the structured path of the error: a name segment points at a property
+    of one of our classes and an index segment at an item of one of our lists,
+    and a member of an open JSON object is neither.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+// Verify that `value` is a JSON-able value, at any depth.
+//
+// The `path` is the JSON path to `value`, written into the messages so that
+// the culprit can be located within the JSON-able value.
+func verifyJsonValue(
+{I}value aastypes.JsonValue,
+{I}path string,
+{I}onError func(*VerificationError) bool,
+) (abort bool) {{
+{I}if value == nil {{
+{II}return onError(
+{III}newVerificationError(
+{IIII}fmt.Sprintf(
+{IIIII}"Expected a JSON-able value at %s, but got a nil",
+{IIIII}path,
+{IIII}),
+{III}),
+{II})
+{I}}}
+
+{I}switch casted := value.(type) {{
+{II}case bool:
+{III}return false
+
+{II}case string:
+{III}return false
+
+{II}case float64:
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number, so neither is
+{III}// a JSON-able value, even though a float64 holds either.
+{III}if math.IsInf(casted, 0) || math.IsNaN(casted) {{
+{IIII}return onError(
+{IIIII}newVerificationError(
+{IIIIII}fmt.Sprintf(
+{IIIIIII}"Expected a JSON-able value at %s, but got the number %v, "+
+{IIIIIII}"which is neither finite nor representable in JSON",
+{IIIIIII}path, casted,
+{IIIIII}),
+{IIIII}),
+{IIII})
+{III}}}
+{III}return false
+
+{II}case aastypes.JsonArray:
+{III}for i, item := range casted {{
+{IIII}abort = verifyJsonValue(
+{IIIII}item, fmt.Sprintf("%s[%d]", path, i), onError,
+{IIII})
+{IIII}if abort {{
+{IIIII}return
+{IIII}}}
+{III}}}
+{III}return false
+
+{II}case aastypes.JsonObject:
+{III}// NOTE (mristin):
+{III}// The keys are sorted so that the errors come in a stable order,
+{III}// as the iteration order of a Go map is deliberately random.
+{III}keys := make([]string, 0, len(casted))
+{III}for key := range casted {{
+{IIII}keys = append(keys, key)
+{III}}}
+{III}sort.Strings(keys)
+
+{III}for _, key := range keys {{
+{IIII}abort = verifyJsonValue(
+{IIIII}casted[key], fmt.Sprintf("%s.%s", path, key), onError,
+{IIII})
+{IIII}if abort {{
+{IIIII}return
+{IIII}}}
+{III}}}
+{III}return false
+
+{II}default:
+{III}return onError(
+{IIII}newVerificationError(
+{IIIII}fmt.Sprintf(
+{IIIIII}"Expected a JSON-able value (a bool, a float64, a string, "+
+{IIIIII}"a JsonArray or a JsonObject) at %s, but got: %T",
+{IIIIII}path, value,
+{IIIII}),
+{IIII}),
+{III})
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Verify that `value` is a JSON-able array.
+func verifyJsonArray(
+{I}value aastypes.JsonArray,
+{I}onError func(*VerificationError) bool,
+) (abort bool) {{
+{I}if value == nil {{
+{II}return onError(
+{III}newVerificationError(
+{IIII}"Expected a JSON-able array, but got a nil",
+{III}),
+{II})
+{I}}}
+
+{I}return verifyJsonValue(value, "$", onError)
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Verify that `value` is a JSON-able object.
+func verifyJsonObject(
+{I}value aastypes.JsonObject,
+{I}onError func(*VerificationError) bool,
+) (abort bool) {{
+{I}if value == nil {{
+{II}return onError(
+{III}newVerificationError(
+{IIII}"Expected a JSON-able object, but got a nil",
+{III}),
+{II})
+{I}}}
+
+{I}return verifyJsonValue(value, "$", onError)
+}}"""
+        ),
+    ]
 
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -1736,6 +2062,8 @@ func (ve *VerificationError) PathString() string {{
 
         else:
             assert_never(verification)
+
+    blocks.extend(_generate_verify_json_value(symbol_table=symbol_table))
 
     for cls in symbol_table.concrete_classes:
         block, underlying_errors = _generate_verify_class(

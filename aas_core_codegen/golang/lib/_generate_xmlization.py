@@ -70,6 +70,20 @@ def _leaf_moniker(type_anno: intermediate.AtomicTypeAnnotation) -> str:
     if primitive_type is not None:
         return _PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
 
+    # NOTE (mristin):
+    # A JSON-able type is no type of the meta-model, so it needs a moniker of
+    # its own, for the same reason as a primitive above. The initial is
+    # *lower-case* so that it can never be confused for one of our types, which
+    # all go through ``capitalized_camel_case``.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return "jsonValue"
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return "jsonArray"
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return "jsonObject"
+
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
     ), f"Unexpected type annotation for a moniker: {type_anno}"
@@ -1519,6 +1533,668 @@ def _read_text_function(type_anno: intermediate.AtomicTypeAnnotation) -> Strippe
     return Stripped(_enum_text_reader_name(type_anno.our_type))
 
 
+def _generate_xml_rpc_readers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the readers of the XML-RPC subset, if the model uses JSON-able types.
+
+    JSON prescribes no XML representation of its own, so a JSON-able value is
+    read over the subset of XML-RPC which covers exactly what such a value can
+    be: ``<boolean>``, ``<double>``, ``<string>``, ``<array>`` and ``<struct>``.
+
+    The path *within* a JSON-able value goes into the message rather than into
+    the structured path of the error -- a name segment points at a property of
+    one of our classes, and a member of an open JSON object is not one.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+// Match a numeral of the `<double>` lexical space.
+//
+// This is the numeric part of the lexical space of `xs:double`, and
+// deliberately not its three named literals -- `INF`, `-INF` and `NaN` --
+// since a JSON number can be none of them.
+//
+// Mind the explicit `[0-9]`: `\\d` would match a digit of any script.
+//
+// See: https://www.w3.org/TR/xmlschema-2/#double
+var xmlRpcDoubleRe = regexp.MustCompile(
+{I}`^(\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?$`,
+)"""
+        ),
+        Stripped(
+            f"""\
+// Read the content of an element holding a JSON-able value.
+//
+// The content is a single discriminator element -- `<boolean>`, `<double>`,
+// `<string>`, `<array>` or `<struct>` -- which says what the value is.
+//
+// The `current` token is expected to point to the content of the enclosing
+// element, and the resulting `next` token points to its end element.
+func readJsonValue(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+) (value aastypes.JsonValue, next xml.Token, err error) {{
+{I}return readElementDispatched(decoder, current, readJsonValueByLocal)
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the content of the discriminator element named `local`.
+func readJsonValueByLocal(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}local string,
+) (value aastypes.JsonValue, next xml.Token, err error) {{
+{I}switch local {{
+{II}case "boolean":
+{III}return readXmlRpcBoolean(decoder, current)
+{II}case "double":
+{III}return readXmlRpcDouble(decoder, current)
+{II}case "string":
+{III}var text string
+{III}text, next, err = readText(decoder, current)
+{III}// NOTE (mristin):
+{III}// `xs:string` is `preserve` and not `collapse`, so a `<string>` keeps
+{III}// its whitespace, unlike a `<boolean>` or a `<double>`.
+{III}value = text
+{III}return
+{II}case "array":
+{III}var items aastypes.JsonArray
+{III}items, next, err = readJsonArray(decoder, current)
+{III}value = items
+{III}return
+{II}case "struct":
+{III}var members aastypes.JsonObject
+{III}members, next, err = readJsonObject(decoder, current)
+{III}value = members
+{III}return
+{II}default:
+{III}err = newDeserializationError(
+{IIII}fmt.Sprintf(
+{IIIII}"Expected a discriminator element (one of boolean, double, "+
+{IIIII}"string, array or struct), but got: %s",
+{IIIII}local,
+{IIII}),
+{III})
+{III}return
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the content of a `<boolean>` element.
+//
+// Real XML-RPC tooling writes and expects a strict `1`/`0`, and not
+// the `true`/`false` which `xs:boolean` and the rest of this module use.
+func readXmlRpcBoolean(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+) (value aastypes.JsonValue, next xml.Token, err error) {{
+{I}var text string
+{I}text, next, err = readText(decoder, current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// `whiteSpace` is fixed to `collapse` for every atomic XSD type but
+{I}// a string, so a pretty-printed `<boolean>` has to be read as well.
+{I}text = collapseWhitespace(text)
+
+{I}switch text {{
+{II}case "1":
+{III}value = true
+{II}case "0":
+{III}value = false
+{II}default:
+{III}err = newDeserializationError(
+{IIII}fmt.Sprintf(
+{IIIII}"Expected \\"0\\" or \\"1\\" as the text of a boolean element, "+
+{IIIII}"but got: %s",
+{IIIII}text,
+{IIII}),
+{III})
+{I}}}
+{I}return
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the content of a `<double>` element.
+func readXmlRpcDouble(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+) (value aastypes.JsonValue, next xml.Token, err error) {{
+{I}var text string
+{I}text, next, err = readText(decoder, current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// See the note in readXmlRpcBoolean on why the whitespace is collapsed.
+{I}text = collapseWhitespace(text)
+
+{I}// NOTE (mristin):
+{I}// The lexical form is matched before the text is converted.
+{I}// strconv.ParseFloat reads more than we admit here: a hexadecimal
+{I}// literal, an underscore separator, and the spellings "inf",
+{I}// "infinity" and "nan".
+{I}//
+{I}// Mind that the numeral excludes "INF", "-INF" and "NaN" on purpose,
+{I}// unlike xs:double, which names all three. A double element carries
+{I}// a JSON number, and JSON knows neither an infinity nor
+{I}// a not-a-number, so there is no JSON-able value for such a text
+{I}// to de-serialize into.
+{I}if !xmlRpcDoubleRe.MatchString(text) {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected a number as the text of a double element, but got: %s",
+{IIII}text,
+{III}),
+{II})
+{II}return
+{I}}}
+
+{I}var number float64
+{I}number, err = strconv.ParseFloat(text, 64)
+{I}if err != nil || math.IsInf(number, 0) {{
+{II}// NOTE (mristin):
+{II}// A literal too large for a float64 gives an infinity, which is no
+{II}// JSON-able value either, so it is refused rather than rounded.
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected a number representable as a JSON-able value as the "+
+{IIII}"text of a double element, but got: %s",
+{IIII}text,
+{III}),
+{II})
+{II}return
+{I}}}
+
+{I}value = number
+{I}return
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the content of an element holding a JSON-able array.
+//
+// The content is a single `<data>` element holding a `<value>` per item.
+func readJsonArray(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+) (value aastypes.JsonArray, next xml.Token, err error) {{
+{I}return readElementDispatched(decoder, current, readXmlRpcData)
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the content of the `<data>` element of a JSON-able array.
+func readXmlRpcData(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}local string,
+) (value aastypes.JsonArray, next xml.Token, err error) {{
+{I}if local != "data" {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected a data element in a JSON-able array, but got: %s",
+{IIII}local,
+{III}),
+{II})
+{II}return
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// An empty data element gives an empty array, and not a nil one, so
+{I}// that the value round-trips as the empty array it was.
+{I}value = aastypes.JsonArray{{}}
+
+{I}next = current
+{I}for {{
+{II}next, err = skipEmptyTextWhitespaceAndComments(decoder, next)
+{II}if err != nil {{
+{III}return
+{II}}}
+
+{II}if _, ok := next.(xml.StartElement); !ok {{
+{III}break
+{II}}}
+
+{II}var item aastypes.JsonValue
+{II}item, next, err = readElementDispatched(decoder, next, readXmlRpcArrayItem)
+{II}if err != nil {{
+{III}err = newDeserializationError(
+{IIII}fmt.Sprintf("At the index %d: %s", len(value), err.Error()),
+{III})
+{III}return
+{II}}}
+
+{II}value = append(value, item)
+{I}}}
+{I}return
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read a `<value>` element of a JSON-able array.
+func readXmlRpcArrayItem(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}local string,
+) (value aastypes.JsonValue, next xml.Token, err error) {{
+{I}if local != "value" {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected a value element in a JSON-able array, but got: %s",
+{IIII}local,
+{III}),
+{II})
+{II}return
+{I}}}
+
+{I}return readJsonValue(decoder, current)
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the content of an element holding a JSON-able object.
+//
+// The content is a `<member>` per key, each holding a `<name>` and
+// a `<value>`.
+func readJsonObject(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+) (value aastypes.JsonObject, next xml.Token, err error) {{
+{I}// NOTE (mristin):
+{I}// An element with no members gives an empty object, and not a nil one,
+{I}// so that the value round-trips as the empty object it was.
+{I}value = aastypes.JsonObject{{}}
+
+{I}next = current
+{I}for {{
+{II}next, err = skipEmptyTextWhitespaceAndComments(decoder, next)
+{II}if err != nil {{
+{III}return
+{II}}}
+
+{II}if _, ok := next.(xml.StartElement); !ok {{
+{III}break
+{II}}}
+
+{II}var member xmlRpcMember
+{II}member, next, err = readElementDispatched(decoder, next, readXmlRpcMember)
+{II}if err != nil {{
+{III}return
+{II}}}
+
+{II}// NOTE (mristin):
+{II}// A repeated member name is refused, just as a repeated property element
+{II}// is refused elsewhere in this module. Letting the later member win would
+{II}// silently accept a document which says two different things about
+{II}// the same key.
+{II}if _, ok := value[member.name]; ok {{
+{III}err = newDeserializationError(
+{IIII}fmt.Sprintf("The member %q occurred more than once", member.name),
+{III})
+{III}return
+{II}}}
+
+{II}value[member.name] = member.value
+{I}}}
+{I}return
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Represent the name and the value of a single `<member>`.
+type xmlRpcMember struct {{
+{I}name  string
+{I}value aastypes.JsonValue
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read a `<member>` element of a JSON-able object.
+func readXmlRpcMember(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}local string,
+) (value xmlRpcMember, next xml.Token, err error) {{
+{I}if local != "member" {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected a member element in a JSON-able object, but got: %s",
+{IIII}local,
+{III}),
+{II})
+{II}return
+{I}}}
+
+{I}next, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}value.name, next, err = readElementDispatched(
+{II}decoder, next, readXmlRpcMemberName,
+{I})
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}next, err = skipEmptyTextWhitespaceAndComments(decoder, next)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}value.value, next, err = readElementDispatched(
+{II}decoder, next, readXmlRpcMemberValue,
+{I})
+{I}if err != nil {{
+{II}// NOTE (mristin):
+{II}// A member of an open JSON object is no property of one of our
+{II}// classes, so it gets no segment of its own -- the key goes into
+{II}// the message instead.
+{II}err = newDeserializationError(
+{III}fmt.Sprintf("In the member %q: %s", value.name, err.Error()),
+{II})
+{II}return
+{I}}}
+{I}return
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the `<name>` element of a `<member>`.
+func readXmlRpcMemberName(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}local string,
+) (value string, next xml.Token, err error) {{
+{I}if local != "name" {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected a name element in a JSON-able member, but got: %s",
+{IIII}local,
+{III}),
+{II})
+{II}return
+{I}}}
+
+{I}return readText(decoder, current)
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the `<value>` element of a `<member>`.
+func readXmlRpcMemberValue(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}local string,
+) (value aastypes.JsonValue, next xml.Token, err error) {{
+{I}if local != "value" {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected a value element in a JSON-able member, but got: %s",
+{IIII}local,
+{III}),
+{II})
+{II}return
+{I}}}
+
+{I}return readJsonValue(decoder, current)
+}}"""
+        ),
+    ]
+
+
+def _generate_xml_rpc_writers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the writers of the XML-RPC subset, if the model uses JSON-able types.
+
+    These mirror :py:func:`_generate_xml_rpc_readers` -- see the note there on
+    the grammar which we borrow.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+// Write `value` as the content of an element holding a JSON-able value.
+//
+// The content is a single discriminator element which says what the value is.
+//
+// Do not flush.
+func writeJsonValue(
+{I}encoder *xml.Encoder,
+{I}value aastypes.JsonValue,
+) (err error) {{
+{I}if value == nil {{
+{II}err = newSerializationError(
+{III}"Expected a JSON-able value, but got a nil",
+{II})
+{II}return
+{I}}}
+
+{I}switch casted := value.(type) {{
+{II}case bool:
+{III}// NOTE (mristin):
+{III}// Real XML-RPC tooling writes and expects a strict `1`/`0`, and not
+{III}// the `true`/`false` which `xs:boolean` and the rest of this module
+{III}// use.
+{III}text := "0"
+{III}if casted {{
+{IIII}text = "1"
+{III}}}
+{III}err = writeElement(
+{IIII}encoder, "boolean",
+{IIII}text,
+{IIII}func(anEncoder *xml.Encoder, aValue string) error {{
+{IIIII}return writeText(anEncoder, aValue)
+{IIII}}},
+{III})
+{III}return
+
+{II}case float64:
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number, so neither is
+{III}// a JSON-able value, and readXmlRpcDouble refuses to read either
+{III}// back.
+{III}if math.IsInf(casted, 0) || math.IsNaN(casted) {{
+{IIII}err = newSerializationError(
+{IIIII}fmt.Sprintf(
+{IIIIII}"Expected a JSON-able value, but got the number %v, which "+
+{IIIIII}"is neither finite nor representable in JSON",
+{IIIIII}casted,
+{IIIII}),
+{IIII})
+{IIII}return
+{III}}}
+{III}err = writeElement(
+{IIII}encoder, "double",
+{IIII}casted,
+{IIII}writeAsText_double,
+{III})
+{III}return
+
+{II}case string:
+{III}err = writeElement(
+{IIII}encoder, "string",
+{IIII}casted,
+{IIII}writeAsText_string,
+{III})
+{III}return
+
+{II}case aastypes.JsonArray:
+{III}err = writeElement(
+{IIII}encoder, "array",
+{IIII}casted,
+{IIII}writeJsonArray,
+{III})
+{III}return
+
+{II}case aastypes.JsonObject:
+{III}err = writeElement(
+{IIII}encoder, "struct",
+{IIII}casted,
+{IIII}writeJsonObject,
+{III})
+{III}return
+
+{II}default:
+{III}err = newSerializationError(
+{IIII}fmt.Sprintf(
+{IIIII}"Expected a JSON-able value (a bool, a float64, a string, "+
+{IIIII}"a JsonArray or a JsonObject), but got: %T",
+{IIIII}value,
+{IIII}),
+{III})
+{III}return
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Write `value` as the content of an element holding a JSON-able array.
+//
+// The content is a single `<data>` element holding a `<value>` per item.
+//
+// Do not flush.
+func writeJsonArray(
+{I}encoder *xml.Encoder,
+{I}value aastypes.JsonArray,
+) (err error) {{
+{I}err = writeStartElement(encoder, "data", false)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}for i, item := range value {{
+{II}err = writeElement(encoder, "value", item, writeJsonValue)
+{II}if err != nil {{
+{III}err = newSerializationError(
+{IIII}fmt.Sprintf("At the index %d: %s", i, err.Error()),
+{III})
+{III}return
+{II}}}
+{I}}}
+
+{I}err = writeEndElement(encoder, "data", false)
+{I}return
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Write `value` as the content of an element holding a JSON-able object.
+//
+// The content is a `<member>` per key, each holding a `<name>` and a
+// `<value>`.
+//
+// Do not flush.
+func writeJsonObject(
+{I}encoder *xml.Encoder,
+{I}value aastypes.JsonObject,
+) (err error) {{
+{I}// NOTE (mristin):
+{I}// The keys are sorted so that the same object always gives the same
+{I}// document, as the iteration order of a Go map is deliberately random.
+{I}keys := make([]string, 0, len(value))
+{I}for key := range value {{
+{II}keys = append(keys, key)
+{I}}}
+{I}sort.Strings(keys)
+
+{I}for _, key := range keys {{
+{II}err = writeStartElement(encoder, "member", false)
+{II}if err != nil {{
+{III}return
+{II}}}
+
+{II}err = writeElement(encoder, "name", key, writeAsText_string)
+{II}if err != nil {{
+{III}return
+{II}}}
+
+{II}err = writeElement(encoder, "value", value[key], writeJsonValue)
+{II}if err != nil {{
+{III}// NOTE (mristin):
+{III}// A member of an open JSON object is no property of one of our
+{III}// classes, so it gets no segment of its own -- the key goes into
+{III}// the message instead.
+{III}err = newSerializationError(
+{IIII}fmt.Sprintf("In the member %q: %s", key, err.Error()),
+{III})
+{III}return
+{II}}}
+
+{II}err = writeEndElement(encoder, "member", false)
+{II}if err != nil {{
+{III}return
+{II}}}
+{I}}}
+{I}return
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Write the optional `that` as an XML element with the `local` name, or write
+// nothing at all if it is not set.
+//
+// Do not flush.
+//
+// A JSON-able value is an `any`, and a JSON-able object is a map. Neither can
+// go through [writeOptionalInstance], which compares against the zero value:
+// that comparison panics at runtime as soon as the `any` holds a slice or
+// a map. Both are nil on their own, though, so a plain comparison against nil
+// answers here. A JSON-able array is a slice and goes through
+// [writeOptionalSlice] like any other.
+func writeOptionalJsonValue(
+{I}encoder *xml.Encoder,
+{I}local string,
+{I}that aastypes.JsonValue,
+{I}writeContent func(anEncoder *xml.Encoder, aValue aastypes.JsonValue) (anErr error),
+) (err error) {{
+{I}if that == nil {{
+{II}return
+{I}}}
+
+{I}return writeElement(encoder, local, that, writeContent)
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Write the optional `that` as an XML element with the `local` name, or write
+// nothing at all if it is not set.
+//
+// Do not flush.
+//
+// See the note on [writeOptionalJsonValue] on why a map needs its own function.
+func writeOptionalJsonObject(
+{I}encoder *xml.Encoder,
+{I}local string,
+{I}that aastypes.JsonObject,
+{I}writeContent func(anEncoder *xml.Encoder, aValue aastypes.JsonObject) (anErr error),
+) (err error) {{
+{I}if that == nil {{
+{II}return
+{I}}}
+
+{I}return writeElement(encoder, local, that, writeContent)
+}}"""
+        ),
+    ]
+
+
 def _item_reader_name(
     type_anno: intermediate.AtomicTypeAnnotation, element_name: str
 ) -> Stripped:
@@ -1543,6 +2219,26 @@ def _item_reader_name(
         )
 
     return Stripped(_scalar_item_reader_name(type_anno, element_name))
+
+
+def _scalar_content_reader(type_anno: intermediate.AtomicTypeAnnotation) -> Stripped:
+    """
+    Determine the reader of the content of an element holding ``type_anno``.
+
+    A primitive, a constrained primitive and an enumeration are read from
+    the element's text; a JSON-able value is read over the XML-RPC subset -- see
+    :py:func:`_generate_xml_rpc_readers`.
+    """
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("readJsonValue")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("readJsonArray")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("readJsonObject")
+
+    return _read_text_function(type_anno)
 
 
 def _generate_read_scalar_item(scalar_item: _ScalarItem) -> Stripped:
@@ -1576,7 +2272,7 @@ func {function_name}(
 {II}return
 {I}}}
 
-{I}return {_read_text_function(scalar_item.type_anno)}(decoder, current)
+{I}return {_scalar_content_reader(scalar_item.type_anno)}(decoder, current)
 }}"""
     )
 
@@ -1733,6 +2429,32 @@ readTuple{arity}(
                 )
             else:
                 case_body = Stripped(f"{prop_var}, current, valueErr = {read_tuple}")
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            json_reader: str
+            if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+                json_reader = "readJsonValue"
+            elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+                json_reader = "readJsonArray"
+            else:
+                json_reader = "readJsonObject"
+
+            # NOTE (mristin):
+            # All three JSON-able types are nilable in Go, so an optional one is
+            # never a pointer and goes through no ``readOptional``.
+            case_body = Stripped(
+                f"""\
+{prop_var}, current, valueErr = {json_reader}(
+{I}decoder, current,
+)"""
+            )
 
         else:
             # noinspection PyTypeChecker
@@ -2842,6 +3564,67 @@ def _write_text_function(type_anno: intermediate.AtomicTypeAnnotation) -> Stripp
     return Stripped(_enum_text_writer_name(type_anno.our_type))
 
 
+def _content_writer_expr(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
+    """
+    Determine the writer of the content of an XML element holding ``type_anno``.
+
+    Mind the difference to :py:func:`_item_writer_expr`: an instance embedded in
+    the element of its property writes only its sequence of properties, while
+    an item of a list or of a tuple writes its own element on top of it.
+    """
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return Stripped(_WRITE_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type])
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple)
+        return _list_content_writer_name(type_anno.items)
+
+    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        return _tuple_content_writer_name(type_anno)
+
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("writeJsonValue")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("writeJsonArray")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("writeJsonObject")
+
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Unexpected type annotation for a content writer: {type_anno}"
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        return _write_text_function(type_anno)
+
+    golang_type = golang_common.generate_type(
+        type_annotation=type_anno, types_package=Identifier("aastypes")
+    )
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return Stripped(f"writeUnion[{golang_type}]")
+
+    assert isinstance(
+        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+    ), f"Unexpected our type for a content writer: {our_type}"
+
+    if _requires_dispatch(type_anno):
+        return Stripped(f"writeInstance[{golang_type}]")
+
+    # NOTE (mristin):
+    # A concrete class without any concrete descendant is embedded directly in
+    # the element of its property, so its sequence of properties *is* the content.
+    return Stripped(
+        golang_naming.private_function_name(
+            Identifier(f"write_{our_type.name}_as_sequence")
+        )
+    )
+
+
 def _generate_write_scalar_item(scalar_item: _ScalarItem) -> Stripped:
     """Generate the function to write a scalar item in a fixed element name."""
     function_name = _scalar_item_writer_name(
@@ -2859,7 +3642,7 @@ def _generate_write_scalar_item(scalar_item: _ScalarItem) -> Stripped:
             "encoder",
             element_name_literal,
             "value",
-            _write_text_function(scalar_item.type_anno),
+            _content_writer_expr(scalar_item.type_anno),
         ],
         indention=2,
     )
@@ -2984,58 +3767,6 @@ func {_tuple_content_writer_name(type_anno)}(
     )
 
 
-def _content_writer_expr(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
-    """
-    Determine the writer of the content of an XML element holding ``type_anno``.
-
-    Mind the difference to :py:func:`_item_writer_expr`: an instance embedded in
-    the element of its property writes only its sequence of properties, while
-    an item of a list or of a tuple writes its own element on top of it.
-    """
-    primitive_type = intermediate.try_primitive_type(type_anno)
-    if primitive_type is not None:
-        return Stripped(_WRITE_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type])
-
-    if isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple)
-        return _list_content_writer_name(type_anno.items)
-
-    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        return _tuple_content_writer_name(type_anno)
-
-    assert isinstance(
-        type_anno, intermediate.OurTypeAnnotation
-    ), f"Unexpected type annotation for a content writer: {type_anno}"
-
-    our_type = type_anno.our_type
-
-    if isinstance(our_type, intermediate.Enumeration):
-        return _write_text_function(type_anno)
-
-    golang_type = golang_common.generate_type(
-        type_annotation=type_anno, types_package=Identifier("aastypes")
-    )
-
-    if isinstance(our_type, intermediate.NamedUnion):
-        return Stripped(f"writeUnion[{golang_type}]")
-
-    assert isinstance(
-        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-    ), f"Unexpected our type for a content writer: {our_type}"
-
-    if _requires_dispatch(type_anno):
-        return Stripped(f"writeInstance[{golang_type}]")
-
-    # NOTE (mristin):
-    # A concrete class without any concrete descendant is embedded directly in
-    # the element of its property, so its sequence of properties *is* the content.
-    return Stripped(
-        golang_naming.private_function_name(
-            Identifier(f"write_{our_type.name}_as_sequence")
-        )
-    )
-
-
 def _wrap_in_finish_property(getter_name: Identifier, write_expr: Stripped) -> Stripped:
     """
     Conclude the ``write_expr`` of the property with the given ``getter_name``.
@@ -3095,6 +3826,14 @@ def _generate_snippet_to_serialize_property(
         intermediate.PrimitiveType.BYTEARRAY
     ):
         function_name = "writeOptionalSlice"
+    elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        function_name = "writeOptionalJsonValue"
+    elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        # NOTE (mristin):
+        # A JSON-able array is a slice like any other.
+        function_name = "writeOptionalSlice"
+    elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        function_name = "writeOptionalJsonObject"
     else:
         assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
             type_anno.our_type,
@@ -3401,6 +4140,12 @@ const Namespace = {namespace_literal}"""
 
     requirements = _collect_requirements(symbol_table)
 
+    # NOTE (mristin):
+    # JSON prescribes no XML representation of its own, so a JSON-able value is
+    # de/serialized over a subset of XML-RPC, which the following functions
+    # implement once for the whole package.
+    blocks.extend(_generate_xml_rpc_readers(symbol_table=symbol_table))
+
     for scalar_item in requirements.scalar_items:
         blocks.append(_generate_read_scalar_item(scalar_item=scalar_item))
 
@@ -3465,6 +4210,8 @@ const Namespace = {namespace_literal}"""
     if len(symbol_table.named_unions) > 0:
         blocks.append(_generate_named_union_constraint())
         blocks.append(_generate_write_union())
+
+    blocks.extend(_generate_xml_rpc_writers(symbol_table=symbol_table))
 
     for scalar_item in requirements.scalar_items:
         blocks.append(_generate_write_scalar_item(scalar_item=scalar_item))
