@@ -188,6 +188,15 @@ def generate_type(
         )
         return Stripped(f"{value}?")
 
+    elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        return Stripped("Nodes.JsonNode")
+
+    elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("Nodes.JsonArray")
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("Nodes.JsonObject")
+
     else:
         assert_never(type_annotation)
 
@@ -339,6 +348,22 @@ def leaf_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
     primitive_type = intermediate.try_primitive_type(type_anno)
     if primitive_type is not None:
         return PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
+
+    # NOTE (mristin):
+    # A JSON-able type is spelled as ``Nodes.JsonNode`` and friends, which is
+    # no more a valid part of an identifier than ``byte[]`` is, so these need
+    # monikers of their own as well. The initial is *lower-case* for exactly
+    # the same reason as the primitives' above: an upper-case initial is what
+    # every one of our own types starts with, so a lower-case one can never
+    # be confused for, say, an enumeration which somebody named ``JsonValue``.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return "jsonValue"
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return "jsonArray"
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return "jsonObject"
 
     # NOTE (mristin):
     # We name our types by ``generate_type`` so that the name of a reader can

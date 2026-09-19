@@ -407,6 +407,20 @@ that.{prop_name} = (
 
                 else:
                     assert_never(type_anno.items.our_type)
+
+            elif isinstance(
+                type_anno.items,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # A JSON-able value is plain data, never one of our model
+                # classes, so there is nothing to enhance; the same holds for
+                # a JSON-able property, see the branch further below.
+                continue
+
             else:
                 raise NotImplementedError(
                     f"(mristin) We handle only lists of classes and named unions "
@@ -499,6 +513,18 @@ var {casted_name} = (
 {joined_pre_stmts}
 that.{prop_name} = {tuple_literal};"""
                 )
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # We can not enhance a JSON-able value; nothing to do here.
+            continue
+
         else:
             assert_never(type_anno)
 
@@ -762,6 +788,9 @@ public class Enhancer<TEnhancement>
     using_directives.extend(
         csharp_common.generate_using_aas_directive_if_necessary(namespace)
     )
+
+    if intermediate.uses_json_types(symbol_table):
+        using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
 
     using_directives.append(
         Stripped(

@@ -24,6 +24,7 @@ from aas_core_codegen.csharp.common import (
     INDENT3 as III,
     INDENT4 as IIII,
     INDENT5 as IIIII,
+    INDENT6 as IIIIII,
 )
 
 
@@ -744,6 +745,19 @@ def _deserializer_expr(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
     if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
         return Stripped(_FROM_METHOD_BY_PRIMITIVE_TYPE[type_anno.a_type])
 
+    # NOTE (mristin):
+    # A JSON-able value is already a ``Nodes.JsonNode``, but it still has to
+    # be checked and rebuilt -- see
+    # :py:func:`_generate_deserialize_json_helpers`.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("JsonValueFrom")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("JsonArrayFrom")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("JsonObjectFrom")
+
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
     ), f"Expected an atomic type annotation, but got {type_anno}"
@@ -1156,7 +1170,205 @@ internal static Aas.{name} {name}From(
     return Stripped(writer.getvalue()), None
 
 
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _generate_deserialize_json_helpers() -> List[Stripped]:
+    """
+    Generate the functions to de-serialize the JSON-able values from JSON.
+
+    Unlike every other de-serialization target in this module, a JSON-able
+    value needs no conversion at all -- it is already a ``Nodes.JsonNode``.
+    It does, however, have to be checked, since ``Nodes.JsonNode`` rules out
+    neither an embedded ``null`` nor a non-finite number, and copied, since
+    a node can only ever be attached to a single parent and the one we are
+    given belongs to the document the caller parsed.
+
+    All three are :py:func:`_generate_deserializer_delegate`-shaped, so each
+    binds to a call site as a bare method group, exactly as a class's
+    ``...From`` does.
+    """
+    return [
+        Stripped(
+            f"""\
+/// <summary>
+/// Check that <paramref name="node" /> is a JSON-able value.
+/// </summary>
+/// <remarks>
+/// A JSON-able value is, recursively, exactly as JSON itself is defined:
+/// a boolean, a finite number, a string, an array of JSON-able values or
+/// an object of JSON-able values with string keys -- never <c>null</c> and
+/// never an infinity or a not-a-number, at any depth.
+/// </remarks>
+/// <param name="node">JSON node to be checked</param>
+/// <param name="error">Error, if any, describing why it is not JSON-able</param>
+private static bool CheckIsJsonAble(
+{I}Nodes.JsonNode? node,
+{I}out Reporting.Error? error)
+{{
+{I}error = null;
+
+{I}if (node == null)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected a JSON-able value, but got a null");
+{II}return false;
+{I}}}
+
+{I}switch (node)
+{I}{{
+{II}case Nodes.JsonArray jsonArray:
+{III}int index = 0;
+{III}foreach (Nodes.JsonNode? item in jsonArray)
+{III}{{
+{IIII}if (!CheckIsJsonAble(item, out error))
+{IIII}{{
+{IIIII}error!.PrependSegment(
+{IIIIII}new Reporting.IndexSegment(index));
+{IIIII}return false;
+{IIII}}}
+{IIII}index++;
+{III}}}
+{III}return true;
+
+{II}case Nodes.JsonObject jsonObject:
+{III}foreach (
+{IIII}KeyValuePair<string, Nodes.JsonNode?> member
+{IIIII}in jsonObject)
+{III}{{
+{IIII}if (!CheckIsJsonAble(member.Value, out error))
+{IIII}{{
+{IIIII}error!.PrependSegment(
+{IIIIII}new Reporting.NameSegment(member.Key));
+{IIIII}return false;
+{IIII}}}
+{III}}}
+{III}return true;
+
+{II}case Nodes.JsonValue jsonValue:
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number, so neither is
+{III}// a JSON-able value. A conformant parser can never produce one, but
+{III}// the caller gives us a node which may have been constructed
+{III}// programmatically.
+{III}if (
+{IIII}jsonValue.TryGetValue<double>(out double number)
+{IIIII}&& !System.Double.IsFinite(number))
+{III}{{
+{IIII}error = new Reporting.Error(
+{IIIII}$"Expected a JSON-able value, but got the number {{number}}, " +
+{IIIII}"which is neither finite nor representable in JSON");
+{IIII}return false;
+{III}}}
+{III}return true;
+
+{II}default:
+{III}throw new System.InvalidOperationException(
+{IIII}$"Unexpected node type: {{node.GetType()}}");
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Convert the <paramref name="node" /> to a JSON-able value.
+/// </summary>
+/// <remarks>
+/// The result is a deep, independent copy of <paramref name="node" />.
+/// A <see cref="Nodes.JsonNode" /> can only ever be attached to a single
+/// parent, and <paramref name="node" /> still belongs to the document
+/// which the caller parsed, so handing it out as-is would make the very
+/// first serialization of the resulting instance throw.
+/// </remarks>
+/// <param name="node">JSON node to be parsed</param>
+/// <param name="error">Error, if any, during the deserialization</param>
+internal static Nodes.JsonNode JsonValueFrom(
+{I}Nodes.JsonNode? node,
+{I}out Reporting.Error? error)
+{{
+{I}if (!CheckIsJsonAble(node, out error))
+{I}{{
+{II}return default!;
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// A System.Text.Json node remembers its parent, and ``node`` is still
+{I}// attached to the document which the caller parsed. Handing it out
+{I}// as-is would make the instance we are constructing share a node with
+{I}// that document, and the very first serialization of the instance
+{I}// would then throw
+{I}// "System.InvalidOperationException: The node already has a parent".
+{I}//
+{I}// ``node.DeepClone()`` would say this in one call, but ``DeepClone``
+{I}// arrived only in .NET 8 and the generated code has to build against
+{I}// .NET 6, where ``SerializeToNode`` is the spelling of the same thing.
+{I}// Its return type is nullable only because it serializes an arbitrary
+{I}// value, and a null one gives a null node; ``node`` has just been
+{I}// checked not to be null, so the branch below can not be taken.
+{I}return System.Text.Json.JsonSerializer.SerializeToNode(node)
+{II}?? throw new System.InvalidOperationException(
+{III}"Expected SerializeToNode to copy the non-null JSON-able value " +
+{IIII}$"{{node.ToJsonString()}}, but it returned null");
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Convert the <paramref name="node" /> to a JSON-able array.
+/// </summary>
+/// <param name="node">JSON node to be parsed</param>
+/// <param name="error">Error, if any, during the deserialization</param>
+internal static Nodes.JsonArray JsonArrayFrom(
+{I}Nodes.JsonNode? node,
+{I}out Reporting.Error? error)
+{{
+{I}if (!(node is Nodes.JsonArray))
+{I}{{
+{II}error = new Reporting.Error(
+{III}$"Expected a JsonArray, but got {{Describe(node)}}");
+{II}return default!;
+{I}}}
+
+{I}Nodes.JsonNode result = JsonValueFrom(node, out error);
+{I}if (error != null)
+{I}{{
+{II}return default!;
+{I}}}
+
+{I}return result as Nodes.JsonArray
+{II}?? throw new System.InvalidOperationException(
+{III}"Unexpected result not a JsonArray when error is null");
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Convert the <paramref name="node" /> to a JSON-able object.
+/// </summary>
+/// <param name="node">JSON node to be parsed</param>
+/// <param name="error">Error, if any, during the deserialization</param>
+internal static Nodes.JsonObject JsonObjectFrom(
+{I}Nodes.JsonNode? node,
+{I}out Reporting.Error? error)
+{{
+{I}if (!(node is Nodes.JsonObject))
+{I}{{
+{II}error = new Reporting.Error(
+{III}$"Expected a JsonObject, but got {{Describe(node)}}");
+{II}return default!;
+{I}}}
+
+{I}Nodes.JsonNode result = JsonValueFrom(node, out error);
+{I}if (error != null)
+{I}{{
+{II}return default!;
+{I}}}
+
+{I}return result as Nodes.JsonObject
+{II}?? throw new System.InvalidOperationException(
+{III}"Unexpected result not a JsonObject when error is null");
+}}"""
+        ),
+    ]
+
+
 def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
@@ -1203,6 +1415,9 @@ def _generate_deserialize_impl(
         blocks.append(_generate_deserializer_field(type_anno))
 
     # endregion
+
+    if intermediate.uses_json_types(symbol_table):
+        blocks.extend(_generate_deserialize_json_helpers())
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -1491,6 +1706,19 @@ def _serializer_expr(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
     if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
         return Stripped("ToJsonValue")
 
+    # NOTE (mristin):
+    # A JSON-able value is serialized by the ``Transformer``, which deep-clones
+    # it and checks it -- see
+    # :py:func:`_generate_serialize_json_helpers`.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("Transformer.SerializeJsonValue")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("Transformer.SerializeJsonArray")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("Transformer.SerializeJsonObject")
+
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
     ), f"Expected an atomic type annotation, but got {type_anno}"
@@ -1560,6 +1788,28 @@ Serialize.{name}ToJsonValue(
             )
         else:
             assert_never(our_type)
+
+    elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        return Stripped(
+            f"""\
+Transformer.SerializeJsonValue(
+{I}{indent_but_first_line(source_expr, I)})"""
+        )
+
+    elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        return Stripped(
+            f"""\
+Transformer.SerializeJsonArray(
+{I}{indent_but_first_line(source_expr, I)})"""
+        )
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        return Stripped(
+            f"""\
+Transformer.SerializeJsonObject(
+{I}{indent_but_first_line(source_expr, I)})"""
+        )
+
     else:
         assert_never(type_annotation)
 
@@ -1886,7 +2136,13 @@ def _generate_transform_property(
 
     if isinstance(
         type_anno,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
+        (
+            intermediate.PrimitiveTypeAnnotation,
+            intermediate.OurTypeAnnotation,
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
     ):
         conversion_expr = _generate_serialize_atomic_value(
             type_annotation=type_anno, source_expr=source_expr
@@ -2019,6 +2275,152 @@ public override Nodes.JsonObject {transform_name}(
     return Stripped(writer.getvalue()), None
 
 
+def _generate_serialize_json_helpers() -> List[Stripped]:
+    """
+    Generate the ``Transformer`` methods to serialize the JSON-able values.
+
+    Serializing a JSON-able value is almost a pass-through, since it is
+    already a ``Nodes.JsonNode`` -- but it still has to be deep-cloned (a
+    node can only ever be attached to one parent) and checked for an
+    embedded ``null``, which a JSON-able value must never contain.
+    """
+    return [
+        Stripped(
+            f"""\
+/// <summary>
+/// Check that <paramref name="that" /> is a JSON-able value, at any depth.
+/// </summary>
+/// <remarks>
+/// Neither a <c>null</c> nor a non-finite number has a representation as
+/// a JSON-able value, and <see cref="Nodes.JsonNode" /> rules out neither
+/// of the two statically.
+/// </remarks>
+/// <exception name="System.ArgumentException">
+/// Thrown if either is found anywhere within <paramref name="that" />.
+/// </exception>
+private static void CheckIsJsonAbleForSerialization(Nodes.JsonNode that)
+{{
+{I}switch (that)
+{I}{{
+{II}case Nodes.JsonArray jsonArray:
+{III}int index = 0;
+{III}foreach (Nodes.JsonNode? item in jsonArray)
+{III}{{
+{IIII}if (item == null)
+{IIII}{{
+{IIIII}throw new System.ArgumentException(
+{IIIIII}"Expected a JSON-able value, but got a null " +
+{IIIIII}$"at the index {{index}}");
+{IIII}}}
+{IIII}CheckIsJsonAbleForSerialization(item);
+{IIII}index++;
+{III}}}
+{III}break;
+
+{II}case Nodes.JsonObject jsonObject:
+{III}foreach (
+{IIII}KeyValuePair<string, Nodes.JsonNode?> member
+{IIIII}in jsonObject)
+{III}{{
+{IIII}if (member.Value == null)
+{IIII}{{
+{IIIII}throw new System.ArgumentException(
+{IIIIII}"Expected a JSON-able value, but got a null " +
+{IIIIII}$"at the member \\"{{member.Key}}\\"");
+{IIII}}}
+{IIII}CheckIsJsonAbleForSerialization(member.Value);
+{III}}}
+{III}break;
+
+{II}case Nodes.JsonValue jsonValue:
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number, so neither is
+{III}// a JSON-able value, even though Nodes.JsonValue holds one happily
+{III}// if it was constructed programmatically.
+{III}if (
+{IIII}jsonValue.TryGetValue<double>(out double number)
+{IIIII}&& !System.Double.IsFinite(number))
+{III}{{
+{IIII}throw new System.ArgumentException(
+{IIIII}$"Expected a JSON-able value, but got the number {{number}}, " +
+{IIIII}"which is neither finite nor representable in JSON");
+{III}}}
+{III}break;
+
+{II}default:
+{III}throw new System.InvalidOperationException(
+{IIII}$"Unexpected node type: {{that.GetType()}}");
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Serialize <paramref name="that" /> to JSON as a JSON-able value.
+/// </summary>
+/// <remarks>
+/// The result is always a deep, independent copy of
+/// <paramref name="that" />, never <paramref name="that" /> itself.
+/// </remarks>
+/// <exception name="System.ArgumentException">
+/// Thrown if <paramref name="that" /> contains a <c>null</c> or a non-finite
+/// number anywhere, at any depth.
+/// </exception>
+private static Nodes.JsonNode SerializeJsonValue(Nodes.JsonNode that)
+{{
+{I}// NOTE (mristin):
+{I}// A System.Text.Json node remembers its parent, and attaching a node
+{I}// which already has one throws
+{I}// "System.InvalidOperationException: The node already has a parent".
+{I}// The instance we are serializing owns ``that``, so putting ``that``
+{I}// itself into the JSON object we are building would hand the same node
+{I}// a second parent. Concretely, without the copy below:
+{I}//
+{I}//     var instance = new Aas.SomeClass(someJsonObject);
+{I}//     Jsonization.Serialize.ToJsonObject(instance);  // fine, attaches
+{I}//     Jsonization.Serialize.ToJsonObject(instance);  // throws
+{I}//
+{I}// and the same happens on the first call already if two properties of
+{I}// the instance, or two instances, share one node.
+{I}//
+{I}// ``that.DeepClone()`` would say this in one call, but ``DeepClone``
+{I}// arrived only in .NET 8 and the generated code has to build against
+{I}// .NET 6, where ``SerializeToNode`` is the spelling of the same thing.
+{I}// Its return type is nullable only because it serializes an arbitrary
+{I}// value, and a null one gives a null node; ``that`` is not null, so
+{I}// the branch below can not be taken.
+{I}Nodes.JsonNode result =
+{II}System.Text.Json.JsonSerializer.SerializeToNode(that)
+{III}?? throw new System.InvalidOperationException(
+{IIII}"Expected SerializeToNode to copy the non-null JSON-able value " +
+{IIIII}$"{{that.ToJsonString()}}, but it returned null");
+{I}CheckIsJsonAbleForSerialization(result);
+{I}return result;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Serialize <paramref name="that" /> to JSON as a JSON-able array.
+/// </summary>
+private static Nodes.JsonArray SerializeJsonArray(Nodes.JsonArray that)
+{{
+{I}return (Nodes.JsonArray)SerializeJsonValue(that);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Serialize <paramref name="that" /> to JSON as a JSON-able object.
+/// </summary>
+private static Nodes.JsonObject SerializeJsonObject(Nodes.JsonObject that)
+{{
+{I}return (Nodes.JsonObject)SerializeJsonValue(that);
+}}"""
+        ),
+    ]
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transformer(
     symbol_table: intermediate.SymbolTable,
@@ -2144,6 +2546,8 @@ private static Nodes.JsonValue ToJsonValue(double that)
 
         for composed_type in composed_types:
             blocks.append(_generate_serializer_field(composed_type))
+    if intermediate.uses_json_types(symbol_table):
+        blocks.extend(_generate_serialize_json_helpers())
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):

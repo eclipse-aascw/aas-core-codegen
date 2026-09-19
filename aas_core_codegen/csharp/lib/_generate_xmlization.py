@@ -368,6 +368,7 @@ class _NeededCombinators:
         polymorphic: bool,
         lists: bool,
         v_elements: bool,
+        json_shapes: bool,
     ) -> None:
         """Initialize with the given values."""
         self.primitive_types = primitive_types
@@ -375,6 +376,7 @@ class _NeededCombinators:
         self.polymorphic = polymorphic
         self.lists = lists
         self.v_elements = v_elements
+        self.json_shapes = json_shapes
 
     @property
     def text(self) -> bool:
@@ -410,6 +412,7 @@ def _needed_combinators(
     polymorphic = False
     lists = False
     v_elements = False
+    json_shapes = False
 
     def register(type_anno: intermediate.TypeAnnotationUnion, nested: bool) -> None:
         """
@@ -421,7 +424,7 @@ def _needed_combinators(
         de/serialize their own, self-describing element and hence need no
         dispatching combinator.
         """
-        nonlocal enumerations, polymorphic, lists, v_elements
+        nonlocal enumerations, polymorphic, lists, v_elements, json_shapes
 
         if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
             primitive_types.add(type_anno.a_type)
@@ -467,6 +470,22 @@ def _needed_combinators(
         elif isinstance(type_anno, intermediate.OptionalTypeAnnotation):
             register(type_anno.value, nested=nested)
 
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # A JSON-able value reads and writes its own content through
+            # ``XmlRpc``, so it needs no combinator of its own -- only
+            # the three shared content readers, which are emitted whenever
+            # the model uses a JSON-able type at all.
+            json_shapes = True
+            v_elements = v_elements or nested
+
         else:
             assert_never(type_anno)
 
@@ -480,6 +499,7 @@ def _needed_combinators(
         polymorphic=polymorphic,
         lists=lists,
         v_elements=v_elements,
+        json_shapes=json_shapes,
     )
 
 
@@ -1328,6 +1348,21 @@ def _content_reader_initializer(
     type_anno: intermediate.TypeAnnotationUnion,
 ) -> Stripped:
     """Generate the expression initializing the reader of ``type_anno``."""
+    # NOTE (mristin):
+    # A JSON-able value reads its content through ``XmlRpc``, wrapped in
+    # a function of the very shape which a content-reader field expects --
+    # see :py:func:`_generate_read_json_content_functions` -- so it binds as
+    # a bare method group, exactly as a concrete class's ``...FromSequence``
+    # does below.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("ReadJsonValueContent")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("ReadJsonArrayContent")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("ReadJsonObjectContent")
+
     primitive_type = intermediate.try_primitive_type(type_anno)
     if primitive_type is not None:
         content_reader, csharp_type, _ = _CONTENT_READER_BY_PRIMITIVE[primitive_type]
@@ -2112,6 +2147,92 @@ internal static Aas.{name} {name}FromElement(
     return Stripped(writer.getvalue())
 
 
+def _generate_read_json_content_functions() -> List[Stripped]:
+    """
+    Generate the functions to read a JSON-able value as an element's content.
+
+    These are :py:func:`_generate_content_reader_delegate`-shaped, so each is
+    bound to its content-reader field as a bare method group, exactly as
+    a concrete class's ``...FromSequence`` is. ``XmlRpc``'s own functions can
+    not be bound directly: they take the XML namespace as a second argument
+    and return a nullable, so these thin wrappers bind ``NS`` and unwrap.
+    """
+    result = []  # type: List[Stripped]
+
+    for function_name, csharp_type, xml_rpc_function, empty_case in (
+        (
+            "ReadJsonValueContent",
+            "Nodes.JsonNode",
+            "DeserializeValueFrom",
+            Stripped(
+                f"""\
+error = new Reporting.Error(
+{I}"Expected one of the elements <boolean>, <double>, <string>, " +
+{I}"<array> or <struct> as the content of the element, " +
+{I}"but the element was self-closing");
+return default!;"""
+            ),
+        ),
+        (
+            "ReadJsonArrayContent",
+            "Nodes.JsonArray",
+            "DeserializeArrayBodyFrom",
+            Stripped(
+                f"""\
+error = new Reporting.Error(
+{I}"Expected a <data> element as the content of the element, " +
+{I}"but the element was self-closing");
+return default!;"""
+            ),
+        ),
+        (
+            "ReadJsonObjectContent",
+            "Nodes.JsonObject",
+            "DeserializeStructBodyFrom",
+            Stripped(
+                """\
+// NOTE (mristin):
+// A self-closing element represents a JSON-able object with no members
+// at all. A JSON-able array, in contrast, always needs an explicit, if
+// empty, <data> element, so the two differ here.
+error = null;
+return new Nodes.JsonObject();"""
+            ),
+        ),
+    ):
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Read the content of an element typed as <c>{csharp_type}</c>.
+/// </summary>
+private static {csharp_type} {function_name}(
+{I}Xml.XmlReader reader,
+{I}bool isEmpty,
+{I}out Reporting.Error? error)
+{{
+{I}if (isEmpty)
+{I}{{
+{II}{indent_but_first_line(empty_case, II)}
+{I}}}
+
+{I}{csharp_type}? result = XmlRpc.{xml_rpc_function}(
+{II}reader, NS, out error);
+{I}if (error != null)
+{I}{{
+{II}return default!;
+{I}}}
+
+{I}return result
+{II}?? throw new System.InvalidOperationException(
+{III}"Unexpected result null when error is null");
+}}"""
+            )
+        )
+
+    return result
+
+
 def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
@@ -2178,6 +2299,14 @@ def _generate_deserialize_impl(
     # A field initializer reads the fields it composes, and a reader of
     # a list or of a tuple of a class composes that class's reader, so
     # the classes have to come first.
+
+    # NOTE (mristin):
+    # These delegate into ``XmlRpc``, which is only generated when the model
+    # actually uses a JSON-able type, so they have to precede the fields
+    # which bind them.
+    if needed_readers.json_shapes:
+        blocks.extend(_generate_read_json_content_functions())
+
     blocks.extend(from_element_fields)
     blocks.extend(_generate_content_reader_fields(symbol_table))
 
@@ -2794,6 +2923,19 @@ def _content_writer_initializer(
     type_anno: intermediate.TypeAnnotationUnion,
 ) -> Stripped:
     """Generate the expression initializing the writer of ``type_anno``."""
+    # NOTE (mristin):
+    # See the note in :py:func:`_content_reader_initializer` -- the writing
+    # side mirrors it, through
+    # :py:func:`_generate_write_json_content_functions`.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("WriteJsonValueContent")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("WriteJsonArrayContent")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("WriteJsonObjectContent")
+
     primitive_type = intermediate.try_primitive_type(type_anno)
     if primitive_type is not None:
         return Stripped(
@@ -3045,6 +3187,43 @@ public override void {visit_name}(
     )
 
 
+def _generate_write_json_content_functions() -> List[Stripped]:
+    """
+    Generate the functions to write a JSON-able value as an element's content.
+
+    ``XmlRpc``'s own serialization functions take the XML namespace as
+    a third argument, so they can not be passed to
+    :py:func:`_generate_serialize_element_helper`'s
+    ``ElementContentSerializer`` as a bare method group. These thin wrappers
+    bind ``NS`` so that every JSON-able-typed property can, mirroring how
+    :py:func:`_generate_tuple_atomic_serializer_helpers` adds wrappers of our
+    own for exactly the same reason on the JSON side.
+    """
+    result = []  # type: List[Stripped]
+
+    for function_name, csharp_type, xml_rpc_function in (
+        ("WriteJsonValueContent", "Nodes.JsonNode", "SerializeValueTo"),
+        ("WriteJsonArrayContent", "Nodes.JsonArray", "SerializeArrayBodyTo"),
+        ("WriteJsonObjectContent", "Nodes.JsonObject", "SerializeStructBodyTo"),
+    ):
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Write <paramref name="that" /> as the content of an element.
+/// </summary>
+private static void {function_name}(
+{I}{csharp_type} that,
+{I}Xml.XmlWriter writer)
+{{
+{I}XmlRpc.{xml_rpc_function}(that, writer, NS);
+}}"""
+            )
+        )
+
+    return result
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_visitor(
     symbol_table: intermediate.SymbolTable,
@@ -3085,6 +3264,12 @@ def _generate_visitor(
     # A class's writer, in contrast, is a method group, which imposes no
     # order at all.
     blocks.extend(_generate_content_writer_fields(symbol_table=symbol_table))
+
+    # NOTE (mristin):
+    # These delegate into ``XmlRpc``, which is only generated when the model
+    # actually uses a JSON-able type.
+    if needed.json_shapes:
+        blocks.extend(_generate_write_json_content_functions())
 
     # The abstract classes are directly dispatched by the transformer,
     # so we do not need to handle them separately.
@@ -3320,6 +3505,9 @@ using Xml = System.Xml;
 using System.Collections.Generic;  // can't alias"""
         )
     )
+
+    if intermediate.uses_json_types(symbol_table):
+        using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
 
     # pylint: disable=line-too-long
     blocks = [
