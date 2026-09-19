@@ -432,6 +432,32 @@ that.{getter_name}().isPresent()
                     )
                 else:
                     constructor_arg_exprs.append(f"""that.{getter_name}()""")
+
+            elif isinstance(
+                type_anno,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # Every other value in a deep copy is copied by sharing it:
+                # a primitive, an enumeration literal and a string are all
+                # immutable. A Jackson node is not, so the copy would see
+                # every later change to the original's node, and the other way
+                # around. ``deepCopy`` is Jackson's own deep copy, and it
+                # gives back the node's own type, so no cast is needed.
+                if optional:
+                    constructor_arg_exprs.append(
+                        f"""\
+that.{getter_name}().isPresent()
+{I}? that.{getter_name}().get().deepCopy()
+{I}: null"""
+                    )
+                else:
+                    constructor_arg_exprs.append(f"that.{getter_name}().deepCopy()")
+
             else:
                 assert_never(type_anno)
 
@@ -522,6 +548,15 @@ def generate(
         Stripped(f"import {package}.types.impl.*;"),
         Stripped(f"import {package}.types.model.*;"),
     ]  # type: List[Stripped]
+
+    # NOTE (mristin):
+    # A JSON-able value is a Jackson node, and only the models which use one
+    # pay for the import.
+    if intermediate.uses_json_types(symbol_table):
+        imports.extend(
+            Stripped(f"import {json_import};")
+            for json_import in java_common.JSON_IMPORTS
+        )
 
     # NOTE (empwilli):
     # We wrap the shallow and deep copying in generic methods to allow for easier
