@@ -358,6 +358,8 @@ JSONIZATION_NAMESPACE = Identifier("jsonization")
 XMLIZATION_NAMESPACE = Identifier("xmlization")
 REVM_NAMESPACE = Identifier("revm")
 PATTERN_NAMESPACE = Identifier("pattern")
+XML_COMMON_NAMESPACE = Identifier("xml_common")
+XML_RPC_NAMESPACE = Identifier("xml_rpc")
 
 
 def generate_primitive_type(primitive_type: intermediate.PrimitiveType) -> Stripped:
@@ -525,6 +527,23 @@ std::tuple<
 >"""
         )
 
+    elif isinstance(
+        type_annotation,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # ``nlohmann::json`` is one monolithic class for every JSON shape --
+        # there is no static distinction between a value, an array and an
+        # object the way there is, say, in C#'s ``System.Text.Json.Nodes``.
+        # The key of a ``JSONObject[K]`` is likewise erased here, mirroring
+        # how every other constrained primitive is already erased to its
+        # bare primitive type throughout this backend.
+        return Stripped("nlohmann::json")
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value_type = generate_type(
             type_annotation=type_annotation.value, types_namespace=types_namespace
@@ -588,6 +607,16 @@ def is_referencable(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
             return True
 
         elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+            return True
+
+        elif isinstance(
+            type_annotation,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
             return True
 
         else:
