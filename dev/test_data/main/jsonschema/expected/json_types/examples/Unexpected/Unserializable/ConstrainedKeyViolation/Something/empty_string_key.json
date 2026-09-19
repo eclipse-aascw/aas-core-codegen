@@ -1,0 +1,8 @@
+{
+  "value": true,
+  "values": [],
+  "mapping": {},
+  "mappingWithConstrainedKey": {
+    "": "the key above is the empty string, but Non_empty_string requires at least one character"
+  }
+}
