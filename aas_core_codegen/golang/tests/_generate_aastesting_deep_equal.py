@@ -92,6 +92,30 @@ if {that_var} != {other_var} {{
 }}"""
                     )
 
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # A JSON-able value is an open structure of maps, slices and
+            # scalars, none of which Go's ``==`` can compare, so it goes
+            # through ``reflect.DeepEqual``. Every other property kind here is
+            # compared structurally instead, which is why this is the only
+            # place in the module which reaches for reflection.
+            cmp_subblock = Stripped(
+                f"""\
+if !reflect.DeepEqual(
+{I}{that_var},
+{I}{other_var},
+) {{
+{I}return false
+}}"""
+            )
+
         elif isinstance(type_anno, intermediate.OurTypeAnnotation):
             if isinstance(type_anno.our_type, intermediate.Enumeration):
                 raise AssertionError("Should have been handled before")
@@ -208,6 +232,27 @@ for i := range {that_var} {{
 }}"""
                 )
 
+            elif isinstance(
+                type_anno.items,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # See the note on the JSON-able property further below on why
+                # this is the only place which reaches for reflection.
+                cmp_subblock = Stripped(
+                    f"""\
+if !reflect.DeepEqual(
+{I}{that_var},
+{I}{other_var},
+) {{
+{I}return false
+}}"""
+                )
+
             else:
                 assert isinstance(
                     type_anno.items, intermediate.OurTypeAnnotation
@@ -263,6 +308,28 @@ if !DeepEqual(
 if !DeepEqual(
 {I}{item_that}.Underlying(),
 {I}{item_other}.Underlying(),
+) {{
+{I}return false
+}}"""
+                        )
+                    )
+                elif isinstance(
+                    item_type_anno,
+                    (
+                        intermediate.JsonValueTypeAnnotation,
+                        intermediate.JsonArrayTypeAnnotation,
+                        intermediate.JsonObjectTypeAnnotation,
+                    ),
+                ):
+                    # NOTE (mristin):
+                    # See the note on the JSON-able property further below on
+                    # why this reaches for reflection.
+                    item_cmp_blocks.append(
+                        Stripped(
+                            f"""\
+if !reflect.DeepEqual(
+{I}{item_that},
+{I}{item_other},
 ) {{
 {I}return false
 }}"""
@@ -414,6 +481,14 @@ func DeepEqual(
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to perform a comparison of deep equality on instances."""
+    # NOTE (mristin):
+    # ``reflect`` is imported only for the JSON-able values, which are the one
+    # kind of property that Go can not compare structurally -- see
+    # :py:func:`_generate_for_cls`.
+    reflect_import = (
+        f'{I}"reflect"\n' if intermediate.uses_json_types(symbol_table) else ""
+    )
+
     blocks = [
         Stripped("package aastesting"),
         golang_common.WARNING,
@@ -422,6 +497,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
 import (
 {I}"bytes"
 {I}"fmt"
+{reflect_import}\
 {I}aastypes "{repo_url}/types"
 )"""
         ),

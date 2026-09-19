@@ -749,6 +749,19 @@ for _, {loop_var} := range {receiver}.{prop_name} {{
                 else:
                     # noinspection PyTypeChecker
                     assert_never(type_anno.items)
+            elif isinstance(
+                type_anno.items,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # A JSON-able value is plain data, never a reference to one of
+                # our own classes, so there is nothing to descend into.
+                continue
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno.items)
@@ -802,6 +815,19 @@ if abort {{
 
             if len(prop_blocks) == 0:
                 continue
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # A JSON-able value is plain data, never a reference to one of our
+            # own classes, so there is nothing to descend into.
+            continue
 
         else:
             # noinspection PyTypeChecker
@@ -1684,6 +1710,49 @@ func ({receiver} *{name}) WithUnderlying(that IClass) *{name} {{
     )
 
 
+def _generate_json_aliases(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the aliases of the JSON-able types, if the model uses them.
+
+    They live here, next to the structs whose fields are typed with them:
+    a field's type belongs to the types package, and every other package
+    already imports it.
+
+    All three are nilable on their own, so an optional one needs no pointer --
+    see :py:func:`aas_core_codegen.golang.pointering.is_pointer_type`.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            """\
+// Represent a value which JSON can carry.
+//
+// This is, recursively, exactly as JSON itself is defined: a bool, a float64,
+// a string, a [JsonArray] of JSON-able values or a [JsonObject] of JSON-able
+// values with string keys -- never a nil, and never an infinity or
+// a not-a-number, which JSON can not represent at all.
+//
+// Go has no sum type, so this is an `any`, and what it actually holds is
+// checked at run-time -- by the verification, and again by the de/serialization.
+type JsonValue = interface{}"""
+        ),
+        Stripped(
+            """\
+// Represent a JSON-able value which is known to be an array.
+type JsonArray = []JsonValue"""
+        ),
+        Stripped(
+            """\
+// Represent a JSON-able value which is known to be an object.
+type JsonObject = map[string]JsonValue"""
+        ),
+    ]
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -1756,6 +1825,7 @@ import (
 {fmt_import}{I}aascommon {common_url_literal}
 )"""
             ),
+            *_generate_json_aliases(symbol_table=symbol_table),
             _generate_definition_for_model_type(symbol_table=symbol_table),
             Stripped(
                 f"""\
