@@ -1415,51 +1415,6 @@ public static class Deserialize
     return Stripped(writer.getvalue())
 
 
-def _generate_serialize_primitive_value(
-    primitive_type: intermediate.PrimitiveType, source_expr: Stripped
-) -> Stripped:
-    """
-    Generate the snippet to serialize ``source_expr`` to JSON.
-
-    Source expression is expected to be of ``primitive_type``.
-    """
-    if (
-        primitive_type is intermediate.PrimitiveType.BOOL
-        or primitive_type is intermediate.PrimitiveType.STR
-    ):
-        # We can not use textwrap due to indent_but_first_line.
-        return Stripped(
-            f"""\
-Nodes.JsonValue.Create(
-{I}{indent_but_first_line(source_expr, I)})"""
-        )
-    elif (
-        primitive_type is intermediate.PrimitiveType.INT
-        or primitive_type is intermediate.PrimitiveType.FLOAT
-    ):
-        # NOTE (mristin):
-        # A number is the only value which the serialization can refuse, so it
-        # is the only one converted by a method of ours instead of going
-        # straight to ``Nodes.JsonValue.Create``.
-        #
-        # We can not use textwrap due to indent_but_first_line.
-        return Stripped(
-            f"""\
-Transformer.ToJsonValue(
-{I}{indent_but_first_line(source_expr, I)})"""
-        )
-    elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-        # We can not use textwrap due to indent_but_first_line.
-        return Stripped(
-            f"""\
-Nodes.JsonValue.Create(
-{I}System.Convert.ToBase64String(
-{II}{indent_but_first_line(source_expr, II)}))"""
-        )
-    else:
-        assert_never(primitive_type)
-
-
 def _serializer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identifier:
     """
     Name the field holding the serializer of a list or of a tuple.
@@ -1471,6 +1426,42 @@ def _serializer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identifier:
     emits an underscore.
     """
     return Identifier(f"Serialize_{csharp_common.type_moniker(type_anno)}")
+
+
+def _atomic_serializer_name(
+    type_anno: intermediate.TypeAnnotationUnion,
+) -> Identifier:
+    """
+    Name the field holding the serializer of the atomic ``type_anno``.
+
+    The name is keyed by the serializer and not by the type: every class goes
+    through ``TransformIClass`` and a constrained primitive through
+    the ``ToJsonValue`` of its constrainee, so the types which share
+    a serializer share the field as well.
+    """
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return Identifier(
+            f"Serialize_{csharp_common.PRIMITIVE_TYPE_TO_MONIKER[primitive_type]}"
+        )
+
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got {type_anno}"
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        return Identifier(f"Serialize_{csharp_naming.enum_name(our_type.name)}")
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return Identifier("Serialize_IUnion")
+
+    assert isinstance(
+        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+    ), f"Expected a class, but got {our_type}"
+
+    return Identifier("Serialize_IClass")
 
 
 def _serializer_expr(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
@@ -1512,56 +1503,6 @@ def _serializer_expr(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
     )
 
     return Stripped("TransformIClass")
-
-
-def _generate_serialize_atomic_value(
-    type_annotation: intermediate.AtomicTypeAnnotation, source_expr: Stripped
-) -> Stripped:
-    """Generate the snippet to serialize ``source_expr`` to JSON."""
-    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
-        return _generate_serialize_primitive_value(
-            primitive_type=type_annotation.a_type, source_expr=source_expr
-        )
-    elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
-        our_type = type_annotation.our_type
-        if isinstance(our_type, intermediate.Enumeration):
-            name = csharp_naming.enum_name(our_type.name)
-
-            # We can not use textwrap due to indent_but_first_line.
-            return Stripped(
-                f"""\
-Serialize.{name}ToJsonValue(
-{I}{indent_but_first_line(source_expr, I)})"""
-            )
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            return _generate_serialize_primitive_value(
-                primitive_type=our_type.constrainee, source_expr=source_expr
-            )
-        elif isinstance(
-            our_type,
-            (
-                intermediate.AbstractClass,
-                intermediate.ConcreteClass,
-                intermediate.NamedUnion,
-            ),
-        ):
-            # NOTE (mristin):
-            # A class is dispatched over its run-time type by ``TransformIClass``
-            # and a named union is unwrapped by ``TransformIUnion``, both of them
-            # static so that they can be named -- here, and equally as an item of
-            # a list or of a tuple (see :py:func:`_serializer_expr`).
-            function = _serializer_expr(type_annotation)
-
-            # We can not use textwrap due to indent_but_first_line.
-            return Stripped(
-                f"""\
-{function}(
-{I}{indent_but_first_line(source_expr, I)})"""
-            )
-        else:
-            assert_never(our_type)
-    else:
-        assert_never(type_annotation)
 
 
 def _generate_atomic_serializer_helpers(
@@ -1627,6 +1568,69 @@ private static Nodes.JsonValue ToJsonValue({csharp_type} that)
 }}"""
             )
         )
+
+    return result
+
+
+def _property_serializer_type_annotations(
+    symbol_table: intermediate.SymbolTable,
+) -> List[intermediate.TypeAnnotationUnion]:
+    """
+    Collect the atomic types which a property is serialized as.
+
+    Each of them gets a cached serializer of its own, so that
+    ``SetProperty`` is handed a field and never a method group -- a method
+    group converted to a delegate allocates at every call under
+    ``LangVersion 8``.
+
+    A list and a tuple already have such a field (see
+    :py:func:`_generate_serializer_field`), so neither is collected here.
+
+    The types are de-duplicated by their serializer, and not by themselves:
+    every class goes through ``TransformIClass``, and a constrained primitive
+    through the ``ToJsonValue`` of its constrainee, so one field serves them
+    all. ``Serializer<in T>`` is contravariant, which is what lets the field
+    of ``IClass`` be handed over where one of a more specific interface is
+    expected.
+    """
+    result = []  # type: List[intermediate.TypeAnnotationUnion]
+    observed = set()  # type: Set[Identifier]
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+            if isinstance(
+                type_anno,
+                (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+            ):
+                continue
+
+            name = _atomic_serializer_name(type_anno)
+            if name in observed:
+                continue
+
+            observed.add(name)
+            result.append(type_anno)
+
+    return result
+
+
+def _property_primitive_types(
+    type_annos: Sequence[intermediate.TypeAnnotationUnion],
+) -> Set[intermediate.PrimitiveType]:
+    """
+    Collect the primitive types among ``type_annos``.
+
+    These need a ``ToJsonValue`` overload of their own, exactly as the items
+    of a list or of a tuple do.
+    """
+    result = set()  # type: Set[intermediate.PrimitiveType]
+
+    for type_anno in type_annos:
+        primitive_type = intermediate.try_primitive_type(type_anno)
+        if primitive_type is not None:
+            result.add(primitive_type)
 
     return result
 
@@ -1753,6 +1757,111 @@ private static Serializer<List<T>> SerializeList<T>(
     )
 
 
+def _atomic_serializer_value_type(
+    type_anno: intermediate.TypeAnnotationUnion,
+) -> Stripped:
+    """
+    Generate the type of the value which the serializer of ``type_anno`` accepts.
+
+    The type is keyed by the serializer, just like
+    :py:func:`_atomic_serializer_name` is: the serializer of a class accepts
+    any ``IClass``, and the one of a named union any ``IUnion``, as one field
+    serves them all. ``Serializer<in T>`` is contravariant, so a field of
+    the general type can be handed over where one of a specific type is
+    expected -- but not the other way around, which is why the type can not
+    simply be the one of the property.
+    """
+    our_type = (
+        type_anno.our_type
+        if isinstance(type_anno, intermediate.OurTypeAnnotation)
+        else None
+    )
+
+    if isinstance(our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)):
+        return Stripped("Aas.IClass")
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return Stripped("Aas.IUnion")
+
+    return csharp_common.generate_type(type_anno)
+
+
+def _generate_atomic_serializer_field(
+    type_anno: intermediate.TypeAnnotationUnion,
+) -> Stripped:
+    """
+    Generate the cached serializer of the atomic ``type_anno``.
+
+    The field exists so that ``SetProperty`` is handed a delegate which was
+    created once, and not a method group, which would be converted to
+    a delegate -- and hence allocated -- at every call under
+    ``LangVersion 8``.
+    """
+    name = _atomic_serializer_name(type_anno)
+    value_type = _atomic_serializer_value_type(type_anno)
+    function = _serializer_expr(type_anno)
+
+    declaration = Stripped(f"private static readonly Serializer<{value_type}> {name} =")
+    if len(declaration) + len(I) * 3 + len(f" {function};") <= _MAX_LINE_LENGTH:
+        return Stripped(f"{declaration} {function};")
+
+    return Stripped(
+        f"""\
+{declaration}
+{I}{function};"""
+    )
+
+
+def _generate_set_property_helper() -> Stripped:
+    """
+    Generate the framer which sets a property and names it on the error path.
+
+    Every property goes through it, and not only the ones which can fail
+    today: the property is recorded here and nowhere below, as nothing below
+    knows through which property the value was reached, so a serializer which
+    grows a new way of failing would quietly lose the way to the culprit.
+
+    An optional property keeps the ``if`` at the call site. C# has two kinds
+    of optional -- a reference type tested against ``null`` and
+    a ``System.Nullable`` tested with ``HasValue`` and unwrapped with
+    ``Value`` -- so a framer of its own would have to come in two overloads to
+    say what one ``if`` already says.
+    """
+    return Stripped(
+        f"""\
+/// <summary>
+/// Set the property <paramref name="jsonName" /> of
+/// <paramref name="result" /> to <paramref name="that" />, serialized by
+/// <paramref name="serialize" />.
+/// </summary>
+/// <remarks>
+/// <paramref name="propertyName" /> names the property on the path of
+/// a failure. It is the C# property, and not the JSON one: a serialization
+/// error is reported on an <em>instance</em>, which the caller holds, and
+/// not on a document which has not been written yet.
+/// </remarks>
+/// <typeparam name="T">Type of the value to serialize</typeparam>
+private static void SetProperty<T>(
+{I}Nodes.JsonObject result,
+{I}string jsonName,
+{I}string propertyName,
+{I}T that,
+{I}Serializer<T> serialize)
+{{
+{I}try
+{I}{{
+{II}result[jsonName] = serialize(that);
+{I}}}
+{I}catch (SerializationFailure failure)
+{I}{{
+{II}failure.Error.PrependSegment(
+{III}new Reporting.NameSegment(propertyName));
+{II}throw;
+{I}}}
+}}"""
+    )
+
+
 def _generate_serializer_field(
     type_anno: intermediate.TypeAnnotationUnion,
 ) -> Stripped:
@@ -1863,13 +1972,18 @@ private static Serializer<{tuple_type}> {function_name}<{type_params_joined}>(
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transform_property(
     prop: intermediate.Property,
-    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the snippet to transform a property into a JSON node."""
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
     name = csharp_naming.property_name(prop.name)
     prop_literal = csharp_common.string_literal(prop.json_name)
+
+    # NOTE (mristin):
+    # A serialization error is reported on an *instance*, which the caller
+    # holds, and not on a document which has not been written yet -- so
+    # the path names the C# property, and not the JSON one.
+    segment_literal = csharp_common.string_literal(name)
 
     # NOTE (mristin):
     # An optional of a value type, such as an enumeration or a tuple, is
@@ -1882,16 +1996,13 @@ def _generate_transform_property(
     ) and csharp_common.is_value_type(type_anno):
         source_expr = Stripped(f"that.{name}.Value")
 
-    serialize_block: Stripped
+    serializer_name: Identifier
 
     if isinstance(
         type_anno,
         (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
     ):
-        conversion_expr = _generate_serialize_atomic_value(
-            type_annotation=type_anno, source_expr=source_expr
-        )
-        serialize_block = Stripped(f"result[{prop_literal}] = {conversion_expr};")
+        serializer_name = _atomic_serializer_name(type_anno)
 
     elif isinstance(
         type_anno,
@@ -1914,35 +2025,43 @@ def _generate_transform_property(
                 f"intermediate._translate._verify_only_simple_type_patterns."
             )
 
-        # We can not use textwrap due to indent_but_first_line.
-        serialize_block = Stripped(
-            f"""\
-result[{prop_literal}] = {_serializer_expr(type_anno)}(
-{I}{indent_but_first_line(source_expr, I)});"""
-        )
+        serializer_name = _serializer_name(type_anno)
 
     else:
         assert_never(type_anno)
 
+    arguments = [
+        Stripped("result"),
+        prop_literal,
+        segment_literal,
+        source_expr,
+        Stripped(serializer_name),
+    ]
+
+    joined_arguments = ", ".join(arguments)
+    one_liner = f"SetProperty({joined_arguments});"
+
     # NOTE (mristin):
-    # Only a value which can be refused at all is worth guarding. The property
-    # is recorded here, and nowhere below, as nothing below knows through which
-    # property the value was reached.
-    if intermediate.reaches_a_number(
-        prop.type_annotation, ids_of_types_reaching_a_number
-    ):
+    # The call lands four levels deep -- the namespace, the class, the nested
+    # transformer and its method -- and one level deeper yet if the property is
+    # optional, as it is then guarded by an ``if``.
+    indention = len(I) * (
+        5
+        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+        else 4
+    )
+
+    serialize_block: Stripped
+    if len(one_liner) + indention <= _MAX_LINE_LENGTH:
+        serialize_block = Stripped(one_liner)
+    else:
+        arguments_block = ",\n".join(arguments)
+
+        # We can not use textwrap due to indent_but_first_line.
         serialize_block = Stripped(
             f"""\
-try
-{{
-{I}{indent_but_first_line(serialize_block, I)}
-}}
-catch (SerializationFailure failure)
-{{
-{I}failure.Error.PrependSegment(
-{II}new Reporting.NameSegment({prop_literal}));
-{I}throw;
-}}"""
+SetProperty(
+{I}{indent_but_first_line(arguments_block, I)});"""
         )
 
     if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
@@ -1969,7 +2088,6 @@ if ({condition})
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transform_for_class(
     cls: intermediate.ConcreteClass,
-    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transform method to a JSON object for the given concrete class."""
     errors = []  # type: List[Error]
@@ -1977,9 +2095,7 @@ def _generate_transform_for_class(
     blocks = [Stripped("var result = new Nodes.JsonObject();")]  # type: List[Stripped]
 
     for prop in cls.properties:
-        block, error = _generate_transform_property(
-            prop=prop, ids_of_types_reaching_a_number=ids_of_types_reaching_a_number
-        )
+        block, error = _generate_transform_property(prop=prop)
         if error is not None:
             errors.append(error)
         else:
@@ -2025,10 +2141,6 @@ def _generate_transformer(
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a transformer which transforms instances of the meta-model to JSON."""
     errors = []  # type: List[Error]
-
-    ids_of_types_reaching_a_number = (
-        intermediate.collect_ids_of_types_reaching_a_number(symbol_table)
-    )
 
     blocks = [
         Stripped(
@@ -2124,15 +2236,29 @@ private static Nodes.JsonValue ToJsonValue(double that)
     # the very type it serializes, and hence can never be missing.
     composed_types = _composed_types_in_initialization_order(symbol_table)
 
-    if len(composed_types) > 0:
+    # NOTE (mristin):
+    # Every property is handed a cached serializer as well, so the delegate
+    # and the ``ToJsonValue`` overloads are needed as soon as the model has
+    # a single property -- not only where a list or a tuple composes them.
+    property_types = _property_serializer_type_annotations(symbol_table)
+
+    has_properties = any(
+        len(cls.properties) > 0 for cls in symbol_table.concrete_classes
+    )
+
+    if has_properties:
         blocks.append(_generate_serializer_delegate())
 
         blocks.extend(
             _generate_atomic_serializer_helpers(
-                primitive_types=_composed_primitive_types(composed_types)
+                primitive_types=(
+                    _composed_primitive_types(composed_types)
+                    | _property_primitive_types(property_types)
+                )
             )
         )
 
+    if len(composed_types) > 0:
         if any(
             isinstance(composed_type, intermediate.ListTypeAnnotation)
             for composed_type in composed_types
@@ -2144,6 +2270,13 @@ private static Nodes.JsonValue ToJsonValue(double that)
 
         for composed_type in composed_types:
             blocks.append(_generate_serializer_field(composed_type))
+
+    # NOTE (mristin):
+    for property_type in property_types:
+        blocks.append(_generate_atomic_serializer_field(property_type))
+
+    if has_properties:
+        blocks.append(_generate_set_property_helper())
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -2160,7 +2293,6 @@ private static Nodes.JsonValue ToJsonValue(double that)
         elif isinstance(our_type, intermediate.ConcreteClass):
             block, cls_errors = _generate_transform_for_class(
                 cls=our_type,
-                ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
             )
             if cls_errors is not None:
                 errors.extend(cls_errors)
@@ -2221,7 +2353,7 @@ public static Nodes.JsonObject ToJsonObject(Aas.IClass that)
 {I}catch (SerializationFailure failure)
 {I}{{
 {II}throw new SerializationException(
-{III}Reporting.GenerateJsonPath(failure.Error.PathSegments),
+{III}Reporting.GenerateCSharpPath(failure.Error.PathSegments),
 {III}failure.Error.Cause);
 {I}}}
 }}"""
@@ -2236,12 +2368,18 @@ public static Nodes.JsonObject ToJsonObject(Aas.IClass that)
 /// <summary>
 /// Serialize a literal of {name} into a JSON string.
 /// </summary>
+/// <exception cref="SerializationFailure">
+/// Thrown when <paramref name="that" /> is no literal of {name} at all.
+/// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+/// a whole instance catches <see cref="SerializationException" /> instead.
+/// </exception>
 public static Nodes.JsonValue {name}ToJsonValue(Aas.{name} that)
 {{
 {I}string? text = Stringification.ToString(that);
 {I}return Nodes.JsonValue.Create(text)
-{II}?? throw new System.ArgumentException(
-{III}$"Invalid {name}: {{that}}");
+{II}?? throw new SerializationFailure(
+{III}new Reporting.Error(
+{IIII}$"Invalid {name}: {{that}}"));
 }}"""
             )
         )

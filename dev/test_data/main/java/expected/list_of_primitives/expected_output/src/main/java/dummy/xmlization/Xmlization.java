@@ -1164,9 +1164,14 @@ public class Xmlization {
      * <p>This is {@link #writeElement} plus the one thing a property knows
      * which nothing below it does: its own name. Prepending it here, once,
      * saves a {@code try} around every one of the property writes.
+     *
+     * <p>The path names the getter, and not the XML element: a serialization
+     * error is reported on an <em>instance</em>, which the caller holds, and
+     * not on a document which has not been written yet.
      */
     private static <T> void writeProperty(
       String name,
+      String getterName,
       T that,
       XMLStreamWriter writer,
       ContentWriter<? super T> writeContent) {
@@ -1174,7 +1179,7 @@ public class Xmlization {
         writeElement(name, that, writer, false, writeContent);
       } catch (_SerializeFailure failure) {
         failure.getError().prependSegment(
-          new Reporting.NameSegment(name));
+          new Reporting.NameSegment(getterName));
         throw failure;
       }
     }
@@ -1290,30 +1295,35 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "someBools",
+        "getSomeBools()",
         that.getSomeBools(),
         writer,
         _VisitorWithWriter::writeListOf_stringified);
 
       writeProperty(
         "someInts",
+        "getSomeInts()",
         that.getSomeInts(),
         writer,
         _VisitorWithWriter::writeListOf_stringified);
 
       writeProperty(
         "someFloats",
+        "getSomeFloats()",
         that.getSomeFloats(),
         writer,
         _VisitorWithWriter::writeListOf_stringified);
 
       writeProperty(
         "someStrings",
+        "getSomeStrings()",
         that.getSomeStrings(),
         writer,
         _VisitorWithWriter::writeListOf_stringified);
 
       writeProperty(
         "someBytes",
+        "getSomeBytes()",
         that.getSomeBytes(),
         writer,
         _VisitorWithWriter::writeListOf_bytes);
@@ -1361,18 +1371,17 @@ public class Xmlization {
      * were it left to the caller, the failure would surface at their own flush,
      * after the serialization has long returned.
      *
-     * <p>The path of a {@link SerializeException} is rendered as a relative
-     * XPath, the same spelling the de-serialization reports, and names
-     * the properties and the list indices leading to the culprit --
-     * {@code submodelElements/*[0]/value}. Two things it deliberately does not
-     * name: the outermost element, since this method takes any
-     * {@link IClass} and the name would say nothing the caller does not
-     * already know; and the discriminator element of a polymorphic property,
-     * which the de-serialization does prepend. The de-serialization is pointing
-     * into a document it is reading, where that element is a real extra level;
-     * this is pointing into the instance the caller handed over, where it is
-     * not -- {@code value/idShort} here is exactly
-     * {@code getValue().getIdShort()}.
+     * <p>The path of a {@link SerializeException} is rendered as a Java
+     * expression on the instance the caller handed over, and not as the XPath
+     * which the de-serialization reports: this error answers a call the caller
+     * made on that instance, and not on a document which has not been written
+     * yet -- {@code getSubmodelElements().get(0).getValue()}. Two things it
+     * deliberately does not name: the outermost element, since this method
+     * takes any {@link IClass} and the name would say nothing the caller does
+     * not already know; and the discriminator element of a polymorphic
+     * property, which the de-serialization does prepend. The de-serialization
+     * is pointing into a document it is reading, where that element is a real
+     * extra level; here it is not.
      */
     public static void to(
       IClass that,
@@ -1386,7 +1395,7 @@ public class Xmlization {
       } catch (_SerializeFailure failure) {
         final Reporting.Error error = failure.getError();
         throw new SerializeException(
-          Reporting.generateRelativeXPath(error.getPathSegments()),
+          Reporting.generateJavaPath(error.getPathSegments()),
           error.getCause());
       }
     }

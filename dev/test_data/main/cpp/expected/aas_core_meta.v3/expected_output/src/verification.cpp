@@ -7673,7 +7673,7 @@ void OfExtension::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kName
           )
@@ -7725,7 +7725,7 @@ void OfExtension::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kValue
           )
@@ -8026,7 +8026,7 @@ void OfAdministrativeInformation::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kVersion
           )
@@ -8080,7 +8080,7 @@ void OfAdministrativeInformation::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kRevision
           )
@@ -8134,7 +8134,7 @@ void OfAdministrativeInformation::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kTemplateId
           )
@@ -8451,7 +8451,7 @@ void OfQualifier::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kType
           )
@@ -8503,7 +8503,7 @@ void OfQualifier::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kValue
           )
@@ -8974,7 +8974,7 @@ void OfAssetAdministrationShell::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -9028,7 +9028,7 @@ void OfAssetAdministrationShell::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -9077,7 +9077,7 @@ void OfAssetAdministrationShell::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kId
           )
@@ -9420,7 +9420,7 @@ void OfAssetInformation::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kGlobalAssetId
           )
@@ -9474,7 +9474,7 @@ void OfAssetInformation::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kAssetType
           )
@@ -9728,7 +9728,7 @@ void OfResource::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kPath
           )
@@ -9780,7 +9780,7 @@ void OfResource::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kContentType
           )
@@ -10094,7 +10094,7 @@ void OfSpecificAssetId::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kName
           )
@@ -10141,7 +10141,7 @@ void OfSpecificAssetId::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kValue
           )
@@ -10756,7 +10756,7 @@ void OfSubmodel::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -10810,7 +10810,7 @@ void OfSubmodel::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -10859,7 +10859,7 @@ void OfSubmodel::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kId
           )
@@ -11340,7 +11340,7 @@ void OfRelationshipElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -11394,7 +11394,7 @@ void OfRelationshipElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -12042,7 +12042,7 @@ void OfSubmodelElementList::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -12096,7 +12096,7 @@ void OfSubmodelElementList::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -12646,7 +12646,7 @@ void OfSubmodelElementCollection::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -12700,7 +12700,7 @@ void OfSubmodelElementCollection::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -13229,7 +13229,7 @@ void OfProperty::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -13283,7 +13283,7 @@ void OfProperty::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -13337,7 +13337,7 @@ void OfProperty::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kValue
           )
@@ -13884,7 +13884,7 @@ void OfMultiLanguageProperty::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -13938,7 +13938,7 @@ void OfMultiLanguageProperty::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -14489,7 +14489,7 @@ void OfRange::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -14543,7 +14543,7 @@ void OfRange::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -14597,7 +14597,7 @@ void OfRange::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kMin
           )
@@ -14651,7 +14651,7 @@ void OfRange::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kMax
           )
@@ -15158,7 +15158,7 @@ void OfReferenceElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -15212,7 +15212,7 @@ void OfReferenceElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -15719,7 +15719,7 @@ void OfBlob::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -15773,7 +15773,7 @@ void OfBlob::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -15827,7 +15827,7 @@ void OfBlob::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kValue
           )
@@ -15876,7 +15876,7 @@ void OfBlob::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kContentType
           )
@@ -16381,7 +16381,7 @@ void OfFile::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -16435,7 +16435,7 @@ void OfFile::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -16489,7 +16489,7 @@ void OfFile::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kValue
           )
@@ -16538,7 +16538,7 @@ void OfFile::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kContentType
           )
@@ -17066,7 +17066,7 @@ void OfAnnotatedRelationshipElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -17120,7 +17120,7 @@ void OfAnnotatedRelationshipElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -17719,7 +17719,7 @@ void OfEntity::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -17773,7 +17773,7 @@ void OfEntity::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -17827,7 +17827,7 @@ void OfEntity::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kGlobalAssetId
           )
@@ -18134,7 +18134,7 @@ void OfEventPayload::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kTopic
           )
@@ -18183,7 +18183,7 @@ void OfEventPayload::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kTimeStamp
           )
@@ -18235,7 +18235,7 @@ void OfEventPayload::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kPayload
           )
@@ -18778,7 +18778,7 @@ void OfBasicEventElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -18832,7 +18832,7 @@ void OfBasicEventElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -18886,7 +18886,7 @@ void OfBasicEventElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kMessageTopic
           )
@@ -18940,7 +18940,7 @@ void OfBasicEventElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kLastUpdate
           )
@@ -18994,7 +18994,7 @@ void OfBasicEventElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kMinInterval
           )
@@ -19048,7 +19048,7 @@ void OfBasicEventElement::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kMaxInterval
           )
@@ -19614,7 +19614,7 @@ void OfOperation::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -19668,7 +19668,7 @@ void OfOperation::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -20365,7 +20365,7 @@ void OfCapability::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -20419,7 +20419,7 @@ void OfCapability::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -20989,7 +20989,7 @@ void OfConceptDescription::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kCategory
           )
@@ -21043,7 +21043,7 @@ void OfConceptDescription::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kIdShort
           )
@@ -21092,7 +21092,7 @@ void OfConceptDescription::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kId
           )
@@ -21796,7 +21796,7 @@ void OfKey::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kValue
           )
@@ -22064,7 +22064,7 @@ void OfLangStringNameType::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kLanguage
           )
@@ -22111,7 +22111,7 @@ void OfLangStringNameType::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kText
           )
@@ -22379,7 +22379,7 @@ void OfLangStringTextType::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kLanguage
           )
@@ -22426,7 +22426,7 @@ void OfLangStringTextType::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kText
           )
@@ -23076,7 +23076,7 @@ void OfValueReferencePair::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kValue
           )
@@ -23555,7 +23555,7 @@ void OfLangStringPreferredNameTypeIec61360::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kLanguage
           )
@@ -23602,7 +23602,7 @@ void OfLangStringPreferredNameTypeIec61360::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kText
           )
@@ -23870,7 +23870,7 @@ void OfLangStringShortNameTypeIec61360::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kLanguage
           )
@@ -23917,7 +23917,7 @@ void OfLangStringShortNameTypeIec61360::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kText
           )
@@ -24185,7 +24185,7 @@ void OfLangStringDefinitionTypeIec61360::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kLanguage
           )
@@ -24232,7 +24232,7 @@ void OfLangStringDefinitionTypeIec61360::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kText
           )
@@ -24683,7 +24683,7 @@ void OfDataSpecificationIec61360::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kUnit
           )
@@ -24737,7 +24737,7 @@ void OfDataSpecificationIec61360::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kSourceOfDefinition
           )
@@ -24791,7 +24791,7 @@ void OfDataSpecificationIec61360::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kSymbol
           )
@@ -24845,7 +24845,7 @@ void OfDataSpecificationIec61360::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kValueFormat
           )
@@ -24899,7 +24899,7 @@ void OfDataSpecificationIec61360::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kValue
           )

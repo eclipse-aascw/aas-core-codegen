@@ -722,44 +722,72 @@ namespace dummy
                 SerializeList<byte[]>(
                     ToJsonValue));
 
+            /// <summary>
+            /// Set the property <paramref name="jsonName" /> of
+            /// <paramref name="result" /> to <paramref name="that" />, serialized by
+            /// <paramref name="serialize" />.
+            /// </summary>
+            /// <remarks>
+            /// <paramref name="propertyName" /> names the property on the path of
+            /// a failure. It is the C# property, and not the JSON one: a serialization
+            /// error is reported on an <em>instance</em>, which the caller holds, and
+            /// not on a document which has not been written yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to serialize</typeparam>
+            private static void SetProperty<T>(
+                Nodes.JsonObject result,
+                string jsonName,
+                string propertyName,
+                T that,
+                Serializer<T> serialize)
+            {
+                try
+                {
+                    result[jsonName] = serialize(that);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
             public override Nodes.JsonObject TransformSomething(
                 Aas.ISomething that
             )
             {
                 var result = new Nodes.JsonObject();
 
-                result["someBools"] = Serialize_ListOf_bool(
-                    that.SomeBools);
+                SetProperty(
+                    result,
+                    "someBools",
+                    "SomeBools",
+                    that.SomeBools,
+                    Serialize_ListOf_bool);
 
-                try
-                {
-                    result["someInts"] = Serialize_ListOf_long(
-                        that.SomeInts);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("someInts"));
-                    throw;
-                }
+                SetProperty(result, "someInts", "SomeInts", that.SomeInts, Serialize_ListOf_long);
 
-                try
-                {
-                    result["someFloats"] = Serialize_ListOf_double(
-                        that.SomeFloats);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("someFloats"));
-                    throw;
-                }
+                SetProperty(
+                    result,
+                    "someFloats",
+                    "SomeFloats",
+                    that.SomeFloats,
+                    Serialize_ListOf_double);
 
-                result["someStrings"] = Serialize_ListOf_string(
-                    that.SomeStrings);
+                SetProperty(
+                    result,
+                    "someStrings",
+                    "SomeStrings",
+                    that.SomeStrings,
+                    Serialize_ListOf_string);
 
-                result["someBytes"] = Serialize_ListOf_bytes(
-                    that.SomeBytes);
+                SetProperty(
+                    result,
+                    "someBytes",
+                    "SomeBytes",
+                    that.SomeBytes,
+                    Serialize_ListOf_bytes);
 
                 return result;
             }
@@ -797,7 +825,7 @@ namespace dummy
                 catch (SerializationFailure failure)
                 {
                     throw new SerializationException(
-                        Reporting.GenerateJsonPath(failure.Error.PathSegments),
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
                         failure.Error.Cause);
                 }
             }

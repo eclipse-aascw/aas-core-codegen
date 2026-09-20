@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 	"encoding/xml"
-	"math"
 	aastesting "github.com/aas-core-works/aas-core3.0-golang/aastesting"
 	aastypes "github.com/aas-core-works/aas-core3.0-golang/types"
 	aasxmlization "github.com/aas-core-works/aas-core3.0-golang/xmlization"

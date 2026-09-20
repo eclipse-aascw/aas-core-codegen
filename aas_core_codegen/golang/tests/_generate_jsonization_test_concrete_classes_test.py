@@ -314,6 +314,12 @@ func {test_name}(t *testing.T) {{
     )
 
 
+#: Stand in for the import block, which is filled in at the very end: it
+#: depends on what the generated code actually names, and an unused import does
+#: not compile in Go.
+_IMPORT_PLACEHOLDER = Stripped("")
+
+
 # fmt: off
 @ensure(
     lambda result: result.endswith('\n'),
@@ -324,29 +330,10 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to test the JSON de/serialization of concrete classes."""
     numeric_places = intermediate.numeric_places(symbol_table)
 
-    # NOTE (mristin):
-    # Only the tests of the serialization failures need the non-finite floats
-    # and the types of the instances they corrupt.
-    extra_imports = (
-        f'\n{I}"math"\n{I}aastypes "{repo_url}/types"'
-        if len(numeric_places) > 0
-        else ""
-    )
-
     blocks = [
         Stripped("package jsonization_test"),
         golang_common.WARNING,
-        Stripped(
-            f"""\
-import (
-{I}"fmt"
-{I}"path/filepath"
-{I}"sort"
-{I}"testing"{extra_imports}
-{I}aasjsonization "{repo_url}/jsonization"
-{I}aastesting "{repo_url}/aastesting"
-)"""
-        ),
+        _IMPORT_PLACEHOLDER,
     ]  # type: List[Stripped]
 
     if len(numeric_places) > 0:
@@ -359,6 +346,24 @@ import (
         blocks.append(_generate_serialization_failure_test(numeric_place))
 
     blocks.append(golang_common.WARNING)
+
+    import_index = blocks.index(_IMPORT_PLACEHOLDER)
+
+    import_lines = []  # type: List[str]
+    for module, literal in (
+        ("fmt", f'{I}"fmt"'),
+        ("filepath", f'{I}"path/filepath"'),
+        ("math", f'{I}"math"'),
+        ("sort", f'{I}"sort"'),
+        ("testing", f'{I}"testing"'),
+        ("aasjsonization", f'{I}aasjsonization "{repo_url}/jsonization"'),
+        ("aastesting", f'{I}aastesting "{repo_url}/aastesting"'),
+        ("aastypes", f'{I}aastypes "{repo_url}/types"'),
+    ):
+        if golang_common.names_package(blocks, module):
+            import_lines.append(literal)
+
+    blocks[import_index] = Stripped("import (\n" + "\n".join(import_lines) + "\n)")
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

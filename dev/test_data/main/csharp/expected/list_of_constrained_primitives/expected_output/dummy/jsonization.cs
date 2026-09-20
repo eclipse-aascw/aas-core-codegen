@@ -614,14 +614,49 @@ namespace dummy
                 SerializeList<string>(
                     ToJsonValue));
 
+            /// <summary>
+            /// Set the property <paramref name="jsonName" /> of
+            /// <paramref name="result" /> to <paramref name="that" />, serialized by
+            /// <paramref name="serialize" />.
+            /// </summary>
+            /// <remarks>
+            /// <paramref name="propertyName" /> names the property on the path of
+            /// a failure. It is the C# property, and not the JSON one: a serialization
+            /// error is reported on an <em>instance</em>, which the caller holds, and
+            /// not on a document which has not been written yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to serialize</typeparam>
+            private static void SetProperty<T>(
+                Nodes.JsonObject result,
+                string jsonName,
+                string propertyName,
+                T that,
+                Serializer<T> serialize)
+            {
+                try
+                {
+                    result[jsonName] = serialize(that);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
             public override Nodes.JsonObject TransformSomething(
                 Aas.ISomething that
             )
             {
                 var result = new Nodes.JsonObject();
 
-                result["someNames"] = Serialize_ListOf_string(
-                    that.SomeNames);
+                SetProperty(
+                    result,
+                    "someNames",
+                    "SomeNames",
+                    that.SomeNames,
+                    Serialize_ListOf_string);
 
                 return result;
             }
@@ -659,7 +694,7 @@ namespace dummy
                 catch (SerializationFailure failure)
                 {
                     throw new SerializationException(
-                        Reporting.GenerateJsonPath(failure.Error.PathSegments),
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
                         failure.Error.Cause);
                 }
             }

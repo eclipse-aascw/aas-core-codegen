@@ -4,7 +4,6 @@ package aastesting
 // Do NOT edit or append.
 
 import (
-	"bytes"
 	"fmt"
 	aastypes "github.com/dummy-works/dummy/types"
 )

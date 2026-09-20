@@ -494,6 +494,83 @@ public class Jsonization {
       }
 
       /**
+       * Convert a single value into a JSON node.
+       */
+      @FunctionalInterface
+      private interface Serializer<T> {
+        JsonNode serialize(T that);
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} to
+       * {@code that}, serialized by {@code serialize}.
+       *
+       * <p>{@code getterName} names the property on the path of a failure. It is
+       * the getter, and not the JSON property: a serialization error is reported
+       * on an <em>instance</em>, which the caller holds, and not on a document
+       * which has not been written yet.
+       */
+      private static <T> void setProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        T that,
+        Serializer<? super T> serialize) {
+        try {
+          result.set(jsonName, serialize.serialize(that));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment(getterName));
+          throw failure;
+        }
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} if {@code that}
+       * has been given, and set nothing at all otherwise.
+       *
+       * <p>The {@link Optional} is taken apart here, once, instead of at every
+       * optional property: asking it and then unwrapping it at the call site would
+       * call the getter twice, and every call allocates an {@link Optional} of
+       * its own.
+       */
+      private static <T> void setOptionalProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        Optional<T> that,
+        Serializer<? super T> serialize) {
+        final T value = that.orElse(null);
+        if (value != null) {
+          setProperty(result, jsonName, getterName, value, serialize);
+        }
+      }
+
+      /**
+       * Convert {@code that} boolean to a JSON value.
+       *
+       * <p>This wraps {@link JsonNodeFactory}, which is an object, so that
+       * the conversion is a static method like every other one here and
+       * a reference to it captures nothing.
+       *
+       * @param that value to be converted
+       */
+      private static JsonNode boolToJsonNode(Boolean that) {
+        return JsonNodeFactory.instance.booleanNode(that);
+      }
+
+      /**
+       * Convert {@code that} string to a JSON value.
+       *
+       * <p>See the note on {@link #boolToJsonNode} on why this wrapper exists.
+       *
+       * @param that value to be converted
+       */
+      private static JsonNode stringToJsonNode(String that) {
+        return JsonNodeFactory.instance.textNode(that);
+      }
+
+      /**
        * Convert {@code that} 64-bit long integer to a JSON value.
        *
        * @param that value to be converted
@@ -551,8 +628,16 @@ public class Jsonization {
       private static ArrayNode serializeListOf_bool(
         List<Boolean> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
+        int i = 0;
         for (Boolean item : that) {
-          result.add(JsonNodeFactory.instance.booleanNode(item));
+          try {
+            result.add(boolToJsonNode(item));
+          } catch (_SerializeFailure failure) {
+            failure.getError().prependSegment(
+              new Reporting.IndexSegment(i));
+            throw failure;
+          }
+          i++;
         }
         return result;
       }
@@ -609,8 +694,16 @@ public class Jsonization {
       private static ArrayNode serializeListOf_string(
         List<String> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
+        int i = 0;
         for (String item : that) {
-          result.add(JsonNodeFactory.instance.textNode(item));
+          try {
+            result.add(stringToJsonNode(item));
+          } catch (_SerializeFailure failure) {
+            failure.getError().prependSegment(
+              new Reporting.IndexSegment(i));
+            throw failure;
+          }
+          i++;
         }
         return result;
       }
@@ -623,8 +716,16 @@ public class Jsonization {
       private static ArrayNode serializeListOf_bytes(
         List<byte[]> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
+        int i = 0;
         for (byte[] item : that) {
-          result.add(bytesToJsonNode(item));
+          try {
+            result.add(bytesToJsonNode(item));
+          } catch (_SerializeFailure failure) {
+            failure.getError().prependSegment(
+              new Reporting.IndexSegment(i));
+            throw failure;
+          }
+          i++;
         }
         return result;
       }
@@ -635,27 +736,25 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("someBools", serializeListOf_bool(that.getSomeBools()));
+        setProperty(
+          result, "someBools", "getSomeBools()",
+          that.getSomeBools(), _Transformer::serializeListOf_bool);
 
-        try {
-          result.set("someInts", serializeListOf_long(that.getSomeInts()));
-        } catch (_SerializeFailure failure) {
-          failure.getError().prependSegment(
-            new Reporting.NameSegment("someInts"));
-          throw failure;
-        }
+        setProperty(
+          result, "someInts", "getSomeInts()",
+          that.getSomeInts(), _Transformer::serializeListOf_long);
 
-        try {
-          result.set("someFloats", serializeListOf_double(that.getSomeFloats()));
-        } catch (_SerializeFailure failure) {
-          failure.getError().prependSegment(
-            new Reporting.NameSegment("someFloats"));
-          throw failure;
-        }
+        setProperty(
+          result, "someFloats", "getSomeFloats()",
+          that.getSomeFloats(), _Transformer::serializeListOf_double);
 
-        result.set("someStrings", serializeListOf_string(that.getSomeStrings()));
+        setProperty(
+          result, "someStrings", "getSomeStrings()",
+          that.getSomeStrings(), _Transformer::serializeListOf_string);
 
-        result.set("someBytes", serializeListOf_bytes(that.getSomeBytes()));
+        setProperty(
+          result, "someBytes", "getSomeBytes()",
+          that.getSomeBytes(), _Transformer::serializeListOf_bytes);
 
         return result;
       }
@@ -687,7 +786,7 @@ public class Jsonization {
         } catch (_SerializeFailure failure) {
           final Reporting.Error error = failure.getError();
           throw new SerializeException(
-            Reporting.generateJsonPath(error.getPathSegments()),
+            Reporting.generateJavaPath(error.getPathSegments()),
             error.getCause());
         }
       }

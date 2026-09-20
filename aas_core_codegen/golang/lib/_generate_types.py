@@ -1684,6 +1684,10 @@ func ({receiver} *{name}) WithUnderlying(that IClass) *{name} {{
     )
 
 
+#: Stand in for the import block, which is filled in at the very end: it
+#: depends on what the generated code actually names, and an unused import does
+#: not compile in Go.
+_IMPORT_PLACEHOLDER = Stripped("")
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -1745,17 +1749,10 @@ package types"""
     model_type_getter = golang_naming.getter_name(Identifier("model_type"))
     model_type_enum = golang_naming.enum_name(Identifier("Model_type"))
 
-    fmt_import = f'{I}"fmt"\n\n' if len(symbol_table.named_unions) > 0 else ""
-
     blocks.extend(
         [
             golang_common.WARNING,
-            Stripped(
-                f"""\
-import (
-{fmt_import}{I}aascommon {common_url_literal}
-)"""
-            ),
+            _IMPORT_PLACEHOLDER,
             _generate_definition_for_model_type(symbol_table=symbol_table),
             Stripped(
                 f"""\
@@ -1849,6 +1846,20 @@ type IClass interface {{
         return None, errors
 
     blocks.append(golang_common.WARNING)
+
+    import_index = blocks.index(_IMPORT_PLACEHOLDER)
+
+    import_lines = []  # type: List[str]
+    if golang_common.names_package(blocks, "fmt"):
+        import_lines.append(f'{I}"fmt"')
+
+    if golang_common.names_package(blocks, "aascommon"):
+        import_lines.append(f"{I}aascommon {common_url_literal}")
+
+    if len(import_lines) == 0:
+        del blocks[import_index]
+    else:
+        blocks[import_index] = Stripped("import (\n" + "\n".join(import_lines) + "\n)")
 
     out = io.StringIO()
     for i, block in enumerate(blocks):

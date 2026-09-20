@@ -1599,6 +1599,12 @@ func {function_name}(
     )
 
 
+#: Stand in for the import block, which is filled in at the very end: it
+#: depends on what the generated code actually names, and an unused import does
+#: not compile in Go.
+_IMPORT_PLACEHOLDER = Stripped("")
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -1636,20 +1642,7 @@ def generate(
 package verification"""
         ),
         golang_common.WARNING,
-        Stripped(
-            f"""\
-import (
-{I}"math/big"
-{I}"fmt"
-{I}"regexp"
-{I}"strconv"
-{I}"strings"
-{I}aascommon {common_url_literal}
-{I}aasconstants {constants_url_literal}
-{I}aasreporting {reporting_url_literal}
-{I}aastypes {types_url_literal}
-)"""
-        ),
+        _IMPORT_PLACEHOLDER,
         Stripped(
             f"""\
 // Represent a verification violation.
@@ -1779,6 +1772,27 @@ func (ve *VerificationError) PathString() string {{
     blocks.append(_generate_verify(symbol_table=symbol_table))
 
     blocks.append(golang_common.WARNING)
+
+    import_index = blocks.index(_IMPORT_PLACEHOLDER)
+
+    import_lines = []  # type: List[str]
+    for module, literal in (
+        ("big", f'{I}"math/big"'),
+        ("fmt", f'{I}"fmt"'),
+        ("math", f'{I}"math"'),
+        ("regexp", f'{I}"regexp"'),
+        ("sort", f'{I}"sort"'),
+        ("strconv", f'{I}"strconv"'),
+        ("strings", f'{I}"strings"'),
+        ("aascommon", f"{I}aascommon {common_url_literal}"),
+        ("aasconstants", f"{I}aasconstants {constants_url_literal}"),
+        ("aasreporting", f"{I}aasreporting {reporting_url_literal}"),
+        ("aastypes", f"{I}aastypes {types_url_literal}"),
+    ):
+        if golang_common.names_package(blocks, module):
+            import_lines.append(literal)
+
+    blocks[import_index] = Stripped("import (\n" + "\n".join(import_lines) + "\n)")
 
     if len(errors) > 0:
         return None, errors

@@ -2472,6 +2472,50 @@ private static void WriteElement<T>(
     )
 
 
+def _generate_write_property_helper() -> Stripped:
+    """
+    Generate the helper writing a property of an instance as an XML element.
+
+    This is ``WriteElement`` plus the one segment of the path which only
+    the property knows. Every property goes through it, and not only the ones
+    which can fail today, so that a writer which grows a new way of failing
+    can not quietly lose the way to the culprit.
+    """
+    return Stripped(
+        f"""\
+/// <summary>
+/// Write the property <paramref name="propertyName" /> of the instance being
+/// serialized as an XML element named <paramref name="elementName" />.
+/// </summary>
+/// <remarks>
+/// This is <see cref="WriteElement{{T}}" /> plus the one segment of the path
+/// which only the property knows. The path names the C# property, and not
+/// the XML element: a serialization error is reported on an <em>instance</em>,
+/// which the caller holds, and not on a document which has not been written
+/// yet.
+/// </remarks>
+/// <typeparam name="T">Type of the value to write</typeparam>
+private static void WriteProperty<T>(
+{I}string elementName,
+{I}string propertyName,
+{I}T that,
+{I}Xml.XmlWriter writer,
+{I}ContentWriter<T> writeContent)
+{{
+{I}try
+{I}{{
+{II}WriteElement(elementName, that, writer, writeContent);
+{I}}}
+{I}catch (SerializationFailure failure)
+{I}{{
+{II}failure.Error.PrependSegment(
+{III}new Reporting.NameSegment(propertyName));
+{II}throw;
+{I}}}
+}}"""
+    )
+
+
 def _generate_wrap_in_element_combinator() -> Stripped:
     """
     Generate the partially applied form of ``WriteElement``.
@@ -2561,9 +2605,10 @@ private static ContentWriter<T> WriteEnum<T>(
 {I}{{
 {II}writer.WriteValue(
 {III}stringifyLiteral(that)
-{IIII}?? throw new System.ArgumentException(
-{IIIII}$"Invalid literal for the enumeration {{typeof(T).Name}}: " +
-{IIIII}that.ToString()));
+{IIII}?? throw new SerializationFailure(
+{IIIII}new Reporting.Error(
+{IIIIII}$"Invalid literal for the enumeration {{typeof(T).Name}}: " +
+{IIIIII}that.ToString())));
 {I}}};
 }}"""
     )
@@ -2594,9 +2639,20 @@ private static ContentWriter<List<T>> WriteList<T>(
 {{
 {I}return (that, writer) =>
 {I}{{
+{II}int index = 0;
 {II}foreach (var item in that)
 {II}{{
-{III}writeItem(item, writer);
+{III}try
+{III}{{
+{IIII}writeItem(item, writer);
+{III}}}
+{III}catch (SerializationFailure failure)
+{III}{{
+{IIII}failure.Error.PrependSegment(
+{IIIII}new Reporting.IndexSegment(index));
+{IIII}throw;
+{III}}}
+{III}index++;
 {II}}}
 {I}}};
 }}"""
@@ -2630,7 +2686,18 @@ def _generate_write_tuple_combinator(arity: int) -> Stripped:
     )
 
     write_stmts_joined = "\n".join(
-        f"writeItem{i}(that.Item{i + 1}, writer);" for i in range(arity)
+        f"""\
+try
+{{{{
+{I}writeItem{i}(that.Item{i + 1}, writer);
+}}}}
+catch (SerializationFailure failure)
+{{{{
+{I}failure.Error.PrependSegment(
+{II}new Reporting.IndexSegment({i}));
+{I}throw;
+}}}}"""
+        for i in range(arity)
     )
 
     return Stripped(
@@ -2929,8 +2996,13 @@ def _generate_serialize_property(
         else:
             condition = f"that.{prop_name} != null"
 
+    # NOTE (mristin):
+    # The path names the C# property, and not the XML element: a serialization
+    # error is reported on an *instance*, which the caller holds, and not on
+    # a document which has not been written yet.
     arguments = [
         xml_prop_name_literal,
+        csharp_common.string_literal(prop_name),
         value_expr,
         "writer",
         _content_writer_name(type_anno),
@@ -2950,7 +3022,7 @@ def _generate_serialize_property(
 
     result = Stripped(
         f"""\
-WriteElement(
+WriteProperty(
 {I}{indent_but_first_line(arguments_joined, I)});"""
     )
 
@@ -3059,6 +3131,7 @@ def _generate_visitor(
     if any(len(cls.properties) > 0 for cls in symbol_table.concrete_classes):
         blocks.append(_generate_content_writer_delegate())
         blocks.append(_generate_write_element_helper())
+        blocks.append(_generate_write_property_helper())
 
     if needed.v_elements:
         blocks.append(_generate_wrap_in_element_combinator())
@@ -3140,12 +3213,25 @@ def _generate_serialize(
 /// <summary>
 /// Serialize an instance of the meta-model to XML.
 /// </summary>
+/// <exception cref="SerializationException">
+/// Thrown when a value within <paramref name="that" /> instance can not be
+/// represented in XML
+/// </exception>
 public static void To(
 {I}Aas.IClass that,
 {I}Xml.XmlWriter writer)
 {{
-{I}VisitorWithWriter.WriteIClass(
-{II}that, writer);
+{I}try
+{I}{{
+{II}VisitorWithWriter.WriteIClass(
+{III}that, writer);
+{I}}}
+{I}catch (SerializationFailure failure)
+{I}{{
+{II}throw new SerializationException(
+{III}Reporting.GenerateCSharpPath(failure.Error.PathSegments),
+{III}failure.Error.Cause);
+{I}}}
 }}"""
         ),
     ]  # type: List[Stripped]
@@ -3253,6 +3339,41 @@ public class Exception : System.Exception
 {I}{{
 {II}Path = path;
 {II}Cause = cause;
+{I}}}
+}}
+
+/// <summary>
+/// Represent a critical error during the serialization.
+/// </summary>
+public class SerializationException : System.Exception
+{{
+{I}public readonly string Path;
+{I}public readonly string Cause;
+{I}public SerializationException(string path, string cause)
+{II}: base($"{{cause}} at: {{path}}")
+{I}{{
+{II}Path = path;
+{II}Cause = cause;
+{I}}}
+}}
+
+/// <summary>
+/// Signal a failure of the serialization, carrying the path to the culprit.
+/// </summary>
+/// <remarks>
+/// The path is built as the stack unwinds -- every container prepends the one
+/// segment it knows, the property its name and the list the index of the item
+/// -- which is why this can not be a <see cref="SerializationException" />
+/// already: that one renders its message in its constructor, so its path has
+/// to be complete by then. <see cref="Serialize.To" /> renders and converts.
+/// </remarks>
+internal class SerializationFailure : System.Exception
+{{
+{I}public readonly Reporting.Error Error;
+{I}public SerializationFailure(Reporting.Error error)
+{II}: base(error.Cause)
+{I}{{
+{II}Error = error;
 {I}}}
 }}"""
         )

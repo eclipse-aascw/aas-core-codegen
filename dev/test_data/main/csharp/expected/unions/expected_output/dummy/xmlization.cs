@@ -2138,6 +2138,41 @@ namespace dummy
         }
 
         /// <summary>
+        /// Represent a critical error during the serialization.
+        /// </summary>
+        public class SerializationException : System.Exception
+        {
+            public readonly string Path;
+            public readonly string Cause;
+            public SerializationException(string path, string cause)
+                : base($"{cause} at: {path}")
+            {
+                Path = path;
+                Cause = cause;
+            }
+        }
+
+        /// <summary>
+        /// Signal a failure of the serialization, carrying the path to the culprit.
+        /// </summary>
+        /// <remarks>
+        /// The path is built as the stack unwinds -- every container prepends the one
+        /// segment it knows, the property its name and the list the index of the item
+        /// -- which is why this can not be a <see cref="SerializationException" />
+        /// already: that one renders its message in its constructor, so its path has
+        /// to be complete by then. <see cref="Serialize.To" /> renders and converts.
+        /// </remarks>
+        internal class SerializationFailure : System.Exception
+        {
+            public readonly Reporting.Error Error;
+            public SerializationFailure(Reporting.Error error)
+                : base(error.Cause)
+            {
+                Error = error;
+            }
+        }
+
+        /// <summary>
         /// Deserialize instances of meta-model classes from XML.
         /// </summary>
         /// <example>
@@ -2723,6 +2758,37 @@ namespace dummy
             }
 
             /// <summary>
+            /// Write the property <paramref name="propertyName" /> of the instance being
+            /// serialized as an XML element named <paramref name="elementName" />.
+            /// </summary>
+            /// <remarks>
+            /// This is <see cref="WriteElement{T}" /> plus the one segment of the path
+            /// which only the property knows. The path names the C# property, and not
+            /// the XML element: a serialization error is reported on an <em>instance</em>,
+            /// which the caller holds, and not on a document which has not been written
+            /// yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private static void WriteProperty<T>(
+                string elementName,
+                string propertyName,
+                T that,
+                Xml.XmlWriter writer,
+                ContentWriter<T> writeContent)
+            {
+                try
+                {
+                    WriteElement(elementName, that, writer, writeContent);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
+            /// <summary>
             /// Write the items of a list, each with <paramref name="writeItem" />.
             /// </summary>
             /// <remarks>
@@ -2736,9 +2802,20 @@ namespace dummy
             {
                 return (that, writer) =>
                 {
+                    int index = 0;
                     foreach (var item in that)
                     {
-                        writeItem(item, writer);
+                        try
+                        {
+                            writeItem(item, writer);
+                        }
+                        catch (SerializationFailure failure)
+                        {
+                            failure.Error.PrependSegment(
+                                new Reporting.IndexSegment(index));
+                            throw;
+                        }
+                        index++;
                     }
                 };
             }
@@ -2758,9 +2835,36 @@ namespace dummy
             {
                 return (that, writer) =>
                 {
-                    writeItem0(that.Item1, writer);
-                    writeItem1(that.Item2, writer);
-                    writeItem2(that.Item3, writer);
+                    try
+                    {{
+                        writeItem0(that.Item1, writer);
+                    }}
+                    catch (SerializationFailure failure)
+                    {{
+                        failure.Error.PrependSegment(
+                            new Reporting.IndexSegment(0));
+                        throw;
+                    }}
+                    try
+                    {{
+                        writeItem1(that.Item2, writer);
+                    }}
+                    catch (SerializationFailure failure)
+                    {{
+                        failure.Error.PrependSegment(
+                            new Reporting.IndexSegment(1));
+                        throw;
+                    }}
+                    try
+                    {{
+                        writeItem2(that.Item3, writer);
+                    }}
+                    catch (SerializationFailure failure)
+                    {{
+                        failure.Error.PrependSegment(
+                            new Reporting.IndexSegment(2));
+                        throw;
+                    }}
                 };
             }
 
@@ -2853,8 +2957,8 @@ namespace dummy
                 Aas.IStructuralFirst that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "uniqueToFirst", that.UniqueToFirst, writer, Write_string);
+                WriteProperty(
+                    "uniqueToFirst", "UniqueToFirst", that.UniqueToFirst, writer, Write_string);
             }  // private static void StructuralFirstToSequence
 
             public override void VisitStructuralFirst(
@@ -2874,8 +2978,8 @@ namespace dummy
                 Aas.IStructuralSecond that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "uniqueToSecond", that.UniqueToSecond, writer, Write_string);
+                WriteProperty(
+                    "uniqueToSecond", "UniqueToSecond", that.UniqueToSecond, writer, Write_string);
             }  // private static void StructuralSecondToSequence
 
             public override void VisitStructuralSecond(
@@ -2895,8 +2999,9 @@ namespace dummy
                 Aas.IMixedAbstractDescendantOne that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
+                WriteProperty(
                     "uniqueToAbstractDescendantOne",
+                    "UniqueToAbstractDescendantOne",
                     that.UniqueToAbstractDescendantOne,
                     writer,
                     Write_string);
@@ -2919,8 +3024,9 @@ namespace dummy
                 Aas.IMixedAbstractDescendantTwo that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
+                WriteProperty(
                     "uniqueToAbstractDescendantTwo",
+                    "UniqueToAbstractDescendantTwo",
                     that.UniqueToAbstractDescendantTwo,
                     writer,
                     Write_string);
@@ -2943,8 +3049,12 @@ namespace dummy
                 Aas.IMixedConcreteWithDescendants that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "someBaseProperty", that.SomeBaseProperty, writer, Write_string);
+                WriteProperty(
+                    "someBaseProperty",
+                    "SomeBaseProperty",
+                    that.SomeBaseProperty,
+                    writer,
+                    Write_string);
             }  // private static void MixedConcreteWithDescendantsToSequence
 
             public override void VisitMixedConcreteWithDescendants(
@@ -2964,11 +3074,19 @@ namespace dummy
                 Aas.IMixedConcreteWithDescendantsChild that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "someBaseProperty", that.SomeBaseProperty, writer, Write_string);
+                WriteProperty(
+                    "someBaseProperty",
+                    "SomeBaseProperty",
+                    that.SomeBaseProperty,
+                    writer,
+                    Write_string);
 
-                WriteElement(
-                    "someChildProperty", that.SomeChildProperty, writer, Write_string);
+                WriteProperty(
+                    "someChildProperty",
+                    "SomeChildProperty",
+                    that.SomeChildProperty,
+                    writer,
+                    Write_string);
             }  // private static void MixedConcreteWithDescendantsChildToSequence
 
             public override void VisitMixedConcreteWithDescendantsChild(
@@ -2988,8 +3106,12 @@ namespace dummy
                 Aas.IMixedConcreteLeaf that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "uniqueToConcreteLeaf", that.UniqueToConcreteLeaf, writer, Write_string);
+                WriteProperty(
+                    "uniqueToConcreteLeaf",
+                    "UniqueToConcreteLeaf",
+                    that.UniqueToConcreteLeaf,
+                    writer,
+                    Write_string);
             }  // private static void MixedConcreteLeafToSequence
 
             public override void VisitMixedConcreteLeaf(
@@ -3009,8 +3131,8 @@ namespace dummy
                 Aas.IModelTypedFirst that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "someProperty", that.SomeProperty, writer, Write_string);
+                WriteProperty(
+                    "someProperty", "SomeProperty", that.SomeProperty, writer, Write_string);
             }  // private static void ModelTypedFirstToSequence
 
             public override void VisitModelTypedFirst(
@@ -3030,8 +3152,8 @@ namespace dummy
                 Aas.IModelTypedSecond that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "someProperty", that.SomeProperty, writer, Write_string);
+                WriteProperty(
+                    "someProperty", "SomeProperty", that.SomeProperty, writer, Write_string);
             }  // private static void ModelTypedSecondToSequence
 
             public override void VisitModelTypedSecond(
@@ -3051,40 +3173,56 @@ namespace dummy
                 Aas.ISomething that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "structuralProperty", that.StructuralProperty, writer, Write_StructuralUnion);
+                WriteProperty(
+                    "structuralProperty",
+                    "StructuralProperty",
+                    that.StructuralProperty,
+                    writer,
+                    Write_StructuralUnion);
 
-                WriteElement(
-                    "mixedProperty", that.MixedProperty, writer, Write_MixedUnion);
+                WriteProperty(
+                    "mixedProperty", "MixedProperty", that.MixedProperty, writer, Write_MixedUnion);
 
-                WriteElement(
-                    "modelTypedProperty", that.ModelTypedProperty, writer, Write_ModelTypedUnion);
+                WriteProperty(
+                    "modelTypedProperty",
+                    "ModelTypedProperty",
+                    that.ModelTypedProperty,
+                    writer,
+                    Write_ModelTypedUnion);
 
-                WriteElement(
+                WriteProperty(
                     "listStructuralProperty",
+                    "ListStructuralProperty",
                     that.ListStructuralProperty,
                     writer,
                     Write_ListOf_StructuralUnion);
 
-                WriteElement(
-                    "listMixedProperty", that.ListMixedProperty, writer, Write_ListOf_MixedUnion);
+                WriteProperty(
+                    "listMixedProperty",
+                    "ListMixedProperty",
+                    that.ListMixedProperty,
+                    writer,
+                    Write_ListOf_MixedUnion);
 
-                WriteElement(
+                WriteProperty(
                     "listModelTypedProperty",
+                    "ListModelTypedProperty",
                     that.ListModelTypedProperty,
                     writer,
                     Write_ListOf_ModelTypedUnion);
 
-                WriteElement(
+                WriteProperty(
                     "tupleProperty",
+                    "TupleProperty",
                     that.TupleProperty,
                     writer,
                     Write_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion);
 
                 if (that.OptionalStructuralProperty != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "optionalStructuralProperty",
+                        "OptionalStructuralProperty",
                         that.OptionalStructuralProperty,
                         writer,
                         Write_StructuralUnion);
@@ -3092,8 +3230,9 @@ namespace dummy
 
                 if (that.OptionalMixedProperty != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "optionalMixedProperty",
+                        "OptionalMixedProperty",
                         that.OptionalMixedProperty,
                         writer,
                         Write_MixedUnion);
@@ -3101,8 +3240,9 @@ namespace dummy
 
                 if (that.OptionalModelTypedProperty != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "optionalModelTypedProperty",
+                        "OptionalModelTypedProperty",
                         that.OptionalModelTypedProperty,
                         writer,
                         Write_ModelTypedUnion);
@@ -3143,12 +3283,25 @@ namespace dummy
             /// <summary>
             /// Serialize an instance of the meta-model to XML.
             /// </summary>
+            /// <exception cref="SerializationException">
+            /// Thrown when a value within <paramref name="that" /> instance can not be
+            /// represented in XML
+            /// </exception>
             public static void To(
                 Aas.IClass that,
                 Xml.XmlWriter writer)
             {
-                VisitorWithWriter.WriteIClass(
-                    that, writer);
+                try
+                {
+                    VisitorWithWriter.WriteIClass(
+                        that, writer);
+                }
+                catch (SerializationFailure failure)
+                {
+                    throw new SerializationException(
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
+                        failure.Error.Cause);
+                }
             }
         }  // public static class Serialize
     }  // public static class Xmlization

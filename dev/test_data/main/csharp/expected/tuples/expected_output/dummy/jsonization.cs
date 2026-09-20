@@ -1226,14 +1226,48 @@ namespace dummy
                     ToJsonValue,
                     TransformIClass));
 
+            private static readonly Serializer<string> Serialize_string = ToJsonValue;
+
+            private static readonly Serializer<long> Serialize_long = ToJsonValue;
+
+            /// <summary>
+            /// Set the property <paramref name="jsonName" /> of
+            /// <paramref name="result" /> to <paramref name="that" />, serialized by
+            /// <paramref name="serialize" />.
+            /// </summary>
+            /// <remarks>
+            /// <paramref name="propertyName" /> names the property on the path of
+            /// a failure. It is the C# property, and not the JSON one: a serialization
+            /// error is reported on an <em>instance</em>, which the caller holds, and
+            /// not on a document which has not been written yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to serialize</typeparam>
+            private static void SetProperty<T>(
+                Nodes.JsonObject result,
+                string jsonName,
+                string propertyName,
+                T that,
+                Serializer<T> serialize)
+            {
+                try
+                {
+                    result[jsonName] = serialize(that);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
             public override Nodes.JsonObject TransformSomeItem(
                 Aas.ISomeItem that
             )
             {
                 var result = new Nodes.JsonObject();
 
-                result["name"] = Nodes.JsonValue.Create(
-                    that.Name);
+                SetProperty(result, "name", "Name", that.Name, Serialize_string);
 
                 result["modelType"] = "SomeItem";
 
@@ -1246,17 +1280,12 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                try
-                {
-                    result["serialNumber"] = Transformer.ToJsonValue(
-                        that.SerialNumber);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("serialNumber"));
-                    throw;
-                }
+                SetProperty(
+                    result,
+                    "serialNumber",
+                    "SerialNumber",
+                    that.SerialNumber,
+                    Serialize_long);
 
                 result["modelType"] = "AnotherItem";
 
@@ -1269,55 +1298,30 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                try
-                {
-                    result["pair"] = Serialize_TupleOf2_string_long(
-                        that.Pair);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("pair"));
-                    throw;
-                }
+                SetProperty(result, "pair", "Pair", that.Pair, Serialize_TupleOf2_string_long);
 
-                try
-                {
-                    result["items"] = Serialize_TupleOf2_IAbstractItem_IAbstractItem(
-                        that.Items);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("items"));
-                    throw;
-                }
+                SetProperty(
+                    result,
+                    "items",
+                    "Items",
+                    that.Items,
+                    Serialize_TupleOf2_IAbstractItem_IAbstractItem);
 
-                try
-                {
-                    result["tricky"] = Serialize_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
-                        that.Tricky);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("tricky"));
-                    throw;
-                }
+                SetProperty(
+                    result,
+                    "tricky",
+                    "Tricky",
+                    that.Tricky,
+                    Serialize_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result);
 
                 if (that.OptionalPair.HasValue)
                 {
-                    try
-                    {
-                        result["optionalPair"] = Serialize_TupleOf2_string_IAbstractItem(
-                            that.OptionalPair.Value);
-                    }
-                    catch (SerializationFailure failure)
-                    {
-                        failure.Error.PrependSegment(
-                            new Reporting.NameSegment("optionalPair"));
-                        throw;
-                    }
+                    SetProperty(
+                        result,
+                        "optionalPair",
+                        "OptionalPair",
+                        that.OptionalPair.Value,
+                        Serialize_TupleOf2_string_IAbstractItem);
                 }
 
                 return result;
@@ -1356,7 +1360,7 @@ namespace dummy
                 catch (SerializationFailure failure)
                 {
                     throw new SerializationException(
-                        Reporting.GenerateJsonPath(failure.Error.PathSegments),
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
                         failure.Error.Cause);
                 }
             }
@@ -1364,12 +1368,18 @@ namespace dummy
             /// <summary>
             /// Serialize a literal of Result into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of Result at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue ResultToJsonValue(Aas.Result that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid Result: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid Result: {that}"));
             }
         }  // public static class Serialize
     }  // public static class Jsonization

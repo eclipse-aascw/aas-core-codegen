@@ -460,3 +460,17 @@ def repo_url_to_environment_variable(repo_url: Stripped) -> Identifier:
     env = re.sub(r"_+", "_", env).strip("_")
 
     return Identifier(env)
+
+
+def names_package(blocks: Sequence[str], qualifier: str) -> bool:
+    """
+    Check whether any of the ``blocks`` names the package behind ``qualifier``.
+
+    This decides whether that package is imported at all: an unused import does
+    not compile in Go, and what a generated file names depends on the meta-model.
+
+    Mind that the qualifier has to stand on its own. ``aastesting.RecordMode``
+    names neither ``testing`` nor ``aas``.
+    """
+    pattern = re.compile(r"(?<![\w.])" + re.escape(qualifier) + r"\.")
+    return any(pattern.search(block) is not None for block in blocks)

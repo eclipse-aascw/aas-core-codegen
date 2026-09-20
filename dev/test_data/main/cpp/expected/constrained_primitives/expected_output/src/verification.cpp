@@ -1607,7 +1607,7 @@ void OfSomething::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kSomeBool
           )
@@ -1654,7 +1654,7 @@ void OfSomething::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kSomeInt
           )
@@ -1701,7 +1701,7 @@ void OfSomething::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kSomeFloat
           )
@@ -1748,7 +1748,7 @@ void OfSomething::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kSomeString
           )
@@ -1795,7 +1795,7 @@ void OfSomething::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kSomeBytes
           )

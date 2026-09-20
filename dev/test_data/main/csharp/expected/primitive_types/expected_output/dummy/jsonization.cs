@@ -523,45 +523,98 @@ namespace dummy
                 return Nodes.JsonValue.Create(that);
             }
 
+            /// <summary>
+            /// Serialize <paramref name="that" /> into a JSON value.
+            /// </summary>
+            /// <remarks>
+            /// This is the shape shared by every serialization step, so that the steps
+            /// can be composed. Unlike the XML side, no combinator is needed to frame
+            /// the value -- a JSON value stands on its own -- so the only composition
+            /// is over the items of a list or of a tuple.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to be serialized</typeparam>
+            private delegate Nodes.JsonNode? Serializer<in T>(T that);
+
+            /// <summary>
+            /// Convert <paramref name="that" /> to a JSON value.
+            /// </summary>
+            private static Nodes.JsonValue ToJsonValue(bool that)
+            {
+                return Nodes.JsonValue.Create(that);
+            }
+
+            /// <summary>
+            /// Convert <paramref name="that" /> to a JSON value.
+            /// </summary>
+            private static Nodes.JsonValue ToJsonValue(string that)
+            {
+                return Nodes.JsonValue.Create(that);
+            }
+
+            /// <summary>
+            /// Convert <paramref name="that" /> to a JSON value.
+            /// </summary>
+            private static Nodes.JsonValue ToJsonValue(byte[] that)
+            {
+                return Nodes.JsonValue.Create(System.Convert.ToBase64String(that));
+            }
+
+            private static readonly Serializer<bool> Serialize_bool = ToJsonValue;
+
+            private static readonly Serializer<long> Serialize_long = ToJsonValue;
+
+            private static readonly Serializer<double> Serialize_double = ToJsonValue;
+
+            private static readonly Serializer<string> Serialize_string = ToJsonValue;
+
+            private static readonly Serializer<byte[]> Serialize_bytes = ToJsonValue;
+
+            /// <summary>
+            /// Set the property <paramref name="jsonName" /> of
+            /// <paramref name="result" /> to <paramref name="that" />, serialized by
+            /// <paramref name="serialize" />.
+            /// </summary>
+            /// <remarks>
+            /// <paramref name="propertyName" /> names the property on the path of
+            /// a failure. It is the C# property, and not the JSON one: a serialization
+            /// error is reported on an <em>instance</em>, which the caller holds, and
+            /// not on a document which has not been written yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to serialize</typeparam>
+            private static void SetProperty<T>(
+                Nodes.JsonObject result,
+                string jsonName,
+                string propertyName,
+                T that,
+                Serializer<T> serialize)
+            {
+                try
+                {
+                    result[jsonName] = serialize(that);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
             public override Nodes.JsonObject TransformSomething(
                 Aas.ISomething that
             )
             {
                 var result = new Nodes.JsonObject();
 
-                result["someBool"] = Nodes.JsonValue.Create(
-                    that.SomeBool);
+                SetProperty(result, "someBool", "SomeBool", that.SomeBool, Serialize_bool);
 
-                try
-                {
-                    result["someInt"] = Transformer.ToJsonValue(
-                        that.SomeInt);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("someInt"));
-                    throw;
-                }
+                SetProperty(result, "someInt", "SomeInt", that.SomeInt, Serialize_long);
 
-                try
-                {
-                    result["someFloat"] = Transformer.ToJsonValue(
-                        that.SomeFloat);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("someFloat"));
-                    throw;
-                }
+                SetProperty(result, "someFloat", "SomeFloat", that.SomeFloat, Serialize_double);
 
-                result["someString"] = Nodes.JsonValue.Create(
-                    that.SomeString);
+                SetProperty(result, "someString", "SomeString", that.SomeString, Serialize_string);
 
-                result["someBytes"] = Nodes.JsonValue.Create(
-                    System.Convert.ToBase64String(
-                        that.SomeBytes));
+                SetProperty(result, "someBytes", "SomeBytes", that.SomeBytes, Serialize_bytes);
 
                 return result;
             }
@@ -599,7 +652,7 @@ namespace dummy
                 catch (SerializationFailure failure)
                 {
                     throw new SerializationException(
-                        Reporting.GenerateJsonPath(failure.Error.PathSegments),
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
                         failure.Error.Cause);
                 }
             }

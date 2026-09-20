@@ -10,8 +10,6 @@ import (
 	"os"
 	"reflect"
 	"strings"
-	"testing"
-	aasstringification "github.com/dummy-works/dummy/stringification"
 	aastesting "github.com/dummy-works/dummy/aastesting"
 	aastypes "github.com/dummy-works/dummy/types"
 )

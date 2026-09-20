@@ -596,13 +596,13 @@ void OfSomething::Execute() {
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::IndexSegment>(
             index_in_constrained_primitives_
           )
         );
 
-        error_->path.segments.emplace_back(
+        error_->path.segments.emplace_front(
           common::make_unique<iteration::PropertySegment>(
             iteration::Property::kSomeNames
           )

@@ -1,6 +1,7 @@
 """Generate the test code for the jsonization of classes with descendants."""
 
 import io
+from typing import List
 
 from icontract import ensure
 
@@ -11,6 +12,12 @@ from aas_core_codegen.common import (
 )
 from aas_core_codegen.golang import common as golang_common, naming as golang_naming
 from aas_core_codegen.golang.common import INDENT as I, INDENT2 as II, INDENT3 as III
+
+
+#: Stand in for the import block, which is filled in at the very end: it
+#: depends on what the generated code actually names, and an unused import does
+#: not compile in Go.
+_IMPORT_PLACEHOLDER = Stripped("")
 
 
 # fmt: off
@@ -24,15 +31,8 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     blocks = [
         Stripped("package jsonization_test"),
         golang_common.WARNING,
-        Stripped(
-            f"""\
-import (
-{I}"testing"
-{I}aasjsonization "{repo_url}/jsonization"
-{I}aastesting "{repo_url}/aastesting"
-)"""
-        ),
-    ]
+        _IMPORT_PLACEHOLDER,
+    ]  # type: List[Stripped]
 
     for cls in symbol_table.classes:
         # NOTE (mristin):
@@ -160,6 +160,19 @@ func {test_name}(t *testing.T) {{
             )
 
     blocks.append(golang_common.WARNING)
+
+    import_index = blocks.index(_IMPORT_PLACEHOLDER)
+
+    import_lines = []  # type: List[str]
+    for module, literal in (
+        ("testing", f'{I}"testing"'),
+        ("aasjsonization", f'{I}aasjsonization "{repo_url}/jsonization"'),
+        ("aastesting", f'{I}aastesting "{repo_url}/aastesting"'),
+    ):
+        if golang_common.names_package(blocks, module):
+            import_lines.append(literal)
+
+    blocks[import_index] = Stripped("import (\n" + "\n".join(import_lines) + "\n)")
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

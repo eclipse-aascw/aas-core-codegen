@@ -21,6 +21,12 @@ from aas_core_codegen.golang.common import (
 )
 
 
+#: Stand in for the import block, which is filled in at the very end: it
+#: depends on what the generated code actually names, and an unused import does
+#: not compile in Go.
+_IMPORT_PLACEHOLDER = Stripped("")
+
+
 # fmt: off
 @ensure(
     lambda result: result.endswith('\n'),
@@ -32,21 +38,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     blocks = [
         Stripped("package types_xxx_or_default_test"),
         golang_common.WARNING,
-        Stripped(
-            f"""\
-import (
-{I}"path/filepath"
-{I}"fmt"
-{I}"encoding/json"
-{I}"os"
-{I}"reflect"
-{I}"strings"
-{I}"testing"
-{I}aasstringification "{repo_url}/stringification"
-{I}aastesting "{repo_url}/aastesting"
-{I}aastypes "{repo_url}/types"
-)"""
-        ),
+        _IMPORT_PLACEHOLDER,
         Stripped(
             f"""\
 // Represent explicitly a literal of an enumeration.
@@ -309,6 +301,26 @@ func {test_function_name}(t *testing.T) {{
             )
 
     blocks.append(golang_common.WARNING)
+
+    import_index = blocks.index(_IMPORT_PLACEHOLDER)
+
+    import_lines = []  # type: List[str]
+    for module, literal in (
+        ("filepath", f'{I}"path/filepath"'),
+        ("fmt", f'{I}"fmt"'),
+        ("json", f'{I}"encoding/json"'),
+        ("os", f'{I}"os"'),
+        ("reflect", f'{I}"reflect"'),
+        ("strings", f'{I}"strings"'),
+        ("testing", f'{I}"testing"'),
+        ("aasstringification", f'{I}aasstringification "{repo_url}/stringification"'),
+        ("aastesting", f'{I}aastesting "{repo_url}/aastesting"'),
+        ("aastypes", f'{I}aastypes "{repo_url}/types"'),
+    ):
+        if golang_common.names_package(blocks, module):
+            import_lines.append(literal)
+
+    blocks[import_index] = Stripped("import (\n" + "\n".join(import_lines) + "\n)")
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

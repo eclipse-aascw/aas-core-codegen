@@ -1308,9 +1308,14 @@ public class Xmlization {
      * <p>This is {@link #writeElement} plus the one thing a property knows
      * which nothing below it does: its own name. Prepending it here, once,
      * saves a {@code try} around every one of the property writes.
+     *
+     * <p>The path names the getter, and not the XML element: a serialization
+     * error is reported on an <em>instance</em>, which the caller holds, and
+     * not on a document which has not been written yet.
      */
     private static <T> void writeProperty(
       String name,
+      String getterName,
       T that,
       XMLStreamWriter writer,
       ContentWriter<? super T> writeContent) {
@@ -1318,7 +1323,7 @@ public class Xmlization {
         writeElement(name, that, writer, false, writeContent);
       } catch (_SerializeFailure failure) {
         failure.getError().prependSegment(
-          new Reporting.NameSegment(name));
+          new Reporting.NameSegment(getterName));
         throw failure;
       }
     }
@@ -1334,12 +1339,13 @@ public class Xmlization {
      */
     private static <T> void writeOptionalProperty(
       String name,
+      String getterName,
       Optional<T> that,
       XMLStreamWriter writer,
       ContentWriter<? super T> writeContent) {
       final T value = that.orElse(null);
       if (value != null) {
-        writeProperty(name, value, writer, writeContent);
+        writeProperty(name, getterName, value, writer, writeContent);
       }
     }
 
@@ -1509,6 +1515,7 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "name",
+        "getName()",
         that.getName(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -1531,6 +1538,7 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "serialNumber",
+        "getSerialNumber()",
         that.getSerialNumber(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -1553,24 +1561,28 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "pair",
+        "getPair()",
         that.getPair(),
         writer,
         _VisitorWithWriter::writeTupleOf2_stringified_stringified);
 
       writeProperty(
         "items",
+        "getItems()",
         that.getItems(),
         writer,
         _VisitorWithWriter::writeTupleOf2_IClass_IClass);
 
       writeProperty(
         "tricky",
+        "getTricky()",
         that.getTricky(),
         writer,
         _VisitorWithWriter::writeTupleOf6_stringified_IClass_IClass_IClass_stringified_IEnum);
 
       writeOptionalProperty(
         "optionalPair",
+        "getOptionalPair()",
         that.getOptionalPair(),
         writer,
         _VisitorWithWriter::writeTupleOf2_stringified_IClass);
@@ -1618,18 +1630,17 @@ public class Xmlization {
      * were it left to the caller, the failure would surface at their own flush,
      * after the serialization has long returned.
      *
-     * <p>The path of a {@link SerializeException} is rendered as a relative
-     * XPath, the same spelling the de-serialization reports, and names
-     * the properties and the list indices leading to the culprit --
-     * {@code submodelElements/*[0]/value}. Two things it deliberately does not
-     * name: the outermost element, since this method takes any
-     * {@link IClass} and the name would say nothing the caller does not
-     * already know; and the discriminator element of a polymorphic property,
-     * which the de-serialization does prepend. The de-serialization is pointing
-     * into a document it is reading, where that element is a real extra level;
-     * this is pointing into the instance the caller handed over, where it is
-     * not -- {@code value/idShort} here is exactly
-     * {@code getValue().getIdShort()}.
+     * <p>The path of a {@link SerializeException} is rendered as a Java
+     * expression on the instance the caller handed over, and not as the XPath
+     * which the de-serialization reports: this error answers a call the caller
+     * made on that instance, and not on a document which has not been written
+     * yet -- {@code getSubmodelElements().get(0).getValue()}. Two things it
+     * deliberately does not name: the outermost element, since this method
+     * takes any {@link IClass} and the name would say nothing the caller does
+     * not already know; and the discriminator element of a polymorphic
+     * property, which the de-serialization does prepend. The de-serialization
+     * is pointing into a document it is reading, where that element is a real
+     * extra level; here it is not.
      */
     public static void to(
       IClass that,
@@ -1643,7 +1654,7 @@ public class Xmlization {
       } catch (_SerializeFailure failure) {
         final Reporting.Error error = failure.getError();
         throw new SerializeException(
-          Reporting.generateRelativeXPath(error.getPathSegments()),
+          Reporting.generateJavaPath(error.getPathSegments()),
           error.getCause());
       }
     }

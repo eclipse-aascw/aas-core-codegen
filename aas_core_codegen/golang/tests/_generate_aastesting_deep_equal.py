@@ -406,6 +406,12 @@ func DeepEqual(
     )
 
 
+#: Stand in for the import block, which is filled in at the very end: it
+#: depends on what the generated code actually names, and an unused import does
+#: not compile in Go.
+_IMPORT_PLACEHOLDER = Stripped("")
+
+
 # fmt: off
 @ensure(
     lambda result: result.endswith('\n'),
@@ -417,14 +423,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     blocks = [
         Stripped("package aastesting"),
         golang_common.WARNING,
-        Stripped(
-            f"""\
-import (
-{I}"bytes"
-{I}"fmt"
-{I}aastypes "{repo_url}/types"
-)"""
-        ),
+        _IMPORT_PLACEHOLDER,
     ]  # type: List[Stripped]
 
     for cls in symbol_table.concrete_classes:
@@ -433,6 +432,19 @@ import (
     blocks.append(_generate_dispatch_function(symbol_table=symbol_table))
 
     blocks.append(golang_common.WARNING)
+
+    import_index = blocks.index(_IMPORT_PLACEHOLDER)
+
+    import_lines = []  # type: List[str]
+    for module, literal in (
+        ("bytes", f'{I}"bytes"'),
+        ("fmt", f'{I}"fmt"'),
+        ("aastypes", f'{I}aastypes "{repo_url}/types"'),
+    ):
+        if golang_common.names_package(blocks, module):
+            import_lines.append(literal)
+
+    blocks[import_index] = Stripped("import (\n" + "\n".join(import_lines) + "\n)")
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

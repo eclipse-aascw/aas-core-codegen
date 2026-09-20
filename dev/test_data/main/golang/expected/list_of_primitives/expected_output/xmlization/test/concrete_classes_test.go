@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 	"encoding/xml"
-	"math"
 	aastesting "github.com/dummy-works/dummy/aastesting"
 	aastypes "github.com/dummy-works/dummy/types"
 	aasxmlization "github.com/dummy-works/dummy/xmlization"

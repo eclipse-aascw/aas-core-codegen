@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"math"
 	b64 "encoding/base64"
-	aascommon "github.com/aas-core-works/aas-core3.0-golang/common"
 	aasreporting "github.com/aas-core-works/aas-core3.0-golang/reporting"
 	aasstringification "github.com/aas-core-works/aas-core3.0-golang/stringification"
 	aastypes "github.com/aas-core-works/aas-core3.0-golang/types"

@@ -2285,6 +2285,12 @@ func ToJsonable(
 
 # endregion
 
+#: Stand in for the import block, which is filled in at the very end: it
+#: depends on what the generated code actually names, and an unused import does
+#: not compile in Go.
+_IMPORT_PLACEHOLDER = Stripped("")
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -2323,18 +2329,7 @@ def generate(
 package jsonization"""
         ),
         golang_common.WARNING,
-        Stripped(
-            f"""\
-import (
-{I}"fmt"
-{I}"math"
-{I}b64 "encoding/base64"
-{I}aascommon {aascommon_url_literal}
-{I}aasreporting {aasreporting_url_literal}
-{I}aasstringification {aasstringification_url_literal}
-{I}aastypes {aastypes_url_literal}
-)"""
-        ),
+        _IMPORT_PLACEHOLDER,
         Stripped("// region De-serialization"),
         Stripped(
             f"""\
@@ -2603,6 +2598,26 @@ func mustSerializationError(err error) *SerializationError {{
         return None, errors
 
     blocks.append(golang_common.WARNING)
+
+    import_index = blocks.index(_IMPORT_PLACEHOLDER)
+
+    import_lines = [
+        f'{I}"fmt"',
+        f'{I}"math"',
+        f'{I}b64 "encoding/base64"',
+    ]  # type: List[str]
+
+    if golang_common.names_package(blocks, "aascommon"):
+        import_lines.append(f"{I}aascommon {aascommon_url_literal}")
+
+    import_lines.append(f"{I}aasreporting {aasreporting_url_literal}")
+
+    if golang_common.names_package(blocks, "aasstringification"):
+        import_lines.append(f"{I}aasstringification {aasstringification_url_literal}")
+
+    import_lines.append(f"{I}aastypes {aastypes_url_literal}")
+
+    blocks[import_index] = Stripped("import (\n" + "\n".join(import_lines) + "\n)")
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

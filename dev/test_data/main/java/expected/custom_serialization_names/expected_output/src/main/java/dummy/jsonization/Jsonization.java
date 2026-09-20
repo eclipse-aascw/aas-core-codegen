@@ -338,19 +338,81 @@ public class Jsonization {
         return INSTANCE.transform(that);
       }
 
+      /**
+       * Convert a single value into a JSON node.
+       */
+      @FunctionalInterface
+      private interface Serializer<T> {
+        JsonNode serialize(T that);
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} to
+       * {@code that}, serialized by {@code serialize}.
+       *
+       * <p>{@code getterName} names the property on the path of a failure. It is
+       * the getter, and not the JSON property: a serialization error is reported
+       * on an <em>instance</em>, which the caller holds, and not on a document
+       * which has not been written yet.
+       */
+      private static <T> void setProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        T that,
+        Serializer<? super T> serialize) {
+        try {
+          result.set(jsonName, serialize.serialize(that));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment(getterName));
+          throw failure;
+        }
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} if {@code that}
+       * has been given, and set nothing at all otherwise.
+       *
+       * <p>The {@link Optional} is taken apart here, once, instead of at every
+       * optional property: asking it and then unwrapping it at the call site would
+       * call the getter twice, and every call allocates an {@link Optional} of
+       * its own.
+       */
+      private static <T> void setOptionalProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        Optional<T> that,
+        Serializer<? super T> serialize) {
+        final T value = that.orElse(null);
+        if (value != null) {
+          setProperty(result, jsonName, getterName, value, serialize);
+        }
+      }
+
+      /**
+       * Convert {@code that} string to a JSON value.
+       *
+       * <p>See the note on {@link #boolToJsonNode} on why this wrapper exists.
+       *
+       * @param that value to be converted
+       */
+      private static JsonNode stringToJsonNode(String that) {
+        return JsonNodeFactory.instance.textNode(that);
+      }
+
       @Override
       public JsonNode transformQueryCondition(
         IQueryCondition that
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getEq().isPresent()) {
-          result.set("$eq", JsonNodeFactory.instance.textNode(that.getEq().get()));
-        }
+        setOptionalProperty(result, "$eq", "getEq()", that.getEq(), _Transformer::stringToJsonNode);
 
-        if (that.getNotEq().isPresent()) {
-          result.set("$ne", JsonNodeFactory.instance.textNode(that.getNotEq().get()));
-        }
+        setOptionalProperty(
+          result, "$ne", "getNotEq()",
+          that.getNotEq(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -382,7 +444,7 @@ public class Jsonization {
         } catch (_SerializeFailure failure) {
           final Reporting.Error error = failure.getError();
           throw new SerializeException(
-            Reporting.generateJsonPath(error.getPathSegments()),
+            Reporting.generateJavaPath(error.getPathSegments()),
             error.getCause());
         }
       }

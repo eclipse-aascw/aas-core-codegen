@@ -94,6 +94,25 @@ namespace AasCore.Aas3_0
         }
 
         /// <summary>
+        /// Generate a C# access path based on the path segments.
+        /// </summary>
+        /// <remarks>
+        /// The name segments are expected to denote the names of the properties in
+        /// C#, not the JSON property names. This is the path to report where in
+        /// an *instance* something went wrong -- on the serialization, say, where
+        /// the caller holds the instance and not a document.
+        /// </remarks>
+        public static string GenerateCSharpPath(
+            ICollection<Segment> segments)
+        {
+            // NOTE (mristin):
+            // We re-use the JSON path formatting as the implementation, but introduce
+            // a separate function to signal to the reader in which form the name
+            // segments are expected.
+            return GenerateJsonPath(segments);
+        }
+
+        /// <summary>
         /// Escape special characters for XPath.
         /// </summary>
         private static string EscapeForXPath(
