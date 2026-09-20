@@ -286,13 +286,14 @@ def generate(
 package constants"""
         ),
         golang_common.WARNING,
-        Stripped(
-            f"""\
-import (
-{I}aastypes {aastypes_url_literal}
-)"""
-        ),
+        # NOTE (mristin):
+        # The import block is filled in at the very end: it depends on what
+        # the constants below actually name, and an unused import does not
+        # compile in Go.
+        Stripped(""),
     ]  # type: List[Stripped]
+
+    import_index = len(blocks) - 1
 
     for constant in symbol_table.constants:
         block: Optional[Stripped]
@@ -320,6 +321,15 @@ import (
         return None, errors
 
     blocks.append(golang_common.WARNING)
+
+    import_lines = []  # type: List[str]
+    if golang_common.names_package(blocks, "aastypes"):
+        import_lines.append(f"{I}aastypes {aastypes_url_literal}")
+
+    if len(import_lines) == 0:
+        del blocks[import_index]
+    else:
+        blocks[import_index] = Stripped("import (\n" + "\n".join(import_lines) + "\n)")
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

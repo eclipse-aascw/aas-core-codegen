@@ -6,12 +6,12 @@ package jsonization_test
 import (
 	"fmt"
 	"path/filepath"
+	"math"
 	"sort"
 	"testing"
-	"math"
-	aastypes "github.com/dummy-works/dummy/types"
 	aasjsonization "github.com/dummy-works/dummy/jsonization"
 	aastesting "github.com/dummy-works/dummy/aastesting"
+	aastypes "github.com/dummy-works/dummy/types"
 )
 
 // Determine the path to the first recorded example of `modelType`.

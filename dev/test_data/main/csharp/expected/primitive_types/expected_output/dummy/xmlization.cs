@@ -866,6 +866,41 @@ namespace dummy
         }
 
         /// <summary>
+        /// Represent a critical error during the serialization.
+        /// </summary>
+        public class SerializationException : System.Exception
+        {
+            public readonly string Path;
+            public readonly string Cause;
+            public SerializationException(string path, string cause)
+                : base($"{cause} at: {path}")
+            {
+                Path = path;
+                Cause = cause;
+            }
+        }
+
+        /// <summary>
+        /// Signal a failure of the serialization, carrying the path to the culprit.
+        /// </summary>
+        /// <remarks>
+        /// The path is built as the stack unwinds -- every container prepends the one
+        /// segment it knows, the property its name and the list the index of the item
+        /// -- which is why this can not be a <see cref="SerializationException" />
+        /// already: that one renders its message in its constructor, so its path has
+        /// to be complete by then. <see cref="Serialize.To" /> renders and converts.
+        /// </remarks>
+        internal class SerializationFailure : System.Exception
+        {
+            public readonly Reporting.Error Error;
+            public SerializationFailure(Reporting.Error error)
+                : base(error.Cause)
+            {
+                Error = error;
+            }
+        }
+
+        /// <summary>
         /// Deserialize instances of meta-model classes from XML.
         /// </summary>
         /// <example>
@@ -975,6 +1010,37 @@ namespace dummy
             }
 
             /// <summary>
+            /// Write the property <paramref name="propertyName" /> of the instance being
+            /// serialized as an XML element named <paramref name="elementName" />.
+            /// </summary>
+            /// <remarks>
+            /// This is <see cref="WriteElement{T}" /> plus the one segment of the path
+            /// which only the property knows. The path names the C# property, and not
+            /// the XML element: a serialization error is reported on an <em>instance</em>,
+            /// which the caller holds, and not on a document which has not been written
+            /// yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private static void WriteProperty<T>(
+                string elementName,
+                string propertyName,
+                T that,
+                Xml.XmlWriter writer,
+                ContentWriter<T> writeContent)
+            {
+                try
+                {
+                    WriteElement(elementName, that, writer, writeContent);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
+            /// <summary>
             /// The one instance through which the writing is dispatched.
             /// </summary>
             /// <remarks>
@@ -1022,20 +1088,20 @@ namespace dummy
                 Aas.ISomething that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "someBool", that.SomeBool, writer, Write_bool);
+                WriteProperty(
+                    "someBool", "SomeBool", that.SomeBool, writer, Write_bool);
 
-                WriteElement(
-                    "someInt", that.SomeInt, writer, Write_long);
+                WriteProperty(
+                    "someInt", "SomeInt", that.SomeInt, writer, Write_long);
 
-                WriteElement(
-                    "someFloat", that.SomeFloat, writer, Write_double);
+                WriteProperty(
+                    "someFloat", "SomeFloat", that.SomeFloat, writer, Write_double);
 
-                WriteElement(
-                    "someString", that.SomeString, writer, Write_string);
+                WriteProperty(
+                    "someString", "SomeString", that.SomeString, writer, Write_string);
 
-                WriteElement(
-                    "someBytes", that.SomeBytes, writer, Write_bytes);
+                WriteProperty(
+                    "someBytes", "SomeBytes", that.SomeBytes, writer, Write_bytes);
             }  // private static void SomethingToSequence
 
             public override void VisitSomething(
@@ -1072,12 +1138,25 @@ namespace dummy
             /// <summary>
             /// Serialize an instance of the meta-model to XML.
             /// </summary>
+            /// <exception cref="SerializationException">
+            /// Thrown when a value within <paramref name="that" /> instance can not be
+            /// represented in XML
+            /// </exception>
             public static void To(
                 Aas.IClass that,
                 Xml.XmlWriter writer)
             {
-                VisitorWithWriter.WriteIClass(
-                    that, writer);
+                try
+                {
+                    VisitorWithWriter.WriteIClass(
+                        that, writer);
+                }
+                catch (SerializationFailure failure)
+                {
+                    throw new SerializationException(
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
+                        failure.Error.Cause);
+                }
             }
         }  // public static class Serialize
     }  // public static class Xmlization

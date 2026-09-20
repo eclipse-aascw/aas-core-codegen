@@ -6631,6 +6631,83 @@ public class Jsonization {
       }
 
       /**
+       * Convert a single value into a JSON node.
+       */
+      @FunctionalInterface
+      private interface Serializer<T> {
+        JsonNode serialize(T that);
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} to
+       * {@code that}, serialized by {@code serialize}.
+       *
+       * <p>{@code getterName} names the property on the path of a failure. It is
+       * the getter, and not the JSON property: a serialization error is reported
+       * on an <em>instance</em>, which the caller holds, and not on a document
+       * which has not been written yet.
+       */
+      private static <T> void setProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        T that,
+        Serializer<? super T> serialize) {
+        try {
+          result.set(jsonName, serialize.serialize(that));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment(getterName));
+          throw failure;
+        }
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} if {@code that}
+       * has been given, and set nothing at all otherwise.
+       *
+       * <p>The {@link Optional} is taken apart here, once, instead of at every
+       * optional property: asking it and then unwrapping it at the call site would
+       * call the getter twice, and every call allocates an {@link Optional} of
+       * its own.
+       */
+      private static <T> void setOptionalProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        Optional<T> that,
+        Serializer<? super T> serialize) {
+        final T value = that.orElse(null);
+        if (value != null) {
+          setProperty(result, jsonName, getterName, value, serialize);
+        }
+      }
+
+      /**
+       * Convert {@code that} boolean to a JSON value.
+       *
+       * <p>This wraps {@link JsonNodeFactory}, which is an object, so that
+       * the conversion is a static method like every other one here and
+       * a reference to it captures nothing.
+       *
+       * @param that value to be converted
+       */
+      private static JsonNode boolToJsonNode(Boolean that) {
+        return JsonNodeFactory.instance.booleanNode(that);
+      }
+
+      /**
+       * Convert {@code that} string to a JSON value.
+       *
+       * <p>See the note on {@link #boolToJsonNode} on why this wrapper exists.
+       *
+       * @param that value to be converted
+       */
+      private static JsonNode stringToJsonNode(String that) {
+        return JsonNodeFactory.instance.textNode(that);
+      }
+
+      /**
        * Convert {@code that} byte array to a JSON value.
        *
        * @param that value to be converted
@@ -6648,8 +6725,16 @@ public class Jsonization {
       private static ArrayNode serializeListOf_IClass(
         List<? extends IClass> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
+        int i = 0;
         for (IClass item : that) {
-          result.add(transformClass(item));
+          try {
+            result.add(transformClass(item));
+          } catch (_SerializeFailure failure) {
+            failure.getError().prependSegment(
+              new Reporting.IndexSegment(i));
+            throw failure;
+          }
+          i++;
         }
         return result;
       }
@@ -6660,28 +6745,27 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        result.set("name", JsonNodeFactory.instance.textNode(that.getName()));
+        setProperty(result, "name", "getName()", that.getName(), _Transformer::stringToJsonNode);
 
-        if (that.getValueType().isPresent()) {
-          result.set("valueType", Serialize.toJsonValue(that.getValueType().get()));
-        }
+        setOptionalProperty(
+          result, "valueType", "getValueType()",
+          that.getValueType(), Serialize::toJsonValue);
 
-        if (that.getValue().isPresent()) {
-          result.set("value", JsonNodeFactory.instance.textNode(that.getValue().get()));
-        }
+        setOptionalProperty(
+          result, "value", "getValue()",
+          that.getValue(), _Transformer::stringToJsonNode);
 
-        if (that.getRefersTo().isPresent()) {
-          result.set("refersTo", serializeListOf_IClass(that.getRefersTo().get()));
-        }
+        setOptionalProperty(
+          result, "refersTo", "getRefersTo()",
+          that.getRefersTo(), _Transformer::serializeListOf_IClass);
 
         return result;
       }
@@ -6692,26 +6776,25 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getVersion().isPresent()) {
-          result.set("version", JsonNodeFactory.instance.textNode(that.getVersion().get()));
-        }
+        setOptionalProperty(
+          result, "version", "getVersion()",
+          that.getVersion(), _Transformer::stringToJsonNode);
 
-        if (that.getRevision().isPresent()) {
-          result.set("revision", JsonNodeFactory.instance.textNode(that.getRevision().get()));
-        }
+        setOptionalProperty(
+          result, "revision", "getRevision()",
+          that.getRevision(), _Transformer::stringToJsonNode);
 
-        if (that.getCreator().isPresent()) {
-          result.set("creator", transformClass(that.getCreator().get()));
-        }
+        setOptionalProperty(
+          result, "creator", "getCreator()",
+          that.getCreator(), _Transformer::transformClass);
 
-        if (that.getTemplateId().isPresent()) {
-          result.set("templateId", JsonNodeFactory.instance.textNode(that.getTemplateId().get()));
-        }
+        setOptionalProperty(
+          result, "templateId", "getTemplateId()",
+          that.getTemplateId(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -6722,30 +6805,29 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getKind().isPresent()) {
-          result.set("kind", Serialize.toJsonValue(that.getKind().get()));
-        }
+        setOptionalProperty(result, "kind", "getKind()", that.getKind(), Serialize::toJsonValue);
 
-        result.set("type", JsonNodeFactory.instance.textNode(that.getType()));
+        setProperty(result, "type", "getType()", that.getType(), _Transformer::stringToJsonNode);
 
-        result.set("valueType", Serialize.toJsonValue(that.getValueType()));
+        setProperty(
+          result, "valueType", "getValueType()",
+          that.getValueType(), Serialize::toJsonValue);
 
-        if (that.getValue().isPresent()) {
-          result.set("value", JsonNodeFactory.instance.textNode(that.getValue().get()));
-        }
+        setOptionalProperty(
+          result, "value", "getValue()",
+          that.getValue(), _Transformer::stringToJsonNode);
 
-        if (that.getValueId().isPresent()) {
-          result.set("valueId", transformClass(that.getValueId().get()));
-        }
+        setOptionalProperty(
+          result, "valueId", "getValueId()",
+          that.getValueId(), _Transformer::transformClass);
 
         return result;
       }
@@ -6756,46 +6838,47 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getAdministration().isPresent()) {
-          result.set("administration", transformClass(that.getAdministration().get()));
-        }
+        setOptionalProperty(
+          result, "administration", "getAdministration()",
+          that.getAdministration(), _Transformer::transformClass);
 
-        result.set("id", JsonNodeFactory.instance.textNode(that.getId()));
+        setProperty(result, "id", "getId()", that.getId(), _Transformer::stringToJsonNode);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDerivedFrom().isPresent()) {
-          result.set("derivedFrom", transformClass(that.getDerivedFrom().get()));
-        }
+        setOptionalProperty(
+          result, "derivedFrom", "getDerivedFrom()",
+          that.getDerivedFrom(), _Transformer::transformClass);
 
-        result.set("assetInformation", transformClass(that.getAssetInformation()));
+        setProperty(
+          result, "assetInformation", "getAssetInformation()",
+          that.getAssetInformation(), _Transformer::transformClass);
 
-        if (that.getSubmodels().isPresent()) {
-          result.set("submodels", serializeListOf_IClass(that.getSubmodels().get()));
-        }
+        setOptionalProperty(
+          result, "submodels", "getSubmodels()",
+          that.getSubmodels(), _Transformer::serializeListOf_IClass);
 
         result.put("modelType", "AssetAdministrationShell");
 
@@ -6808,24 +6891,25 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("assetKind", Serialize.toJsonValue(that.getAssetKind()));
+        setProperty(
+          result, "assetKind", "getAssetKind()",
+          that.getAssetKind(), Serialize::toJsonValue);
 
-        if (that.getGlobalAssetId().isPresent()) {
-          result.set("globalAssetId", JsonNodeFactory.instance.textNode(
-            that.getGlobalAssetId().get()));
-        }
+        setOptionalProperty(
+          result, "globalAssetId", "getGlobalAssetId()",
+          that.getGlobalAssetId(), _Transformer::stringToJsonNode);
 
-        if (that.getSpecificAssetIds().isPresent()) {
-          result.set("specificAssetIds", serializeListOf_IClass(that.getSpecificAssetIds().get()));
-        }
+        setOptionalProperty(
+          result, "specificAssetIds", "getSpecificAssetIds()",
+          that.getSpecificAssetIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getAssetType().isPresent()) {
-          result.set("assetType", JsonNodeFactory.instance.textNode(that.getAssetType().get()));
-        }
+        setOptionalProperty(
+          result, "assetType", "getAssetType()",
+          that.getAssetType(), _Transformer::stringToJsonNode);
 
-        if (that.getDefaultThumbnail().isPresent()) {
-          result.set("defaultThumbnail", transformClass(that.getDefaultThumbnail().get()));
-        }
+        setOptionalProperty(
+          result, "defaultThumbnail", "getDefaultThumbnail()",
+          that.getDefaultThumbnail(), _Transformer::transformClass);
 
         return result;
       }
@@ -6836,11 +6920,11 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("path", JsonNodeFactory.instance.textNode(that.getPath()));
+        setProperty(result, "path", "getPath()", that.getPath(), _Transformer::stringToJsonNode);
 
-        if (that.getContentType().isPresent()) {
-          result.set("contentType", JsonNodeFactory.instance.textNode(that.getContentType().get()));
-        }
+        setOptionalProperty(
+          result, "contentType", "getContentType()",
+          that.getContentType(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -6851,22 +6935,21 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        result.set("name", JsonNodeFactory.instance.textNode(that.getName()));
+        setProperty(result, "name", "getName()", that.getName(), _Transformer::stringToJsonNode);
 
-        result.set("value", JsonNodeFactory.instance.textNode(that.getValue()));
+        setProperty(result, "value", "getValue()", that.getValue(), _Transformer::stringToJsonNode);
 
-        if (that.getExternalSubjectId().isPresent()) {
-          result.set("externalSubjectId", transformClass(that.getExternalSubjectId().get()));
-        }
+        setOptionalProperty(
+          result, "externalSubjectId", "getExternalSubjectId()",
+          that.getExternalSubjectId(), _Transformer::transformClass);
 
         return result;
       }
@@ -6877,57 +6960,53 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getAdministration().isPresent()) {
-          result.set("administration", transformClass(that.getAdministration().get()));
-        }
+        setOptionalProperty(
+          result, "administration", "getAdministration()",
+          that.getAdministration(), _Transformer::transformClass);
 
-        result.set("id", JsonNodeFactory.instance.textNode(that.getId()));
+        setProperty(result, "id", "getId()", that.getId(), _Transformer::stringToJsonNode);
 
-        if (that.getKind().isPresent()) {
-          result.set("kind", Serialize.toJsonValue(that.getKind().get()));
-        }
+        setOptionalProperty(result, "kind", "getKind()", that.getKind(), Serialize::toJsonValue);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSubmodelElements().isPresent()) {
-          result.set("submodelElements", serializeListOf_IClass(that.getSubmodelElements().get()));
-        }
+        setOptionalProperty(
+          result, "submodelElements", "getSubmodelElements()",
+          that.getSubmodelElements(), _Transformer::serializeListOf_IClass);
 
         result.put("modelType", "Submodel");
 
@@ -6940,47 +7019,47 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        result.set("first", transformClass(that.getFirst()));
+        setProperty(result, "first", "getFirst()", that.getFirst(), _Transformer::transformClass);
 
-        result.set("second", transformClass(that.getSecond()));
+        setProperty(
+          result, "second", "getSecond()",
+          that.getSecond(), _Transformer::transformClass);
 
         result.put("modelType", "RelationshipElement");
 
@@ -6993,63 +7072,61 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getOrderRelevant().isPresent()) {
-          result.set("orderRelevant", JsonNodeFactory.instance.booleanNode(
-            that.getOrderRelevant().get()));
-        }
+        setOptionalProperty(
+          result, "orderRelevant", "getOrderRelevant()",
+          that.getOrderRelevant(), _Transformer::boolToJsonNode);
 
-        if (that.getSemanticIdListElement().isPresent()) {
-          result.set("semanticIdListElement", transformClass(that.getSemanticIdListElement().get()));
-        }
+        setOptionalProperty(
+          result, "semanticIdListElement", "getSemanticIdListElement()",
+          that.getSemanticIdListElement(), _Transformer::transformClass);
 
-        result.set("typeValueListElement", Serialize.toJsonValue(that.getTypeValueListElement()));
+        setProperty(
+          result, "typeValueListElement", "getTypeValueListElement()",
+          that.getTypeValueListElement(), Serialize::toJsonValue);
 
-        if (that.getValueTypeListElement().isPresent()) {
-          result.set("valueTypeListElement", Serialize.toJsonValue(
-            that.getValueTypeListElement().get()));
-        }
+        setOptionalProperty(
+          result, "valueTypeListElement", "getValueTypeListElement()",
+          that.getValueTypeListElement(), Serialize::toJsonValue);
 
-        if (that.getValue().isPresent()) {
-          result.set("value", serializeListOf_IClass(that.getValue().get()));
-        }
+        setOptionalProperty(
+          result, "value", "getValue()",
+          that.getValue(), _Transformer::serializeListOf_IClass);
 
         result.put("modelType", "SubmodelElementList");
 
@@ -7062,47 +7139,45 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getValue().isPresent()) {
-          result.set("value", serializeListOf_IClass(that.getValue().get()));
-        }
+        setOptionalProperty(
+          result, "value", "getValue()",
+          that.getValue(), _Transformer::serializeListOf_IClass);
 
         result.put("modelType", "SubmodelElementCollection");
 
@@ -7115,53 +7190,53 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        result.set("valueType", Serialize.toJsonValue(that.getValueType()));
+        setProperty(
+          result, "valueType", "getValueType()",
+          that.getValueType(), Serialize::toJsonValue);
 
-        if (that.getValue().isPresent()) {
-          result.set("value", JsonNodeFactory.instance.textNode(that.getValue().get()));
-        }
+        setOptionalProperty(
+          result, "value", "getValue()",
+          that.getValue(), _Transformer::stringToJsonNode);
 
-        if (that.getValueId().isPresent()) {
-          result.set("valueId", transformClass(that.getValueId().get()));
-        }
+        setOptionalProperty(
+          result, "valueId", "getValueId()",
+          that.getValueId(), _Transformer::transformClass);
 
         result.put("modelType", "Property");
 
@@ -7174,51 +7249,49 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getValue().isPresent()) {
-          result.set("value", serializeListOf_IClass(that.getValue().get()));
-        }
+        setOptionalProperty(
+          result, "value", "getValue()",
+          that.getValue(), _Transformer::serializeListOf_IClass);
 
-        if (that.getValueId().isPresent()) {
-          result.set("valueId", transformClass(that.getValueId().get()));
-        }
+        setOptionalProperty(
+          result, "valueId", "getValueId()",
+          that.getValueId(), _Transformer::transformClass);
 
         result.put("modelType", "MultiLanguageProperty");
 
@@ -7231,53 +7304,53 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        result.set("valueType", Serialize.toJsonValue(that.getValueType()));
+        setProperty(
+          result, "valueType", "getValueType()",
+          that.getValueType(), Serialize::toJsonValue);
 
-        if (that.getMin().isPresent()) {
-          result.set("min", JsonNodeFactory.instance.textNode(that.getMin().get()));
-        }
+        setOptionalProperty(
+          result, "min", "getMin()",
+          that.getMin(), _Transformer::stringToJsonNode);
 
-        if (that.getMax().isPresent()) {
-          result.set("max", JsonNodeFactory.instance.textNode(that.getMax().get()));
-        }
+        setOptionalProperty(
+          result, "max", "getMax()",
+          that.getMax(), _Transformer::stringToJsonNode);
 
         result.put("modelType", "Range");
 
@@ -7290,47 +7363,45 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getValue().isPresent()) {
-          result.set("value", transformClass(that.getValue().get()));
-        }
+        setOptionalProperty(
+          result, "value", "getValue()",
+          that.getValue(), _Transformer::transformClass);
 
         result.put("modelType", "ReferenceElement");
 
@@ -7343,49 +7414,49 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getValue().isPresent()) {
-          result.set("value", bytesToJsonNode(that.getValue().get()));
-        }
+        setOptionalProperty(
+          result, "value", "getValue()",
+          that.getValue(), _Transformer::bytesToJsonNode);
 
-        result.set("contentType", JsonNodeFactory.instance.textNode(that.getContentType()));
+        setProperty(
+          result, "contentType", "getContentType()",
+          that.getContentType(), _Transformer::stringToJsonNode);
 
         result.put("modelType", "Blob");
 
@@ -7398,49 +7469,49 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getValue().isPresent()) {
-          result.set("value", JsonNodeFactory.instance.textNode(that.getValue().get()));
-        }
+        setOptionalProperty(
+          result, "value", "getValue()",
+          that.getValue(), _Transformer::stringToJsonNode);
 
-        result.set("contentType", JsonNodeFactory.instance.textNode(that.getContentType()));
+        setProperty(
+          result, "contentType", "getContentType()",
+          that.getContentType(), _Transformer::stringToJsonNode);
 
         result.put("modelType", "File");
 
@@ -7453,51 +7524,51 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        result.set("first", transformClass(that.getFirst()));
+        setProperty(result, "first", "getFirst()", that.getFirst(), _Transformer::transformClass);
 
-        result.set("second", transformClass(that.getSecond()));
+        setProperty(
+          result, "second", "getSecond()",
+          that.getSecond(), _Transformer::transformClass);
 
-        if (that.getAnnotations().isPresent()) {
-          result.set("annotations", serializeListOf_IClass(that.getAnnotations().get()));
-        }
+        setOptionalProperty(
+          result, "annotations", "getAnnotations()",
+          that.getAnnotations(), _Transformer::serializeListOf_IClass);
 
         result.put("modelType", "AnnotatedRelationshipElement");
 
@@ -7510,58 +7581,57 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getStatements().isPresent()) {
-          result.set("statements", serializeListOf_IClass(that.getStatements().get()));
-        }
+        setOptionalProperty(
+          result, "statements", "getStatements()",
+          that.getStatements(), _Transformer::serializeListOf_IClass);
 
-        result.set("entityType", Serialize.toJsonValue(that.getEntityType()));
+        setProperty(
+          result, "entityType", "getEntityType()",
+          that.getEntityType(), Serialize::toJsonValue);
 
-        if (that.getGlobalAssetId().isPresent()) {
-          result.set("globalAssetId", JsonNodeFactory.instance.textNode(
-            that.getGlobalAssetId().get()));
-        }
+        setOptionalProperty(
+          result, "globalAssetId", "getGlobalAssetId()",
+          that.getGlobalAssetId(), _Transformer::stringToJsonNode);
 
-        if (that.getSpecificAssetIds().isPresent()) {
-          result.set("specificAssetIds", serializeListOf_IClass(that.getSpecificAssetIds().get()));
-        }
+        setOptionalProperty(
+          result, "specificAssetIds", "getSpecificAssetIds()",
+          that.getSpecificAssetIds(), _Transformer::serializeListOf_IClass);
 
         result.put("modelType", "Entity");
 
@@ -7574,31 +7644,37 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("source", transformClass(that.getSource()));
+        setProperty(
+          result, "source", "getSource()",
+          that.getSource(), _Transformer::transformClass);
 
-        if (that.getSourceSemanticId().isPresent()) {
-          result.set("sourceSemanticId", transformClass(that.getSourceSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "sourceSemanticId", "getSourceSemanticId()",
+          that.getSourceSemanticId(), _Transformer::transformClass);
 
-        result.set("observableReference", transformClass(that.getObservableReference()));
+        setProperty(
+          result, "observableReference", "getObservableReference()",
+          that.getObservableReference(), _Transformer::transformClass);
 
-        if (that.getObservableSemanticId().isPresent()) {
-          result.set("observableSemanticId", transformClass(that.getObservableSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "observableSemanticId", "getObservableSemanticId()",
+          that.getObservableSemanticId(), _Transformer::transformClass);
 
-        if (that.getTopic().isPresent()) {
-          result.set("topic", JsonNodeFactory.instance.textNode(that.getTopic().get()));
-        }
+        setOptionalProperty(
+          result, "topic", "getTopic()",
+          that.getTopic(), _Transformer::stringToJsonNode);
 
-        if (that.getSubjectId().isPresent()) {
-          result.set("subjectId", transformClass(that.getSubjectId().get()));
-        }
+        setOptionalProperty(
+          result, "subjectId", "getSubjectId()",
+          that.getSubjectId(), _Transformer::transformClass);
 
-        result.set("timeStamp", JsonNodeFactory.instance.textNode(that.getTimeStamp()));
+        setProperty(
+          result, "timeStamp", "getTimeStamp()",
+          that.getTimeStamp(), _Transformer::stringToJsonNode);
 
-        if (that.getPayload().isPresent()) {
-          result.set("payload", bytesToJsonNode(that.getPayload().get()));
-        }
+        setOptionalProperty(
+          result, "payload", "getPayload()",
+          that.getPayload(), _Transformer::bytesToJsonNode);
 
         return result;
       }
@@ -7609,69 +7685,71 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        result.set("observed", transformClass(that.getObserved()));
+        setProperty(
+          result, "observed", "getObserved()",
+          that.getObserved(), _Transformer::transformClass);
 
-        result.set("direction", Serialize.toJsonValue(that.getDirection()));
+        setProperty(
+          result, "direction", "getDirection()",
+          that.getDirection(), Serialize::toJsonValue);
 
-        result.set("state", Serialize.toJsonValue(that.getState()));
+        setProperty(result, "state", "getState()", that.getState(), Serialize::toJsonValue);
 
-        if (that.getMessageTopic().isPresent()) {
-          result.set("messageTopic", JsonNodeFactory.instance.textNode(that.getMessageTopic().get()));
-        }
+        setOptionalProperty(
+          result, "messageTopic", "getMessageTopic()",
+          that.getMessageTopic(), _Transformer::stringToJsonNode);
 
-        if (that.getMessageBroker().isPresent()) {
-          result.set("messageBroker", transformClass(that.getMessageBroker().get()));
-        }
+        setOptionalProperty(
+          result, "messageBroker", "getMessageBroker()",
+          that.getMessageBroker(), _Transformer::transformClass);
 
-        if (that.getLastUpdate().isPresent()) {
-          result.set("lastUpdate", JsonNodeFactory.instance.textNode(that.getLastUpdate().get()));
-        }
+        setOptionalProperty(
+          result, "lastUpdate", "getLastUpdate()",
+          that.getLastUpdate(), _Transformer::stringToJsonNode);
 
-        if (that.getMinInterval().isPresent()) {
-          result.set("minInterval", JsonNodeFactory.instance.textNode(that.getMinInterval().get()));
-        }
+        setOptionalProperty(
+          result, "minInterval", "getMinInterval()",
+          that.getMinInterval(), _Transformer::stringToJsonNode);
 
-        if (that.getMaxInterval().isPresent()) {
-          result.set("maxInterval", JsonNodeFactory.instance.textNode(that.getMaxInterval().get()));
-        }
+        setOptionalProperty(
+          result, "maxInterval", "getMaxInterval()",
+          that.getMaxInterval(), _Transformer::stringToJsonNode);
 
         result.put("modelType", "BasicEventElement");
 
@@ -7684,56 +7762,53 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getInputVariables().isPresent()) {
-          result.set("inputVariables", serializeListOf_IClass(that.getInputVariables().get()));
-        }
+        setOptionalProperty(
+          result, "inputVariables", "getInputVariables()",
+          that.getInputVariables(), _Transformer::serializeListOf_IClass);
 
-        if (that.getOutputVariables().isPresent()) {
-          result.set("outputVariables", serializeListOf_IClass(that.getOutputVariables().get()));
-        }
+        setOptionalProperty(
+          result, "outputVariables", "getOutputVariables()",
+          that.getOutputVariables(), _Transformer::serializeListOf_IClass);
 
-        if (that.getInoutputVariables().isPresent()) {
-          result.set("inoutputVariables", serializeListOf_IClass(
-            that.getInoutputVariables().get()));
-        }
+        setOptionalProperty(
+          result, "inoutputVariables", "getInoutputVariables()",
+          that.getInoutputVariables(), _Transformer::serializeListOf_IClass);
 
         result.put("modelType", "Operation");
 
@@ -7746,7 +7821,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("value", transformClass(that.getValue()));
+        setProperty(result, "value", "getValue()", that.getValue(), _Transformer::transformClass);
 
         return result;
       }
@@ -7757,43 +7832,41 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transformClass(that.getSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "semanticId", "getSemanticId()",
+          that.getSemanticId(), _Transformer::transformClass);
 
-        if (that.getSupplementalSemanticIds().isPresent()) {
-          result.set("supplementalSemanticIds", serializeListOf_IClass(
-            that.getSupplementalSemanticIds().get()));
-        }
+        setOptionalProperty(
+          result, "supplementalSemanticIds", "getSupplementalSemanticIds()",
+          that.getSupplementalSemanticIds(), _Transformer::serializeListOf_IClass);
 
-        if (that.getQualifiers().isPresent()) {
-          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
-        }
+        setOptionalProperty(
+          result, "qualifiers", "getQualifiers()",
+          that.getQualifiers(), _Transformer::serializeListOf_IClass);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
         result.put("modelType", "Capability");
 
@@ -7806,40 +7879,39 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getExtensions().isPresent()) {
-          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
-        }
+        setOptionalProperty(
+          result, "extensions", "getExtensions()",
+          that.getExtensions(), _Transformer::serializeListOf_IClass);
 
-        if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
-        }
+        setOptionalProperty(
+          result, "category", "getCategory()",
+          that.getCategory(), _Transformer::stringToJsonNode);
 
-        if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
-        }
+        setOptionalProperty(
+          result, "idShort", "getIdShort()",
+          that.getIdShort(), _Transformer::stringToJsonNode);
 
-        if (that.getDisplayName().isPresent()) {
-          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
-        }
+        setOptionalProperty(
+          result, "displayName", "getDisplayName()",
+          that.getDisplayName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getDescription().isPresent()) {
-          result.set("description", serializeListOf_IClass(that.getDescription().get()));
-        }
+        setOptionalProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::serializeListOf_IClass);
 
-        if (that.getAdministration().isPresent()) {
-          result.set("administration", transformClass(that.getAdministration().get()));
-        }
+        setOptionalProperty(
+          result, "administration", "getAdministration()",
+          that.getAdministration(), _Transformer::transformClass);
 
-        result.set("id", JsonNodeFactory.instance.textNode(that.getId()));
+        setProperty(result, "id", "getId()", that.getId(), _Transformer::stringToJsonNode);
 
-        if (that.getEmbeddedDataSpecifications().isPresent()) {
-          result.set("embeddedDataSpecifications", serializeListOf_IClass(
-            that.getEmbeddedDataSpecifications().get()));
-        }
+        setOptionalProperty(
+          result, "embeddedDataSpecifications", "getEmbeddedDataSpecifications()",
+          that.getEmbeddedDataSpecifications(), _Transformer::serializeListOf_IClass);
 
-        if (that.getIsCaseOf().isPresent()) {
-          result.set("isCaseOf", serializeListOf_IClass(that.getIsCaseOf().get()));
-        }
+        setOptionalProperty(
+          result, "isCaseOf", "getIsCaseOf()",
+          that.getIsCaseOf(), _Transformer::serializeListOf_IClass);
 
         result.put("modelType", "ConceptDescription");
 
@@ -7852,13 +7924,15 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("type", Serialize.toJsonValue(that.getType()));
+        setProperty(result, "type", "getType()", that.getType(), Serialize::toJsonValue);
 
-        if (that.getReferredSemanticId().isPresent()) {
-          result.set("referredSemanticId", transformClass(that.getReferredSemanticId().get()));
-        }
+        setOptionalProperty(
+          result, "referredSemanticId", "getReferredSemanticId()",
+          that.getReferredSemanticId(), _Transformer::transformClass);
 
-        result.set("keys", serializeListOf_IClass(that.getKeys()));
+        setProperty(
+          result, "keys", "getKeys()",
+          that.getKeys(), _Transformer::serializeListOf_IClass);
 
         return result;
       }
@@ -7869,9 +7943,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("type", Serialize.toJsonValue(that.getType()));
+        setProperty(result, "type", "getType()", that.getType(), Serialize::toJsonValue);
 
-        result.set("value", JsonNodeFactory.instance.textNode(that.getValue()));
+        setProperty(result, "value", "getValue()", that.getValue(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -7882,9 +7956,11 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("language", JsonNodeFactory.instance.textNode(that.getLanguage()));
+        setProperty(
+          result, "language", "getLanguage()",
+          that.getLanguage(), _Transformer::stringToJsonNode);
 
-        result.set("text", JsonNodeFactory.instance.textNode(that.getText()));
+        setProperty(result, "text", "getText()", that.getText(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -7895,9 +7971,11 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("language", JsonNodeFactory.instance.textNode(that.getLanguage()));
+        setProperty(
+          result, "language", "getLanguage()",
+          that.getLanguage(), _Transformer::stringToJsonNode);
 
-        result.set("text", JsonNodeFactory.instance.textNode(that.getText()));
+        setProperty(result, "text", "getText()", that.getText(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -7908,19 +7986,17 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        if (that.getAssetAdministrationShells().isPresent()) {
-          result.set("assetAdministrationShells", serializeListOf_IClass(
-            that.getAssetAdministrationShells().get()));
-        }
+        setOptionalProperty(
+          result, "assetAdministrationShells", "getAssetAdministrationShells()",
+          that.getAssetAdministrationShells(), _Transformer::serializeListOf_IClass);
 
-        if (that.getSubmodels().isPresent()) {
-          result.set("submodels", serializeListOf_IClass(that.getSubmodels().get()));
-        }
+        setOptionalProperty(
+          result, "submodels", "getSubmodels()",
+          that.getSubmodels(), _Transformer::serializeListOf_IClass);
 
-        if (that.getConceptDescriptions().isPresent()) {
-          result.set("conceptDescriptions", serializeListOf_IClass(
-            that.getConceptDescriptions().get()));
-        }
+        setOptionalProperty(
+          result, "conceptDescriptions", "getConceptDescriptions()",
+          that.getConceptDescriptions(), _Transformer::serializeListOf_IClass);
 
         return result;
       }
@@ -7931,9 +8007,13 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("dataSpecification", transformClass(that.getDataSpecification()));
+        setProperty(
+          result, "dataSpecification", "getDataSpecification()",
+          that.getDataSpecification(), _Transformer::transformClass);
 
-        result.set("dataSpecificationContent", transformClass(that.getDataSpecificationContent()));
+        setProperty(
+          result, "dataSpecificationContent", "getDataSpecificationContent()",
+          that.getDataSpecificationContent(), _Transformer::transformClass);
 
         return result;
       }
@@ -7944,13 +8024,13 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("min", JsonNodeFactory.instance.booleanNode(that.getMin()));
+        setProperty(result, "min", "getMin()", that.getMin(), _Transformer::boolToJsonNode);
 
-        result.set("nom", JsonNodeFactory.instance.booleanNode(that.getNom()));
+        setProperty(result, "nom", "getNom()", that.getNom(), _Transformer::boolToJsonNode);
 
-        result.set("typ", JsonNodeFactory.instance.booleanNode(that.getTyp()));
+        setProperty(result, "typ", "getTyp()", that.getTyp(), _Transformer::boolToJsonNode);
 
-        result.set("max", JsonNodeFactory.instance.booleanNode(that.getMax()));
+        setProperty(result, "max", "getMax()", that.getMax(), _Transformer::boolToJsonNode);
 
         return result;
       }
@@ -7961,9 +8041,11 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("value", JsonNodeFactory.instance.textNode(that.getValue()));
+        setProperty(result, "value", "getValue()", that.getValue(), _Transformer::stringToJsonNode);
 
-        result.set("valueId", transformClass(that.getValueId()));
+        setProperty(
+          result, "valueId", "getValueId()",
+          that.getValueId(), _Transformer::transformClass);
 
         return result;
       }
@@ -7974,7 +8056,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("valueReferencePairs", serializeListOf_IClass(that.getValueReferencePairs()));
+        setProperty(
+          result, "valueReferencePairs", "getValueReferencePairs()",
+          that.getValueReferencePairs(), _Transformer::serializeListOf_IClass);
 
         return result;
       }
@@ -7985,9 +8069,11 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("language", JsonNodeFactory.instance.textNode(that.getLanguage()));
+        setProperty(
+          result, "language", "getLanguage()",
+          that.getLanguage(), _Transformer::stringToJsonNode);
 
-        result.set("text", JsonNodeFactory.instance.textNode(that.getText()));
+        setProperty(result, "text", "getText()", that.getText(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -7998,9 +8084,11 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("language", JsonNodeFactory.instance.textNode(that.getLanguage()));
+        setProperty(
+          result, "language", "getLanguage()",
+          that.getLanguage(), _Transformer::stringToJsonNode);
 
-        result.set("text", JsonNodeFactory.instance.textNode(that.getText()));
+        setProperty(result, "text", "getText()", that.getText(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -8011,9 +8099,11 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("language", JsonNodeFactory.instance.textNode(that.getLanguage()));
+        setProperty(
+          result, "language", "getLanguage()",
+          that.getLanguage(), _Transformer::stringToJsonNode);
 
-        result.set("text", JsonNodeFactory.instance.textNode(that.getText()));
+        setProperty(result, "text", "getText()", that.getText(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -8024,52 +8114,53 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("preferredName", serializeListOf_IClass(that.getPreferredName()));
+        setProperty(
+          result, "preferredName", "getPreferredName()",
+          that.getPreferredName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getShortName().isPresent()) {
-          result.set("shortName", serializeListOf_IClass(that.getShortName().get()));
-        }
+        setOptionalProperty(
+          result, "shortName", "getShortName()",
+          that.getShortName(), _Transformer::serializeListOf_IClass);
 
-        if (that.getUnit().isPresent()) {
-          result.set("unit", JsonNodeFactory.instance.textNode(that.getUnit().get()));
-        }
+        setOptionalProperty(
+          result, "unit", "getUnit()",
+          that.getUnit(), _Transformer::stringToJsonNode);
 
-        if (that.getUnitId().isPresent()) {
-          result.set("unitId", transformClass(that.getUnitId().get()));
-        }
+        setOptionalProperty(
+          result, "unitId", "getUnitId()",
+          that.getUnitId(), _Transformer::transformClass);
 
-        if (that.getSourceOfDefinition().isPresent()) {
-          result.set("sourceOfDefinition", JsonNodeFactory.instance.textNode(
-            that.getSourceOfDefinition().get()));
-        }
+        setOptionalProperty(
+          result, "sourceOfDefinition", "getSourceOfDefinition()",
+          that.getSourceOfDefinition(), _Transformer::stringToJsonNode);
 
-        if (that.getSymbol().isPresent()) {
-          result.set("symbol", JsonNodeFactory.instance.textNode(that.getSymbol().get()));
-        }
+        setOptionalProperty(
+          result, "symbol", "getSymbol()",
+          that.getSymbol(), _Transformer::stringToJsonNode);
 
-        if (that.getDataType().isPresent()) {
-          result.set("dataType", Serialize.toJsonValue(that.getDataType().get()));
-        }
+        setOptionalProperty(
+          result, "dataType", "getDataType()",
+          that.getDataType(), Serialize::toJsonValue);
 
-        if (that.getDefinition().isPresent()) {
-          result.set("definition", serializeListOf_IClass(that.getDefinition().get()));
-        }
+        setOptionalProperty(
+          result, "definition", "getDefinition()",
+          that.getDefinition(), _Transformer::serializeListOf_IClass);
 
-        if (that.getValueFormat().isPresent()) {
-          result.set("valueFormat", JsonNodeFactory.instance.textNode(that.getValueFormat().get()));
-        }
+        setOptionalProperty(
+          result, "valueFormat", "getValueFormat()",
+          that.getValueFormat(), _Transformer::stringToJsonNode);
 
-        if (that.getValueList().isPresent()) {
-          result.set("valueList", transformClass(that.getValueList().get()));
-        }
+        setOptionalProperty(
+          result, "valueList", "getValueList()",
+          that.getValueList(), _Transformer::transformClass);
 
-        if (that.getValue().isPresent()) {
-          result.set("value", JsonNodeFactory.instance.textNode(that.getValue().get()));
-        }
+        setOptionalProperty(
+          result, "value", "getValue()",
+          that.getValue(), _Transformer::stringToJsonNode);
 
-        if (that.getLevelType().isPresent()) {
-          result.set("levelType", transformClass(that.getLevelType().get()));
-        }
+        setOptionalProperty(
+          result, "levelType", "getLevelType()",
+          that.getLevelType(), _Transformer::transformClass);
 
         result.put("modelType", "DataSpecificationIec61360");
 
@@ -8103,7 +8194,7 @@ public class Jsonization {
         } catch (_SerializeFailure failure) {
           final Reporting.Error error = failure.getError();
           throw new SerializeException(
-            Reporting.generateJsonPath(error.getPathSegments()),
+            Reporting.generateJavaPath(error.getPathSegments()),
             error.getCause());
         }
       }

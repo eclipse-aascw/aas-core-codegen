@@ -6,7 +6,6 @@ package types
 
 import (
 	"fmt"
-
 	aascommon "github.com/dummy-works/dummy/common"
 )
 

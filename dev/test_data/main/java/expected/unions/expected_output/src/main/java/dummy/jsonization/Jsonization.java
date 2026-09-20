@@ -1533,6 +1533,59 @@ public class Jsonization {
       }
 
       /**
+       * Convert a single value into a JSON node.
+       */
+      @FunctionalInterface
+      private interface Serializer<T> {
+        JsonNode serialize(T that);
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} to
+       * {@code that}, serialized by {@code serialize}.
+       *
+       * <p>{@code getterName} names the property on the path of a failure. It is
+       * the getter, and not the JSON property: a serialization error is reported
+       * on an <em>instance</em>, which the caller holds, and not on a document
+       * which has not been written yet.
+       */
+      private static <T> void setProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        T that,
+        Serializer<? super T> serialize) {
+        try {
+          result.set(jsonName, serialize.serialize(that));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment(getterName));
+          throw failure;
+        }
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} if {@code that}
+       * has been given, and set nothing at all otherwise.
+       *
+       * <p>The {@link Optional} is taken apart here, once, instead of at every
+       * optional property: asking it and then unwrapping it at the call site would
+       * call the getter twice, and every call allocates an {@link Optional} of
+       * its own.
+       */
+      private static <T> void setOptionalProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        Optional<T> that,
+        Serializer<? super T> serialize) {
+        final T value = that.orElse(null);
+        if (value != null) {
+          setProperty(result, jsonName, getterName, value, serialize);
+        }
+      }
+
+      /**
        * Serialize the named union {@code that} into a JSON object.
        *
        * <p>A named union is not itself an {@link IClass}, so it can not be
@@ -1549,6 +1602,17 @@ public class Jsonization {
       }
 
       /**
+       * Convert {@code that} string to a JSON value.
+       *
+       * <p>See the note on {@link #boolToJsonNode} on why this wrapper exists.
+       *
+       * @param that value to be converted
+       */
+      private static JsonNode stringToJsonNode(String that) {
+        return JsonNodeFactory.instance.textNode(that);
+      }
+
+      /**
        * Serialize every item of {@code that} into a JSON array.
        *
        * @param that to be serialized
@@ -1556,8 +1620,16 @@ public class Jsonization {
       private static ArrayNode serializeListOf_IUnion(
         List<? extends IUnion<?>> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
+        int i = 0;
         for (IUnion<?> item : that) {
-          result.add(transformUnion(item));
+          try {
+            result.add(transformUnion(item));
+          } catch (_SerializeFailure failure) {
+            failure.getError().prependSegment(
+              new Reporting.IndexSegment(i));
+            throw failure;
+          }
+          i++;
         }
         return result;
       }
@@ -1573,9 +1645,27 @@ public class Jsonization {
           ? extends IUnion<?>,
           ? extends IUnion<?>> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
-        result.add(transformUnion(that.item1()));
-        result.add(transformUnion(that.item2()));
-        result.add(transformUnion(that.item3()));
+        try {
+          result.add(transformUnion(that.item1()));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.IndexSegment(0));
+          throw failure;
+        }
+        try {
+          result.add(transformUnion(that.item2()));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.IndexSegment(1));
+          throw failure;
+        }
+        try {
+          result.add(transformUnion(that.item3()));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.IndexSegment(2));
+          throw failure;
+        }
         return result;
       }
 
@@ -1585,7 +1675,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("uniqueToFirst", JsonNodeFactory.instance.textNode(that.getUniqueToFirst()));
+        setProperty(
+          result, "uniqueToFirst", "getUniqueToFirst()",
+          that.getUniqueToFirst(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -1596,7 +1688,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("uniqueToSecond", JsonNodeFactory.instance.textNode(that.getUniqueToSecond()));
+        setProperty(
+          result, "uniqueToSecond", "getUniqueToSecond()",
+          that.getUniqueToSecond(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -1607,8 +1701,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("uniqueToAbstractDescendantOne", JsonNodeFactory.instance.textNode(
-          that.getUniqueToAbstractDescendantOne()));
+        setProperty(
+          result, "uniqueToAbstractDescendantOne", "getUniqueToAbstractDescendantOne()",
+          that.getUniqueToAbstractDescendantOne(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -1619,8 +1714,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("uniqueToAbstractDescendantTwo", JsonNodeFactory.instance.textNode(
-          that.getUniqueToAbstractDescendantTwo()));
+        setProperty(
+          result, "uniqueToAbstractDescendantTwo", "getUniqueToAbstractDescendantTwo()",
+          that.getUniqueToAbstractDescendantTwo(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -1631,7 +1727,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("someBaseProperty", JsonNodeFactory.instance.textNode(that.getSomeBaseProperty()));
+        setProperty(
+          result, "someBaseProperty", "getSomeBaseProperty()",
+          that.getSomeBaseProperty(), _Transformer::stringToJsonNode);
 
         result.put("modelType", "MixedConcreteWithDescendants");
 
@@ -1644,10 +1742,13 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("someBaseProperty", JsonNodeFactory.instance.textNode(that.getSomeBaseProperty()));
+        setProperty(
+          result, "someBaseProperty", "getSomeBaseProperty()",
+          that.getSomeBaseProperty(), _Transformer::stringToJsonNode);
 
-        result.set("someChildProperty", JsonNodeFactory.instance.textNode(
-          that.getSomeChildProperty()));
+        setProperty(
+          result, "someChildProperty", "getSomeChildProperty()",
+          that.getSomeChildProperty(), _Transformer::stringToJsonNode);
 
         result.put("modelType", "MixedConcreteWithDescendantsChild");
 
@@ -1660,8 +1761,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("uniqueToConcreteLeaf", JsonNodeFactory.instance.textNode(
-          that.getUniqueToConcreteLeaf()));
+        setProperty(
+          result, "uniqueToConcreteLeaf", "getUniqueToConcreteLeaf()",
+          that.getUniqueToConcreteLeaf(), _Transformer::stringToJsonNode);
 
         return result;
       }
@@ -1672,7 +1774,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("someProperty", JsonNodeFactory.instance.textNode(that.getSomeProperty()));
+        setProperty(
+          result, "someProperty", "getSomeProperty()",
+          that.getSomeProperty(), _Transformer::stringToJsonNode);
 
         result.put("modelType", "ModelTypedFirst");
 
@@ -1685,7 +1789,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("someProperty", JsonNodeFactory.instance.textNode(that.getSomeProperty()));
+        setProperty(
+          result, "someProperty", "getSomeProperty()",
+          that.getSomeProperty(), _Transformer::stringToJsonNode);
 
         result.put("modelType", "ModelTypedSecond");
 
@@ -1698,36 +1804,45 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("structuralProperty", transformUnion(that.getStructuralProperty()));
+        setProperty(
+          result, "structuralProperty", "getStructuralProperty()",
+          that.getStructuralProperty(), _Transformer::transformUnion);
 
-        result.set("mixedProperty", transformUnion(that.getMixedProperty()));
+        setProperty(
+          result, "mixedProperty", "getMixedProperty()",
+          that.getMixedProperty(), _Transformer::transformUnion);
 
-        result.set("modelTypedProperty", transformUnion(that.getModelTypedProperty()));
+        setProperty(
+          result, "modelTypedProperty", "getModelTypedProperty()",
+          that.getModelTypedProperty(), _Transformer::transformUnion);
 
-        result.set("listStructuralProperty", serializeListOf_IUnion(
-          that.getListStructuralProperty()));
+        setProperty(
+          result, "listStructuralProperty", "getListStructuralProperty()",
+          that.getListStructuralProperty(), _Transformer::serializeListOf_IUnion);
 
-        result.set("listMixedProperty", serializeListOf_IUnion(that.getListMixedProperty()));
+        setProperty(
+          result, "listMixedProperty", "getListMixedProperty()",
+          that.getListMixedProperty(), _Transformer::serializeListOf_IUnion);
 
-        result.set("listModelTypedProperty", serializeListOf_IUnion(
-          that.getListModelTypedProperty()));
+        setProperty(
+          result, "listModelTypedProperty", "getListModelTypedProperty()",
+          that.getListModelTypedProperty(), _Transformer::serializeListOf_IUnion);
 
-        result.set("tupleProperty", serializeTupleOf3_IUnion_IUnion_IUnion(
-          that.getTupleProperty()));
+        setProperty(
+          result, "tupleProperty", "getTupleProperty()",
+          that.getTupleProperty(), _Transformer::serializeTupleOf3_IUnion_IUnion_IUnion);
 
-        if (that.getOptionalStructuralProperty().isPresent()) {
-          result.set("optionalStructuralProperty", transformUnion(
-            that.getOptionalStructuralProperty().get()));
-        }
+        setOptionalProperty(
+          result, "optionalStructuralProperty", "getOptionalStructuralProperty()",
+          that.getOptionalStructuralProperty(), _Transformer::transformUnion);
 
-        if (that.getOptionalMixedProperty().isPresent()) {
-          result.set("optionalMixedProperty", transformUnion(that.getOptionalMixedProperty().get()));
-        }
+        setOptionalProperty(
+          result, "optionalMixedProperty", "getOptionalMixedProperty()",
+          that.getOptionalMixedProperty(), _Transformer::transformUnion);
 
-        if (that.getOptionalModelTypedProperty().isPresent()) {
-          result.set("optionalModelTypedProperty", transformUnion(
-            that.getOptionalModelTypedProperty().get()));
-        }
+        setOptionalProperty(
+          result, "optionalModelTypedProperty", "getOptionalModelTypedProperty()",
+          that.getOptionalModelTypedProperty(), _Transformer::transformUnion);
 
         return result;
       }
@@ -1759,7 +1874,7 @@ public class Jsonization {
         } catch (_SerializeFailure failure) {
           final Reporting.Error error = failure.getError();
           throw new SerializeException(
-            Reporting.generateJsonPath(error.getPathSegments()),
+            Reporting.generateJavaPath(error.getPathSegments()),
             error.getCause());
         }
       }

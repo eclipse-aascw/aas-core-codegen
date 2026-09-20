@@ -460,6 +460,59 @@ namespace dummy
                 return Nodes.JsonValue.Create(that);
             }
 
+            /// <summary>
+            /// Serialize <paramref name="that" /> into a JSON value.
+            /// </summary>
+            /// <remarks>
+            /// This is the shape shared by every serialization step, so that the steps
+            /// can be composed. Unlike the XML side, no combinator is needed to frame
+            /// the value -- a JSON value stands on its own -- so the only composition
+            /// is over the items of a list or of a tuple.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to be serialized</typeparam>
+            private delegate Nodes.JsonNode? Serializer<in T>(T that);
+
+            /// <summary>
+            /// Convert <paramref name="that" /> to a JSON value.
+            /// </summary>
+            private static Nodes.JsonValue ToJsonValue(string that)
+            {
+                return Nodes.JsonValue.Create(that);
+            }
+
+            private static readonly Serializer<string> Serialize_string = ToJsonValue;
+
+            /// <summary>
+            /// Set the property <paramref name="jsonName" /> of
+            /// <paramref name="result" /> to <paramref name="that" />, serialized by
+            /// <paramref name="serialize" />.
+            /// </summary>
+            /// <remarks>
+            /// <paramref name="propertyName" /> names the property on the path of
+            /// a failure. It is the C# property, and not the JSON one: a serialization
+            /// error is reported on an <em>instance</em>, which the caller holds, and
+            /// not on a document which has not been written yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to serialize</typeparam>
+            private static void SetProperty<T>(
+                Nodes.JsonObject result,
+                string jsonName,
+                string propertyName,
+                T that,
+                Serializer<T> serialize)
+            {
+                try
+                {
+                    result[jsonName] = serialize(that);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
             public override Nodes.JsonObject TransformQueryCondition(
                 Aas.IQueryCondition that
             )
@@ -468,14 +521,12 @@ namespace dummy
 
                 if (that.Eq != null)
                 {
-                    result["$eq"] = Nodes.JsonValue.Create(
-                        that.Eq);
+                    SetProperty(result, "$eq", "Eq", that.Eq, Serialize_string);
                 }
 
                 if (that.NotEq != null)
                 {
-                    result["$ne"] = Nodes.JsonValue.Create(
-                        that.NotEq);
+                    SetProperty(result, "$ne", "NotEq", that.NotEq, Serialize_string);
                 }
 
                 return result;
@@ -514,7 +565,7 @@ namespace dummy
                 catch (SerializationFailure failure)
                 {
                     throw new SerializationException(
-                        Reporting.GenerateJsonPath(failure.Error.PathSegments),
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
                         failure.Error.Cause);
                 }
             }

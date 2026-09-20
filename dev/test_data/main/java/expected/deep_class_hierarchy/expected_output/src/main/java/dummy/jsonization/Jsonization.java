@@ -926,6 +926,70 @@ public class Jsonization {
       }
 
       /**
+       * Convert a single value into a JSON node.
+       */
+      @FunctionalInterface
+      private interface Serializer<T> {
+        JsonNode serialize(T that);
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} to
+       * {@code that}, serialized by {@code serialize}.
+       *
+       * <p>{@code getterName} names the property on the path of a failure. It is
+       * the getter, and not the JSON property: a serialization error is reported
+       * on an <em>instance</em>, which the caller holds, and not on a document
+       * which has not been written yet.
+       */
+      private static <T> void setProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        T that,
+        Serializer<? super T> serialize) {
+        try {
+          result.set(jsonName, serialize.serialize(that));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment(getterName));
+          throw failure;
+        }
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} if {@code that}
+       * has been given, and set nothing at all otherwise.
+       *
+       * <p>The {@link Optional} is taken apart here, once, instead of at every
+       * optional property: asking it and then unwrapping it at the call site would
+       * call the getter twice, and every call allocates an {@link Optional} of
+       * its own.
+       */
+      private static <T> void setOptionalProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        Optional<T> that,
+        Serializer<? super T> serialize) {
+        final T value = that.orElse(null);
+        if (value != null) {
+          setProperty(result, jsonName, getterName, value, serialize);
+        }
+      }
+
+      /**
+       * Convert {@code that} string to a JSON value.
+       *
+       * <p>See the note on {@link #boolToJsonNode} on why this wrapper exists.
+       *
+       * @param that value to be converted
+       */
+      private static JsonNode stringToJsonNode(String that) {
+        return JsonNodeFactory.instance.textNode(that);
+      }
+
+      /**
        * Convert {@code that} 64-bit long integer to a JSON value.
        *
        * @param that value to be converted
@@ -951,9 +1015,13 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("identifier", JsonNodeFactory.instance.textNode(that.getIdentifier()));
+        setProperty(
+          result, "identifier", "getIdentifier()",
+          that.getIdentifier(), _Transformer::stringToJsonNode);
 
-        result.set("description", JsonNodeFactory.instance.textNode(that.getDescription()));
+        setProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::stringToJsonNode);
 
         result.put("modelType", "Branch");
 
@@ -966,17 +1034,15 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("identifier", JsonNodeFactory.instance.textNode(that.getIdentifier()));
+        setProperty(
+          result, "identifier", "getIdentifier()",
+          that.getIdentifier(), _Transformer::stringToJsonNode);
 
-        result.set("description", JsonNodeFactory.instance.textNode(that.getDescription()));
+        setProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::stringToJsonNode);
 
-        try {
-          result.set("value", longToJsonNode(that.getValue()));
-        } catch (_SerializeFailure failure) {
-          failure.getError().prependSegment(
-            new Reporting.NameSegment("value"));
-          throw failure;
-        }
+        setProperty(result, "value", "getValue()", that.getValue(), _Transformer::longToJsonNode);
 
         result.put("modelType", "Leaf");
 
@@ -989,19 +1055,19 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("identifier", JsonNodeFactory.instance.textNode(that.getIdentifier()));
+        setProperty(
+          result, "identifier", "getIdentifier()",
+          that.getIdentifier(), _Transformer::stringToJsonNode);
 
-        result.set("description", JsonNodeFactory.instance.textNode(that.getDescription()));
+        setProperty(
+          result, "description", "getDescription()",
+          that.getDescription(), _Transformer::stringToJsonNode);
 
-        try {
-          result.set("value", longToJsonNode(that.getValue()));
-        } catch (_SerializeFailure failure) {
-          failure.getError().prependSegment(
-            new Reporting.NameSegment("value"));
-          throw failure;
-        }
+        setProperty(result, "value", "getValue()", that.getValue(), _Transformer::longToJsonNode);
 
-        result.set("details", JsonNodeFactory.instance.textNode(that.getDetails()));
+        setProperty(
+          result, "details", "getDetails()",
+          that.getDetails(), _Transformer::stringToJsonNode);
 
         result.put("modelType", "Blossom");
 
@@ -1014,21 +1080,13 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        try {
-          result.set("someChoice", transformClass(that.getSomeChoice()));
-        } catch (_SerializeFailure failure) {
-          failure.getError().prependSegment(
-            new Reporting.NameSegment("someChoice"));
-          throw failure;
-        }
+        setProperty(
+          result, "someChoice", "getSomeChoice()",
+          that.getSomeChoice(), _Transformer::transformClass);
 
-        try {
-          result.set("somethingWithoutChoice", transformClass(that.getSomethingWithoutChoice()));
-        } catch (_SerializeFailure failure) {
-          failure.getError().prependSegment(
-            new Reporting.NameSegment("somethingWithoutChoice"));
-          throw failure;
-        }
+        setProperty(
+          result, "somethingWithoutChoice", "getSomethingWithoutChoice()",
+          that.getSomethingWithoutChoice(), _Transformer::transformClass);
 
         return result;
       }
@@ -1039,21 +1097,11 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        try {
-          result.set("node", transformClass(that.getNode()));
-        } catch (_SerializeFailure failure) {
-          failure.getError().prependSegment(
-            new Reporting.NameSegment("node"));
-          throw failure;
-        }
+        setProperty(result, "node", "getNode()", that.getNode(), _Transformer::transformClass);
 
-        try {
-          result.set("something", transformClass(that.getSomething()));
-        } catch (_SerializeFailure failure) {
-          failure.getError().prependSegment(
-            new Reporting.NameSegment("something"));
-          throw failure;
-        }
+        setProperty(
+          result, "something", "getSomething()",
+          that.getSomething(), _Transformer::transformClass);
 
         return result;
       }
@@ -1085,7 +1133,7 @@ public class Jsonization {
         } catch (_SerializeFailure failure) {
           final Reporting.Error error = failure.getError();
           throw new SerializeException(
-            Reporting.generateJsonPath(error.getPathSegments()),
+            Reporting.generateJavaPath(error.getPathSegments()),
             error.getCause());
         }
       }

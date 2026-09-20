@@ -655,14 +655,49 @@ namespace dummy
                 SerializeList<Result>(
                     Serialize.ResultToJsonValue));
 
+            /// <summary>
+            /// Set the property <paramref name="jsonName" /> of
+            /// <paramref name="result" /> to <paramref name="that" />, serialized by
+            /// <paramref name="serialize" />.
+            /// </summary>
+            /// <remarks>
+            /// <paramref name="propertyName" /> names the property on the path of
+            /// a failure. It is the C# property, and not the JSON one: a serialization
+            /// error is reported on an <em>instance</em>, which the caller holds, and
+            /// not on a document which has not been written yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to serialize</typeparam>
+            private static void SetProperty<T>(
+                Nodes.JsonObject result,
+                string jsonName,
+                string propertyName,
+                T that,
+                Serializer<T> serialize)
+            {
+                try
+                {
+                    result[jsonName] = serialize(that);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
             public override Nodes.JsonObject TransformSomething(
                 Aas.ISomething that
             )
             {
                 var result = new Nodes.JsonObject();
 
-                result["someResults"] = Serialize_ListOf_Result(
-                    that.SomeResults);
+                SetProperty(
+                    result,
+                    "someResults",
+                    "SomeResults",
+                    that.SomeResults,
+                    Serialize_ListOf_Result);
 
                 return result;
             }
@@ -700,7 +735,7 @@ namespace dummy
                 catch (SerializationFailure failure)
                 {
                     throw new SerializationException(
-                        Reporting.GenerateJsonPath(failure.Error.PathSegments),
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
                         failure.Error.Cause);
                 }
             }
@@ -708,12 +743,18 @@ namespace dummy
             /// <summary>
             /// Serialize a literal of Result into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of Result at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue ResultToJsonValue(Aas.Result that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid Result: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid Result: {that}"));
             }
         }  // public static class Serialize
     }  // public static class Jsonization

@@ -582,6 +582,12 @@ func Wrap[E any](
     )
 
 
+#: Stand in for the import block, which is filled in at the very end: it
+#: depends on what the generated code actually names, and an unused import does
+#: not compile in Go.
+_IMPORT_PLACEHOLDER = Stripped("")
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -595,8 +601,9 @@ def generate(
     repo_url: Stripped,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code for enhancing model classes."""
-    aastypes_url_literal = golang_common.string_literal(f"{repo_url}/types")
     aascommon_url_literal = golang_common.string_literal(f"{repo_url}/common")
+
+    aastypes_url_literal = golang_common.string_literal(f"{repo_url}/types")
 
     blocks = [
         Stripped(
@@ -605,15 +612,7 @@ def generate(
 package enhancing"""
         ),
         golang_common.WARNING,
-        Stripped(
-            f"""\
-import (
-{I}"fmt"
-
-{I}aascommon {aascommon_url_literal}
-{I}aastypes {aastypes_url_literal}
-)"""
-        ),
+        _IMPORT_PLACEHOLDER,
         Stripped(
             f"""\
 type enhanced[E any] interface {{
@@ -673,6 +672,19 @@ func MustUnwrap[E any](that aastypes.IClass) (enhancement E) {{
             golang_common.WARNING,
         ]
     )
+
+    import_index = blocks.index(_IMPORT_PLACEHOLDER)
+
+    import_lines = []  # type: List[str]
+    if golang_common.names_package(blocks, "fmt"):
+        import_lines.append(f'{I}"fmt"')
+
+    if golang_common.names_package(blocks, "aascommon"):
+        import_lines.append(f"{I}aascommon {aascommon_url_literal}")
+
+    import_lines.append(f"{I}aastypes {aastypes_url_literal}")
+
+    blocks[import_index] = Stripped("import (\n" + "\n".join(import_lines) + "\n)")
 
     out = io.StringIO()
     for i, block in enumerate(blocks):

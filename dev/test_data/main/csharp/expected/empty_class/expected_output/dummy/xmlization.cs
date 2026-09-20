@@ -301,6 +301,41 @@ namespace dummy
         }
 
         /// <summary>
+        /// Represent a critical error during the serialization.
+        /// </summary>
+        public class SerializationException : System.Exception
+        {
+            public readonly string Path;
+            public readonly string Cause;
+            public SerializationException(string path, string cause)
+                : base($"{cause} at: {path}")
+            {
+                Path = path;
+                Cause = cause;
+            }
+        }
+
+        /// <summary>
+        /// Signal a failure of the serialization, carrying the path to the culprit.
+        /// </summary>
+        /// <remarks>
+        /// The path is built as the stack unwinds -- every container prepends the one
+        /// segment it knows, the property its name and the list the index of the item
+        /// -- which is why this can not be a <see cref="SerializationException" />
+        /// already: that one renders its message in its constructor, so its path has
+        /// to be complete by then. <see cref="Serialize.To" /> renders and converts.
+        /// </remarks>
+        internal class SerializationFailure : System.Exception
+        {
+            public readonly Reporting.Error Error;
+            public SerializationFailure(Reporting.Error error)
+                : base(error.Cause)
+            {
+                Error = error;
+            }
+        }
+
+        /// <summary>
         /// Deserialize instances of meta-model classes from XML.
         /// </summary>
         /// <example>
@@ -435,12 +470,25 @@ namespace dummy
             /// <summary>
             /// Serialize an instance of the meta-model to XML.
             /// </summary>
+            /// <exception cref="SerializationException">
+            /// Thrown when a value within <paramref name="that" /> instance can not be
+            /// represented in XML
+            /// </exception>
             public static void To(
                 Aas.IClass that,
                 Xml.XmlWriter writer)
             {
-                VisitorWithWriter.WriteIClass(
-                    that, writer);
+                try
+                {
+                    VisitorWithWriter.WriteIClass(
+                        that, writer);
+                }
+                catch (SerializationFailure failure)
+                {
+                    throw new SerializationException(
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
+                        failure.Error.Cause);
+                }
             }
         }  // public static class Serialize
     }  // public static class Xmlization

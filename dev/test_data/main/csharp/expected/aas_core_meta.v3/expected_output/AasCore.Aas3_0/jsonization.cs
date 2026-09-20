@@ -7179,6 +7179,30 @@ namespace AasCore.Aas3_0
             private delegate Nodes.JsonNode? Serializer<in T>(T that);
 
             /// <summary>
+            /// Convert <paramref name="that" /> to a JSON value.
+            /// </summary>
+            private static Nodes.JsonValue ToJsonValue(bool that)
+            {
+                return Nodes.JsonValue.Create(that);
+            }
+
+            /// <summary>
+            /// Convert <paramref name="that" /> to a JSON value.
+            /// </summary>
+            private static Nodes.JsonValue ToJsonValue(string that)
+            {
+                return Nodes.JsonValue.Create(that);
+            }
+
+            /// <summary>
+            /// Convert <paramref name="that" /> to a JSON value.
+            /// </summary>
+            private static Nodes.JsonValue ToJsonValue(byte[] that)
+            {
+                return Nodes.JsonValue.Create(System.Convert.ToBase64String(that));
+            }
+
+            /// <summary>
             /// Compose the serializer of a list whose items are serialized with
             /// <paramref name="serializeItem" />.
             /// </summary>
@@ -7313,6 +7337,78 @@ namespace AasCore.Aas3_0
                 SerializeList<ILangStringDefinitionTypeIec61360>(
                     TransformIClass));
 
+            private static readonly Serializer<Aas.IClass> Serialize_IClass = TransformIClass;
+
+            private static readonly Serializer<string> Serialize_string = ToJsonValue;
+
+            private static readonly Serializer<DataTypeDefXsd> Serialize_DataTypeDefXsd =
+                Serialize.DataTypeDefXsdToJsonValue;
+
+            private static readonly Serializer<QualifierKind> Serialize_QualifierKind =
+                Serialize.QualifierKindToJsonValue;
+
+            private static readonly Serializer<AssetKind> Serialize_AssetKind =
+                Serialize.AssetKindToJsonValue;
+
+            private static readonly Serializer<ModellingKind> Serialize_ModellingKind =
+                Serialize.ModellingKindToJsonValue;
+
+            private static readonly Serializer<bool> Serialize_bool = ToJsonValue;
+
+            private static readonly Serializer<AasSubmodelElements> Serialize_AasSubmodelElements =
+                Serialize.AasSubmodelElementsToJsonValue;
+
+            private static readonly Serializer<byte[]> Serialize_bytes = ToJsonValue;
+
+            private static readonly Serializer<EntityType> Serialize_EntityType =
+                Serialize.EntityTypeToJsonValue;
+
+            private static readonly Serializer<Direction> Serialize_Direction =
+                Serialize.DirectionToJsonValue;
+
+            private static readonly Serializer<StateOfEvent> Serialize_StateOfEvent =
+                Serialize.StateOfEventToJsonValue;
+
+            private static readonly Serializer<ReferenceTypes> Serialize_ReferenceTypes =
+                Serialize.ReferenceTypesToJsonValue;
+
+            private static readonly Serializer<KeyTypes> Serialize_KeyTypes =
+                Serialize.KeyTypesToJsonValue;
+
+            private static readonly Serializer<DataTypeIec61360> Serialize_DataTypeIec61360 =
+                Serialize.DataTypeIec61360ToJsonValue;
+
+            /// <summary>
+            /// Set the property <paramref name="jsonName" /> of
+            /// <paramref name="result" /> to <paramref name="that" />, serialized by
+            /// <paramref name="serialize" />.
+            /// </summary>
+            /// <remarks>
+            /// <paramref name="propertyName" /> names the property on the path of
+            /// a failure. It is the C# property, and not the JSON one: a serialization
+            /// error is reported on an <em>instance</em>, which the caller holds, and
+            /// not on a document which has not been written yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to serialize</typeparam>
+            private static void SetProperty<T>(
+                Nodes.JsonObject result,
+                string jsonName,
+                string propertyName,
+                T that,
+                Serializer<T> serialize)
+            {
+                try
+                {
+                    result[jsonName] = serialize(that);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
             public override Nodes.JsonObject TransformExtension(
                 Aas.IExtension that
             )
@@ -7321,35 +7417,49 @@ namespace AasCore.Aas3_0
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
-                result["name"] = Nodes.JsonValue.Create(
-                    that.Name);
+                SetProperty(result, "name", "Name", that.Name, Serialize_string);
 
                 if (that.ValueType.HasValue)
                 {
-                    result["valueType"] = Serialize.DataTypeDefXsdToJsonValue(
-                        that.ValueType.Value);
+                    SetProperty(
+                        result,
+                        "valueType",
+                        "ValueType",
+                        that.ValueType.Value,
+                        Serialize_DataTypeDefXsd);
                 }
 
                 if (that.Value != null)
                 {
-                    result["value"] = Nodes.JsonValue.Create(
-                        that.Value);
+                    SetProperty(result, "value", "Value", that.Value, Serialize_string);
                 }
 
                 if (that.RefersTo != null)
                 {
-                    result["refersTo"] = Serialize_ListOf_IReference(
-                        that.RefersTo);
+                    SetProperty(
+                        result,
+                        "refersTo",
+                        "RefersTo",
+                        that.RefersTo,
+                        Serialize_ListOf_IReference);
                 }
 
                 return result;
@@ -7363,32 +7473,37 @@ namespace AasCore.Aas3_0
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Version != null)
                 {
-                    result["version"] = Nodes.JsonValue.Create(
-                        that.Version);
+                    SetProperty(result, "version", "Version", that.Version, Serialize_string);
                 }
 
                 if (that.Revision != null)
                 {
-                    result["revision"] = Nodes.JsonValue.Create(
-                        that.Revision);
+                    SetProperty(result, "revision", "Revision", that.Revision, Serialize_string);
                 }
 
                 if (that.Creator != null)
                 {
-                    result["creator"] = TransformIClass(
-                        that.Creator);
+                    SetProperty(result, "creator", "Creator", that.Creator, Serialize_IClass);
                 }
 
                 if (that.TemplateId != null)
                 {
-                    result["templateId"] = Nodes.JsonValue.Create(
-                        that.TemplateId);
+                    SetProperty(
+                        result,
+                        "templateId",
+                        "TemplateId",
+                        that.TemplateId,
+                        Serialize_string);
                 }
 
                 return result;
@@ -7402,38 +7517,46 @@ namespace AasCore.Aas3_0
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Kind.HasValue)
                 {
-                    result["kind"] = Serialize.QualifierKindToJsonValue(
-                        that.Kind.Value);
+                    SetProperty(result, "kind", "Kind", that.Kind.Value, Serialize_QualifierKind);
                 }
 
-                result["type"] = Nodes.JsonValue.Create(
-                    that.Type);
+                SetProperty(result, "type", "Type", that.Type, Serialize_string);
 
-                result["valueType"] = Serialize.DataTypeDefXsdToJsonValue(
-                    that.ValueType);
+                SetProperty(
+                    result,
+                    "valueType",
+                    "ValueType",
+                    that.ValueType,
+                    Serialize_DataTypeDefXsd);
 
                 if (that.Value != null)
                 {
-                    result["value"] = Nodes.JsonValue.Create(
-                        that.Value);
+                    SetProperty(result, "value", "Value", that.Value, Serialize_string);
                 }
 
                 if (that.ValueId != null)
                 {
-                    result["valueId"] = TransformIClass(
-                        that.ValueId);
+                    SetProperty(result, "valueId", "ValueId", that.ValueId, Serialize_IClass);
                 }
 
                 return result;
@@ -7447,62 +7570,91 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.Administration != null)
                 {
-                    result["administration"] = TransformIClass(
-                        that.Administration);
+                    SetProperty(
+                        result,
+                        "administration",
+                        "Administration",
+                        that.Administration,
+                        Serialize_IClass);
                 }
 
-                result["id"] = Nodes.JsonValue.Create(
-                    that.Id);
+                SetProperty(result, "id", "Id", that.Id, Serialize_string);
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.DerivedFrom != null)
                 {
-                    result["derivedFrom"] = TransformIClass(
-                        that.DerivedFrom);
+                    SetProperty(
+                        result,
+                        "derivedFrom",
+                        "DerivedFrom",
+                        that.DerivedFrom,
+                        Serialize_IClass);
                 }
 
-                result["assetInformation"] = TransformIClass(
-                    that.AssetInformation);
+                SetProperty(
+                    result,
+                    "assetInformation",
+                    "AssetInformation",
+                    that.AssetInformation,
+                    Serialize_IClass);
 
                 if (that.Submodels != null)
                 {
-                    result["submodels"] = Serialize_ListOf_IReference(
-                        that.Submodels);
+                    SetProperty(
+                        result,
+                        "submodels",
+                        "Submodels",
+                        that.Submodels,
+                        Serialize_ListOf_IReference);
                 }
 
                 result["modelType"] = "AssetAdministrationShell";
@@ -7516,31 +7668,41 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["assetKind"] = Serialize.AssetKindToJsonValue(
-                    that.AssetKind);
+                SetProperty(result, "assetKind", "AssetKind", that.AssetKind, Serialize_AssetKind);
 
                 if (that.GlobalAssetId != null)
                 {
-                    result["globalAssetId"] = Nodes.JsonValue.Create(
-                        that.GlobalAssetId);
+                    SetProperty(
+                        result,
+                        "globalAssetId",
+                        "GlobalAssetId",
+                        that.GlobalAssetId,
+                        Serialize_string);
                 }
 
                 if (that.SpecificAssetIds != null)
                 {
-                    result["specificAssetIds"] = Serialize_ListOf_ISpecificAssetId(
-                        that.SpecificAssetIds);
+                    SetProperty(
+                        result,
+                        "specificAssetIds",
+                        "SpecificAssetIds",
+                        that.SpecificAssetIds,
+                        Serialize_ListOf_ISpecificAssetId);
                 }
 
                 if (that.AssetType != null)
                 {
-                    result["assetType"] = Nodes.JsonValue.Create(
-                        that.AssetType);
+                    SetProperty(result, "assetType", "AssetType", that.AssetType, Serialize_string);
                 }
 
                 if (that.DefaultThumbnail != null)
                 {
-                    result["defaultThumbnail"] = TransformIClass(
-                        that.DefaultThumbnail);
+                    SetProperty(
+                        result,
+                        "defaultThumbnail",
+                        "DefaultThumbnail",
+                        that.DefaultThumbnail,
+                        Serialize_IClass);
                 }
 
                 return result;
@@ -7552,13 +7714,16 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["path"] = Nodes.JsonValue.Create(
-                    that.Path);
+                SetProperty(result, "path", "Path", that.Path, Serialize_string);
 
                 if (that.ContentType != null)
                 {
-                    result["contentType"] = Nodes.JsonValue.Create(
-                        that.ContentType);
+                    SetProperty(
+                        result,
+                        "contentType",
+                        "ContentType",
+                        that.ContentType,
+                        Serialize_string);
                 }
 
                 return result;
@@ -7572,26 +7737,36 @@ namespace AasCore.Aas3_0
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
-                result["name"] = Nodes.JsonValue.Create(
-                    that.Name);
+                SetProperty(result, "name", "Name", that.Name, Serialize_string);
 
-                result["value"] = Nodes.JsonValue.Create(
-                    that.Value);
+                SetProperty(result, "value", "Value", that.Value, Serialize_string);
 
                 if (that.ExternalSubjectId != null)
                 {
-                    result["externalSubjectId"] = TransformIClass(
-                        that.ExternalSubjectId);
+                    SetProperty(
+                        result,
+                        "externalSubjectId",
+                        "ExternalSubjectId",
+                        that.ExternalSubjectId,
+                        Serialize_IClass);
                 }
 
                 return result;
@@ -7605,77 +7780,109 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.Administration != null)
                 {
-                    result["administration"] = TransformIClass(
-                        that.Administration);
+                    SetProperty(
+                        result,
+                        "administration",
+                        "Administration",
+                        that.Administration,
+                        Serialize_IClass);
                 }
 
-                result["id"] = Nodes.JsonValue.Create(
-                    that.Id);
+                SetProperty(result, "id", "Id", that.Id, Serialize_string);
 
                 if (that.Kind.HasValue)
                 {
-                    result["kind"] = Serialize.ModellingKindToJsonValue(
-                        that.Kind.Value);
+                    SetProperty(result, "kind", "Kind", that.Kind.Value, Serialize_ModellingKind);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.SubmodelElements != null)
                 {
-                    result["submodelElements"] = Serialize_ListOf_ISubmodelElement(
-                        that.SubmodelElements);
+                    SetProperty(
+                        result,
+                        "submodelElements",
+                        "SubmodelElements",
+                        that.SubmodelElements,
+                        Serialize_ListOf_ISubmodelElement);
                 }
 
                 result["modelType"] = "Submodel";
@@ -7691,63 +7898,87 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
-                result["first"] = TransformIClass(
-                    that.First);
+                SetProperty(result, "first", "First", that.First, Serialize_IClass);
 
-                result["second"] = TransformIClass(
-                    that.Second);
+                SetProperty(result, "second", "Second", that.Second, Serialize_IClass);
 
                 result["modelType"] = "RelationshipElement";
 
@@ -7762,83 +7993,129 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.OrderRelevant.HasValue)
                 {
-                    result["orderRelevant"] = Nodes.JsonValue.Create(
-                        that.OrderRelevant.Value);
+                    SetProperty(
+                        result,
+                        "orderRelevant",
+                        "OrderRelevant",
+                        that.OrderRelevant.Value,
+                        Serialize_bool);
                 }
 
                 if (that.SemanticIdListElement != null)
                 {
-                    result["semanticIdListElement"] = TransformIClass(
-                        that.SemanticIdListElement);
+                    SetProperty(
+                        result,
+                        "semanticIdListElement",
+                        "SemanticIdListElement",
+                        that.SemanticIdListElement,
+                        Serialize_IClass);
                 }
 
-                result["typeValueListElement"] = Serialize.AasSubmodelElementsToJsonValue(
-                    that.TypeValueListElement);
+                SetProperty(
+                    result,
+                    "typeValueListElement",
+                    "TypeValueListElement",
+                    that.TypeValueListElement,
+                    Serialize_AasSubmodelElements);
 
                 if (that.ValueTypeListElement.HasValue)
                 {
-                    result["valueTypeListElement"] = Serialize.DataTypeDefXsdToJsonValue(
-                        that.ValueTypeListElement.Value);
+                    SetProperty(
+                        result,
+                        "valueTypeListElement",
+                        "ValueTypeListElement",
+                        that.ValueTypeListElement.Value,
+                        Serialize_DataTypeDefXsd);
                 }
 
                 if (that.Value != null)
                 {
-                    result["value"] = Serialize_ListOf_ISubmodelElement(
-                        that.Value);
+                    SetProperty(
+                        result,
+                        "value",
+                        "Value",
+                        that.Value,
+                        Serialize_ListOf_ISubmodelElement);
                 }
 
                 result["modelType"] = "SubmodelElementList";
@@ -7854,62 +8131,92 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
-                    result["value"] = Serialize_ListOf_ISubmodelElement(
-                        that.Value);
+                    SetProperty(
+                        result,
+                        "value",
+                        "Value",
+                        that.Value,
+                        Serialize_ListOf_ISubmodelElement);
                 }
 
                 result["modelType"] = "SubmodelElementCollection";
@@ -7925,71 +8232,99 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
-                result["valueType"] = Serialize.DataTypeDefXsdToJsonValue(
-                    that.ValueType);
+                SetProperty(
+                    result,
+                    "valueType",
+                    "ValueType",
+                    that.ValueType,
+                    Serialize_DataTypeDefXsd);
 
                 if (that.Value != null)
                 {
-                    result["value"] = Nodes.JsonValue.Create(
-                        that.Value);
+                    SetProperty(result, "value", "Value", that.Value, Serialize_string);
                 }
 
                 if (that.ValueId != null)
                 {
-                    result["valueId"] = TransformIClass(
-                        that.ValueId);
+                    SetProperty(result, "valueId", "ValueId", that.ValueId, Serialize_IClass);
                 }
 
                 result["modelType"] = "Property";
@@ -8005,68 +8340,97 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
-                    result["value"] = Serialize_ListOf_ILangStringTextType(
-                        that.Value);
+                    SetProperty(
+                        result,
+                        "value",
+                        "Value",
+                        that.Value,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.ValueId != null)
                 {
-                    result["valueId"] = TransformIClass(
-                        that.ValueId);
+                    SetProperty(result, "valueId", "ValueId", that.ValueId, Serialize_IClass);
                 }
 
                 result["modelType"] = "MultiLanguageProperty";
@@ -8082,71 +8446,99 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
-                result["valueType"] = Serialize.DataTypeDefXsdToJsonValue(
-                    that.ValueType);
+                SetProperty(
+                    result,
+                    "valueType",
+                    "ValueType",
+                    that.ValueType,
+                    Serialize_DataTypeDefXsd);
 
                 if (that.Min != null)
                 {
-                    result["min"] = Nodes.JsonValue.Create(
-                        that.Min);
+                    SetProperty(result, "min", "Min", that.Min, Serialize_string);
                 }
 
                 if (that.Max != null)
                 {
-                    result["max"] = Nodes.JsonValue.Create(
-                        that.Max);
+                    SetProperty(result, "max", "Max", that.Max, Serialize_string);
                 }
 
                 result["modelType"] = "Range";
@@ -8162,62 +8554,87 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
-                    result["value"] = TransformIClass(
-                        that.Value);
+                    SetProperty(result, "value", "Value", that.Value, Serialize_IClass);
                 }
 
                 result["modelType"] = "ReferenceElement";
@@ -8233,67 +8650,95 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
-                    result["value"] = Nodes.JsonValue.Create(
-                        System.Convert.ToBase64String(
-                            that.Value));
+                    SetProperty(result, "value", "Value", that.Value, Serialize_bytes);
                 }
 
-                result["contentType"] = Nodes.JsonValue.Create(
-                    that.ContentType);
+                SetProperty(
+                    result,
+                    "contentType",
+                    "ContentType",
+                    that.ContentType,
+                    Serialize_string);
 
                 result["modelType"] = "Blob";
 
@@ -8308,66 +8753,95 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
-                    result["value"] = Nodes.JsonValue.Create(
-                        that.Value);
+                    SetProperty(result, "value", "Value", that.Value, Serialize_string);
                 }
 
-                result["contentType"] = Nodes.JsonValue.Create(
-                    that.ContentType);
+                SetProperty(
+                    result,
+                    "contentType",
+                    "ContentType",
+                    that.ContentType,
+                    Serialize_string);
 
                 result["modelType"] = "File";
 
@@ -8382,68 +8856,96 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
-                result["first"] = TransformIClass(
-                    that.First);
+                SetProperty(result, "first", "First", that.First, Serialize_IClass);
 
-                result["second"] = TransformIClass(
-                    that.Second);
+                SetProperty(result, "second", "Second", that.Second, Serialize_IClass);
 
                 if (that.Annotations != null)
                 {
-                    result["annotations"] = Serialize_ListOf_IDataElement(
-                        that.Annotations);
+                    SetProperty(
+                        result,
+                        "annotations",
+                        "Annotations",
+                        that.Annotations,
+                        Serialize_ListOf_IDataElement);
                 }
 
                 result["modelType"] = "AnnotatedRelationshipElement";
@@ -8459,77 +8961,119 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Statements != null)
                 {
-                    result["statements"] = Serialize_ListOf_ISubmodelElement(
-                        that.Statements);
+                    SetProperty(
+                        result,
+                        "statements",
+                        "Statements",
+                        that.Statements,
+                        Serialize_ListOf_ISubmodelElement);
                 }
 
-                result["entityType"] = Serialize.EntityTypeToJsonValue(
-                    that.EntityType);
+                SetProperty(
+                    result,
+                    "entityType",
+                    "EntityType",
+                    that.EntityType,
+                    Serialize_EntityType);
 
                 if (that.GlobalAssetId != null)
                 {
-                    result["globalAssetId"] = Nodes.JsonValue.Create(
-                        that.GlobalAssetId);
+                    SetProperty(
+                        result,
+                        "globalAssetId",
+                        "GlobalAssetId",
+                        that.GlobalAssetId,
+                        Serialize_string);
                 }
 
                 if (that.SpecificAssetIds != null)
                 {
-                    result["specificAssetIds"] = Serialize_ListOf_ISpecificAssetId(
-                        that.SpecificAssetIds);
+                    SetProperty(
+                        result,
+                        "specificAssetIds",
+                        "SpecificAssetIds",
+                        that.SpecificAssetIds,
+                        Serialize_ListOf_ISpecificAssetId);
                 }
 
                 result["modelType"] = "Entity";
@@ -8543,44 +9087,50 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["source"] = TransformIClass(
-                    that.Source);
+                SetProperty(result, "source", "Source", that.Source, Serialize_IClass);
 
                 if (that.SourceSemanticId != null)
                 {
-                    result["sourceSemanticId"] = TransformIClass(
-                        that.SourceSemanticId);
+                    SetProperty(
+                        result,
+                        "sourceSemanticId",
+                        "SourceSemanticId",
+                        that.SourceSemanticId,
+                        Serialize_IClass);
                 }
 
-                result["observableReference"] = TransformIClass(
-                    that.ObservableReference);
+                SetProperty(
+                    result,
+                    "observableReference",
+                    "ObservableReference",
+                    that.ObservableReference,
+                    Serialize_IClass);
 
                 if (that.ObservableSemanticId != null)
                 {
-                    result["observableSemanticId"] = TransformIClass(
-                        that.ObservableSemanticId);
+                    SetProperty(
+                        result,
+                        "observableSemanticId",
+                        "ObservableSemanticId",
+                        that.ObservableSemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.Topic != null)
                 {
-                    result["topic"] = Nodes.JsonValue.Create(
-                        that.Topic);
+                    SetProperty(result, "topic", "Topic", that.Topic, Serialize_string);
                 }
 
                 if (that.SubjectId != null)
                 {
-                    result["subjectId"] = TransformIClass(
-                        that.SubjectId);
+                    SetProperty(result, "subjectId", "SubjectId", that.SubjectId, Serialize_IClass);
                 }
 
-                result["timeStamp"] = Nodes.JsonValue.Create(
-                    that.TimeStamp);
+                SetProperty(result, "timeStamp", "TimeStamp", that.TimeStamp, Serialize_string);
 
                 if (that.Payload != null)
                 {
-                    result["payload"] = Nodes.JsonValue.Create(
-                        System.Convert.ToBase64String(
-                            that.Payload));
+                    SetProperty(result, "payload", "Payload", that.Payload, Serialize_bytes);
                 }
 
                 return result;
@@ -8594,95 +9144,138 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
-                result["observed"] = TransformIClass(
-                    that.Observed);
+                SetProperty(result, "observed", "Observed", that.Observed, Serialize_IClass);
 
-                result["direction"] = Serialize.DirectionToJsonValue(
-                    that.Direction);
+                SetProperty(result, "direction", "Direction", that.Direction, Serialize_Direction);
 
-                result["state"] = Serialize.StateOfEventToJsonValue(
-                    that.State);
+                SetProperty(result, "state", "State", that.State, Serialize_StateOfEvent);
 
                 if (that.MessageTopic != null)
                 {
-                    result["messageTopic"] = Nodes.JsonValue.Create(
-                        that.MessageTopic);
+                    SetProperty(
+                        result,
+                        "messageTopic",
+                        "MessageTopic",
+                        that.MessageTopic,
+                        Serialize_string);
                 }
 
                 if (that.MessageBroker != null)
                 {
-                    result["messageBroker"] = TransformIClass(
-                        that.MessageBroker);
+                    SetProperty(
+                        result,
+                        "messageBroker",
+                        "MessageBroker",
+                        that.MessageBroker,
+                        Serialize_IClass);
                 }
 
                 if (that.LastUpdate != null)
                 {
-                    result["lastUpdate"] = Nodes.JsonValue.Create(
-                        that.LastUpdate);
+                    SetProperty(
+                        result,
+                        "lastUpdate",
+                        "LastUpdate",
+                        that.LastUpdate,
+                        Serialize_string);
                 }
 
                 if (that.MinInterval != null)
                 {
-                    result["minInterval"] = Nodes.JsonValue.Create(
-                        that.MinInterval);
+                    SetProperty(
+                        result,
+                        "minInterval",
+                        "MinInterval",
+                        that.MinInterval,
+                        Serialize_string);
                 }
 
                 if (that.MaxInterval != null)
                 {
-                    result["maxInterval"] = Nodes.JsonValue.Create(
-                        that.MaxInterval);
+                    SetProperty(
+                        result,
+                        "maxInterval",
+                        "MaxInterval",
+                        that.MaxInterval,
+                        Serialize_string);
                 }
 
                 result["modelType"] = "BasicEventElement";
@@ -8698,74 +9291,112 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.InputVariables != null)
                 {
-                    result["inputVariables"] = Serialize_ListOf_IOperationVariable(
-                        that.InputVariables);
+                    SetProperty(
+                        result,
+                        "inputVariables",
+                        "InputVariables",
+                        that.InputVariables,
+                        Serialize_ListOf_IOperationVariable);
                 }
 
                 if (that.OutputVariables != null)
                 {
-                    result["outputVariables"] = Serialize_ListOf_IOperationVariable(
-                        that.OutputVariables);
+                    SetProperty(
+                        result,
+                        "outputVariables",
+                        "OutputVariables",
+                        that.OutputVariables,
+                        Serialize_ListOf_IOperationVariable);
                 }
 
                 if (that.InoutputVariables != null)
                 {
-                    result["inoutputVariables"] = Serialize_ListOf_IOperationVariable(
-                        that.InoutputVariables);
+                    SetProperty(
+                        result,
+                        "inoutputVariables",
+                        "InoutputVariables",
+                        that.InoutputVariables,
+                        Serialize_ListOf_IOperationVariable);
                 }
 
                 result["modelType"] = "Operation";
@@ -8779,8 +9410,7 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["value"] = TransformIClass(
-                    that.Value);
+                SetProperty(result, "value", "Value", that.Value, Serialize_IClass);
 
                 return result;
             }
@@ -8793,56 +9423,82 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    result["semanticId"] = TransformIClass(
-                        that.SemanticId);
+                    SetProperty(
+                        result,
+                        "semanticId",
+                        "SemanticId",
+                        that.SemanticId,
+                        Serialize_IClass);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    result["supplementalSemanticIds"] = Serialize_ListOf_IReference(
-                        that.SupplementalSemanticIds);
+                    SetProperty(
+                        result,
+                        "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
+                        that.SupplementalSemanticIds,
+                        Serialize_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    result["qualifiers"] = Serialize_ListOf_IQualifier(
-                        that.Qualifiers);
+                    SetProperty(
+                        result,
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        Serialize_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 result["modelType"] = "Capability";
@@ -8858,53 +9514,74 @@ namespace AasCore.Aas3_0
 
                 if (that.Extensions != null)
                 {
-                    result["extensions"] = Serialize_ListOf_IExtension(
-                        that.Extensions);
+                    SetProperty(
+                        result,
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        Serialize_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    result["category"] = Nodes.JsonValue.Create(
-                        that.Category);
+                    SetProperty(result, "category", "Category", that.Category, Serialize_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    result["idShort"] = Nodes.JsonValue.Create(
-                        that.IdShort);
+                    SetProperty(result, "idShort", "IdShort", that.IdShort, Serialize_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    result["displayName"] = Serialize_ListOf_ILangStringNameType(
-                        that.DisplayName);
+                    SetProperty(
+                        result,
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        Serialize_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    result["description"] = Serialize_ListOf_ILangStringTextType(
-                        that.Description);
+                    SetProperty(
+                        result,
+                        "description",
+                        "Description",
+                        that.Description,
+                        Serialize_ListOf_ILangStringTextType);
                 }
 
                 if (that.Administration != null)
                 {
-                    result["administration"] = TransformIClass(
-                        that.Administration);
+                    SetProperty(
+                        result,
+                        "administration",
+                        "Administration",
+                        that.Administration,
+                        Serialize_IClass);
                 }
 
-                result["id"] = Nodes.JsonValue.Create(
-                    that.Id);
+                SetProperty(result, "id", "Id", that.Id, Serialize_string);
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    result["embeddedDataSpecifications"] = Serialize_ListOf_IEmbeddedDataSpecification(
-                        that.EmbeddedDataSpecifications);
+                    SetProperty(
+                        result,
+                        "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
+                        that.EmbeddedDataSpecifications,
+                        Serialize_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.IsCaseOf != null)
                 {
-                    result["isCaseOf"] = Serialize_ListOf_IReference(
-                        that.IsCaseOf);
+                    SetProperty(
+                        result,
+                        "isCaseOf",
+                        "IsCaseOf",
+                        that.IsCaseOf,
+                        Serialize_ListOf_IReference);
                 }
 
                 result["modelType"] = "ConceptDescription";
@@ -8918,17 +9595,19 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["type"] = Serialize.ReferenceTypesToJsonValue(
-                    that.Type);
+                SetProperty(result, "type", "Type", that.Type, Serialize_ReferenceTypes);
 
                 if (that.ReferredSemanticId != null)
                 {
-                    result["referredSemanticId"] = TransformIClass(
-                        that.ReferredSemanticId);
+                    SetProperty(
+                        result,
+                        "referredSemanticId",
+                        "ReferredSemanticId",
+                        that.ReferredSemanticId,
+                        Serialize_IClass);
                 }
 
-                result["keys"] = Serialize_ListOf_IKey(
-                    that.Keys);
+                SetProperty(result, "keys", "Keys", that.Keys, Serialize_ListOf_IKey);
 
                 return result;
             }
@@ -8939,11 +9618,9 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["type"] = Serialize.KeyTypesToJsonValue(
-                    that.Type);
+                SetProperty(result, "type", "Type", that.Type, Serialize_KeyTypes);
 
-                result["value"] = Nodes.JsonValue.Create(
-                    that.Value);
+                SetProperty(result, "value", "Value", that.Value, Serialize_string);
 
                 return result;
             }
@@ -8954,11 +9631,9 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["language"] = Nodes.JsonValue.Create(
-                    that.Language);
+                SetProperty(result, "language", "Language", that.Language, Serialize_string);
 
-                result["text"] = Nodes.JsonValue.Create(
-                    that.Text);
+                SetProperty(result, "text", "Text", that.Text, Serialize_string);
 
                 return result;
             }
@@ -8969,11 +9644,9 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["language"] = Nodes.JsonValue.Create(
-                    that.Language);
+                SetProperty(result, "language", "Language", that.Language, Serialize_string);
 
-                result["text"] = Nodes.JsonValue.Create(
-                    that.Text);
+                SetProperty(result, "text", "Text", that.Text, Serialize_string);
 
                 return result;
             }
@@ -8986,20 +9659,32 @@ namespace AasCore.Aas3_0
 
                 if (that.AssetAdministrationShells != null)
                 {
-                    result["assetAdministrationShells"] = Serialize_ListOf_IAssetAdministrationShell(
-                        that.AssetAdministrationShells);
+                    SetProperty(
+                        result,
+                        "assetAdministrationShells",
+                        "AssetAdministrationShells",
+                        that.AssetAdministrationShells,
+                        Serialize_ListOf_IAssetAdministrationShell);
                 }
 
                 if (that.Submodels != null)
                 {
-                    result["submodels"] = Serialize_ListOf_ISubmodel(
-                        that.Submodels);
+                    SetProperty(
+                        result,
+                        "submodels",
+                        "Submodels",
+                        that.Submodels,
+                        Serialize_ListOf_ISubmodel);
                 }
 
                 if (that.ConceptDescriptions != null)
                 {
-                    result["conceptDescriptions"] = Serialize_ListOf_IConceptDescription(
-                        that.ConceptDescriptions);
+                    SetProperty(
+                        result,
+                        "conceptDescriptions",
+                        "ConceptDescriptions",
+                        that.ConceptDescriptions,
+                        Serialize_ListOf_IConceptDescription);
                 }
 
                 return result;
@@ -9011,11 +9696,19 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["dataSpecification"] = TransformIClass(
-                    that.DataSpecification);
+                SetProperty(
+                    result,
+                    "dataSpecification",
+                    "DataSpecification",
+                    that.DataSpecification,
+                    Serialize_IClass);
 
-                result["dataSpecificationContent"] = TransformIClass(
-                    that.DataSpecificationContent);
+                SetProperty(
+                    result,
+                    "dataSpecificationContent",
+                    "DataSpecificationContent",
+                    that.DataSpecificationContent,
+                    Serialize_IClass);
 
                 return result;
             }
@@ -9026,17 +9719,13 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["min"] = Nodes.JsonValue.Create(
-                    that.Min);
+                SetProperty(result, "min", "Min", that.Min, Serialize_bool);
 
-                result["nom"] = Nodes.JsonValue.Create(
-                    that.Nom);
+                SetProperty(result, "nom", "Nom", that.Nom, Serialize_bool);
 
-                result["typ"] = Nodes.JsonValue.Create(
-                    that.Typ);
+                SetProperty(result, "typ", "Typ", that.Typ, Serialize_bool);
 
-                result["max"] = Nodes.JsonValue.Create(
-                    that.Max);
+                SetProperty(result, "max", "Max", that.Max, Serialize_bool);
 
                 return result;
             }
@@ -9047,11 +9736,9 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["value"] = Nodes.JsonValue.Create(
-                    that.Value);
+                SetProperty(result, "value", "Value", that.Value, Serialize_string);
 
-                result["valueId"] = TransformIClass(
-                    that.ValueId);
+                SetProperty(result, "valueId", "ValueId", that.ValueId, Serialize_IClass);
 
                 return result;
             }
@@ -9062,8 +9749,12 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["valueReferencePairs"] = Serialize_ListOf_IValueReferencePair(
-                    that.ValueReferencePairs);
+                SetProperty(
+                    result,
+                    "valueReferencePairs",
+                    "ValueReferencePairs",
+                    that.ValueReferencePairs,
+                    Serialize_ListOf_IValueReferencePair);
 
                 return result;
             }
@@ -9074,11 +9765,9 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["language"] = Nodes.JsonValue.Create(
-                    that.Language);
+                SetProperty(result, "language", "Language", that.Language, Serialize_string);
 
-                result["text"] = Nodes.JsonValue.Create(
-                    that.Text);
+                SetProperty(result, "text", "Text", that.Text, Serialize_string);
 
                 return result;
             }
@@ -9089,11 +9778,9 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["language"] = Nodes.JsonValue.Create(
-                    that.Language);
+                SetProperty(result, "language", "Language", that.Language, Serialize_string);
 
-                result["text"] = Nodes.JsonValue.Create(
-                    that.Text);
+                SetProperty(result, "text", "Text", that.Text, Serialize_string);
 
                 return result;
             }
@@ -9104,11 +9791,9 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["language"] = Nodes.JsonValue.Create(
-                    that.Language);
+                SetProperty(result, "language", "Language", that.Language, Serialize_string);
 
-                result["text"] = Nodes.JsonValue.Create(
-                    that.Text);
+                SetProperty(result, "text", "Text", that.Text, Serialize_string);
 
                 return result;
             }
@@ -9119,73 +9804,91 @@ namespace AasCore.Aas3_0
             {
                 var result = new Nodes.JsonObject();
 
-                result["preferredName"] = Serialize_ListOf_ILangStringPreferredNameTypeIec61360(
-                    that.PreferredName);
+                SetProperty(
+                    result,
+                    "preferredName",
+                    "PreferredName",
+                    that.PreferredName,
+                    Serialize_ListOf_ILangStringPreferredNameTypeIec61360);
 
                 if (that.ShortName != null)
                 {
-                    result["shortName"] = Serialize_ListOf_ILangStringShortNameTypeIec61360(
-                        that.ShortName);
+                    SetProperty(
+                        result,
+                        "shortName",
+                        "ShortName",
+                        that.ShortName,
+                        Serialize_ListOf_ILangStringShortNameTypeIec61360);
                 }
 
                 if (that.Unit != null)
                 {
-                    result["unit"] = Nodes.JsonValue.Create(
-                        that.Unit);
+                    SetProperty(result, "unit", "Unit", that.Unit, Serialize_string);
                 }
 
                 if (that.UnitId != null)
                 {
-                    result["unitId"] = TransformIClass(
-                        that.UnitId);
+                    SetProperty(result, "unitId", "UnitId", that.UnitId, Serialize_IClass);
                 }
 
                 if (that.SourceOfDefinition != null)
                 {
-                    result["sourceOfDefinition"] = Nodes.JsonValue.Create(
-                        that.SourceOfDefinition);
+                    SetProperty(
+                        result,
+                        "sourceOfDefinition",
+                        "SourceOfDefinition",
+                        that.SourceOfDefinition,
+                        Serialize_string);
                 }
 
                 if (that.Symbol != null)
                 {
-                    result["symbol"] = Nodes.JsonValue.Create(
-                        that.Symbol);
+                    SetProperty(result, "symbol", "Symbol", that.Symbol, Serialize_string);
                 }
 
                 if (that.DataType.HasValue)
                 {
-                    result["dataType"] = Serialize.DataTypeIec61360ToJsonValue(
-                        that.DataType.Value);
+                    SetProperty(
+                        result,
+                        "dataType",
+                        "DataType",
+                        that.DataType.Value,
+                        Serialize_DataTypeIec61360);
                 }
 
                 if (that.Definition != null)
                 {
-                    result["definition"] = Serialize_ListOf_ILangStringDefinitionTypeIec61360(
-                        that.Definition);
+                    SetProperty(
+                        result,
+                        "definition",
+                        "Definition",
+                        that.Definition,
+                        Serialize_ListOf_ILangStringDefinitionTypeIec61360);
                 }
 
                 if (that.ValueFormat != null)
                 {
-                    result["valueFormat"] = Nodes.JsonValue.Create(
-                        that.ValueFormat);
+                    SetProperty(
+                        result,
+                        "valueFormat",
+                        "ValueFormat",
+                        that.ValueFormat,
+                        Serialize_string);
                 }
 
                 if (that.ValueList != null)
                 {
-                    result["valueList"] = TransformIClass(
-                        that.ValueList);
+                    SetProperty(result, "valueList", "ValueList", that.ValueList, Serialize_IClass);
                 }
 
                 if (that.Value != null)
                 {
-                    result["value"] = Nodes.JsonValue.Create(
-                        that.Value);
+                    SetProperty(result, "value", "Value", that.Value, Serialize_string);
                 }
 
                 if (that.LevelType != null)
                 {
-                    result["levelType"] = TransformIClass(
-                        that.LevelType);
+                    SetProperty(result, "levelType", "LevelType", that.LevelType, Serialize_IClass);
                 }
 
                 result["modelType"] = "DataSpecificationIec61360";
@@ -9226,7 +9929,7 @@ namespace AasCore.Aas3_0
                 catch (SerializationFailure failure)
                 {
                     throw new SerializationException(
-                        Reporting.GenerateJsonPath(failure.Error.PathSegments),
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
                         failure.Error.Cause);
                 }
             }
@@ -9234,122 +9937,188 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Serialize a literal of ModellingKind into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of ModellingKind at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue ModellingKindToJsonValue(Aas.ModellingKind that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid ModellingKind: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid ModellingKind: {that}"));
             }
 
             /// <summary>
             /// Serialize a literal of QualifierKind into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of QualifierKind at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue QualifierKindToJsonValue(Aas.QualifierKind that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid QualifierKind: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid QualifierKind: {that}"));
             }
 
             /// <summary>
             /// Serialize a literal of AssetKind into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of AssetKind at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue AssetKindToJsonValue(Aas.AssetKind that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid AssetKind: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid AssetKind: {that}"));
             }
 
             /// <summary>
             /// Serialize a literal of AasSubmodelElements into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of AasSubmodelElements at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue AasSubmodelElementsToJsonValue(Aas.AasSubmodelElements that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid AasSubmodelElements: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid AasSubmodelElements: {that}"));
             }
 
             /// <summary>
             /// Serialize a literal of EntityType into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of EntityType at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue EntityTypeToJsonValue(Aas.EntityType that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid EntityType: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid EntityType: {that}"));
             }
 
             /// <summary>
             /// Serialize a literal of Direction into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of Direction at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue DirectionToJsonValue(Aas.Direction that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid Direction: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid Direction: {that}"));
             }
 
             /// <summary>
             /// Serialize a literal of StateOfEvent into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of StateOfEvent at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue StateOfEventToJsonValue(Aas.StateOfEvent that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid StateOfEvent: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid StateOfEvent: {that}"));
             }
 
             /// <summary>
             /// Serialize a literal of ReferenceTypes into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of ReferenceTypes at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue ReferenceTypesToJsonValue(Aas.ReferenceTypes that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid ReferenceTypes: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid ReferenceTypes: {that}"));
             }
 
             /// <summary>
             /// Serialize a literal of KeyTypes into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of KeyTypes at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue KeyTypesToJsonValue(Aas.KeyTypes that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid KeyTypes: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid KeyTypes: {that}"));
             }
 
             /// <summary>
             /// Serialize a literal of DataTypeDefXsd into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of DataTypeDefXsd at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue DataTypeDefXsdToJsonValue(Aas.DataTypeDefXsd that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid DataTypeDefXsd: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid DataTypeDefXsd: {that}"));
             }
 
             /// <summary>
             /// Serialize a literal of DataTypeIec61360 into a JSON string.
             /// </summary>
+            /// <exception cref="SerializationFailure">
+            /// Thrown when <paramref name="that" /> is no literal of DataTypeIec61360 at all.
+            /// <see cref="ToJsonObject" /> converts it, so a caller which serializes
+            /// a whole instance catches <see cref="SerializationException" /> instead.
+            /// </exception>
             public static Nodes.JsonValue DataTypeIec61360ToJsonValue(Aas.DataTypeIec61360 that)
             {
                 string? text = Stringification.ToString(that);
                 return Nodes.JsonValue.Create(text)
-                    ?? throw new System.ArgumentException(
-                        $"Invalid DataTypeIec61360: {that}");
+                    ?? throw new SerializationFailure(
+                        new Reporting.Error(
+                            $"Invalid DataTypeIec61360: {that}"));
             }
         }  // public static class Serialize
     }  // public static class Jsonization

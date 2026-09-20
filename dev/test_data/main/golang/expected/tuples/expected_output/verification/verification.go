@@ -11,13 +11,8 @@ package verification
 // Do NOT edit or append.
 
 import (
-	"math/big"
 	"fmt"
-	"regexp"
-	"strconv"
-	"strings"
 	aascommon "github.com/dummy-works/dummy/common"
-	aasconstants "github.com/dummy-works/dummy/constants"
 	aasreporting "github.com/dummy-works/dummy/reporting"
 	aastypes "github.com/dummy-works/dummy/types"
 )

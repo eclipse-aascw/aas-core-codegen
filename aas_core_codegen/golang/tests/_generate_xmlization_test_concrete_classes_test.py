@@ -384,27 +384,7 @@ func {test_name}(t *testing.T) {{
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to test the XML de/serialization of concrete classes."""
-    blocks = [
-        Stripped("package xmlization_test"),
-        golang_common.WARNING,
-        Stripped(
-            f"""\
-import (
-{I}"bytes"
-{I}"path/filepath"
-{I}"fmt"
-{I}"os"
-{I}"sort"
-{I}"strings"
-{I}"testing"
-{I}"encoding/xml"
-{I}"math"
-{I}aastesting "{repo_url}/aastesting"
-{I}aastypes "{repo_url}/types"
-{I}aasxmlization "{repo_url}/xmlization"
-)"""
-        ),
-    ]  # type: List[Stripped]
+    blocks = []  # type: List[Stripped]
 
     for concrete_cls in symbol_table.concrete_classes:
         blocks.extend(_generate_for_cls(cls=concrete_cls))
@@ -493,6 +473,36 @@ func {test_name}(t *testing.T) {{
     blocks.extend(_generate_lexical_tests(symbol_table))
 
     blocks.append(golang_common.WARNING)
+
+    # NOTE (mristin):
+    # ``math`` names the two infinities of a lexical case, and nothing else in
+    # this file, so a meta-model whose examples need no such case leaves it
+    # unused -- and an unused import does not compile in Go.
+    math_import = f'{I}"math"\n' if any("math." in block for block in blocks) else ""
+
+    blocks = (
+        [
+            Stripped("package xmlization_test"),
+            golang_common.WARNING,
+            Stripped(
+                f"""\
+import (
+{I}"bytes"
+{I}"path/filepath"
+{I}"fmt"
+{I}"os"
+{I}"sort"
+{I}"strings"
+{I}"testing"
+{I}"encoding/xml"
+{math_import}{I}aastesting "{repo_url}/aastesting"
+{I}aastypes "{repo_url}/types"
+{I}aasxmlization "{repo_url}/xmlization"
+)"""
+            ),
+        ]
+        + blocks
+    )
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

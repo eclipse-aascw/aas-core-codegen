@@ -1248,7 +1248,7 @@ error_ = common::make_unique<Error>(
 {I})
 );
 
-error_->path.segments.emplace_back(
+error_->path.segments.emplace_front(
 {I}common::make_unique<iteration::PropertySegment>(
 {II}iteration::{property_enum}::{property_literal}
 {I})
@@ -1330,13 +1330,13 @@ error_ = common::make_unique<Error>(
 {I})
 );
 
-error_->path.segments.emplace_back(
+error_->path.segments.emplace_front(
 {I}common::make_unique<iteration::IndexSegment>(
 {II}index_in_constrained_primitives_
 {I})
 );
 
-error_->path.segments.emplace_back(
+error_->path.segments.emplace_front(
 {I}common::make_unique<iteration::PropertySegment>(
 {II}iteration::{property_enum}::{property_literal}
 {I})
@@ -1412,13 +1412,13 @@ error_ = common::make_unique<Error>(
 {I})
 );
 
-error_->path.segments.emplace_back(
+error_->path.segments.emplace_front(
 {I}common::make_unique<iteration::IndexSegment>(
 {II}{item_index}
 {I})
 );
 
-error_->path.segments.emplace_back(
+error_->path.segments.emplace_front(
 {I}common::make_unique<iteration::PropertySegment>(
 {II}iteration::{property_enum}::{property_literal}
 {I})

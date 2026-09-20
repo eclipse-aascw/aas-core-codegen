@@ -6,8 +6,6 @@ package enhancing
 
 import (
 	"fmt"
-
-	aascommon "github.com/aas-core-works/aas-core3.0-golang/common"
 	aastypes "github.com/aas-core-works/aas-core3.0-golang/types"
 )
 

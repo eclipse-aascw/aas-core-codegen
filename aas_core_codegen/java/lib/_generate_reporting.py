@@ -15,7 +15,6 @@ from aas_core_codegen.csharp.common import (
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
-    INDENT5 as IIIII,
 )
 
 
@@ -86,16 +85,7 @@ public static String generateJsonPath(Collection<Segment> segments) {{
 {III}if (m.matches()) {{
 {IIII}part = (i == 0) ? nameSegment.getName() : "." + nameSegment.getName();
 {III}}} else {{
-{IIII}String escaped = nameSegment.getName()
-{IIIII}.replace("\\t", "\\\\t")
-{IIIII}.replace("\\b", "\\\\b")
-{IIIII}.replace("\\n", "\\\\n")
-{IIIII}.replace("\\r", "\\\\r")
-{IIIII}.replace("\\f", "\\\\f")
-{IIIII}.replace("\\"", "\\\\\\"")
-{IIIII}.replace("\\\\", "\\\\\\\\");
-
-{IIII}part = "[\\"" + escaped + "\\"]";
+{IIII}part = "[\\"" + escapeForJsonString(nameSegment.getName()) + "\\"]";
 {III}}}
 {II}}} else if (segment instanceof IndexSegment) {{
 {III}IndexSegment indexSegment = (IndexSegment) segment;
@@ -110,6 +100,25 @@ public static String generateJsonPath(Collection<Segment> segments) {{
 {II}i++;
 {I}}}
 {I}return String.join("", parts);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Escape the characters which a JSON string may not hold as they are.
+ *
+ * <p>Mind the order: the backslash has to go first, or the backslash which
+ * the replacements below introduce would be escaped a second time.
+ */
+private static String escapeForJsonString(String text) {{
+{I}return text
+{II}.replace("\\\\", "\\\\\\\\")
+{II}.replace("\\"", "\\\\\\"")
+{II}.replace("\\b", "\\\\b")
+{II}.replace("\\f", "\\\\f")
+{II}.replace("\\n", "\\\\n")
+{II}.replace("\\r", "\\\\r")
+{II}.replace("\\t", "\\\\t");
 }}"""
         ),
         Stripped(
@@ -154,6 +163,47 @@ public static String generateRelativeXPath(Collection<Segment> segments) {{
 {II}parts.add(part);
 {I}}});
 {I}return String.join("/", parts);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Generate a Java access path based on the path segments.
+ *
+ * <p>The name segments are expected to be the getters of the properties in
+ * Java, parentheses included. This is the path to report where in an
+ * <em>instance</em> something went wrong -- on the serialization, say,
+ * where the caller holds the instance, and not a document which has not
+ * been written yet.
+ *
+ * <p>Unlike the JSON path and the XPath, this one is a Java expression on
+ * that instance which the caller can paste, <em>e.g.</em>,
+ * {{@code getSubmodelElements().get(0).getValue()}}.
+ */
+public static String generateJavaPath(Collection<Segment> segments) {{
+{I}final List<String> parts = new ArrayList<>(segments.size());
+{I}int i = 0;
+
+{I}for (Segment segment : segments) {{
+{II}final String part;
+
+{II}if (segment instanceof NameSegment) {{
+{III}final NameSegment nameSegment = ((NameSegment) segment);
+{III}part = (i == 0)
+{IIII}? nameSegment.getName()
+{IIII}: "." + nameSegment.getName();
+{II}}} else if (segment instanceof IndexSegment) {{
+{III}final IndexSegment indexSegment = ((IndexSegment) segment);
+{III}part = ".get(" + indexSegment.getIndex() + ")";
+{II}}} else {{
+{III}throw new IllegalArgumentException("Unexpected segment type: " +
+{IIII}segment.getClass().getSimpleName());
+{II}}}
+
+{II}parts.add(part);
+{II}i++;
+{I}}}
+{I}return String.join("", parts);
 }}"""
         ),
         Stripped(

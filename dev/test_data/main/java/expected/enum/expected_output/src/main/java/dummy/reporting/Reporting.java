@@ -72,16 +72,7 @@ public class Reporting
                 if (m.matches()) {
                     part = (i == 0) ? nameSegment.getName() : "." + nameSegment.getName();
                 } else {
-                    String escaped = nameSegment.getName()
-                        .replace("\t", "\\t")
-                        .replace("\b", "\\b")
-                        .replace("\n", "\\n")
-                        .replace("\r", "\\r")
-                        .replace("\f", "\\f")
-                        .replace("\"", "\\\"")
-                        .replace("\\", "\\\\");
-
-                    part = "[\"" + escaped + "\"]";
+                    part = "[\"" + escapeForJsonString(nameSegment.getName()) + "\"]";
                 }
             } else if (segment instanceof IndexSegment) {
                 IndexSegment indexSegment = (IndexSegment) segment;
@@ -96,6 +87,23 @@ public class Reporting
             i++;
         }
         return String.join("", parts);
+    }
+
+    /**
+     * Escape the characters which a JSON string may not hold as they are.
+     *
+     * <p>Mind the order: the backslash has to go first, or the backslash which
+     * the replacements below introduce would be escaped a second time.
+     */
+    private static String escapeForJsonString(String text) {
+        return text
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\b", "\\b")
+            .replace("\f", "\\f")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t");
     }
 
     /**
@@ -136,6 +144,45 @@ public class Reporting
             parts.add(part);
         });
         return String.join("/", parts);
+    }
+
+    /**
+     * Generate a Java access path based on the path segments.
+     *
+     * <p>The name segments are expected to be the getters of the properties in
+     * Java, parentheses included. This is the path to report where in an
+     * <em>instance</em> something went wrong -- on the serialization, say,
+     * where the caller holds the instance, and not a document which has not
+     * been written yet.
+     *
+     * <p>Unlike the JSON path and the XPath, this one is a Java expression on
+     * that instance which the caller can paste, <em>e.g.</em>,
+     * {@code getSubmodelElements().get(0).getValue()}.
+     */
+    public static String generateJavaPath(Collection<Segment> segments) {
+        final List<String> parts = new ArrayList<>(segments.size());
+        int i = 0;
+
+        for (Segment segment : segments) {
+            final String part;
+
+            if (segment instanceof NameSegment) {
+                final NameSegment nameSegment = ((NameSegment) segment);
+                part = (i == 0)
+                    ? nameSegment.getName()
+                    : "." + nameSegment.getName();
+            } else if (segment instanceof IndexSegment) {
+                final IndexSegment indexSegment = ((IndexSegment) segment);
+                part = ".get(" + indexSegment.getIndex() + ")";
+            } else {
+                throw new IllegalArgumentException("Unexpected segment type: " +
+                    segment.getClass().getSimpleName());
+            }
+
+            parts.add(part);
+            i++;
+        }
+        return String.join("", parts);
     }
 
     /**

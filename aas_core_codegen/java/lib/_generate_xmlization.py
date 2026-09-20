@@ -2518,9 +2518,14 @@ def _generate_write_property() -> Stripped:
  * <p>This is {{@link #writeElement}} plus the one thing a property knows
  * which nothing below it does: its own name. Prepending it here, once,
  * saves a {{@code try}} around every one of the property writes.
+ *
+ * <p>The path names the getter, and not the XML element: a serialization
+ * error is reported on an <em>instance</em>, which the caller holds, and
+ * not on a document which has not been written yet.
  */
 private static <T> void writeProperty(
 {I}String name,
+{I}String getterName,
 {I}T that,
 {I}XMLStreamWriter writer,
 {I}ContentWriter<? super T> writeContent) {{
@@ -2528,7 +2533,7 @@ private static <T> void writeProperty(
 {II}writeElement(name, that, writer, false, writeContent);
 {I}}} catch (_SerializeFailure failure) {{
 {II}failure.getError().prependSegment(
-{III}new Reporting.NameSegment(name));
+{III}new Reporting.NameSegment(getterName));
 {II}throw failure;
 {I}}}
 }}"""
@@ -2550,12 +2555,13 @@ def _generate_write_optional_property() -> Stripped:
  */
 private static <T> void writeOptionalProperty(
 {I}String name,
+{I}String getterName,
 {I}Optional<T> that,
 {I}XMLStreamWriter writer,
 {I}ContentWriter<? super T> writeContent) {{
 {I}final T value = that.orElse(null);
 {I}if (value != null) {{
-{II}writeProperty(name, value, writer, writeContent);
+{II}writeProperty(name, getterName, value, writer, writeContent);
 {I}}}
 }}"""
     )
@@ -2883,10 +2889,17 @@ def _generate_serialize_property(prop: intermediate.Property) -> Stripped:
     getter_name = java_naming.getter_name(prop.name)
     content_writer = _content_writer_reference(type_anno)
 
+    # NOTE (mristin):
+    # The path names the getter, and not the XML element: a serialization
+    # error is reported on an *instance*, which the caller holds, and not on
+    # a document which has not been written yet.
+    getter_literal = java_common.string_literal(f"{getter_name}()")
+
     return Stripped(
         f"""\
 {function_name}(
 {I}{xml_prop_name_literal},
+{I}{getter_literal},
 {I}that.{getter_name}(),
 {I}writer,
 {I}{content_writer});"""
@@ -3060,18 +3073,17 @@ def _generate_serialize(
  * were it left to the caller, the failure would surface at their own flush,
  * after the serialization has long returned.
  *
- * <p>The path of a {{@link SerializeException}} is rendered as a relative
- * XPath, the same spelling the de-serialization reports, and names
- * the properties and the list indices leading to the culprit --
- * {{@code submodelElements/*[0]/value}}. Two things it deliberately does not
- * name: the outermost element, since this method takes any
- * {{@link IClass}} and the name would say nothing the caller does not
- * already know; and the discriminator element of a polymorphic property,
- * which the de-serialization does prepend. The de-serialization is pointing
- * into a document it is reading, where that element is a real extra level;
- * this is pointing into the instance the caller handed over, where it is
- * not -- {{@code value/idShort}} here is exactly
- * {{@code getValue().getIdShort()}}.
+ * <p>The path of a {{@link SerializeException}} is rendered as a Java
+ * expression on the instance the caller handed over, and not as the XPath
+ * which the de-serialization reports: this error answers a call the caller
+ * made on that instance, and not on a document which has not been written
+ * yet -- {{@code getSubmodelElements().get(0).getValue()}}. Two things it
+ * deliberately does not name: the outermost element, since this method
+ * takes any {{@link IClass}} and the name would say nothing the caller does
+ * not already know; and the discriminator element of a polymorphic
+ * property, which the de-serialization does prepend. The de-serialization
+ * is pointing into a document it is reading, where that element is a real
+ * extra level; here it is not.
  */
 public static void to(
 {I}IClass that,
@@ -3085,7 +3097,7 @@ public static void to(
 {I}}} catch (_SerializeFailure failure) {{
 {II}final Reporting.Error error = failure.getError();
 {II}throw new SerializeException(
-{III}Reporting.generateRelativeXPath(error.getPathSegments()),
+{III}Reporting.generateJavaPath(error.getPathSegments()),
 {III}error.getCause());
 {I}}}
 }}"""

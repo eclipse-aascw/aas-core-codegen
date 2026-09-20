@@ -2018,6 +2018,14 @@ namespace dummy
             private delegate Nodes.JsonNode? Serializer<in T>(T that);
 
             /// <summary>
+            /// Convert <paramref name="that" /> to a JSON value.
+            /// </summary>
+            private static Nodes.JsonValue ToJsonValue(string that)
+            {
+                return Nodes.JsonValue.Create(that);
+            }
+
+            /// <summary>
             /// Compose the serializer of a list whose items are serialized with
             /// <paramref name="serializeItem" />.
             /// </summary>
@@ -2132,14 +2140,53 @@ namespace dummy
                     TransformIUnion,
                     TransformIUnion));
 
+            private static readonly Serializer<string> Serialize_string = ToJsonValue;
+
+            private static readonly Serializer<Aas.IUnion> Serialize_IUnion = TransformIUnion;
+
+            /// <summary>
+            /// Set the property <paramref name="jsonName" /> of
+            /// <paramref name="result" /> to <paramref name="that" />, serialized by
+            /// <paramref name="serialize" />.
+            /// </summary>
+            /// <remarks>
+            /// <paramref name="propertyName" /> names the property on the path of
+            /// a failure. It is the C# property, and not the JSON one: a serialization
+            /// error is reported on an <em>instance</em>, which the caller holds, and
+            /// not on a document which has not been written yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to serialize</typeparam>
+            private static void SetProperty<T>(
+                Nodes.JsonObject result,
+                string jsonName,
+                string propertyName,
+                T that,
+                Serializer<T> serialize)
+            {
+                try
+                {
+                    result[jsonName] = serialize(that);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
             public override Nodes.JsonObject TransformStructuralFirst(
                 Aas.IStructuralFirst that
             )
             {
                 var result = new Nodes.JsonObject();
 
-                result["uniqueToFirst"] = Nodes.JsonValue.Create(
-                    that.UniqueToFirst);
+                SetProperty(
+                    result,
+                    "uniqueToFirst",
+                    "UniqueToFirst",
+                    that.UniqueToFirst,
+                    Serialize_string);
 
                 return result;
             }
@@ -2150,8 +2197,12 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["uniqueToSecond"] = Nodes.JsonValue.Create(
-                    that.UniqueToSecond);
+                SetProperty(
+                    result,
+                    "uniqueToSecond",
+                    "UniqueToSecond",
+                    that.UniqueToSecond,
+                    Serialize_string);
 
                 return result;
             }
@@ -2162,8 +2213,12 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["uniqueToAbstractDescendantOne"] = Nodes.JsonValue.Create(
-                    that.UniqueToAbstractDescendantOne);
+                SetProperty(
+                    result,
+                    "uniqueToAbstractDescendantOne",
+                    "UniqueToAbstractDescendantOne",
+                    that.UniqueToAbstractDescendantOne,
+                    Serialize_string);
 
                 return result;
             }
@@ -2174,8 +2229,12 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["uniqueToAbstractDescendantTwo"] = Nodes.JsonValue.Create(
-                    that.UniqueToAbstractDescendantTwo);
+                SetProperty(
+                    result,
+                    "uniqueToAbstractDescendantTwo",
+                    "UniqueToAbstractDescendantTwo",
+                    that.UniqueToAbstractDescendantTwo,
+                    Serialize_string);
 
                 return result;
             }
@@ -2186,8 +2245,12 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["someBaseProperty"] = Nodes.JsonValue.Create(
-                    that.SomeBaseProperty);
+                SetProperty(
+                    result,
+                    "someBaseProperty",
+                    "SomeBaseProperty",
+                    that.SomeBaseProperty,
+                    Serialize_string);
 
                 result["modelType"] = "MixedConcreteWithDescendants";
 
@@ -2200,11 +2263,19 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["someBaseProperty"] = Nodes.JsonValue.Create(
-                    that.SomeBaseProperty);
+                SetProperty(
+                    result,
+                    "someBaseProperty",
+                    "SomeBaseProperty",
+                    that.SomeBaseProperty,
+                    Serialize_string);
 
-                result["someChildProperty"] = Nodes.JsonValue.Create(
-                    that.SomeChildProperty);
+                SetProperty(
+                    result,
+                    "someChildProperty",
+                    "SomeChildProperty",
+                    that.SomeChildProperty,
+                    Serialize_string);
 
                 result["modelType"] = "MixedConcreteWithDescendantsChild";
 
@@ -2217,8 +2288,12 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["uniqueToConcreteLeaf"] = Nodes.JsonValue.Create(
-                    that.UniqueToConcreteLeaf);
+                SetProperty(
+                    result,
+                    "uniqueToConcreteLeaf",
+                    "UniqueToConcreteLeaf",
+                    that.UniqueToConcreteLeaf,
+                    Serialize_string);
 
                 return result;
             }
@@ -2229,8 +2304,12 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["someProperty"] = Nodes.JsonValue.Create(
-                    that.SomeProperty);
+                SetProperty(
+                    result,
+                    "someProperty",
+                    "SomeProperty",
+                    that.SomeProperty,
+                    Serialize_string);
 
                 result["modelType"] = "ModelTypedFirst";
 
@@ -2243,8 +2322,12 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["someProperty"] = Nodes.JsonValue.Create(
-                    that.SomeProperty);
+                SetProperty(
+                    result,
+                    "someProperty",
+                    "SomeProperty",
+                    that.SomeProperty,
+                    Serialize_string);
 
                 result["modelType"] = "ModelTypedSecond";
 
@@ -2257,43 +2340,83 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["structuralProperty"] = TransformIUnion(
-                    that.StructuralProperty);
+                SetProperty(
+                    result,
+                    "structuralProperty",
+                    "StructuralProperty",
+                    that.StructuralProperty,
+                    Serialize_IUnion);
 
-                result["mixedProperty"] = TransformIUnion(
-                    that.MixedProperty);
+                SetProperty(
+                    result,
+                    "mixedProperty",
+                    "MixedProperty",
+                    that.MixedProperty,
+                    Serialize_IUnion);
 
-                result["modelTypedProperty"] = TransformIUnion(
-                    that.ModelTypedProperty);
+                SetProperty(
+                    result,
+                    "modelTypedProperty",
+                    "ModelTypedProperty",
+                    that.ModelTypedProperty,
+                    Serialize_IUnion);
 
-                result["listStructuralProperty"] = Serialize_ListOf_StructuralUnion(
-                    that.ListStructuralProperty);
+                SetProperty(
+                    result,
+                    "listStructuralProperty",
+                    "ListStructuralProperty",
+                    that.ListStructuralProperty,
+                    Serialize_ListOf_StructuralUnion);
 
-                result["listMixedProperty"] = Serialize_ListOf_MixedUnion(
-                    that.ListMixedProperty);
+                SetProperty(
+                    result,
+                    "listMixedProperty",
+                    "ListMixedProperty",
+                    that.ListMixedProperty,
+                    Serialize_ListOf_MixedUnion);
 
-                result["listModelTypedProperty"] = Serialize_ListOf_ModelTypedUnion(
-                    that.ListModelTypedProperty);
+                SetProperty(
+                    result,
+                    "listModelTypedProperty",
+                    "ListModelTypedProperty",
+                    that.ListModelTypedProperty,
+                    Serialize_ListOf_ModelTypedUnion);
 
-                result["tupleProperty"] = Serialize_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
-                    that.TupleProperty);
+                SetProperty(
+                    result,
+                    "tupleProperty",
+                    "TupleProperty",
+                    that.TupleProperty,
+                    Serialize_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion);
 
                 if (that.OptionalStructuralProperty != null)
                 {
-                    result["optionalStructuralProperty"] = TransformIUnion(
-                        that.OptionalStructuralProperty);
+                    SetProperty(
+                        result,
+                        "optionalStructuralProperty",
+                        "OptionalStructuralProperty",
+                        that.OptionalStructuralProperty,
+                        Serialize_IUnion);
                 }
 
                 if (that.OptionalMixedProperty != null)
                 {
-                    result["optionalMixedProperty"] = TransformIUnion(
-                        that.OptionalMixedProperty);
+                    SetProperty(
+                        result,
+                        "optionalMixedProperty",
+                        "OptionalMixedProperty",
+                        that.OptionalMixedProperty,
+                        Serialize_IUnion);
                 }
 
                 if (that.OptionalModelTypedProperty != null)
                 {
-                    result["optionalModelTypedProperty"] = TransformIUnion(
-                        that.OptionalModelTypedProperty);
+                    SetProperty(
+                        result,
+                        "optionalModelTypedProperty",
+                        "OptionalModelTypedProperty",
+                        that.OptionalModelTypedProperty,
+                        Serialize_IUnion);
                 }
 
                 return result;
@@ -2332,7 +2455,7 @@ namespace dummy
                 catch (SerializationFailure failure)
                 {
                     throw new SerializationException(
-                        Reporting.GenerateJsonPath(failure.Error.PathSegments),
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
                         failure.Error.Cause);
                 }
             }

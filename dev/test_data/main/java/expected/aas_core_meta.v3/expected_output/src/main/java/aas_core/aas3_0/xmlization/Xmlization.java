@@ -9818,9 +9818,14 @@ public class Xmlization {
      * <p>This is {@link #writeElement} plus the one thing a property knows
      * which nothing below it does: its own name. Prepending it here, once,
      * saves a {@code try} around every one of the property writes.
+     *
+     * <p>The path names the getter, and not the XML element: a serialization
+     * error is reported on an <em>instance</em>, which the caller holds, and
+     * not on a document which has not been written yet.
      */
     private static <T> void writeProperty(
       String name,
+      String getterName,
       T that,
       XMLStreamWriter writer,
       ContentWriter<? super T> writeContent) {
@@ -9828,7 +9833,7 @@ public class Xmlization {
         writeElement(name, that, writer, false, writeContent);
       } catch (_SerializeFailure failure) {
         failure.getError().prependSegment(
-          new Reporting.NameSegment(name));
+          new Reporting.NameSegment(getterName));
         throw failure;
       }
     }
@@ -9844,12 +9849,13 @@ public class Xmlization {
      */
     private static <T> void writeOptionalProperty(
       String name,
+      String getterName,
       Optional<T> that,
       XMLStreamWriter writer,
       ContentWriter<? super T> writeContent) {
       final T value = that.orElse(null);
       if (value != null) {
-        writeProperty(name, value, writer, writeContent);
+        writeProperty(name, getterName, value, writer, writeContent);
       }
     }
 
@@ -9934,36 +9940,42 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "name",
+        "getName()",
         that.getName(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "valueType",
+        "getValueType()",
         that.getValueType(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "refersTo",
+        "getRefersTo()",
         that.getRefersTo(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -9986,30 +9998,35 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "version",
+        "getVersion()",
         that.getVersion(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "revision",
+        "getRevision()",
         that.getRevision(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "creator",
+        "getCreator()",
         that.getCreator(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "templateId",
+        "getTemplateId()",
         that.getTemplateId(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -10032,42 +10049,49 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "kind",
+        "getKind()",
         that.getKind(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeProperty(
         "type",
+        "getType()",
         that.getType(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "valueType",
+        "getValueType()",
         that.getValueType(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "valueId",
+        "getValueId()",
         that.getValueId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
@@ -10090,66 +10114,77 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "administration",
+        "getAdministration()",
         that.getAdministration(),
         writer,
         _VisitorWithWriter::writeAdministrativeInformationAsSequence);
 
       writeProperty(
         "id",
+        "getId()",
         that.getId(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "derivedFrom",
+        "getDerivedFrom()",
         that.getDerivedFrom(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeProperty(
         "assetInformation",
+        "getAssetInformation()",
         that.getAssetInformation(),
         writer,
         _VisitorWithWriter::writeAssetInformationAsSequence);
 
       writeOptionalProperty(
         "submodels",
+        "getSubmodels()",
         that.getSubmodels(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -10172,30 +10207,35 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "assetKind",
+        "getAssetKind()",
         that.getAssetKind(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "globalAssetId",
+        "getGlobalAssetId()",
         that.getGlobalAssetId(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "specificAssetIds",
+        "getSpecificAssetIds()",
         that.getSpecificAssetIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "assetType",
+        "getAssetType()",
         that.getAssetType(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "defaultThumbnail",
+        "getDefaultThumbnail()",
         that.getDefaultThumbnail(),
         writer,
         _VisitorWithWriter::writeResourceAsSequence);
@@ -10218,12 +10258,14 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "path",
+        "getPath()",
         that.getPath(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "contentType",
+        "getContentType()",
         that.getContentType(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -10246,30 +10288,35 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "name",
+        "getName()",
         that.getName(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "externalSubjectId",
+        "getExternalSubjectId()",
         that.getExternalSubjectId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
@@ -10292,78 +10339,91 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "administration",
+        "getAdministration()",
         that.getAdministration(),
         writer,
         _VisitorWithWriter::writeAdministrativeInformationAsSequence);
 
       writeProperty(
         "id",
+        "getId()",
         that.getId(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "kind",
+        "getKind()",
         that.getKind(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "submodelElements",
+        "getSubmodelElements()",
         that.getSubmodelElements(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -10386,66 +10446,77 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "first",
+        "getFirst()",
         that.getFirst(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeProperty(
         "second",
+        "getSecond()",
         that.getSecond(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
@@ -10468,84 +10539,98 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "orderRelevant",
+        "getOrderRelevant()",
         that.getOrderRelevant(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "semanticIdListElement",
+        "getSemanticIdListElement()",
         that.getSemanticIdListElement(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeProperty(
         "typeValueListElement",
+        "getTypeValueListElement()",
         that.getTypeValueListElement(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "valueTypeListElement",
+        "getValueTypeListElement()",
         that.getValueTypeListElement(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -10568,60 +10653,70 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -10644,72 +10739,84 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "valueType",
+        "getValueType()",
         that.getValueType(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "valueId",
+        "getValueId()",
         that.getValueId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
@@ -10732,66 +10839,77 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "valueId",
+        "getValueId()",
         that.getValueId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
@@ -10814,72 +10932,84 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "valueType",
+        "getValueType()",
         that.getValueType(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "min",
+        "getMin()",
         that.getMin(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "max",
+        "getMax()",
         that.getMax(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -10902,60 +11032,70 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
@@ -10978,66 +11118,77 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeByteArrayContent);
 
       writeProperty(
         "contentType",
+        "getContentType()",
         that.getContentType(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -11060,66 +11211,77 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "contentType",
+        "getContentType()",
         that.getContentType(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -11142,72 +11304,84 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "first",
+        "getFirst()",
         that.getFirst(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeProperty(
         "second",
+        "getSecond()",
         that.getSecond(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "annotations",
+        "getAnnotations()",
         that.getAnnotations(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -11230,78 +11404,91 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "statements",
+        "getStatements()",
         that.getStatements(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "entityType",
+        "getEntityType()",
         that.getEntityType(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "globalAssetId",
+        "getGlobalAssetId()",
         that.getGlobalAssetId(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "specificAssetIds",
+        "getSpecificAssetIds()",
         that.getSpecificAssetIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -11324,48 +11511,56 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "source",
+        "getSource()",
         that.getSource(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "sourceSemanticId",
+        "getSourceSemanticId()",
         that.getSourceSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeProperty(
         "observableReference",
+        "getObservableReference()",
         that.getObservableReference(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "observableSemanticId",
+        "getObservableSemanticId()",
         that.getObservableSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "topic",
+        "getTopic()",
         that.getTopic(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "subjectId",
+        "getSubjectId()",
         that.getSubjectId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeProperty(
         "timeStamp",
+        "getTimeStamp()",
         that.getTimeStamp(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "payload",
+        "getPayload()",
         that.getPayload(),
         writer,
         _VisitorWithWriter::writeByteArrayContent);
@@ -11388,102 +11583,119 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "observed",
+        "getObserved()",
         that.getObserved(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeProperty(
         "direction",
+        "getDirection()",
         that.getDirection(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeProperty(
         "state",
+        "getState()",
         that.getState(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "messageTopic",
+        "getMessageTopic()",
         that.getMessageTopic(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "messageBroker",
+        "getMessageBroker()",
         that.getMessageBroker(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "lastUpdate",
+        "getLastUpdate()",
         that.getLastUpdate(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "minInterval",
+        "getMinInterval()",
         that.getMinInterval(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "maxInterval",
+        "getMaxInterval()",
         that.getMaxInterval(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -11506,72 +11718,84 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "inputVariables",
+        "getInputVariables()",
         that.getInputVariables(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "outputVariables",
+        "getOutputVariables()",
         that.getOutputVariables(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "inoutputVariables",
+        "getInoutputVariables()",
         that.getInoutputVariables(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -11594,6 +11818,7 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeClass);
@@ -11616,54 +11841,63 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
+        "getSemanticId()",
         that.getSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "supplementalSemanticIds",
+        "getSupplementalSemanticIds()",
         that.getSupplementalSemanticIds(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
+        "getQualifiers()",
         that.getQualifiers(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -11686,54 +11920,63 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "extensions",
+        "getExtensions()",
         that.getExtensions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
+        "getCategory()",
         that.getCategory(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "idShort",
+        "getIdShort()",
         that.getIdShort(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "displayName",
+        "getDisplayName()",
         that.getDisplayName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
+        "getDescription()",
         that.getDescription(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "administration",
+        "getAdministration()",
         that.getAdministration(),
         writer,
         _VisitorWithWriter::writeAdministrativeInformationAsSequence);
 
       writeProperty(
         "id",
+        "getId()",
         that.getId(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
+        "getEmbeddedDataSpecifications()",
         that.getEmbeddedDataSpecifications(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "isCaseOf",
+        "getIsCaseOf()",
         that.getIsCaseOf(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -11756,18 +11999,21 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "type",
+        "getType()",
         that.getType(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "referredSemanticId",
+        "getReferredSemanticId()",
         that.getReferredSemanticId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeProperty(
         "keys",
+        "getKeys()",
         that.getKeys(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -11790,12 +12036,14 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "type",
+        "getType()",
         that.getType(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -11818,12 +12066,14 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "language",
+        "getLanguage()",
         that.getLanguage(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "text",
+        "getText()",
         that.getText(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -11846,12 +12096,14 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "language",
+        "getLanguage()",
         that.getLanguage(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "text",
+        "getText()",
         that.getText(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -11874,18 +12126,21 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeOptionalProperty(
         "assetAdministrationShells",
+        "getAssetAdministrationShells()",
         that.getAssetAdministrationShells(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "submodels",
+        "getSubmodels()",
         that.getSubmodels(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "conceptDescriptions",
+        "getConceptDescriptions()",
         that.getConceptDescriptions(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -11908,12 +12163,14 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "dataSpecification",
+        "getDataSpecification()",
         that.getDataSpecification(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeProperty(
         "dataSpecificationContent",
+        "getDataSpecificationContent()",
         that.getDataSpecificationContent(),
         writer,
         _VisitorWithWriter::writeClass);
@@ -11936,24 +12193,28 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "min",
+        "getMin()",
         that.getMin(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "nom",
+        "getNom()",
         that.getNom(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "typ",
+        "getTyp()",
         that.getTyp(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "max",
+        "getMax()",
         that.getMax(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -11976,12 +12237,14 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "valueId",
+        "getValueId()",
         that.getValueId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
@@ -12004,6 +12267,7 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "valueReferencePairs",
+        "getValueReferencePairs()",
         that.getValueReferencePairs(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
@@ -12026,12 +12290,14 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "language",
+        "getLanguage()",
         that.getLanguage(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "text",
+        "getText()",
         that.getText(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -12054,12 +12320,14 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "language",
+        "getLanguage()",
         that.getLanguage(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "text",
+        "getText()",
         that.getText(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -12082,12 +12350,14 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "language",
+        "getLanguage()",
         that.getLanguage(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeProperty(
         "text",
+        "getText()",
         that.getText(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
@@ -12110,72 +12380,84 @@ public class Xmlization {
       XMLStreamWriter writer) {
       writeProperty(
         "preferredName",
+        "getPreferredName()",
         that.getPreferredName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "shortName",
+        "getShortName()",
         that.getShortName(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "unit",
+        "getUnit()",
         that.getUnit(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "unitId",
+        "getUnitId()",
         that.getUnitId(),
         writer,
         _VisitorWithWriter::writeReferenceAsSequence);
 
       writeOptionalProperty(
         "sourceOfDefinition",
+        "getSourceOfDefinition()",
         that.getSourceOfDefinition(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "symbol",
+        "getSymbol()",
         that.getSymbol(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "dataType",
+        "getDataType()",
         that.getDataType(),
         writer,
         _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "definition",
+        "getDefinition()",
         that.getDefinition(),
         writer,
         _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "valueFormat",
+        "getValueFormat()",
         that.getValueFormat(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "valueList",
+        "getValueList()",
         that.getValueList(),
         writer,
         _VisitorWithWriter::writeValueListAsSequence);
 
       writeOptionalProperty(
         "value",
+        "getValue()",
         that.getValue(),
         writer,
         _VisitorWithWriter::writeStringifiedContent);
 
       writeOptionalProperty(
         "levelType",
+        "getLevelType()",
         that.getLevelType(),
         writer,
         _VisitorWithWriter::writeLevelTypeAsSequence);
@@ -12223,18 +12505,17 @@ public class Xmlization {
      * were it left to the caller, the failure would surface at their own flush,
      * after the serialization has long returned.
      *
-     * <p>The path of a {@link SerializeException} is rendered as a relative
-     * XPath, the same spelling the de-serialization reports, and names
-     * the properties and the list indices leading to the culprit --
-     * {@code submodelElements/*[0]/value}. Two things it deliberately does not
-     * name: the outermost element, since this method takes any
-     * {@link IClass} and the name would say nothing the caller does not
-     * already know; and the discriminator element of a polymorphic property,
-     * which the de-serialization does prepend. The de-serialization is pointing
-     * into a document it is reading, where that element is a real extra level;
-     * this is pointing into the instance the caller handed over, where it is
-     * not -- {@code value/idShort} here is exactly
-     * {@code getValue().getIdShort()}.
+     * <p>The path of a {@link SerializeException} is rendered as a Java
+     * expression on the instance the caller handed over, and not as the XPath
+     * which the de-serialization reports: this error answers a call the caller
+     * made on that instance, and not on a document which has not been written
+     * yet -- {@code getSubmodelElements().get(0).getValue()}. Two things it
+     * deliberately does not name: the outermost element, since this method
+     * takes any {@link IClass} and the name would say nothing the caller does
+     * not already know; and the discriminator element of a polymorphic
+     * property, which the de-serialization does prepend. The de-serialization
+     * is pointing into a document it is reading, where that element is a real
+     * extra level; here it is not.
      */
     public static void to(
       IClass that,
@@ -12248,7 +12529,7 @@ public class Xmlization {
       } catch (_SerializeFailure failure) {
         final Reporting.Error error = failure.getError();
         throw new SerializeException(
-          Reporting.generateRelativeXPath(error.getPathSegments()),
+          Reporting.generateJavaPath(error.getPathSegments()),
           error.getCause());
       }
     }

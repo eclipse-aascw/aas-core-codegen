@@ -1178,17 +1178,77 @@ namespace dummy
                 return Nodes.JsonValue.Create(that);
             }
 
+            /// <summary>
+            /// Serialize <paramref name="that" /> into a JSON value.
+            /// </summary>
+            /// <remarks>
+            /// This is the shape shared by every serialization step, so that the steps
+            /// can be composed. Unlike the XML side, no combinator is needed to frame
+            /// the value -- a JSON value stands on its own -- so the only composition
+            /// is over the items of a list or of a tuple.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to be serialized</typeparam>
+            private delegate Nodes.JsonNode? Serializer<in T>(T that);
+
+            /// <summary>
+            /// Convert <paramref name="that" /> to a JSON value.
+            /// </summary>
+            private static Nodes.JsonValue ToJsonValue(string that)
+            {
+                return Nodes.JsonValue.Create(that);
+            }
+
+            private static readonly Serializer<string> Serialize_string = ToJsonValue;
+
+            private static readonly Serializer<long> Serialize_long = ToJsonValue;
+
+            private static readonly Serializer<Aas.IClass> Serialize_IClass = TransformIClass;
+
+            /// <summary>
+            /// Set the property <paramref name="jsonName" /> of
+            /// <paramref name="result" /> to <paramref name="that" />, serialized by
+            /// <paramref name="serialize" />.
+            /// </summary>
+            /// <remarks>
+            /// <paramref name="propertyName" /> names the property on the path of
+            /// a failure. It is the C# property, and not the JSON one: a serialization
+            /// error is reported on an <em>instance</em>, which the caller holds, and
+            /// not on a document which has not been written yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to serialize</typeparam>
+            private static void SetProperty<T>(
+                Nodes.JsonObject result,
+                string jsonName,
+                string propertyName,
+                T that,
+                Serializer<T> serialize)
+            {
+                try
+                {
+                    result[jsonName] = serialize(that);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
             public override Nodes.JsonObject TransformBranch(
                 Aas.IBranch that
             )
             {
                 var result = new Nodes.JsonObject();
 
-                result["identifier"] = Nodes.JsonValue.Create(
-                    that.Identifier);
+                SetProperty(result, "identifier", "Identifier", that.Identifier, Serialize_string);
 
-                result["description"] = Nodes.JsonValue.Create(
-                    that.Description);
+                SetProperty(
+                    result,
+                    "description",
+                    "Description",
+                    that.Description,
+                    Serialize_string);
 
                 result["modelType"] = "Branch";
 
@@ -1201,23 +1261,16 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["identifier"] = Nodes.JsonValue.Create(
-                    that.Identifier);
+                SetProperty(result, "identifier", "Identifier", that.Identifier, Serialize_string);
 
-                result["description"] = Nodes.JsonValue.Create(
-                    that.Description);
+                SetProperty(
+                    result,
+                    "description",
+                    "Description",
+                    that.Description,
+                    Serialize_string);
 
-                try
-                {
-                    result["value"] = Transformer.ToJsonValue(
-                        that.Value);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("value"));
-                    throw;
-                }
+                SetProperty(result, "value", "Value", that.Value, Serialize_long);
 
                 result["modelType"] = "Leaf";
 
@@ -1230,26 +1283,18 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["identifier"] = Nodes.JsonValue.Create(
-                    that.Identifier);
+                SetProperty(result, "identifier", "Identifier", that.Identifier, Serialize_string);
 
-                result["description"] = Nodes.JsonValue.Create(
-                    that.Description);
+                SetProperty(
+                    result,
+                    "description",
+                    "Description",
+                    that.Description,
+                    Serialize_string);
 
-                try
-                {
-                    result["value"] = Transformer.ToJsonValue(
-                        that.Value);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("value"));
-                    throw;
-                }
+                SetProperty(result, "value", "Value", that.Value, Serialize_long);
 
-                result["details"] = Nodes.JsonValue.Create(
-                    that.Details);
+                SetProperty(result, "details", "Details", that.Details, Serialize_string);
 
                 result["modelType"] = "Blossom";
 
@@ -1262,29 +1307,14 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                try
-                {
-                    result["someChoice"] = TransformIClass(
-                        that.SomeChoice);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("someChoice"));
-                    throw;
-                }
+                SetProperty(result, "someChoice", "SomeChoice", that.SomeChoice, Serialize_IClass);
 
-                try
-                {
-                    result["somethingWithoutChoice"] = TransformIClass(
-                        that.SomethingWithoutChoice);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("somethingWithoutChoice"));
-                    throw;
-                }
+                SetProperty(
+                    result,
+                    "somethingWithoutChoice",
+                    "SomethingWithoutChoice",
+                    that.SomethingWithoutChoice,
+                    Serialize_IClass);
 
                 return result;
             }
@@ -1295,29 +1325,9 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                try
-                {
-                    result["node"] = TransformIClass(
-                        that.Node);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("node"));
-                    throw;
-                }
+                SetProperty(result, "node", "Node", that.Node, Serialize_IClass);
 
-                try
-                {
-                    result["something"] = TransformIClass(
-                        that.Something);
-                }
-                catch (SerializationFailure failure)
-                {
-                    failure.Error.PrependSegment(
-                        new Reporting.NameSegment("something"));
-                    throw;
-                }
+                SetProperty(result, "something", "Something", that.Something, Serialize_IClass);
 
                 return result;
             }
@@ -1355,7 +1365,7 @@ namespace dummy
                 catch (SerializationFailure failure)
                 {
                     throw new SerializationException(
-                        Reporting.GenerateJsonPath(failure.Error.PathSegments),
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
                         failure.Error.Cause);
                 }
             }

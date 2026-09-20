@@ -575,18 +575,17 @@ public class Xmlization {
      * were it left to the caller, the failure would surface at their own flush,
      * after the serialization has long returned.
      *
-     * <p>The path of a {@link SerializeException} is rendered as a relative
-     * XPath, the same spelling the de-serialization reports, and names
-     * the properties and the list indices leading to the culprit --
-     * {@code submodelElements/*[0]/value}. Two things it deliberately does not
-     * name: the outermost element, since this method takes any
-     * {@link IClass} and the name would say nothing the caller does not
-     * already know; and the discriminator element of a polymorphic property,
-     * which the de-serialization does prepend. The de-serialization is pointing
-     * into a document it is reading, where that element is a real extra level;
-     * this is pointing into the instance the caller handed over, where it is
-     * not -- {@code value/idShort} here is exactly
-     * {@code getValue().getIdShort()}.
+     * <p>The path of a {@link SerializeException} is rendered as a Java
+     * expression on the instance the caller handed over, and not as the XPath
+     * which the de-serialization reports: this error answers a call the caller
+     * made on that instance, and not on a document which has not been written
+     * yet -- {@code getSubmodelElements().get(0).getValue()}. Two things it
+     * deliberately does not name: the outermost element, since this method
+     * takes any {@link IClass} and the name would say nothing the caller does
+     * not already know; and the discriminator element of a polymorphic
+     * property, which the de-serialization does prepend. The de-serialization
+     * is pointing into a document it is reading, where that element is a real
+     * extra level; here it is not.
      */
     public static void to(
       IClass that,
@@ -600,7 +599,7 @@ public class Xmlization {
       } catch (_SerializeFailure failure) {
         final Reporting.Error error = failure.getError();
         throw new SerializeException(
-          Reporting.generateRelativeXPath(error.getPathSegments()),
+          Reporting.generateJavaPath(error.getPathSegments()),
           error.getCause());
       }
     }

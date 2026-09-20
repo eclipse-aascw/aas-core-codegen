@@ -1572,10 +1572,10 @@ public static class Deserialize
 _SERIALIZE_FUNCTION_BY_PRIMITIVE_TYPE: Final[
     Mapping[intermediate.PrimitiveType, Stripped]
 ] = {
-    intermediate.PrimitiveType.BOOL: Stripped("JsonNodeFactory.instance.booleanNode"),
+    intermediate.PrimitiveType.BOOL: Stripped("boolToJsonNode"),
     intermediate.PrimitiveType.INT: Stripped("longToJsonNode"),
     intermediate.PrimitiveType.FLOAT: Stripped("doubleToJsonNode"),
-    intermediate.PrimitiveType.STR: Stripped("JsonNodeFactory.instance.textNode"),
+    intermediate.PrimitiveType.STR: Stripped("stringToJsonNode"),
     intermediate.PrimitiveType.BYTEARRAY: Stripped("bytesToJsonNode"),
 }
 assert all(
@@ -1779,7 +1779,6 @@ def _serialize_call(
 
 def _generate_composed_serializer(
     type_anno: intermediate.ContainerTypeAnnotation,
-    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Stripped:
     """
     Generate the serializer of the list or of the tuple ``type_anno``.
@@ -1815,11 +1814,6 @@ def _generate_composed_serializer(
         Stripped("final ArrayNode result = JsonNodeFactory.instance.arrayNode();")
     ]  # type: List[Stripped]
 
-    items_are_fallible = any(
-        intermediate.reaches_a_number(item_type_anno, ids_of_types_reaching_a_number)
-        for item_type_anno in item_type_annos
-    )
-
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
         item_type = _serialized_value_type(item_type_annos[0])
         conversion = _serialize_call(
@@ -1830,22 +1824,13 @@ def _generate_composed_serializer(
             indentation=body_indentation + len(I) + len("result.add("),
         )
 
-        if not items_are_fallible:
-            stmts.append(
-                Stripped(
-                    f"""\
-for ({item_type} item : that) {{
-{I}result.add({indent_but_first_line(conversion, I)});
-}}"""
-                )
-            )
-        else:
-            # NOTE (mristin):
-            # The loop has to count so that the failure can name the item
-            # which was refused.
-            stmts.append(
-                Stripped(
-                    f"""\
+        # NOTE (mristin):
+        # The loop counts so that the failure can name the item which was
+        # refused. Every item is guarded, and not only the ones which can
+        # fail today: nothing below the loop knows which item it was in.
+        stmts.append(
+            Stripped(
+                f"""\
 int i = 0;
 for ({item_type} item : that) {{
 {I}try {{
@@ -1857,8 +1842,8 @@ for ({item_type} item : that) {{
 {I}}}
 {I}i++;
 }}"""
-                )
             )
+        )
     else:
         for i, item_type_anno in enumerate(item_type_annos):
             conversion = _serialize_call(
@@ -1869,11 +1854,8 @@ for ({item_type} item : that) {{
 
             statement = Stripped(f"result.add({conversion});")
 
-            if intermediate.reaches_a_number(
-                item_type_anno, ids_of_types_reaching_a_number
-            ):
-                statement = Stripped(
-                    f"""\
+            statement = Stripped(
+                f"""\
 try {{
 {I}{indent_but_first_line(statement, I)}
 }} catch (_SerializeFailure failure) {{
@@ -1881,7 +1863,7 @@ try {{
 {II}new Reporting.IndexSegment({i}));
 {I}throw failure;
 }}"""
-                )
+            )
 
             stmts.append(statement)
 
@@ -1961,7 +1943,6 @@ private static JsonNode transformUnion(IUnion<?> that) {{
 
 def _generate_transform_property(
     prop: intermediate.Property,
-    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Stripped:
     """
     Generate the snippet to transform a property into a JSON node.
@@ -1984,77 +1965,79 @@ def _generate_transform_property(
 
     is_optional = isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
 
-    source_expr = Stripped(
-        f"that.{getter_name}().get()" if is_optional else f"that.{getter_name}()"
-    )
-
-    #: The statement sits one level deeper when the property is optional, as
-    #: it is then wrapped in an ``if``.
-    indentation = _FUNCTION_BODY_INDENTATION + (len(I) if is_optional else 0)
-
-    conversion: Stripped
+    serializer: Stripped
 
     if isinstance(type_anno, intermediate.ContainerTypeAnnotationAsTuple):
         # NOTE (mristin):
         # That the items are atomic is asserted in
         # :py:func:`_item_type_annotations`, which names the offending type,
         # and through which every use of the items goes.
-        name = _serializer_name(type_anno)
-
-        one_liner = Stripped(f"{name}({source_expr})")
-        prefix_length = indentation + len(f"result.set({prop_literal}, ") + len(");")
-
-        if prefix_length + len(one_liner) <= _MAX_LINE_LENGTH:
-            conversion = one_liner
-        else:
-            # We can not use textwrap due to indent_but_first_line.
-            conversion = Stripped(
-                f"""\
-{name}(
-{I}{indent_but_first_line(source_expr, I)})"""
-            )
+        serializer = Stripped(_serializer_name(type_anno))
     else:
-        conversion = _serialize_call(
-            type_anno=type_anno,
-            source_expr=source_expr,
-            indentation=indentation + len(f"result.set({prop_literal}, "),
-        )
-
-    statement = Stripped(f"result.set({prop_literal}, {conversion});")
+        serializer = _serialize_function(type_anno)
 
     # NOTE (mristin):
-    # Only a value which can be refused at all is worth guarding. The property
-    # is recorded here, and nowhere below, as nothing below knows through which
-    # property the value was reached.
-    if intermediate.reaches_a_number(
-        prop.type_annotation, ids_of_types_reaching_a_number
+    # Every serializer is a static method, so the reference to one captures
+    # nothing and the JVM hands out a single instance for it -- the lambda is
+    # created once at the call site and never again. A method of this very
+    # class is qualified by it; ``Serialize.toJsonValue`` already names
+    # the class it lives in.
+    serializer_reference = (
+        Stripped(serializer.replace(".", "::"))
+        if "." in serializer
+        else Stripped(f"_Transformer::{serializer}")
+    )
+
+    # NOTE (mristin):
+    # The path names the getter, and not the JSON property: a serialization
+    # error is reported on an *instance*, which the caller holds, and not on
+    # a document which has not been written yet.
+    getter_literal = java_common.string_literal(f"{getter_name}()")
+
+    function_name = "setOptionalProperty" if is_optional else "setProperty"
+
+    arguments = [
+        Stripped("result"),
+        prop_literal,
+        getter_literal,
+        Stripped(f"that.{getter_name}()"),
+        serializer_reference,
+    ]
+
+    one_liner = Stripped(f"{function_name}({', '.join(arguments)});")
+    if _FUNCTION_BODY_INDENTATION + len(one_liner) <= _MAX_LINE_LENGTH:
+        return one_liner
+
+    # NOTE (mristin):
+    # The call is broken into the two halves it reads as -- where the value
+    # goes, and what it is -- before it is broken into one argument per line.
+    where = ", ".join(arguments[:3])
+    what = ", ".join(arguments[3:])
+
+    indentation = _FUNCTION_BODY_INDENTATION + len(I)
+    if (
+        indentation + max(len(where) + len(","), len(what) + len(");"))
+        <= _MAX_LINE_LENGTH
     ):
-        statement = Stripped(
+        return Stripped(
             f"""\
-try {{
-{I}{indent_but_first_line(statement, I)}
-}} catch (_SerializeFailure failure) {{
-{I}failure.getError().prependSegment(
-{II}new Reporting.NameSegment({prop_literal}));
-{I}throw failure;
-}}"""
+{function_name}(
+{I}{where},
+{I}{what});"""
         )
 
-    if not is_optional:
-        return statement
-
     # We can not use textwrap due to indent_but_first_line.
+    arguments_joined = Stripped(",\n".join(arguments))
+
     return Stripped(
         f"""\
-if (that.{getter_name}().isPresent()) {{
-{I}{indent_but_first_line(statement, I)}
-}}"""
+{function_name}(
+{I}{indent_but_first_line(arguments_joined, I)});"""
     )
 
 
 def _generate_transform_for_class(
     cls: intermediate.ConcreteClass,
-    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Stripped:
     """Generate the transform method to a JSON object for the given concrete class."""
     blocks = [
@@ -2065,7 +2048,6 @@ def _generate_transform_for_class(
         blocks.append(
             _generate_transform_property(
                 prop=prop,
-                ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
             )
         )
 
@@ -2173,6 +2155,114 @@ def _called_serialize_functions(
     return result
 
 
+def _generate_set_property_helpers() -> Stripped:
+    """
+    Generate the framers which set a property and name it on the error path.
+
+    Every property goes through one of the two, and not only the ones which
+    can fail today: the property is recorded here and nowhere below, as
+    nothing below knows through which property the value was reached, so
+    a serializer which grows a new way of failing would quietly lose the way
+    to the culprit.
+
+    The serializer is handed over as a method reference. Every one of them is
+    a static method, so the reference captures nothing and the JVM hands out
+    a single instance for it, created once at the call site -- which is what
+    lets the framer cost no more than the statement it replaces.
+    """
+    return Stripped(
+        f"""\
+/**
+ * Convert a single value into a JSON node.
+ */
+@FunctionalInterface
+private interface Serializer<T> {{
+{I}JsonNode serialize(T that);
+}}
+
+/**
+ * Set the property {{@code jsonName}} of {{@code result}} to
+ * {{@code that}}, serialized by {{@code serialize}}.
+ *
+ * <p>{{@code getterName}} names the property on the path of a failure. It is
+ * the getter, and not the JSON property: a serialization error is reported
+ * on an <em>instance</em>, which the caller holds, and not on a document
+ * which has not been written yet.
+ */
+private static <T> void setProperty(
+{I}ObjectNode result,
+{I}String jsonName,
+{I}String getterName,
+{I}T that,
+{I}Serializer<? super T> serialize) {{
+{I}try {{
+{II}result.set(jsonName, serialize.serialize(that));
+{I}}} catch (_SerializeFailure failure) {{
+{II}failure.getError().prependSegment(
+{III}new Reporting.NameSegment(getterName));
+{II}throw failure;
+{I}}}
+}}
+
+/**
+ * Set the property {{@code jsonName}} of {{@code result}} if {{@code that}}
+ * has been given, and set nothing at all otherwise.
+ *
+ * <p>The {{@link Optional}} is taken apart here, once, instead of at every
+ * optional property: asking it and then unwrapping it at the call site would
+ * call the getter twice, and every call allocates an {{@link Optional}} of
+ * its own.
+ */
+private static <T> void setOptionalProperty(
+{I}ObjectNode result,
+{I}String jsonName,
+{I}String getterName,
+{I}Optional<T> that,
+{I}Serializer<? super T> serialize) {{
+{I}final T value = that.orElse(null);
+{I}if (value != null) {{
+{II}setProperty(result, jsonName, getterName, value, serialize);
+{I}}}
+}}"""
+    )
+
+
+def _generate_bool_to_json_node_helper() -> Stripped:
+    """Generate the conversion of a boolean."""
+    return Stripped(
+        f"""\
+/**
+ * Convert {{@code that}} boolean to a JSON value.
+ *
+ * <p>This wraps {{@link JsonNodeFactory}}, which is an object, so that
+ * the conversion is a static method like every other one here and
+ * a reference to it captures nothing.
+ *
+ * @param that value to be converted
+ */
+private static JsonNode boolToJsonNode(Boolean that) {{
+{I}return JsonNodeFactory.instance.booleanNode(that);
+}}"""
+    )
+
+
+def _generate_string_to_json_node_helper() -> Stripped:
+    """Generate the conversion of a string."""
+    return Stripped(
+        f"""\
+/**
+ * Convert {{@code that}} string to a JSON value.
+ *
+ * <p>See the note on {{@link #boolToJsonNode}} on why this wrapper exists.
+ *
+ * @param that value to be converted
+ */
+private static JsonNode stringToJsonNode(String that) {{
+{I}return JsonNodeFactory.instance.textNode(that);
+}}"""
+    )
+
+
 def _generate_long_to_json_node_helper() -> Stripped:
     """Generate the conversion of a 64-bit integer, which JSON can not hold."""
     return Stripped(
@@ -2254,10 +2344,6 @@ def _generate_transformer(
     # the base64 conversion nor the import it needs.
     called = _called_serialize_functions(symbol_table)
 
-    ids_of_types_reaching_a_number = (
-        intermediate.collect_ids_of_types_reaching_a_number(symbol_table)
-    )
-
     blocks = [
         Stripped(
             """\
@@ -2270,10 +2356,17 @@ def _generate_transformer(
 private static final _Transformer INSTANCE = new _Transformer();"""
         ),
         _generate_transform_class_helper(),
+        _generate_set_property_helpers(),
     ]  # type: List[Stripped]
 
     if Stripped("transformUnion") in called:
         blocks.append(_generate_transform_union_helper())
+
+    if Stripped("boolToJsonNode") in called:
+        blocks.append(_generate_bool_to_json_node_helper())
+
+    if Stripped("stringToJsonNode") in called:
+        blocks.append(_generate_string_to_json_node_helper())
 
     if Stripped("longToJsonNode") in called:
         blocks.append(_generate_long_to_json_node_helper())
@@ -2285,9 +2378,7 @@ private static final _Transformer INSTANCE = new _Transformer();"""
         blocks.append(_generate_bytes_to_json_node_helper())
 
     for type_anno in _composed_serializer_type_annotations(symbol_table):
-        blocks.append(
-            _generate_composed_serializer(type_anno, ids_of_types_reaching_a_number)
-        )
+        blocks.append(_generate_composed_serializer(type_anno))
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -2305,7 +2396,6 @@ private static final _Transformer INSTANCE = new _Transformer();"""
             blocks.append(
                 _generate_transform_for_class(
                     cls=our_type,
-                    ids_of_types_reaching_a_number=(ids_of_types_reaching_a_number),
                 )
             )
         elif isinstance(our_type, intermediate.NamedUnion):
@@ -2356,7 +2446,7 @@ public static JsonNode toJsonObject(IClass that) {{
 {I}}} catch (_SerializeFailure failure) {{
 {II}final Reporting.Error error = failure.getError();
 {II}throw new SerializeException(
-{III}Reporting.generateJsonPath(error.getPathSegments()),
+{III}Reporting.generateJavaPath(error.getPathSegments()),
 {III}error.getCause());
 {I}}}
 }}"""

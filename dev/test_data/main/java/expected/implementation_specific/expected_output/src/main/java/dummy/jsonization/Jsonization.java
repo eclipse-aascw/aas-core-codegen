@@ -753,6 +753,70 @@ public class Jsonization {
       }
 
       /**
+       * Convert a single value into a JSON node.
+       */
+      @FunctionalInterface
+      private interface Serializer<T> {
+        JsonNode serialize(T that);
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} to
+       * {@code that}, serialized by {@code serialize}.
+       *
+       * <p>{@code getterName} names the property on the path of a failure. It is
+       * the getter, and not the JSON property: a serialization error is reported
+       * on an <em>instance</em>, which the caller holds, and not on a document
+       * which has not been written yet.
+       */
+      private static <T> void setProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        T that,
+        Serializer<? super T> serialize) {
+        try {
+          result.set(jsonName, serialize.serialize(that));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment(getterName));
+          throw failure;
+        }
+      }
+
+      /**
+       * Set the property {@code jsonName} of {@code result} if {@code that}
+       * has been given, and set nothing at all otherwise.
+       *
+       * <p>The {@link Optional} is taken apart here, once, instead of at every
+       * optional property: asking it and then unwrapping it at the call site would
+       * call the getter twice, and every call allocates an {@link Optional} of
+       * its own.
+       */
+      private static <T> void setOptionalProperty(
+        ObjectNode result,
+        String jsonName,
+        String getterName,
+        Optional<T> that,
+        Serializer<? super T> serialize) {
+        final T value = that.orElse(null);
+        if (value != null) {
+          setProperty(result, jsonName, getterName, value, serialize);
+        }
+      }
+
+      /**
+       * Convert {@code that} string to a JSON value.
+       *
+       * <p>See the note on {@link #boolToJsonNode} on why this wrapper exists.
+       *
+       * @param that value to be converted
+       */
+      private static JsonNode stringToJsonNode(String that) {
+        return JsonNodeFactory.instance.textNode(that);
+      }
+
+      /**
        * Serialize every item of {@code that} into a JSON array.
        *
        * @param that to be serialized
@@ -760,8 +824,16 @@ public class Jsonization {
       private static ArrayNode serializeListOf_string(
         List<String> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
+        int i = 0;
         for (String item : that) {
-          result.add(JsonNodeFactory.instance.textNode(item));
+          try {
+            result.add(stringToJsonNode(item));
+          } catch (_SerializeFailure failure) {
+            failure.getError().prependSegment(
+              new Reporting.IndexSegment(i));
+            throw failure;
+          }
+          i++;
         }
         return result;
       }
@@ -774,8 +846,16 @@ public class Jsonization {
       private static ArrayNode serializeListOf_IClass(
         List<? extends IClass> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
+        int i = 0;
         for (IClass item : that) {
-          result.add(transformClass(item));
+          try {
+            result.add(transformClass(item));
+          } catch (_SerializeFailure failure) {
+            failure.getError().prependSegment(
+              new Reporting.IndexSegment(i));
+            throw failure;
+          }
+          i++;
         }
         return result;
       }
@@ -786,11 +866,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("label", JsonNodeFactory.instance.textNode(that.getLabel()));
+        setProperty(result, "label", "getLabel()", that.getLabel(), _Transformer::stringToJsonNode);
 
-        if (that.getColor().isPresent()) {
-          result.set("color", Serialize.toJsonValue(that.getColor().get()));
-        }
+        setOptionalProperty(result, "color", "getColor()", that.getColor(), Serialize::toJsonValue);
 
         result.put("modelType", "Box");
 
@@ -803,9 +881,11 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("label", JsonNodeFactory.instance.textNode(that.getLabel()));
+        setProperty(result, "label", "getLabel()", that.getLabel(), _Transformer::stringToJsonNode);
 
-        result.set("tags", serializeListOf_string(that.getTags()));
+        setProperty(
+          result, "tags", "getTags()",
+          that.getTags(), _Transformer::serializeListOf_string);
 
         result.put("modelType", "Bag");
 
@@ -818,9 +898,13 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("names", serializeListOf_string(that.getNames()));
+        setProperty(
+          result, "names", "getNames()",
+          that.getNames(), _Transformer::serializeListOf_string);
 
-        result.set("items", serializeListOf_IClass(that.getItems()));
+        setProperty(
+          result, "items", "getItems()",
+          that.getItems(), _Transformer::serializeListOf_IClass);
 
         return result;
       }
@@ -852,7 +936,7 @@ public class Jsonization {
         } catch (_SerializeFailure failure) {
           final Reporting.Error error = failure.getError();
           throw new SerializeException(
-            Reporting.generateJsonPath(error.getPathSegments()),
+            Reporting.generateJavaPath(error.getPathSegments()),
             error.getCause());
         }
       }

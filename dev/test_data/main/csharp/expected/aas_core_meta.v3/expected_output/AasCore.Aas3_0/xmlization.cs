@@ -8310,6 +8310,41 @@ namespace AasCore.Aas3_0
         }
 
         /// <summary>
+        /// Represent a critical error during the serialization.
+        /// </summary>
+        public class SerializationException : System.Exception
+        {
+            public readonly string Path;
+            public readonly string Cause;
+            public SerializationException(string path, string cause)
+                : base($"{cause} at: {path}")
+            {
+                Path = path;
+                Cause = cause;
+            }
+        }
+
+        /// <summary>
+        /// Signal a failure of the serialization, carrying the path to the culprit.
+        /// </summary>
+        /// <remarks>
+        /// The path is built as the stack unwinds -- every container prepends the one
+        /// segment it knows, the property its name and the list the index of the item
+        /// -- which is why this can not be a <see cref="SerializationException" />
+        /// already: that one renders its message in its constructor, so its path has
+        /// to be complete by then. <see cref="Serialize.To" /> renders and converts.
+        /// </remarks>
+        internal class SerializationFailure : System.Exception
+        {
+            public readonly Reporting.Error Error;
+            public SerializationFailure(Reporting.Error error)
+                : base(error.Cause)
+            {
+                Error = error;
+            }
+        }
+
+        /// <summary>
         /// Deserialize instances of meta-model classes from XML.
         /// </summary>
         /// <example>
@@ -10119,6 +10154,37 @@ namespace AasCore.Aas3_0
             }
 
             /// <summary>
+            /// Write the property <paramref name="propertyName" /> of the instance being
+            /// serialized as an XML element named <paramref name="elementName" />.
+            /// </summary>
+            /// <remarks>
+            /// This is <see cref="WriteElement{T}" /> plus the one segment of the path
+            /// which only the property knows. The path names the C# property, and not
+            /// the XML element: a serialization error is reported on an <em>instance</em>,
+            /// which the caller holds, and not on a document which has not been written
+            /// yet.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private static void WriteProperty<T>(
+                string elementName,
+                string propertyName,
+                T that,
+                Xml.XmlWriter writer,
+                ContentWriter<T> writeContent)
+            {
+                try
+                {
+                    WriteElement(elementName, that, writer, writeContent);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment(propertyName));
+                    throw;
+                }
+            }
+
+            /// <summary>
             /// Render the literal <paramref name="that" /> of <typeparamref name="T" />
             /// as text.
             /// </summary>
@@ -10145,9 +10211,10 @@ namespace AasCore.Aas3_0
                 {
                     writer.WriteValue(
                         stringifyLiteral(that)
-                            ?? throw new System.ArgumentException(
-                                $"Invalid literal for the enumeration {typeof(T).Name}: " +
-                                that.ToString()));
+                            ?? throw new SerializationFailure(
+                                new Reporting.Error(
+                                    $"Invalid literal for the enumeration {typeof(T).Name}: " +
+                                    that.ToString())));
                 };
             }
 
@@ -10165,9 +10232,20 @@ namespace AasCore.Aas3_0
             {
                 return (that, writer) =>
                 {
+                    int index = 0;
                     foreach (var item in that)
                     {
-                        writeItem(item, writer);
+                        try
+                        {
+                            writeItem(item, writer);
+                        }
+                        catch (SerializationFailure failure)
+                        {
+                            failure.Error.PrependSegment(
+                                new Reporting.IndexSegment(index));
+                            throw;
+                        }
+                        index++;
                     }
                 };
             }
@@ -10384,38 +10462,43 @@ namespace AasCore.Aas3_0
             {
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
                 }
 
-                WriteElement(
-                    "name", that.Name, writer, Write_string);
+                WriteProperty(
+                    "name", "Name", that.Name, writer, Write_string);
 
                 if (that.ValueType.HasValue)
                 {
-                    WriteElement(
-                        "valueType", that.ValueType.Value, writer, Write_DataTypeDefXsd);
+                    WriteProperty(
+                        "valueType",
+                        "ValueType",
+                        that.ValueType.Value,
+                        writer,
+                        Write_DataTypeDefXsd);
                 }
 
                 if (that.Value != null)
                 {
-                    WriteElement(
-                        "value", that.Value, writer, Write_string);
+                    WriteProperty(
+                        "value", "Value", that.Value, writer, Write_string);
                 }
 
                 if (that.RefersTo != null)
                 {
-                    WriteElement(
-                        "refersTo", that.RefersTo, writer, Write_ListOf_IReference);
+                    WriteProperty(
+                        "refersTo", "RefersTo", that.RefersTo, writer, Write_ListOf_IReference);
                 }
             }  // private static void ExtensionToSequence
 
@@ -10438,8 +10521,9 @@ namespace AasCore.Aas3_0
             {
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -10447,26 +10531,26 @@ namespace AasCore.Aas3_0
 
                 if (that.Version != null)
                 {
-                    WriteElement(
-                        "version", that.Version, writer, Write_string);
+                    WriteProperty(
+                        "version", "Version", that.Version, writer, Write_string);
                 }
 
                 if (that.Revision != null)
                 {
-                    WriteElement(
-                        "revision", that.Revision, writer, Write_string);
+                    WriteProperty(
+                        "revision", "Revision", that.Revision, writer, Write_string);
                 }
 
                 if (that.Creator != null)
                 {
-                    WriteElement(
-                        "creator", that.Creator, writer, Write_IReference);
+                    WriteProperty(
+                        "creator", "Creator", that.Creator, writer, Write_IReference);
                 }
 
                 if (that.TemplateId != null)
                 {
-                    WriteElement(
-                        "templateId", that.TemplateId, writer, Write_string);
+                    WriteProperty(
+                        "templateId", "TemplateId", that.TemplateId, writer, Write_string);
                 }
             }  // private static void AdministrativeInformationToSequence
 
@@ -10489,14 +10573,15 @@ namespace AasCore.Aas3_0
             {
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -10504,26 +10589,26 @@ namespace AasCore.Aas3_0
 
                 if (that.Kind.HasValue)
                 {
-                    WriteElement(
-                        "kind", that.Kind.Value, writer, Write_QualifierKind);
+                    WriteProperty(
+                        "kind", "Kind", that.Kind.Value, writer, Write_QualifierKind);
                 }
 
-                WriteElement(
-                    "type", that.Type, writer, Write_string);
+                WriteProperty(
+                    "type", "Type", that.Type, writer, Write_string);
 
-                WriteElement(
-                    "valueType", that.ValueType, writer, Write_DataTypeDefXsd);
+                WriteProperty(
+                    "valueType", "ValueType", that.ValueType, writer, Write_DataTypeDefXsd);
 
                 if (that.Value != null)
                 {
-                    WriteElement(
-                        "value", that.Value, writer, Write_string);
+                    WriteProperty(
+                        "value", "Value", that.Value, writer, Write_string);
                 }
 
                 if (that.ValueId != null)
                 {
-                    WriteElement(
-                        "valueId", that.ValueId, writer, Write_IReference);
+                    WriteProperty(
+                        "valueId", "ValueId", that.ValueId, writer, Write_IReference);
                 }
             }  // private static void QualifierToSequence
 
@@ -10546,50 +10631,64 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.Administration != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "administration",
+                        "Administration",
                         that.Administration,
                         writer,
                         Write_IAdministrativeInformation);
                 }
 
-                WriteElement(
-                    "id", that.Id, writer, Write_string);
+                WriteProperty(
+                    "id", "Id", that.Id, writer, Write_string);
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -10597,17 +10696,21 @@ namespace AasCore.Aas3_0
 
                 if (that.DerivedFrom != null)
                 {
-                    WriteElement(
-                        "derivedFrom", that.DerivedFrom, writer, Write_IReference);
+                    WriteProperty(
+                        "derivedFrom", "DerivedFrom", that.DerivedFrom, writer, Write_IReference);
                 }
 
-                WriteElement(
-                    "assetInformation", that.AssetInformation, writer, Write_IAssetInformation);
+                WriteProperty(
+                    "assetInformation",
+                    "AssetInformation",
+                    that.AssetInformation,
+                    writer,
+                    Write_IAssetInformation);
 
                 if (that.Submodels != null)
                 {
-                    WriteElement(
-                        "submodels", that.Submodels, writer, Write_ListOf_IReference);
+                    WriteProperty(
+                        "submodels", "Submodels", that.Submodels, writer, Write_ListOf_IReference);
                 }
             }  // private static void AssetAdministrationShellToSequence
 
@@ -10628,19 +10731,20 @@ namespace AasCore.Aas3_0
                 Aas.IAssetInformation that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "assetKind", that.AssetKind, writer, Write_AssetKind);
+                WriteProperty(
+                    "assetKind", "AssetKind", that.AssetKind, writer, Write_AssetKind);
 
                 if (that.GlobalAssetId != null)
                 {
-                    WriteElement(
-                        "globalAssetId", that.GlobalAssetId, writer, Write_string);
+                    WriteProperty(
+                        "globalAssetId", "GlobalAssetId", that.GlobalAssetId, writer, Write_string);
                 }
 
                 if (that.SpecificAssetIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "specificAssetIds",
+                        "SpecificAssetIds",
                         that.SpecificAssetIds,
                         writer,
                         Write_ListOf_ISpecificAssetId);
@@ -10648,14 +10752,18 @@ namespace AasCore.Aas3_0
 
                 if (that.AssetType != null)
                 {
-                    WriteElement(
-                        "assetType", that.AssetType, writer, Write_string);
+                    WriteProperty(
+                        "assetType", "AssetType", that.AssetType, writer, Write_string);
                 }
 
                 if (that.DefaultThumbnail != null)
                 {
-                    WriteElement(
-                        "defaultThumbnail", that.DefaultThumbnail, writer, Write_IResource);
+                    WriteProperty(
+                        "defaultThumbnail",
+                        "DefaultThumbnail",
+                        that.DefaultThumbnail,
+                        writer,
+                        Write_IResource);
                 }
             }  // private static void AssetInformationToSequence
 
@@ -10676,13 +10784,13 @@ namespace AasCore.Aas3_0
                 Aas.IResource that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "path", that.Path, writer, Write_string);
+                WriteProperty(
+                    "path", "Path", that.Path, writer, Write_string);
 
                 if (that.ContentType != null)
                 {
-                    WriteElement(
-                        "contentType", that.ContentType, writer, Write_string);
+                    WriteProperty(
+                        "contentType", "ContentType", that.ContentType, writer, Write_string);
                 }
             }  // private static void ResourceToSequence
 
@@ -10705,29 +10813,34 @@ namespace AasCore.Aas3_0
             {
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
                 }
 
-                WriteElement(
-                    "name", that.Name, writer, Write_string);
+                WriteProperty(
+                    "name", "Name", that.Name, writer, Write_string);
 
-                WriteElement(
-                    "value", that.Value, writer, Write_string);
+                WriteProperty(
+                    "value", "Value", that.Value, writer, Write_string);
 
                 if (that.ExternalSubjectId != null)
                 {
-                    WriteElement(
-                        "externalSubjectId", that.ExternalSubjectId, writer, Write_IReference);
+                    WriteProperty(
+                        "externalSubjectId",
+                        "ExternalSubjectId",
+                        that.ExternalSubjectId,
+                        writer,
+                        Write_IReference);
                 }
             }  // private static void SpecificAssetIdToSequence
 
@@ -10750,62 +10863,76 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.Administration != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "administration",
+                        "Administration",
                         that.Administration,
                         writer,
                         Write_IAdministrativeInformation);
                 }
 
-                WriteElement(
-                    "id", that.Id, writer, Write_string);
+                WriteProperty(
+                    "id", "Id", that.Id, writer, Write_string);
 
                 if (that.Kind.HasValue)
                 {
-                    WriteElement(
-                        "kind", that.Kind.Value, writer, Write_ModellingKind);
+                    WriteProperty(
+                        "kind", "Kind", that.Kind.Value, writer, Write_ModellingKind);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -10813,14 +10940,19 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -10828,8 +10960,9 @@ namespace AasCore.Aas3_0
 
                 if (that.SubmodelElements != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "submodelElements",
+                        "SubmodelElements",
                         that.SubmodelElements,
                         writer,
                         Write_ListOf_ISubmodelElement);
@@ -10855,44 +10988,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -10900,24 +11046,29 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
                 }
 
-                WriteElement(
-                    "first", that.First, writer, Write_IReference);
+                WriteProperty(
+                    "first", "First", that.First, writer, Write_IReference);
 
-                WriteElement(
-                    "second", that.Second, writer, Write_IReference);
+                WriteProperty(
+                    "second", "Second", that.Second, writer, Write_IReference);
             }  // private static void RelationshipElementToSequence
 
             public override void VisitRelationshipElement(
@@ -10939,44 +11090,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -10984,14 +11148,19 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -10999,29 +11168,36 @@ namespace AasCore.Aas3_0
 
                 if (that.OrderRelevant.HasValue)
                 {
-                    WriteElement(
-                        "orderRelevant", that.OrderRelevant.Value, writer, Write_bool);
+                    WriteProperty(
+                        "orderRelevant",
+                        "OrderRelevant",
+                        that.OrderRelevant.Value,
+                        writer,
+                        Write_bool);
                 }
 
                 if (that.SemanticIdListElement != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "semanticIdListElement",
+                        "SemanticIdListElement",
                         that.SemanticIdListElement,
                         writer,
                         Write_IReference);
                 }
 
-                WriteElement(
+                WriteProperty(
                     "typeValueListElement",
+                    "TypeValueListElement",
                     that.TypeValueListElement,
                     writer,
                     Write_AasSubmodelElements);
 
                 if (that.ValueTypeListElement.HasValue)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "valueTypeListElement",
+                        "ValueTypeListElement",
                         that.ValueTypeListElement.Value,
                         writer,
                         Write_DataTypeDefXsd);
@@ -11029,8 +11205,8 @@ namespace AasCore.Aas3_0
 
                 if (that.Value != null)
                 {
-                    WriteElement(
-                        "value", that.Value, writer, Write_ListOf_ISubmodelElement);
+                    WriteProperty(
+                        "value", "Value", that.Value, writer, Write_ListOf_ISubmodelElement);
                 }
             }  // private static void SubmodelElementListToSequence
 
@@ -11053,44 +11229,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -11098,14 +11287,19 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -11113,8 +11307,8 @@ namespace AasCore.Aas3_0
 
                 if (that.Value != null)
                 {
-                    WriteElement(
-                        "value", that.Value, writer, Write_ListOf_ISubmodelElement);
+                    WriteProperty(
+                        "value", "Value", that.Value, writer, Write_ListOf_ISubmodelElement);
                 }
             }  // private static void SubmodelElementCollectionToSequence
 
@@ -11137,44 +11331,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -11182,32 +11389,37 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
                 }
 
-                WriteElement(
-                    "valueType", that.ValueType, writer, Write_DataTypeDefXsd);
+                WriteProperty(
+                    "valueType", "ValueType", that.ValueType, writer, Write_DataTypeDefXsd);
 
                 if (that.Value != null)
                 {
-                    WriteElement(
-                        "value", that.Value, writer, Write_string);
+                    WriteProperty(
+                        "value", "Value", that.Value, writer, Write_string);
                 }
 
                 if (that.ValueId != null)
                 {
-                    WriteElement(
-                        "valueId", that.ValueId, writer, Write_IReference);
+                    WriteProperty(
+                        "valueId", "ValueId", that.ValueId, writer, Write_IReference);
                 }
             }  // private static void PropertyToSequence
 
@@ -11230,44 +11442,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -11275,14 +11500,19 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -11290,14 +11520,14 @@ namespace AasCore.Aas3_0
 
                 if (that.Value != null)
                 {
-                    WriteElement(
-                        "value", that.Value, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "value", "Value", that.Value, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.ValueId != null)
                 {
-                    WriteElement(
-                        "valueId", that.ValueId, writer, Write_IReference);
+                    WriteProperty(
+                        "valueId", "ValueId", that.ValueId, writer, Write_IReference);
                 }
             }  // private static void MultiLanguagePropertyToSequence
 
@@ -11320,44 +11550,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -11365,32 +11608,37 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
                 }
 
-                WriteElement(
-                    "valueType", that.ValueType, writer, Write_DataTypeDefXsd);
+                WriteProperty(
+                    "valueType", "ValueType", that.ValueType, writer, Write_DataTypeDefXsd);
 
                 if (that.Min != null)
                 {
-                    WriteElement(
-                        "min", that.Min, writer, Write_string);
+                    WriteProperty(
+                        "min", "Min", that.Min, writer, Write_string);
                 }
 
                 if (that.Max != null)
                 {
-                    WriteElement(
-                        "max", that.Max, writer, Write_string);
+                    WriteProperty(
+                        "max", "Max", that.Max, writer, Write_string);
                 }
             }  // private static void RangeToSequence
 
@@ -11413,44 +11661,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -11458,14 +11719,19 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -11473,8 +11739,8 @@ namespace AasCore.Aas3_0
 
                 if (that.Value != null)
                 {
-                    WriteElement(
-                        "value", that.Value, writer, Write_IReference);
+                    WriteProperty(
+                        "value", "Value", that.Value, writer, Write_IReference);
                 }
             }  // private static void ReferenceElementToSequence
 
@@ -11497,44 +11763,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -11542,14 +11821,19 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -11557,12 +11841,12 @@ namespace AasCore.Aas3_0
 
                 if (that.Value != null)
                 {
-                    WriteElement(
-                        "value", that.Value, writer, Write_bytes);
+                    WriteProperty(
+                        "value", "Value", that.Value, writer, Write_bytes);
                 }
 
-                WriteElement(
-                    "contentType", that.ContentType, writer, Write_string);
+                WriteProperty(
+                    "contentType", "ContentType", that.ContentType, writer, Write_string);
             }  // private static void BlobToSequence
 
             public override void VisitBlob(
@@ -11584,44 +11868,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -11629,14 +11926,19 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -11644,12 +11946,12 @@ namespace AasCore.Aas3_0
 
                 if (that.Value != null)
                 {
-                    WriteElement(
-                        "value", that.Value, writer, Write_string);
+                    WriteProperty(
+                        "value", "Value", that.Value, writer, Write_string);
                 }
 
-                WriteElement(
-                    "contentType", that.ContentType, writer, Write_string);
+                WriteProperty(
+                    "contentType", "ContentType", that.ContentType, writer, Write_string);
             }  // private static void FileToSequence
 
             public override void VisitFile(
@@ -11671,44 +11973,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -11716,29 +12031,38 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
                 }
 
-                WriteElement(
-                    "first", that.First, writer, Write_IReference);
+                WriteProperty(
+                    "first", "First", that.First, writer, Write_IReference);
 
-                WriteElement(
-                    "second", that.Second, writer, Write_IReference);
+                WriteProperty(
+                    "second", "Second", that.Second, writer, Write_IReference);
 
                 if (that.Annotations != null)
                 {
-                    WriteElement(
-                        "annotations", that.Annotations, writer, Write_ListOf_IDataElement);
+                    WriteProperty(
+                        "annotations",
+                        "Annotations",
+                        that.Annotations,
+                        writer,
+                        Write_ListOf_IDataElement);
                 }
             }  // private static void AnnotatedRelationshipElementToSequence
 
@@ -11761,44 +12085,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -11806,14 +12143,19 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -11821,23 +12163,28 @@ namespace AasCore.Aas3_0
 
                 if (that.Statements != null)
                 {
-                    WriteElement(
-                        "statements", that.Statements, writer, Write_ListOf_ISubmodelElement);
+                    WriteProperty(
+                        "statements",
+                        "Statements",
+                        that.Statements,
+                        writer,
+                        Write_ListOf_ISubmodelElement);
                 }
 
-                WriteElement(
-                    "entityType", that.EntityType, writer, Write_EntityType);
+                WriteProperty(
+                    "entityType", "EntityType", that.EntityType, writer, Write_EntityType);
 
                 if (that.GlobalAssetId != null)
                 {
-                    WriteElement(
-                        "globalAssetId", that.GlobalAssetId, writer, Write_string);
+                    WriteProperty(
+                        "globalAssetId", "GlobalAssetId", that.GlobalAssetId, writer, Write_string);
                 }
 
                 if (that.SpecificAssetIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "specificAssetIds",
+                        "SpecificAssetIds",
                         that.SpecificAssetIds,
                         writer,
                         Write_ListOf_ISpecificAssetId);
@@ -11861,22 +12208,31 @@ namespace AasCore.Aas3_0
                 Aas.IEventPayload that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "source", that.Source, writer, Write_IReference);
+                WriteProperty(
+                    "source", "Source", that.Source, writer, Write_IReference);
 
                 if (that.SourceSemanticId != null)
                 {
-                    WriteElement(
-                        "sourceSemanticId", that.SourceSemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "sourceSemanticId",
+                        "SourceSemanticId",
+                        that.SourceSemanticId,
+                        writer,
+                        Write_IReference);
                 }
 
-                WriteElement(
-                    "observableReference", that.ObservableReference, writer, Write_IReference);
+                WriteProperty(
+                    "observableReference",
+                    "ObservableReference",
+                    that.ObservableReference,
+                    writer,
+                    Write_IReference);
 
                 if (that.ObservableSemanticId != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "observableSemanticId",
+                        "ObservableSemanticId",
                         that.ObservableSemanticId,
                         writer,
                         Write_IReference);
@@ -11884,23 +12240,23 @@ namespace AasCore.Aas3_0
 
                 if (that.Topic != null)
                 {
-                    WriteElement(
-                        "topic", that.Topic, writer, Write_string);
+                    WriteProperty(
+                        "topic", "Topic", that.Topic, writer, Write_string);
                 }
 
                 if (that.SubjectId != null)
                 {
-                    WriteElement(
-                        "subjectId", that.SubjectId, writer, Write_IReference);
+                    WriteProperty(
+                        "subjectId", "SubjectId", that.SubjectId, writer, Write_IReference);
                 }
 
-                WriteElement(
-                    "timeStamp", that.TimeStamp, writer, Write_string);
+                WriteProperty(
+                    "timeStamp", "TimeStamp", that.TimeStamp, writer, Write_string);
 
                 if (that.Payload != null)
                 {
-                    WriteElement(
-                        "payload", that.Payload, writer, Write_bytes);
+                    WriteProperty(
+                        "payload", "Payload", that.Payload, writer, Write_bytes);
                 }
             }  // private static void EventPayloadToSequence
 
@@ -11923,44 +12279,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -11968,56 +12337,65 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
                 }
 
-                WriteElement(
-                    "observed", that.Observed, writer, Write_IReference);
+                WriteProperty(
+                    "observed", "Observed", that.Observed, writer, Write_IReference);
 
-                WriteElement(
-                    "direction", that.Direction, writer, Write_Direction);
+                WriteProperty(
+                    "direction", "Direction", that.Direction, writer, Write_Direction);
 
-                WriteElement(
-                    "state", that.State, writer, Write_StateOfEvent);
+                WriteProperty(
+                    "state", "State", that.State, writer, Write_StateOfEvent);
 
                 if (that.MessageTopic != null)
                 {
-                    WriteElement(
-                        "messageTopic", that.MessageTopic, writer, Write_string);
+                    WriteProperty(
+                        "messageTopic", "MessageTopic", that.MessageTopic, writer, Write_string);
                 }
 
                 if (that.MessageBroker != null)
                 {
-                    WriteElement(
-                        "messageBroker", that.MessageBroker, writer, Write_IReference);
+                    WriteProperty(
+                        "messageBroker",
+                        "MessageBroker",
+                        that.MessageBroker,
+                        writer,
+                        Write_IReference);
                 }
 
                 if (that.LastUpdate != null)
                 {
-                    WriteElement(
-                        "lastUpdate", that.LastUpdate, writer, Write_string);
+                    WriteProperty(
+                        "lastUpdate", "LastUpdate", that.LastUpdate, writer, Write_string);
                 }
 
                 if (that.MinInterval != null)
                 {
-                    WriteElement(
-                        "minInterval", that.MinInterval, writer, Write_string);
+                    WriteProperty(
+                        "minInterval", "MinInterval", that.MinInterval, writer, Write_string);
                 }
 
                 if (that.MaxInterval != null)
                 {
-                    WriteElement(
-                        "maxInterval", that.MaxInterval, writer, Write_string);
+                    WriteProperty(
+                        "maxInterval", "MaxInterval", that.MaxInterval, writer, Write_string);
                 }
             }  // private static void BasicEventElementToSequence
 
@@ -12040,44 +12418,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -12085,14 +12476,19 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -12100,8 +12496,9 @@ namespace AasCore.Aas3_0
 
                 if (that.InputVariables != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "inputVariables",
+                        "InputVariables",
                         that.InputVariables,
                         writer,
                         Write_ListOf_IOperationVariable);
@@ -12109,8 +12506,9 @@ namespace AasCore.Aas3_0
 
                 if (that.OutputVariables != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "outputVariables",
+                        "OutputVariables",
                         that.OutputVariables,
                         writer,
                         Write_ListOf_IOperationVariable);
@@ -12118,8 +12516,9 @@ namespace AasCore.Aas3_0
 
                 if (that.InoutputVariables != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "inoutputVariables",
+                        "InoutputVariables",
                         that.InoutputVariables,
                         writer,
                         Write_ListOf_IOperationVariable);
@@ -12143,8 +12542,8 @@ namespace AasCore.Aas3_0
                 Aas.IOperationVariable that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "value", that.Value, writer, Write_ISubmodelElement);
+                WriteProperty(
+                    "value", "Value", that.Value, writer, Write_ISubmodelElement);
             }  // private static void OperationVariableToSequence
 
             public override void VisitOperationVariable(
@@ -12166,44 +12565,57 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    WriteElement(
-                        "semanticId", that.SemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "semanticId", "SemanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "supplementalSemanticIds",
+                        "SupplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
                         Write_ListOf_IReference);
@@ -12211,14 +12623,19 @@ namespace AasCore.Aas3_0
 
                 if (that.Qualifiers != null)
                 {
-                    WriteElement(
-                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
+                    WriteProperty(
+                        "qualifiers",
+                        "Qualifiers",
+                        that.Qualifiers,
+                        writer,
+                        Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -12244,50 +12661,64 @@ namespace AasCore.Aas3_0
             {
                 if (that.Extensions != null)
                 {
-                    WriteElement(
-                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
+                    WriteProperty(
+                        "extensions",
+                        "Extensions",
+                        that.Extensions,
+                        writer,
+                        Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    WriteElement(
-                        "category", that.Category, writer, Write_string);
+                    WriteProperty(
+                        "category", "Category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
-                    WriteElement(
-                        "idShort", that.IdShort, writer, Write_string);
+                    WriteProperty(
+                        "idShort", "IdShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    WriteElement(
-                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
+                    WriteProperty(
+                        "displayName",
+                        "DisplayName",
+                        that.DisplayName,
+                        writer,
+                        Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    WriteElement(
-                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
+                    WriteProperty(
+                        "description",
+                        "Description",
+                        that.Description,
+                        writer,
+                        Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.Administration != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "administration",
+                        "Administration",
                         that.Administration,
                         writer,
                         Write_IAdministrativeInformation);
                 }
 
-                WriteElement(
-                    "id", that.Id, writer, Write_string);
+                WriteProperty(
+                    "id", "Id", that.Id, writer, Write_string);
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "embeddedDataSpecifications",
+                        "EmbeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
                         Write_ListOf_IEmbeddedDataSpecification);
@@ -12295,8 +12726,8 @@ namespace AasCore.Aas3_0
 
                 if (that.IsCaseOf != null)
                 {
-                    WriteElement(
-                        "isCaseOf", that.IsCaseOf, writer, Write_ListOf_IReference);
+                    WriteProperty(
+                        "isCaseOf", "IsCaseOf", that.IsCaseOf, writer, Write_ListOf_IReference);
                 }
             }  // private static void ConceptDescriptionToSequence
 
@@ -12317,17 +12748,21 @@ namespace AasCore.Aas3_0
                 Aas.IReference that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "type", that.Type, writer, Write_ReferenceTypes);
+                WriteProperty(
+                    "type", "Type", that.Type, writer, Write_ReferenceTypes);
 
                 if (that.ReferredSemanticId != null)
                 {
-                    WriteElement(
-                        "referredSemanticId", that.ReferredSemanticId, writer, Write_IReference);
+                    WriteProperty(
+                        "referredSemanticId",
+                        "ReferredSemanticId",
+                        that.ReferredSemanticId,
+                        writer,
+                        Write_IReference);
                 }
 
-                WriteElement(
-                    "keys", that.Keys, writer, Write_ListOf_IKey);
+                WriteProperty(
+                    "keys", "Keys", that.Keys, writer, Write_ListOf_IKey);
             }  // private static void ReferenceToSequence
 
             public override void VisitReference(
@@ -12347,11 +12782,11 @@ namespace AasCore.Aas3_0
                 Aas.IKey that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "type", that.Type, writer, Write_KeyTypes);
+                WriteProperty(
+                    "type", "Type", that.Type, writer, Write_KeyTypes);
 
-                WriteElement(
-                    "value", that.Value, writer, Write_string);
+                WriteProperty(
+                    "value", "Value", that.Value, writer, Write_string);
             }  // private static void KeyToSequence
 
             public override void VisitKey(
@@ -12371,11 +12806,11 @@ namespace AasCore.Aas3_0
                 Aas.ILangStringNameType that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "language", that.Language, writer, Write_string);
+                WriteProperty(
+                    "language", "Language", that.Language, writer, Write_string);
 
-                WriteElement(
-                    "text", that.Text, writer, Write_string);
+                WriteProperty(
+                    "text", "Text", that.Text, writer, Write_string);
             }  // private static void LangStringNameTypeToSequence
 
             public override void VisitLangStringNameType(
@@ -12395,11 +12830,11 @@ namespace AasCore.Aas3_0
                 Aas.ILangStringTextType that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "language", that.Language, writer, Write_string);
+                WriteProperty(
+                    "language", "Language", that.Language, writer, Write_string);
 
-                WriteElement(
-                    "text", that.Text, writer, Write_string);
+                WriteProperty(
+                    "text", "Text", that.Text, writer, Write_string);
             }  // private static void LangStringTextTypeToSequence
 
             public override void VisitLangStringTextType(
@@ -12421,8 +12856,9 @@ namespace AasCore.Aas3_0
             {
                 if (that.AssetAdministrationShells != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "assetAdministrationShells",
+                        "AssetAdministrationShells",
                         that.AssetAdministrationShells,
                         writer,
                         Write_ListOf_IAssetAdministrationShell);
@@ -12430,14 +12866,15 @@ namespace AasCore.Aas3_0
 
                 if (that.Submodels != null)
                 {
-                    WriteElement(
-                        "submodels", that.Submodels, writer, Write_ListOf_ISubmodel);
+                    WriteProperty(
+                        "submodels", "Submodels", that.Submodels, writer, Write_ListOf_ISubmodel);
                 }
 
                 if (that.ConceptDescriptions != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "conceptDescriptions",
+                        "ConceptDescriptions",
                         that.ConceptDescriptions,
                         writer,
                         Write_ListOf_IConceptDescription);
@@ -12461,11 +12898,16 @@ namespace AasCore.Aas3_0
                 Aas.IEmbeddedDataSpecification that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "dataSpecification", that.DataSpecification, writer, Write_IReference);
+                WriteProperty(
+                    "dataSpecification",
+                    "DataSpecification",
+                    that.DataSpecification,
+                    writer,
+                    Write_IReference);
 
-                WriteElement(
+                WriteProperty(
                     "dataSpecificationContent",
+                    "DataSpecificationContent",
                     that.DataSpecificationContent,
                     writer,
                     Write_IDataSpecificationContent);
@@ -12488,17 +12930,17 @@ namespace AasCore.Aas3_0
                 Aas.ILevelType that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "min", that.Min, writer, Write_bool);
+                WriteProperty(
+                    "min", "Min", that.Min, writer, Write_bool);
 
-                WriteElement(
-                    "nom", that.Nom, writer, Write_bool);
+                WriteProperty(
+                    "nom", "Nom", that.Nom, writer, Write_bool);
 
-                WriteElement(
-                    "typ", that.Typ, writer, Write_bool);
+                WriteProperty(
+                    "typ", "Typ", that.Typ, writer, Write_bool);
 
-                WriteElement(
-                    "max", that.Max, writer, Write_bool);
+                WriteProperty(
+                    "max", "Max", that.Max, writer, Write_bool);
             }  // private static void LevelTypeToSequence
 
             public override void VisitLevelType(
@@ -12518,11 +12960,11 @@ namespace AasCore.Aas3_0
                 Aas.IValueReferencePair that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "value", that.Value, writer, Write_string);
+                WriteProperty(
+                    "value", "Value", that.Value, writer, Write_string);
 
-                WriteElement(
-                    "valueId", that.ValueId, writer, Write_IReference);
+                WriteProperty(
+                    "valueId", "ValueId", that.ValueId, writer, Write_IReference);
             }  // private static void ValueReferencePairToSequence
 
             public override void VisitValueReferencePair(
@@ -12542,8 +12984,9 @@ namespace AasCore.Aas3_0
                 Aas.IValueList that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
+                WriteProperty(
                     "valueReferencePairs",
+                    "ValueReferencePairs",
                     that.ValueReferencePairs,
                     writer,
                     Write_ListOf_IValueReferencePair);
@@ -12566,11 +13009,11 @@ namespace AasCore.Aas3_0
                 Aas.ILangStringPreferredNameTypeIec61360 that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "language", that.Language, writer, Write_string);
+                WriteProperty(
+                    "language", "Language", that.Language, writer, Write_string);
 
-                WriteElement(
-                    "text", that.Text, writer, Write_string);
+                WriteProperty(
+                    "text", "Text", that.Text, writer, Write_string);
             }  // private static void LangStringPreferredNameTypeIec61360ToSequence
 
             public override void VisitLangStringPreferredNameTypeIec61360(
@@ -12590,11 +13033,11 @@ namespace AasCore.Aas3_0
                 Aas.ILangStringShortNameTypeIec61360 that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "language", that.Language, writer, Write_string);
+                WriteProperty(
+                    "language", "Language", that.Language, writer, Write_string);
 
-                WriteElement(
-                    "text", that.Text, writer, Write_string);
+                WriteProperty(
+                    "text", "Text", that.Text, writer, Write_string);
             }  // private static void LangStringShortNameTypeIec61360ToSequence
 
             public override void VisitLangStringShortNameTypeIec61360(
@@ -12614,11 +13057,11 @@ namespace AasCore.Aas3_0
                 Aas.ILangStringDefinitionTypeIec61360 that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
-                    "language", that.Language, writer, Write_string);
+                WriteProperty(
+                    "language", "Language", that.Language, writer, Write_string);
 
-                WriteElement(
-                    "text", that.Text, writer, Write_string);
+                WriteProperty(
+                    "text", "Text", that.Text, writer, Write_string);
             }  // private static void LangStringDefinitionTypeIec61360ToSequence
 
             public override void VisitLangStringDefinitionTypeIec61360(
@@ -12638,16 +13081,18 @@ namespace AasCore.Aas3_0
                 Aas.IDataSpecificationIec61360 that,
                 Xml.XmlWriter writer)
             {
-                WriteElement(
+                WriteProperty(
                     "preferredName",
+                    "PreferredName",
                     that.PreferredName,
                     writer,
                     Write_ListOf_ILangStringPreferredNameTypeIec61360);
 
                 if (that.ShortName != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "shortName",
+                        "ShortName",
                         that.ShortName,
                         writer,
                         Write_ListOf_ILangStringShortNameTypeIec61360);
@@ -12655,38 +13100,47 @@ namespace AasCore.Aas3_0
 
                 if (that.Unit != null)
                 {
-                    WriteElement(
-                        "unit", that.Unit, writer, Write_string);
+                    WriteProperty(
+                        "unit", "Unit", that.Unit, writer, Write_string);
                 }
 
                 if (that.UnitId != null)
                 {
-                    WriteElement(
-                        "unitId", that.UnitId, writer, Write_IReference);
+                    WriteProperty(
+                        "unitId", "UnitId", that.UnitId, writer, Write_IReference);
                 }
 
                 if (that.SourceOfDefinition != null)
                 {
-                    WriteElement(
-                        "sourceOfDefinition", that.SourceOfDefinition, writer, Write_string);
+                    WriteProperty(
+                        "sourceOfDefinition",
+                        "SourceOfDefinition",
+                        that.SourceOfDefinition,
+                        writer,
+                        Write_string);
                 }
 
                 if (that.Symbol != null)
                 {
-                    WriteElement(
-                        "symbol", that.Symbol, writer, Write_string);
+                    WriteProperty(
+                        "symbol", "Symbol", that.Symbol, writer, Write_string);
                 }
 
                 if (that.DataType.HasValue)
                 {
-                    WriteElement(
-                        "dataType", that.DataType.Value, writer, Write_DataTypeIec61360);
+                    WriteProperty(
+                        "dataType",
+                        "DataType",
+                        that.DataType.Value,
+                        writer,
+                        Write_DataTypeIec61360);
                 }
 
                 if (that.Definition != null)
                 {
-                    WriteElement(
+                    WriteProperty(
                         "definition",
+                        "Definition",
                         that.Definition,
                         writer,
                         Write_ListOf_ILangStringDefinitionTypeIec61360);
@@ -12694,26 +13148,26 @@ namespace AasCore.Aas3_0
 
                 if (that.ValueFormat != null)
                 {
-                    WriteElement(
-                        "valueFormat", that.ValueFormat, writer, Write_string);
+                    WriteProperty(
+                        "valueFormat", "ValueFormat", that.ValueFormat, writer, Write_string);
                 }
 
                 if (that.ValueList != null)
                 {
-                    WriteElement(
-                        "valueList", that.ValueList, writer, Write_IValueList);
+                    WriteProperty(
+                        "valueList", "ValueList", that.ValueList, writer, Write_IValueList);
                 }
 
                 if (that.Value != null)
                 {
-                    WriteElement(
-                        "value", that.Value, writer, Write_string);
+                    WriteProperty(
+                        "value", "Value", that.Value, writer, Write_string);
                 }
 
                 if (that.LevelType != null)
                 {
-                    WriteElement(
-                        "levelType", that.LevelType, writer, Write_ILevelType);
+                    WriteProperty(
+                        "levelType", "LevelType", that.LevelType, writer, Write_ILevelType);
                 }
             }  // private static void DataSpecificationIec61360ToSequence
 
@@ -12751,12 +13205,25 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Serialize an instance of the meta-model to XML.
             /// </summary>
+            /// <exception cref="SerializationException">
+            /// Thrown when a value within <paramref name="that" /> instance can not be
+            /// represented in XML
+            /// </exception>
             public static void To(
                 Aas.IClass that,
                 Xml.XmlWriter writer)
             {
-                VisitorWithWriter.WriteIClass(
-                    that, writer);
+                try
+                {
+                    VisitorWithWriter.WriteIClass(
+                        that, writer);
+                }
+                catch (SerializationFailure failure)
+                {
+                    throw new SerializationException(
+                        Reporting.GenerateCSharpPath(failure.Error.PathSegments),
+                        failure.Error.Cause);
+                }
             }
         }  // public static class Serialize
     }  // public static class Xmlization
