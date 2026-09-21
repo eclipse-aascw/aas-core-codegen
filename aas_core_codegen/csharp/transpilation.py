@@ -301,6 +301,31 @@ class Transpiler(
         if not isinstance(node.container, no_parentheses_types):
             container = Stripped(f"({container})")
 
+        container_type = self.type_map[node.container]
+
+        # NOTE (mristin):
+        # A JSON-able object is a ``Nodes.JsonObject``, a dictionary of nodes,
+        # so the membership is a question about its keys.
+        if isinstance(
+            container_type, intermediate_type_inference.JsonObjectTypeAnnotation
+        ):
+            return Stripped(f"{container}.ContainsKey({member})"), None
+
+        if isinstance(
+            container_type,
+            (
+                intermediate_type_inference.JsonValueTypeAnnotation,
+                intermediate_type_inference.JsonArrayTypeAnnotation,
+            ),
+        ):
+            return None, Error(
+                node.original_node,
+                f"We do not know how to generate the membership check for "
+                f"the container of type {container_type}. Only a JSON-able "
+                f"object, whose keys the membership is about, is supported. "
+                f"Please contact the developers if you need this feature.",
+            )
+
         return Stripped(f"{container}.Contains({member})"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))

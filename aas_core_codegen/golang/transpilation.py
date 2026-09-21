@@ -494,7 +494,16 @@ len(
 
         container_type = self.type_map[node.container]
 
-        if isinstance(container_type, intermediate_type_inference.SetTypeAnnotation):
+        # NOTE (mristin):
+        # A JSON-able object is a ``map[string]interface{}``, so the membership
+        # is a question about its keys, just as it is for a set.
+        if isinstance(
+            container_type,
+            (
+                intermediate_type_inference.SetTypeAnnotation,
+                intermediate_type_inference.JsonObjectTypeAnnotation,
+            ),
+        ):
             return (
                 Stripped(
                     f"""\

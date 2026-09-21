@@ -607,11 +607,11 @@ public class TestJsonizationOfConcreteClasses {
         Jsonization.Serialize.toJsonObject(instance);
         fail(
           "Expected the serialization to fail at "
-            + "value"
+            + "getValue()"
             + ", but it succeeded");
       } catch (Jsonization.SerializeException exception) {
         assertEquals(
-          "value",
+          "getValue()",
           exception.getPath().orElse(null));
       }
     }
@@ -630,11 +630,11 @@ public class TestJsonizationOfConcreteClasses {
         Jsonization.Serialize.toJsonObject(instance);
         fail(
           "Expected the serialization to fail at "
-            + "value"
+            + "getValue()"
             + ", but it succeeded");
       } catch (Jsonization.SerializeException exception) {
         assertEquals(
-          "value",
+          "getValue()",
           exception.getPath().orElse(null));
       }
     }

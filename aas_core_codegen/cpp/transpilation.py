@@ -673,6 +673,46 @@ std::make_tuple(
         assert member is not None
         assert container is not None
 
+        container_type = self.type_map[node.container]
+
+        # NOTE (mristin):
+        # A JSON-able object is a ``nlohmann::json`` which holds an object, so
+        # the membership is a question about its keys, and not about the values
+        # which the generic ``common::Contains`` would iterate over. The keys
+        # are UTF-8 encoded, while a string in the transpiled code is
+        # a wide string, so the member has to be converted.
+        if isinstance(
+            container_type, intermediate_type_inference.JsonObjectTypeAnnotation
+        ):
+            wstring_to_utf8 = cpp_naming.function_name(Identifier("wstring_to_utf8"))
+
+            return (
+                Stripped(
+                    f"""\
+{container}.contains(
+{I}common::{wstring_to_utf8}(
+{II}{indent_but_first_line(member, II)}
+{I})
+)"""
+                ),
+                None,
+            )
+
+        if isinstance(
+            container_type,
+            (
+                intermediate_type_inference.JsonValueTypeAnnotation,
+                intermediate_type_inference.JsonArrayTypeAnnotation,
+            ),
+        ):
+            return None, Error(
+                node.original_node,
+                f"We do not know how to generate the membership check for "
+                f"the container of type {container_type}. Only a JSON-able "
+                f"object, whose keys the membership is about, is supported. "
+                f"Please contact the developers if you need this feature.",
+            )
+
         contains_function = cpp_naming.function_name(Identifier("contains"))
 
         return (
