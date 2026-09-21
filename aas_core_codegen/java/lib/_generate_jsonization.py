@@ -98,6 +98,16 @@ def _parse_method_for_atomic_value(
 
         else:
             assert_never(our_type)
+
+    elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        parse_method = "tryJsonValueFrom"
+
+    elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        parse_method = "tryJsonArrayFrom"
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        parse_method = "tryJsonObjectFrom"
+
     else:
         assert_never(type_annotation)
 
@@ -1244,6 +1254,242 @@ private static Reporting.Result<byte[]> tryBytesFrom(JsonNode value) {{
     ]
 
 
+def _generate_json_able_helpers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the de/serialization of the JSON-able values, if the model uses them.
+
+    A JSON-able value needs no conversion at all -- it already *is* a Jackson
+    node. It does need to be checked, since a node rules out neither a null nor
+    a non-finite number, and copied, so that the instance and the document it
+    came from do not share a mutable tree.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * Parse {{@code node}} as a JSON-able value.
+ *
+ * <p>A JSON-able value is, recursively, exactly as JSON itself is defined:
+ * a boolean, a number, a string, an array of JSON-able values or an object
+ * of JSON-able values with string keys. A null is rejected at any depth, as
+ * the JSON null has no representation as a JSON-able value, and so are
+ * an infinity and a not-a-number, which JSON can not represent at all.
+ *
+ * <p>The result is a deep copy, and never {{@code node}} itself, so that
+ * the parsed instance does not share a tree with the document it came from.
+ *
+ * @param node to be parsed
+ * @param path JSON path to {{@code node}}, written into the messages
+ * @return the parsed value, or an error
+ */
+private static Reporting.Result<JsonNode> tryJsonValueFromAt(
+{II}JsonNode node, String path) {{
+{I}if (node == null || node.isNull() || node.isMissingNode()) {{
+{II}return Reporting.Result.failure(new Reporting.Error(
+{III}"Expected a JSON-able value at " + path + ", but got: " + node));
+{I}}}
+
+{I}if (node.isNumber()) {{
+{II}// NOTE (mristin):
+{II}// JSON knows neither an infinity nor a not-a-number. Jackson's own
+{II}// parser never gives us one, but {{@code node}} may well have been
+{II}// put together programmatically.
+{II}final double value = node.doubleValue();
+{II}if (Double.isInfinite(value) || Double.isNaN(value)) {{
+{III}return Reporting.Result.failure(new Reporting.Error(
+{IIII}"Expected a JSON-able value at " + path + ", but got the number " +
+{IIII}value + ", which is neither finite nor representable in JSON"));
+{II}}}
+{II}return Reporting.Result.success(node.deepCopy());
+{I}}}
+
+{I}if (node.isBoolean() || node.isTextual()) {{
+{II}return Reporting.Result.success(node.deepCopy());
+{I}}}
+
+{I}if (node.isArray()) {{
+{II}final ArrayNode result = JsonNodeFactory.instance.arrayNode();
+{II}int index = 0;
+{II}for (JsonNode item : node) {{
+{III}final Reporting.Result<JsonNode> itemResult = tryJsonValueFromAt(
+{IIII}item, path + "[" + index + "]");
+{III}if (itemResult.isError()) {{
+{IIII}return itemResult;
+{III}}}
+{III}result.add(itemResult.getResult());
+{III}index++;
+{II}}}
+{II}return Reporting.Result.success(result);
+{I}}}
+
+{I}if (node.isObject()) {{
+{II}final ObjectNode result = JsonNodeFactory.instance.objectNode();
+{II}final Iterator<String> names = node.fieldNames();
+{II}while (names.hasNext()) {{
+{III}final String name = names.next();
+{III}final Reporting.Result<JsonNode> valueResult = tryJsonValueFromAt(
+{IIII}node.get(name), path + "." + name);
+{III}if (valueResult.isError()) {{
+{IIII}return valueResult;
+{III}}}
+{III}result.set(name, valueResult.getResult());
+{II}}}
+{II}return Reporting.Result.success(result);
+{I}}}
+
+{I}return Reporting.Result.failure(new Reporting.Error(
+{II}"Expected a JSON-able value (a boolean, a number, a string, " +
+{II}"an array or an object) at " + path + ", but got: " +
+{II}node.getNodeType()));
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Parse {{@code node}} as a JSON-able value.
+ *
+ * @param node to be parsed
+ * @return the parsed value, or an error
+ */
+private static Reporting.Result<JsonNode> tryJsonValueFrom(JsonNode node) {{
+{I}return tryJsonValueFromAt(node, "$");
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Parse {{@code node}} as a JSON-able array.
+ *
+ * @param node to be parsed
+ * @return the parsed array, or an error
+ */
+private static Reporting.Result<ArrayNode> tryJsonArrayFrom(JsonNode node) {{
+{I}if (node == null || !node.isArray()) {{
+{II}return Reporting.Result.failure(new Reporting.Error(
+{III}"Expected a JSON-able array, but got: " + node));
+{I}}}
+
+{I}final Reporting.Result<JsonNode> result = tryJsonValueFrom(node);
+{I}return result.isError()
+{II}? Reporting.Result.failure(result.getError())
+{II}: Reporting.Result.success((ArrayNode) result.getResult());
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Parse {{@code node}} as a JSON-able object.
+ *
+ * @param node to be parsed
+ * @return the parsed object, or an error
+ */
+private static Reporting.Result<ObjectNode> tryJsonObjectFrom(JsonNode node) {{
+{I}if (node == null || !node.isObject()) {{
+{II}return Reporting.Result.failure(new Reporting.Error(
+{III}"Expected a JSON-able object, but got: " + node));
+{I}}}
+
+{I}final Reporting.Result<JsonNode> result = tryJsonValueFrom(node);
+{I}return result.isError()
+{II}? Reporting.Result.failure(result.getError())
+{II}: Reporting.Result.success((ObjectNode) result.getResult());
+}}"""
+        ),
+    ]
+
+
+def _generate_json_able_serializer(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """Generate the serializer of the JSON-able values, if the model uses them."""
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * Serialize {{@code that}} as a JSON node.
+ *
+ * <p>A JSON-able value is almost a JSON node as it comes, but not quite: its
+ * type rules out neither a null nor a non-finite number, neither of which
+ * JSON can represent. Each is refused here, at any depth.
+ *
+ * <p>The result is a deep copy, and never {{@code that}} itself, so that
+ * the serialized document does not share a tree with the instance it came
+ * from.
+ *
+ * @param that to be serialized
+ * @return {{@code that}}, as a node of a JSON document
+ */
+private static JsonNode jsonValueToJsonNode(JsonNode that) {{
+{I}if (that == null || that.isNull() || that.isMissingNode()) {{
+{II}throw new _SerializeFailure(
+{III}new Reporting.Error(
+{IIII}"Expected a JSON-able value, but got: " + that));
+{I}}}
+
+{I}if (that.isNumber()) {{
+{II}final double value = that.doubleValue();
+{II}if (Double.isInfinite(value) || Double.isNaN(value)) {{
+{III}throw new _SerializeFailure(
+{IIII}new Reporting.Error(
+{IIIII}"Expected a JSON-able value, but got the number " + value +
+{IIIII}", which is neither finite nor representable in JSON"));
+{II}}}
+{II}return that.deepCopy();
+{I}}}
+
+{I}if (that.isBoolean() || that.isTextual()) {{
+{II}return that.deepCopy();
+{I}}}
+
+{I}if (that.isArray()) {{
+{II}final ArrayNode result = JsonNodeFactory.instance.arrayNode();
+{II}int index = 0;
+{II}for (JsonNode item : that) {{
+{III}try {{
+{IIII}result.add(jsonValueToJsonNode(item));
+{III}}} catch (_SerializeFailure failure) {{
+{IIII}failure.getError().prependSegment(
+{IIIII}new Reporting.IndexSegment(index));
+{IIII}throw failure;
+{III}}}
+{III}index++;
+{II}}}
+{II}return result;
+{I}}}
+
+{I}if (that.isObject()) {{
+{II}final ObjectNode result = JsonNodeFactory.instance.objectNode();
+{II}final Iterator<String> names = that.fieldNames();
+{II}while (names.hasNext()) {{
+{III}final String name = names.next();
+{III}try {{
+{IIII}result.set(name, jsonValueToJsonNode(that.get(name)));
+{III}}} catch (_SerializeFailure failure) {{
+{IIII}failure.getError().prependSegment(
+{IIIII}new Reporting.KeySegment(name));
+{IIII}throw failure;
+{III}}}
+{II}}}
+{II}return result;
+{I}}}
+
+{I}throw new _SerializeFailure(
+{II}new Reporting.Error(
+{III}"Expected a JSON-able value (a boolean, a number, a string, " +
+{III}"an array or an object), but got: " + that.getNodeType()));
+}}"""
+        ),
+    ]
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
@@ -1351,6 +1597,8 @@ def _generate_deserialize_impl(
 
     for arity in tuple_arities:
         blocks.append(_generate_parse_tuple_helper(arity=arity))
+
+    blocks.extend(_generate_json_able_helpers(symbol_table=symbol_table))
 
     for type_anno in composed_type_annotations:
         blocks.append(_generate_composed_parser(type_anno))
@@ -1595,6 +1843,21 @@ def _serialize_function(type_anno: intermediate.AtomicTypeAnnotation) -> Strippe
     if primitive_type is not None:
         return _SERIALIZE_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type]
 
+    # NOTE (mristin):
+    # A JSON-able value is almost a JSON node as it comes, but not quite: its
+    # type rules out neither a non-finite number nor a null, so it is checked
+    # and copied. All three shapes go through the one function: an array and
+    # an object are only JSON-able values whose top-level shape is known.
+    if isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        return Stripped("jsonValueToJsonNode")
+
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
     ), f"Expected one of our types, but got: {type_anno}"
@@ -1636,6 +1899,20 @@ def _serialized_leaf_moniker(type_anno: intermediate.AtomicTypeAnnotation) -> st
     if primitive_type is not None:
         return java_common.PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
 
+    # NOTE (mristin):
+    # All three JSON-able shapes collapse onto one moniker: every one of them
+    # is serialized by ``jsonValueToJsonNode``, which gives the node back
+    # whatever its shape happens to be.
+    if isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        return "jsonValue"
+
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
     ), f"Expected one of our types, but got: {type_anno}"
@@ -1665,6 +1942,19 @@ def _serialized_value_type(type_anno: intermediate.AtomicTypeAnnotation) -> Stri
     primitive_type = intermediate.try_primitive_type(type_anno)
     if primitive_type is not None:
         return java_common.PRIMITIVE_TYPE_MAP[primitive_type]
+
+    # NOTE (mristin):
+    # A JSON-able value widens to nothing: ``jsonValueToJsonNode`` takes
+    # the very Jackson node which the property holds.
+    if isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        return java_common.generate_type(type_anno)
 
     moniker = _serialized_leaf_moniker(type_anno)
 
@@ -2377,6 +2667,8 @@ private static final _Transformer INSTANCE = new _Transformer();"""
     if Stripped("bytesToJsonNode") in called:
         blocks.append(_generate_bytes_to_json_node_helper())
 
+    blocks.extend(_generate_json_able_serializer(symbol_table=symbol_table))
+
     for type_anno in _composed_serializer_type_annotations(symbol_table):
         blocks.append(_generate_composed_serializer(type_anno))
 
@@ -2595,10 +2887,16 @@ def generate(
         Stripped("import com.fasterxml.jackson.databind.JsonNode;"),
     ]  # type: List[Stripped]
 
-    if composes_a_container:
+    if composes_a_container or intermediate.uses_json_types(symbol_table):
         imports.append(
             Stripped("import com.fasterxml.jackson.databind.node.ArrayNode;")
         )
+
+    # NOTE (mristin):
+    # A JSON-able value is walked with an iterator over the field names of
+    # an object, which no other conversion in this module needs.
+    if intermediate.uses_json_types(symbol_table):
+        imports.append(Stripped("import java.util.Iterator;"))
 
     imports.extend(
         [

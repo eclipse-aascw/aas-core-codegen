@@ -65,6 +65,9 @@ from aas_core_codegen.intermediate._types import (
     AtomicTypeAnnotationAsTuple,
     OptionalTypeAnnotation,
     OurTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
     STR_TO_PRIMITIVE_TYPE,
     PrimitiveTypeAnnotation,
     DefaultEnumerationLiteral,
@@ -95,6 +98,7 @@ from aas_core_codegen.intermediate._types import (
     MethodUnion,
     beneath_optional,
     over_type_annotation_and_nested_type_annotations,
+    try_primitive_type,
     DescriptionOfConstant,
     ConstantUnion,
     ConstantPrimitive,
@@ -1014,6 +1018,12 @@ def _to_type_annotation(
         if primitive_type is not None:
             return PrimitiveTypeAnnotation(a_type=primitive_type, parsed=parsed)
 
+        if parsed.identifier == parse.JSON_VALUE_TYPE_NAME:
+            return JsonValueTypeAnnotation(parsed=parsed)
+
+        if parsed.identifier == parse.JSON_ARRAY_TYPE_NAME:
+            return JsonArrayTypeAnnotation(parsed=parsed)
+
         # noinspection PyTypeChecker
         return OurTypeAnnotation(
             our_type=_PlaceholderOurType(name=parsed.identifier),  # type: ignore
@@ -1053,6 +1063,18 @@ def _to_type_annotation(
                 items=[
                     _to_type_annotation(subscript) for subscript in parsed.subscripts
                 ],
+                parsed=parsed,
+            )
+
+        elif parsed.identifier == "JSONObject":
+            assert len(parsed.subscripts) == 1, (
+                f"Expected exactly one subscript (the key type) for the "
+                f"JSONObject type annotation, but got: {parsed}; this should "
+                f"have been caught before!"
+            )
+
+            return JsonObjectTypeAnnotation(
+                key=_to_type_annotation(parsed.subscripts[0]),
                 parsed=parsed,
             )
 
@@ -2307,6 +2329,15 @@ def _over_our_type_annotations(
 
     elif isinstance(something, OptionalTypeAnnotation):
         yield from _over_our_type_annotations(something.value)
+
+    elif isinstance(something, JsonValueTypeAnnotation):
+        pass
+
+    elif isinstance(something, JsonArrayTypeAnnotation):
+        pass
+
+    elif isinstance(something, JsonObjectTypeAnnotation):
+        yield from _over_our_type_annotations(something.key)
 
     elif isinstance(something, Enumeration):
         pass
@@ -4788,15 +4819,19 @@ def _verify_only_simple_type_patterns(symbol_table: SymbolTable) -> List[Error]:
     in the future. At this point, we restrict ourselves to the following patterns:
 
     * Non-nested optional types, *i.e.* optional of optionals, are unexpected;
-    * Lists of optionals are unexpected; and
+    * Lists of optionals are unexpected;
     * Tuples of non-atomic types (*i.e.* of lists, tuples or optionals) are
       unexpected -- we only support tuples of primitives, constrained primitives,
-      classes and enumerations.
+      classes, enumerations and JSON-able values; and
+    * The key of a ``JSONObject`` must be ``str`` or a class (transitively)
+      constraining ``str`` -- its open-keyed shape only makes sense over
+      string-like keys.
 
-    Note that lists themselves may nest: ``List[List[...]]`` is deliberately
-    allowed here, as the JSON Schema and the XSD generator both support it. The
-    code generators, in contrast, handle only lists of atomic values, and assert
-    as much where they would otherwise have to descend into a nested list.
+    Note that a list of lists is not supported: the code generators report an
+    error where they would otherwise have to descend into a nested list. A
+    JSON-able array is a different matter -- an array of arrays is a perfectly
+    good ``JSONValue`` -- but its shape is known only at run time, so there is
+    nothing for this check to verify.
     """
     errors = []  # type: List[Error]
     for cls in symbol_table.classes:
@@ -4844,6 +4879,23 @@ def _verify_only_simple_type_patterns(symbol_table: SymbolTable) -> List[Error]:
                             f"only tuples of primitives, constrained primitives, "
                             f"classes and enumerations (*i.e.* no tuples of "
                             f"optionals, lists or nested tuples), "
+                            f"but the property {prop.name!r} "
+                            f"of the class {cls.name!r} "
+                            f"has type: {prop.type_annotation}. "
+                            f"Please contact the developers if you need "
+                            f"this functionality",
+                        )
+                    )
+
+            elif isinstance(type_anno, JsonObjectTypeAnnotation):
+                if try_primitive_type(type_anno.key) != PrimitiveType.STR:
+                    errors.append(
+                        Error(
+                            prop.parsed.node,
+                            f"We currently support only a limited set of "
+                            f"type annotation patterns. At the moment, we only "
+                            f"support ``str`` or a class constraining ``str`` as "
+                            f"the key of a ``JSONObject``, "
                             f"but the property {prop.name!r} "
                             f"of the class {cls.name!r} "
                             f"has type: {prop.type_annotation}. "

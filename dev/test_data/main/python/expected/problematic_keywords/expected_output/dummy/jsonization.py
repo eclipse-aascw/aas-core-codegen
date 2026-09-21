@@ -14,7 +14,6 @@ properties do not have fixed order, and hence we can not read
 import collections.abc
 import sys
 from typing import (
-    cast,
     Any,
     Callable,
     Dict,
@@ -37,6 +36,39 @@ else:
 import dummy.common as aas_common
 import dummy.stringification as aas_stringification
 import dummy.types as aas_types
+
+
+# NOTE (mristin):
+# The SDK defines three of these path vocabularies: this one, the one in
+# :py:mod:`dummy.jsonization`, and the one in
+# :py:mod:`dummy.xmlcommon`.
+# They look alike, and it is tempting to merge them, but they are not
+# interchangeable.
+#
+# Each of them points into a different thing, and every segment carries
+# a back-pointer to the container it stepped through, so the type of that
+# back-pointer differs from one to the next:
+#
+# * This one points into the instances which you built, so a property
+#   segment holds a class of the meta-model.
+# * The jsonization's points into the JSON-able structure being read or
+#   written, so a property segment holds the JSON-able mapping instead:
+#   while a document is being parsed, the instance which the property would
+#   belong to does not exist yet.
+# * The xmlcommon's points into the XML document, where there are no
+#   properties at all, only elements, so it names an element instead.
+#
+# The three also render differently: a path into the instances is a Python
+# access expression, a path into a JSON-able structure starts at the root of
+# the document and carries no leading dot, and a path into an XML document
+# is a relative XPath.
+#
+# Merging them would mean either dropping the back-pointers, which have been
+# part of the public API of this SDK since before these modules were split
+# apart, or defining a single path over the union of all the segment kinds --
+# in which case every consumer would have to handle segments which can never
+# occur in its world. Three small vocabularies which each say exactly what
+# they can say cost less than one large one which lies about its range.
 
 
 class PropertySegment:
@@ -77,7 +109,33 @@ class IndexSegment:
         self.index = index
 
 
-Segment = Union[PropertySegment, IndexSegment]
+class KeySegment:
+    """
+    Represent a member access on a path to the erroneous value.
+
+    Unlike a :py:class:`PropertySegment`, which names a property of one of our
+    classes, a key names a member of an open JSON-able object. It is known only
+    at run time, and can be any string at all, so it is always rendered
+    as a subscript.
+    """
+
+    #: Mapping that contains the value at :py:attr:`~key`
+    mapping: Final[Mapping[str, Any]]
+
+    #: Key of the value
+    key: Final[str]
+
+    def __init__(
+            self,
+            mapping: Mapping[str, Any],
+            key: str
+    ) -> None:
+        """Initialize with the given values."""
+        self.mapping = mapping
+        self.key = key
+
+
+Segment = Union[PropertySegment, IndexSegment, KeySegment]
 
 
 class Path:
@@ -108,6 +166,8 @@ class Path:
             parts.append(f"{first.name}")
         elif isinstance(first, IndexSegment):
             parts.append(f"[{first.index}]")
+        elif isinstance(first, KeySegment):
+            parts.append(f"[{first.key!r}]")
         else:
             aas_common.assert_never(first)
 
@@ -116,6 +176,8 @@ class Path:
                 parts.append(f".{segment.name}")
             elif isinstance(segment, IndexSegment):
                 parts.append(f"[{segment.index}]")
+            elif isinstance(segment, KeySegment):
+                parts.append(f"[{segment.key!r}]")
             else:
                 aas_common.assert_never(segment)
 
@@ -333,6 +395,16 @@ class SerializationException(Exception):
         """Insert the access to the item at :paramref:`index` before the path."""
         self._segments.insert(0, f'[{index}]')
 
+    def _prepend_key(self, key: str) -> None:
+        """
+        Insert the access to the member :paramref:`key` before the path.
+
+        Unlike a property of one of our classes, a member of an open JSON-able
+        object is known only at run time and can be any string at all, so it is
+        always rendered as a subscript.
+        """
+        self._segments.insert(0, f'[{key!r}]')
+
     def __str__(self) -> str:
         if len(self._segments) == 0:
             return self.cause
@@ -345,10 +417,26 @@ def _something_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['interface'] = that.interface
-    jsonable['type'] = that.type
-    jsonable['range'] = that.range
-    jsonable['void'] = that.void
+    try:
+        jsonable['interface'] = that.interface
+    except SerializationException as exception:
+        exception._prepend_property('interface')
+        raise
+    try:
+        jsonable['type'] = that.type
+    except SerializationException as exception:
+        exception._prepend_property('type')
+        raise
+    try:
+        jsonable['range'] = that.range
+    except SerializationException as exception:
+        exception._prepend_property('range')
+        raise
+    try:
+        jsonable['void'] = that.void
+    except SerializationException as exception:
+        exception._prepend_property('void')
+        raise
     return jsonable
 
 

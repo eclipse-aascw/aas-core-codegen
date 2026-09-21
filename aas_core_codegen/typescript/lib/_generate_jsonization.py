@@ -24,6 +24,7 @@ from aas_core_codegen.typescript.common import (
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
+    INDENT5 as IIIII,
 )
 
 
@@ -916,6 +917,16 @@ def _parse_function_for_atomic_value(
 
         else:
             assert_never(our_type)
+
+    elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        function_name = "jsonValueFromJsonable"
+
+    elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        function_name = "jsonArrayFromJsonable"
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        function_name = "jsonObjectFromJsonable"
+
     else:
         assert_never(type_annotation)
 
@@ -977,10 +988,7 @@ def _generate_parse_call_for_property(prop: intermediate.Property) -> Stripped:
     """
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
-    if isinstance(
-        type_anno,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-    ):
+    if isinstance(type_anno, intermediate.AtomicTypeAnnotationAsTuple):
         parse_function = _parse_function_for_atomic_value(type_anno)
 
         return Stripped(
@@ -1423,21 +1431,21 @@ export function {function_name}(
 # NOTE (mristin):
 # The serialization guards with a ``try`` so that the path can be prepended as
 # the stack unwinds: one ``try`` per serializer for the properties, and one per
-# list, or per refusable item of a tuple, for the index. Only a value which can be
-# refused at all is worth guarding, and two of them can be:
+# list and per tuple for the index. Every property and every item is guarded, and
+# not only the one whose type we can see a refusal for today -- nothing below
+# knows through which property, or at which position, the value was reached, so
+# a serializer which grows a new way of failing would quietly lose the way to
+# the culprit.
+#
+# Three ways of failing exist as it is:
 #
 # * a number, as JSON holds neither an infinity nor a not-a-number, and an integer
-#   only within [-2^53 + 1, 2^53 - 1]; and
+#   only within [-2^53 + 1, 2^53 - 1];
 # * an enumeration literal, as a TypeScript enumeration is a number at run time, so
 #   a literal outside the enumeration is possible and ``{enum}ToString`` gives out
-#   ``null`` for it.
-#
-# Hence the ``reaches_a_number(...) or reaches_an_enumeration(...)`` spelled out at
-# each of the three sites below. The two are deliberately not folded into a single
-# query: *which* values a serialization can refuse is a property of the target
-# language -- a literal can not be invalid in Java or in Python -- whereas *what
-# a type reaches* is a property of the meta-model, and only the latter belongs in
-# :py:mod:`aas_core_codegen.intermediate`.
+#   ``null`` for it; and
+# * a JSON-able value, which holds whatever JSON holds and is therefore walked and
+#   checked all the way down.
 
 
 def _serialize_function_name(cls: intermediate.ConcreteClass) -> Identifier:
@@ -1489,6 +1497,20 @@ def _jsonable_type_of_atomic(type_anno: intermediate.AtomicTypeAnnotation) -> St
         else:
             assert_never(primitive_type)
 
+    # NOTE (mristin):
+    # A JSON-able value goes on the wire as itself, whatever shape it happens
+    # to have. ``JsonValue`` here is the jsonization module's own alias for
+    # a value of a JSON document, and not ``AasTypes.JsonValue``, but the two
+    # describe the very same thing.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("JsonValue")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("Array<JsonValue>")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("JsonObject")
+
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
     ), f"Expected an atomic type annotation, but got: {type_anno}"
@@ -1499,6 +1521,254 @@ def _jsonable_type_of_atomic(type_anno: intermediate.AtomicTypeAnnotation) -> St
         return Stripped("string")
 
     return Stripped("JsonObject")
+
+
+def _generate_json_able_helpers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the de/serialization of the JSON-able values, if the model uses them.
+
+    A JSON-able value needs no conversion at all -- it already *is* a value of
+    a JSON document. It does need to be checked, since neither its TypeScript
+    type nor a `JsonValue` coming off `JSON.parse` rules out a `null` or
+    a non-finite number, and it needs to be copied, so that the instance and
+    the document it came from do not share a mutable object.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * Convert `jsonable` to a JSON-able value.
+ *
+ * @remarks
+ * The result is a deep, independent copy of `jsonable`, so that the parsed
+ * instance and the document it came from do not share a mutable object.
+ *
+ * The path of an error points into `jsonable` itself: an item of an array
+ * contributes an index segment and a member of an object a key segment, so
+ * that the path leads all the way down to the culprit.
+ *
+ * @param jsonable - to be parsed
+ * @returns the parsed value, or an error
+ */
+function jsonValueFromJsonable(
+{I}jsonable: JsonValue
+): AasCommon.Either<AasTypes.JsonValue, DeserializationError> {{
+{I}if (jsonable === null || jsonable === undefined) {{
+{II}return newDeserializationError<AasTypes.JsonValue>(
+{III}`Expected a JSON-able value, but got: ${{jsonable}}`
+{II});
+{I}}}
+
+{I}switch (typeof jsonable) {{
+{II}case "boolean":
+{II}case "string":
+{III}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{IIII}jsonable, null
+{III});
+
+{II}case "number":
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number. `JSON.parse`
+{III}// never gives us one, but the caller may well have put the value
+{III}// together programmatically.
+{III}if (!Number.isFinite(jsonable)) {{
+{IIII}return newDeserializationError<AasTypes.JsonValue>(
+{IIIII}`Expected a JSON-able value, but got the number ${{jsonable}}, ` +
+{IIIII}`which is neither finite nor representable in JSON`
+{IIII});
+{III}}}
+{III}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{IIII}jsonable, null
+{III});
+
+{II}case "object":
+{III}break;
+
+{II}default:
+{III}return newDeserializationError<AasTypes.JsonValue>(
+{IIII}`Expected a JSON-able value (a boolean, a number, a string, ` +
+{IIIII}`an array or an object), but got: ${{typeof jsonable}}`
+{III});
+{I}}}
+
+{I}if (Array.isArray(jsonable)) {{
+{II}const items = new Array<AasTypes.JsonValue>(jsonable.length);
+{II}for (let i = 0; i < jsonable.length; i++) {{
+{III}const parsed = jsonValueFromJsonable(jsonable[i]);
+{III}if (parsed.error !== null) {{
+{IIII}parsed.error.path.prepend(new IndexSegment(jsonable, i));
+{IIII}return parsed;
+{III}}}
+{III}items[i] = parsed.mustValue();
+{II}}}
+{II}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{III}items, null
+{II});
+{I}}}
+
+{I}const members: AasTypes.JsonObject = {{}};
+{I}for (const key of Object.keys(jsonable)) {{
+{II}const parsed = jsonValueFromJsonable((jsonable as JsonObject)[key]);
+{II}if (parsed.error !== null) {{
+{III}parsed.error.path.prepend(
+{IIII}new KeySegment(jsonable as JsonObject, key)
+{III});
+{III}return parsed;
+{II}}}
+{II}members[key] = parsed.mustValue();
+{I}}}
+
+{I}return new AasCommon.Either<AasTypes.JsonValue, DeserializationError>(
+{II}members, null
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Convert `jsonable` to a JSON-able array.
+ *
+ * @param jsonable - to be parsed
+ * @returns the parsed array, or an error
+ */
+function jsonArrayFromJsonable(
+{I}jsonable: JsonValue
+): AasCommon.Either<AasTypes.JsonArray, DeserializationError> {{
+{I}if (!Array.isArray(jsonable)) {{
+{II}return newDeserializationError<AasTypes.JsonArray>(
+{III}`Expected a JSON-able array, but got: ${{typeof jsonable}}`
+{II});
+{I}}}
+
+{I}const parsed = jsonValueFromJsonable(jsonable);
+{I}if (parsed.error !== null) {{
+{II}return new AasCommon.Either<AasTypes.JsonArray, DeserializationError>(
+{III}null, parsed.error
+{II});
+{I}}}
+
+{I}return new AasCommon.Either<AasTypes.JsonArray, DeserializationError>(
+{II}parsed.mustValue() as AasTypes.JsonArray, null
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Convert `jsonable` to a JSON-able object.
+ *
+ * @param jsonable - to be parsed
+ * @returns the parsed object, or an error
+ */
+function jsonObjectFromJsonable(
+{I}jsonable: JsonValue
+): AasCommon.Either<AasTypes.JsonObject, DeserializationError> {{
+{I}if (
+{II}jsonable === null
+{II}|| jsonable === undefined
+{II}|| typeof jsonable !== "object"
+{II}|| Array.isArray(jsonable)
+{I}) {{
+{II}return newDeserializationError<AasTypes.JsonObject>(
+{III}`Expected a JSON-able object, but got: ${{typeof jsonable}}`
+{II});
+{I}}}
+
+{I}const parsed = jsonValueFromJsonable(jsonable);
+{I}if (parsed.error !== null) {{
+{II}return new AasCommon.Either<AasTypes.JsonObject, DeserializationError>(
+{III}null, parsed.error
+{II});
+{I}}}
+
+{I}return new AasCommon.Either<AasTypes.JsonObject, DeserializationError>(
+{II}parsed.mustValue() as AasTypes.JsonObject, null
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Serialize `that` as a JSON-able value.
+ *
+ * @remarks
+ * The result is a deep, independent copy of `that`, so that the serialized
+ * document and the instance it came from do not share a mutable object.
+ *
+ * @param that - to be serialized
+ * @returns `that`, as a value of a JSON document
+ * @throws {{@link SerializationError}} if `that` is not JSON-able
+ */
+function jsonValueToJsonable(that: AasTypes.JsonValue): JsonValue {{
+{I}if (that === null || that === undefined) {{
+{II}throw new SerializationError(
+{III}`Expected a JSON-able value, but got: ${{that}}`
+{II});
+{I}}}
+
+{I}switch (typeof that) {{
+{II}case "boolean":
+{II}case "string":
+{III}return that;
+
+{II}case "number":
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number, so neither is
+{III}// a JSON-able value, even though a TypeScript `number` holds either.
+{III}if (!Number.isFinite(that)) {{
+{IIII}throw new SerializationError(
+{IIIII}`Expected a JSON-able value, but got the number ${{that}}, ` +
+{IIIII}`which is neither finite nor representable in JSON`
+{IIII});
+{III}}}
+{III}return that;
+
+{II}case "object":
+{III}break;
+
+{II}default:
+{III}throw new SerializationError(
+{IIII}`Expected a JSON-able value (a boolean, a number, a string, ` +
+{IIIII}`an array or an object), but got: ${{typeof that}}`
+{III});
+{I}}}
+
+{I}if (Array.isArray(that)) {{
+{II}const items = new Array<JsonValue>(that.length);
+{II}for (let i = 0; i < that.length; i++) {{
+{III}try {{
+{IIII}items[i] = jsonValueToJsonable(that[i]);
+{III}}} catch (error) {{
+{IIII}if (error instanceof SerializationError) {{
+{IIIII}error.prependIndex(i);
+{IIII}}}
+{IIII}throw error;
+{III}}}
+{II}}}
+{II}return items;
+{I}}}
+
+{I}const members: JsonObject = {{}};
+{I}for (const key of Object.keys(that)) {{
+{II}try {{
+{III}members[key] = jsonValueToJsonable((that as AasTypes.JsonObject)[key]);
+{II}}} catch (error) {{
+{III}if (error instanceof SerializationError) {{
+{IIII}error.prependKey(key);
+{III}}}
+{III}throw error;
+{II}}}
+{I}}}
+
+{I}return members;
+}}"""
+        ),
+    ]
 
 
 def _generate_serialize_call(
@@ -1533,6 +1803,22 @@ def _generate_serialize_call(
 
         else:
             assert_never(primitive_type)
+
+    # NOTE (mristin):
+    # A JSON-able value is almost JSON-able as it comes, but not quite -- its
+    # type rules out neither a non-finite number nor a non-string key -- so it
+    # is checked and copied, see ``jsonValueToJsonable``. All three shapes go
+    # through the one function: an array and an object are only JSON-able
+    # values whose top-level shape is already known.
+    if isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        return Stripped(f"jsonValueToJsonable({access_expression})")
 
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
@@ -1611,9 +1897,7 @@ function {function_name}(
     )
 
 
-def _generate_serialize_list(
-    type_anno: intermediate.ListTypeAnnotation, guarded: bool
-) -> Stripped:
+def _generate_serialize_list(type_anno: intermediate.ListTypeAnnotation) -> Stripped:
     """
     Generate the function serializing the list ``type_anno``.
 
@@ -1622,9 +1906,9 @@ def _generate_serialize_list(
     of the call and no closure is allocated.
 
     The array is sized up front and written by index, which also gives the index
-    of a refused item for free. When ``guarded``, the ``try`` sits outside the loop
-    with the index advanced only after an item has been written, as the XML
-    ``writeList`` already does.
+    of a refused item for free. The ``try`` sits outside the loop with the index
+    advanced only after an item has been written, as the XML ``writeList`` already
+    does.
     """
     items_type_anno = type_anno.items
     assert isinstance(items_type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
@@ -1645,18 +1929,8 @@ def _generate_serialize_list(
         access_expression=Stripped("that[i]"), type_anno=items_type_anno
     )
 
-    if not guarded:
-        body = Stripped(
-            f"""\
-const result = new Array<{jsonable_item_type}>(that.length);
-for (let i = 0; i < that.length; i++) {{
-{I}result[i] = {serialize_item};
-}}
-return result;"""
-        )
-    else:
-        body = Stripped(
-            f"""\
+    body = Stripped(
+        f"""\
 const result = new Array<{jsonable_item_type}>(that.length);
 let i = 0;
 try {{
@@ -1670,7 +1944,7 @@ try {{
 {I}throw error;
 }}
 return result;"""
-        )
+    )
 
     return Stripped(
         f"""\
@@ -1688,16 +1962,12 @@ function {function_name}(
     )
 
 
-def _generate_serialize_tuple(
-    type_anno: intermediate.TupleTypeAnnotation,
-    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
-    ids_of_types_reaching_an_enumeration: Set[intermediate.IdOfOurType],
-) -> Stripped:
+def _generate_serialize_tuple(type_anno: intermediate.TupleTypeAnnotation) -> Stripped:
     """
     Generate the function serializing the tuple ``type_anno``.
 
     The items are written out in order, so the name of the function states what its
-    body does, and only an item which can be refused carries a ``try``.
+    body does, and each item carries a ``try`` under its own position.
     """
     item_type_annos = []  # type: List[intermediate.AtomicTypeAnnotation]
     for item_type_anno in type_anno.items:
@@ -1725,14 +1995,8 @@ def _generate_serialize_tuple(
             f"{_generate_serialize_call(Stripped(f'that[{i}]'), item_type_anno)};"
         )
 
-        # NOTE (mristin):
-        # See the note at the top of this region on the two queries.
-        if intermediate.reaches_a_number(
-            item_type_anno, ids_of_types_reaching_a_number
-        ) or intermediate.reaches_an_enumeration(
-            item_type_anno, ids_of_types_reaching_an_enumeration
-        ):
-            statement = Stripped(
+        statements.append(
+            Stripped(
                 f"""\
 try {{
 {I}{indent_but_first_line(statement, I)}
@@ -1743,8 +2007,7 @@ try {{
 {I}throw error;
 }}"""
             )
-
-        statements.append(statement)
+        )
 
     statements_joined = "\n".join(statements)
 
@@ -1766,9 +2029,7 @@ function {function_name}(
     )
 
 
-def _generate_serialize_property(
-    prop: intermediate.Property, refusable: bool
-) -> Stripped:
+def _generate_serialize_property(prop: intermediate.Property) -> Stripped:
     """
     Generate the statement serializing ``prop`` into the JSON object.
 
@@ -1777,10 +2038,10 @@ def _generate_serialize_property(
     else. They used to spell their framing out at the call site, and to hand
     a ``this``-capturing closure to a shared helper on top of that.
 
-    A ``refusable`` property records its name in ``prop`` first, for the single
-    ``catch`` of the serializer to report, see
-    :py:func:`_generate_serialize_class`. The recording sits inside the ``if`` of
-    an optional property, so an absent one pays nothing at all.
+    The property records its name in ``prop`` first, for the single ``catch`` of
+    the serializer to report, see :py:func:`_generate_serialize_class`. The
+    recording sits inside the ``if`` of an optional property, so an absent one
+    pays nothing at all.
     """
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
@@ -1790,10 +2051,7 @@ def _generate_serialize_property(
 
     value_expression: Stripped
 
-    if isinstance(
-        type_anno,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-    ):
+    if isinstance(type_anno, intermediate.AtomicTypeAnnotationAsTuple):
         value_expression = _generate_serialize_call(access_expression, type_anno)
 
     elif isinstance(type_anno, intermediate.ListTypeAnnotation) and (
@@ -1822,14 +2080,13 @@ jsonable[{key_literal}] =
     # NOTE (mristin):
     # The property is recorded here, and nowhere below, as nothing below knows
     # through which property the value was reached.
-    if refusable:
-        prop_name_literal = typescript_common.string_literal(prop_name)
+    prop_name_literal = typescript_common.string_literal(prop_name)
 
-        statement = Stripped(
-            f"""\
+    statement = Stripped(
+        f"""\
 prop = {prop_name_literal};
 {statement}"""
-        )
+    )
 
     if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
         statement = Stripped(
@@ -1842,54 +2099,30 @@ if ({access_expression} !== null) {{
     return statement
 
 
-def _generate_serialize_class(
-    cls: intermediate.ConcreteClass,
-    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
-    ids_of_types_reaching_an_enumeration: Set[intermediate.IdOfOurType],
-) -> Stripped:
+def _generate_serialize_class(cls: intermediate.ConcreteClass) -> Stripped:
     """
     Generate the function serializing an instance of ``cls``.
 
-    The properties which can be refused share a single ``try``, and the one which is
-    being serialized records its name in ``prop`` for the ``catch`` to report. One
-    ``try`` per property would cost seven lines apiece, where this costs one line
-    apiece and eight for the whole serializer.
+    The properties share a single ``try``, and the one which is being serialized
+    records its name in ``prop`` for the ``catch`` to report. One ``try`` per
+    property would cost seven lines apiece, where this costs one line apiece and
+    eight for the whole serializer.
 
-    ``prop`` can not be read stale. The ``catch`` prepends only for
-    a ``SerializationError``, and a property which records no name can raise none --
-    that is the very question which decided whether to record it. A class whose every
-    property is beyond refusal is written without a ``try`` at all.
+    ``prop`` can not be read stale: it is written by the very statement which then
+    fails, and every statement of the ``try`` writes it. A class without
+    a single property is written without a ``try`` at all.
     """
-    property_blocks = []  # type: List[Stripped]
-    any_refusable = False
-
-    for prop in cls.properties:
-        # NOTE (mristin):
-        # See the note at the top of this region on why the two queries are asked
-        # here, one beside the other, instead of being folded into one.
-        refusable = intermediate.reaches_a_number(
-            prop.type_annotation, ids_of_types_reaching_a_number
-        ) or intermediate.reaches_an_enumeration(
-            prop.type_annotation, ids_of_types_reaching_an_enumeration
-        )
-
-        any_refusable = any_refusable or refusable
-
-        property_blocks.append(
-            _generate_serialize_property(prop=prop, refusable=refusable)
-        )
-
     blocks = [Stripped("const jsonable: JsonObject = {};")]  # type: List[Stripped]
 
-    if not any_refusable:
-        blocks.extend(property_blocks)
-    else:
-        property_blocks_joined = "\n\n".join(property_blocks)
+    if len(cls.properties) > 0:
+        property_blocks_joined = "\n\n".join(
+            _generate_serialize_property(prop=prop) for prop in cls.properties
+        )
 
         blocks.append(
             Stripped(
                 f"""\
-// Only a property which can be refused records its name.
+// The property being serialized, for the path of a failure.
 let prop = "";
 try {{
 {textwrap.indent(property_blocks_joined, I)}
@@ -2136,6 +2369,19 @@ export class SerializationError extends Error {{
 {I}prependIndex(index: number): void {{
 {II}this._segments.unshift(`[${{index}}]`);
 {I}}}
+
+{I}/**
+{I} * Insert the access to the member `key` before the {{@link path}}.
+{I} *
+{I} * @remarks
+{I} *
+{I} * Unlike a property of one of our classes, a member of an open JSON-able
+{I} * object is known only at run time and can be any string at all, so it is
+{I} * always rendered as a subscript.
+{I} */
+{I}prependKey(key: string): void {{
+{II}this._segments.unshift(`[${{JSON.stringify(key)}}]`);
+{I}}}
 }}"""
     )
 
@@ -2244,14 +2490,6 @@ def generate(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code for JSON de/serialization."""
-    ids_of_types_reaching_a_number = (
-        intermediate.collect_ids_of_types_reaching_a_number(symbol_table)
-    )
-
-    ids_of_types_reaching_an_enumeration = (
-        intermediate.collect_ids_of_types_reaching_an_enumeration(symbol_table)
-    )
-
     number_types = _collect_number_types(symbol_table)
 
     blocks = [
@@ -2279,6 +2517,7 @@ export type JsonValue = string | number | boolean | JsonObject | JsonArray;
 export type JsonArray = Iterable<JsonValue>;
 export type JsonObject = { [prop: string]: JsonValue };"""
         ),
+        typescript_common.NOTE_ON_THE_THREE_ERROR_PATHS,
         Stripped(
             f"""\
 /**
@@ -2328,8 +2567,38 @@ export class IndexSegment {{
 }}"""
         ),
         Stripped(
+            f"""\
+/**
+ * Represent a member of an open JSON-able object on a path to the erroneous
+ * value.
+ *
+ * @remarks
+ *
+ * Unlike a {{@link PropertySegment}}, which names a property of one of our
+ * classes, a key names a member of an open JSON-able object. It is known only
+ * at run time, and can be any string at all, so it is always rendered as
+ * a subscript.
+ */
+export class KeySegment {{
+{I}/**
+{I} * Object that contains the value at {{@link key}}
+{I} */
+{I}readonly object: JsonObject;
+
+{I}/**
+{I} * Key of the value
+{I} */
+{I}readonly key: string;
+
+{I}constructor(object: JsonObject, key: string) {{
+{II}this.object = object;
+{II}this.key = key;
+{I}}}
+}}"""
+        ),
+        Stripped(
             """\
-export type Segment = PropertySegment | IndexSegment;"""
+export type Segment = PropertySegment | IndexSegment | KeySegment;"""
         ),
         Stripped(
             f"""\
@@ -2368,6 +2637,8 @@ export class Path {{
 {III}parts.push(segment.name);
 {II}}} else if (segment instanceof IndexSegment) {{
 {III}parts.push(`[${{segment.index}}]`);
+{II}}} else if (segment instanceof KeySegment) {{
+{III}parts.push(`[${{JSON.stringify(segment.key)}}]`);
 {II}}} else {{
 {III}throw new Error(`Unexpected segment: ${{segment}}`);
 {II}}}
@@ -2378,6 +2649,8 @@ export class Path {{
 {IIII}parts.push(`.${{segment.name}}`);
 {III}}} else if (segment instanceof IndexSegment) {{
 {IIII}parts.push(`[${{segment.index}}]`);
+{III}}} else if (segment instanceof KeySegment) {{
+{IIII}parts.push(`[${{JSON.stringify(segment.key)}}]`);
 {III}}} else {{
 {IIII}throw new Error(`Unexpected segment: ${{segment}}`);
 {III}}}
@@ -2480,46 +2753,23 @@ function newDeserializationError<T>(
 
     blocks.extend(_generate_number_serializers(number_types))
 
+    # NOTE (mristin):
+    # The JSON-able helpers come here, and not next to the parsers above, as
+    # one of the four serializes and needs ``SerializationError``, which is
+    # declared just above.
+    blocks.extend(_generate_json_able_helpers(symbol_table=symbol_table))
+
     for enumeration in _collect_enumerations_to_serialize(symbol_table):
         blocks.append(_generate_serialize_enumeration(enumeration=enumeration))
 
     for concrete_cls in symbol_table.concrete_classes:
-        blocks.append(
-            _generate_serialize_class(
-                cls=concrete_cls,
-                ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
-                ids_of_types_reaching_an_enumeration=(
-                    ids_of_types_reaching_an_enumeration
-                ),
-            )
-        )
+        blocks.append(_generate_serialize_class(cls=concrete_cls))
+
     for composed_type_anno in _collect_composed_type_annotations(symbol_table):
         if isinstance(composed_type_anno, intermediate.ListTypeAnnotation):
-            items_type_anno = composed_type_anno.items
-
-            blocks.append(
-                _generate_serialize_list(
-                    type_anno=composed_type_anno,
-                    guarded=(
-                        intermediate.reaches_a_number(
-                            items_type_anno, ids_of_types_reaching_a_number
-                        )
-                        or intermediate.reaches_an_enumeration(
-                            items_type_anno, ids_of_types_reaching_an_enumeration
-                        )
-                    ),
-                )
-            )
+            blocks.append(_generate_serialize_list(type_anno=composed_type_anno))
         else:
-            blocks.append(
-                _generate_serialize_tuple(
-                    type_anno=composed_type_anno,
-                    ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
-                    ids_of_types_reaching_an_enumeration=(
-                        ids_of_types_reaching_an_enumeration
-                    ),
-                )
-            )
+            blocks.append(_generate_serialize_tuple(type_anno=composed_type_anno))
 
     blocks.append(_generate_transformer(symbol_table=symbol_table))
 

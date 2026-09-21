@@ -94,24 +94,28 @@ from typing import (
     TextIO,
     Tuple,
     TypeVar,
-    Union,
     TYPE_CHECKING
 )
 import xml.etree.ElementTree
 
 if sys.version_info >= (3, 8):
-    from typing import (
-        Final,
-        Protocol
-    )
+    from typing import Final
 else:
-    from typing_extensions import (
-        Final,
-        Protocol
-    )
+    from typing_extensions import Final
 
 import dummy.stringification as aas_stringification
 import dummy.types as aas_types
+import dummy.xmlcommon as aas_xmlcommon
+from dummy.xmlcommon import (
+    XS_WHITESPACE_RE,
+    collapse_whitespace,
+    parse_element_tag,
+    raise_if_has_tail_or_attrib,
+    read_end_element,
+    read_next_start_element,
+    read_str_from_element_text,
+    read_text_from_element
+)
 
 # See: https://stackoverflow.com/questions/55076778/why-isnt-this-function-type-annotated-correctly-error-missing-type-parameters
 if TYPE_CHECKING:
@@ -121,156 +125,23 @@ else:
 
 
 #: XML namespace in which all the elements are expected to reside
-NAMESPACE = 'https://dummy.com'
+NAMESPACE = aas_xmlcommon.NAMESPACE
 
 
 # region De-serialization
 
 
-#: XML namespace as a prefix specially tailored for
-#: :py:mod:`xml.etree.ElementTree`
-_NAMESPACE_IN_CURLY_BRACKETS = f'{{{NAMESPACE}}}'
+Element = aas_xmlcommon.Element
+HasIterparse = aas_xmlcommon.HasIterparse
 
+ElementSegment = aas_xmlcommon.ElementSegment
+IndexSegment = aas_xmlcommon.IndexSegment
+KeySegment = aas_xmlcommon.KeySegment
+Segment = aas_xmlcommon.Segment
+Path = aas_xmlcommon.Path
 
-class Element(Protocol):
-    """Behave like :py:meth:`xml.etree.ElementTree.Element`."""
-
-    @property
-    def attrib(self) -> Optional[Mapping[str, str]]:
-        """Attributes of the element"""
-        raise NotImplementedError()
-
-    @property
-    def text(self) -> Optional[str]:
-        """Text content of the element"""
-        raise NotImplementedError()
-
-    @property
-    def tail(self) -> Optional[str]:
-        """Tail text of the element"""
-        raise NotImplementedError()
-
-    @property
-    def tag(self) -> str:
-        """Tag of the element; with a namespace provided as a ``{...}`` prefix"""
-        raise NotImplementedError()
-
-    def clear(self) -> None:
-        """Behave like :py:meth:`xml.etree.ElementTree.Element.clear`."""
-        raise NotImplementedError()
-
-
-class HasIterparse(Protocol):
-    """Parse an XML document incrementally."""
-
-    # NOTE (mristin):
-    # ``self`` is not used in this context, but is necessary for Mypy,
-    # see: https://github.com/python/mypy/issues/5018 and
-    # https://github.com/python/mypy/commit/3efbc5c5e910296a60ed5b9e0e7eb11dd912c3ed#diff-e165eb7aed9dca0a5ebd93985c8cd263a6462d36ac185f9461348dc5a1396d76R9937
-
-    def iterparse(
-            self,
-            source: TextIO,
-            events: Optional[Sequence[str]] = None
-    ) -> Iterator[Tuple[str, Element]]:
-        """Behave like :py:func:`xml.etree.ElementTree.iterparse`."""
-
-
-class ElementSegment:
-    """Represent an element on a path to the erroneous value."""
-    #: Erroneous element
-    element: Final[Element]
-
-    def __init__(
-            self,
-            element: Element
-    ) -> None:
-        """Initialize with the given values."""
-        self.element = element
-
-    def __str__(self) -> str:
-        """
-        Render the segment as a tag without the namespace.
-
-        We deliberately omit the namespace in the tag names. If you want to actually
-        query with the resulting XPath, you have to insert the namespaces manually.
-        We did not know how to include the namespace in a meaningful way, as XPath
-        assumes namespace prefixes to be defined *outside* of the document. At least
-        the path thus rendered is informative, and you should be able to descend it
-        manually.
-        """
-        _, has_namespace, tag_wo_ns = self.element.tag.rpartition('}')
-        if not has_namespace:
-            return self.element.tag
-        else:
-            return tag_wo_ns
-
-
-class IndexSegment:
-    """Represent an element in a sequence on a path to the erroneous value."""
-    #: Erroneous element
-    element: Final[Element]
-
-    #: Index of the element in the sequence
-    index: Final[int]
-
-    def __init__(
-            self,
-            element: Element,
-            index: int
-    ) -> None:
-        """Initialize with the given values."""
-        self.element = element
-        self.index = index
-
-    def __str__(self) -> str:
-        """Render the segment as an element wildcard with the index."""
-        return f'*[{self.index}]'
-
-
-Segment = Union[ElementSegment, IndexSegment]
-
-
-class Path:
-    """Represent the relative path to the erroneous element."""
-
-    def __init__(self) -> None:
-        """Initialize as an empty path."""
-        self._segments = []  # type: List[Segment]
-
-    @property
-    def segments(self) -> Sequence[Segment]:
-        """Get the segments of the path."""
-        return self._segments
-
-    def _prepend(self, segment: Segment) -> None:
-        """Insert the :paramref:`segment` in front of other segments."""
-        self._segments.insert(0, segment)
-
-    def __str__(self) -> str:
-        """Render the path as a relative XPath.
-
-        We omit the leading ``/`` so that you can easily prefix it as you need.
-        """
-        return "/".join(str(segment) for segment in self._segments)
-
-
-class DeserializationException(Exception):
-    """Signal that the XML de-serialization could not be performed."""
-
-    #: Human-readable explanation of the exception's cause
-    cause: Final[str]
-
-    #: Relative path to the erroneous value
-    path: Final[Path]
-
-    def __init__(
-            self,
-            cause: str
-    ) -> None:
-        """Initialize with the given :paramref:`cause` and an empty path."""
-        self.cause = cause
-        self.path = Path()
+DeserializationException = aas_xmlcommon.DeserializationException
+SerializationException = aas_xmlcommon.SerializationException
 
 
 def _with_elements_cleared_after_yield(
@@ -678,92 +549,6 @@ _ContentReader = Callable[
 ]
 
 
-def _parse_element_tag(element: Element) -> str:
-    """
-    Extract the tag name without the namespace prefix from :paramref:`element`.
-
-    :param element: whose tag without namespace we want to extract
-    :return: tag name without the namespace prefix
-    :raise: :py:class:`DeserializationException` if unexpected :paramref:`element`
-    """
-    if not element.tag.startswith(_NAMESPACE_IN_CURLY_BRACKETS):
-        namespace, got_namespace, tag_wo_ns = (
-            element.tag.rpartition('}')
-        )
-        if got_namespace:
-            if namespace.startswith('{'):
-                namespace = namespace[1:]
-
-            raise DeserializationException(
-                f"Expected the element in the namespace {NAMESPACE!r}, "
-                f"but got the element {tag_wo_ns!r} in the namespace {namespace!r}"
-            )
-        else:
-            raise DeserializationException(
-                f"Expected the element in the namespace {NAMESPACE!r}, "
-                f"but got the element {tag_wo_ns!r} without the namespace prefix"
-            )
-
-    return element.tag[len(_NAMESPACE_IN_CURLY_BRACKETS):]
-
-
-def _raise_if_has_tail_or_attrib(
-        element: Element
-) -> None:
-    """
-    Check that :paramref:`element` has no trailing text and no attributes.
-
-    :param element: to be verified
-    :raise:
-        :py:class:`.DeserializationException` if trailing text or attributes;
-        conforming to the convention about handling error paths,
-        the exception path is left empty.
-    """
-    if element.tail is not None and len(element.tail.strip()) != 0:
-        raise DeserializationException(
-            f"Expected no trailing text, but got: {element.tail!r}"
-        )
-
-    if element.attrib is not None and len(element.attrib) > 0:
-        raise DeserializationException(
-            f"Expected no attributes, but got: {element.attrib}"
-        )
-
-
-def _read_end_element(
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-) -> Element:
-    """
-    Read the end element corresponding to the start :paramref:`element`
-    from :paramref:`iterator`.
-
-    :param element: corresponding start element
-    :param iterator:
-        Input stream of ``(event, element)`` coming from
-        :py:func:`xml.etree.ElementTree.iterparse` with the argument
-        ``events=["start", "end"]``
-    :raise: :py:class:`DeserializationException` if unexpected input
-    """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            f"Expected the end element for {element.tag}, "
-            f"but got the end-of-input"
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != "end" or next_element.tag != element.tag:
-        raise DeserializationException(
-            f"Expected the end element for {element.tag!r}, "
-            f"but got the event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(next_element)
-
-    return next_element
-
-
 def _read_named_element(
     element: Element,
     iterator: Iterator[Tuple[str, Element]],
@@ -788,7 +573,7 @@ def _read_named_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed value
     """
-    tag_wo_ns = _parse_element_tag(element)
+    tag_wo_ns = parse_element_tag(element)
     if tag_wo_ns != expected_tag:
         raise DeserializationException(
             f"Expected an element with the tag {expected_tag!r}, "
@@ -821,7 +606,7 @@ def _read_dispatched(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
+    tag_wo_ns = parse_element_tag(element)
 
     read_as_sequence = dispatch.get(tag_wo_ns, None)
     if read_as_sequence is None:
@@ -865,7 +650,7 @@ def _read_properties(
             f"and whitespace text, but got text: {element.text!r}"
         )
 
-    _raise_if_has_tail_or_attrib(element)
+    raise_if_has_tail_or_attrib(element)
 
     values = dict()  # type: Dict[str, Any]
 
@@ -894,7 +679,7 @@ def _read_properties(
             )
 
         try:
-            tag_wo_ns = _parse_element_tag(prop_element)
+            tag_wo_ns = parse_element_tag(prop_element)
 
             # NOTE (mristin):
             # A tag already in ``values`` can only have got there by being read,
@@ -936,68 +721,13 @@ def _read_instance_from_iterparse(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            f"Expected the start element for {expected_what}, "
-            f"but got the end-of-input"
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for {expected_what}, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
+    next_element = read_next_start_element(iterator, expected_what)
 
     try:
         return read_as_element(next_element, iterator)
     except DeserializationException as exception:
         exception.path._prepend(ElementSegment(next_element))
         raise exception
-
-
-def _read_str_from_element_text(
-    element: Element,
-    iterator: Iterator[Tuple[str, Element]]
-) -> str:
-    """
-    Parse the text of :paramref:`element` as a string, and
-    read the corresponding end element from :paramref:`iterator`.
-
-    If there is no text, empty string is returned.
-
-    :param element: start element
-    :param iterator:
-        Input stream of ``(event, element)`` coming from
-        :py:func:`xml.etree.ElementTree.iterparse` with the argument
-        ``events=["start", "end"]``
-    :raise: :py:class:`DeserializationException` if unexpected input
-    :return: parsed value
-    """
-    # NOTE (mristin):
-    # We do not use ``_read_text_from_element`` as that function expects
-    # the ``element`` to contain *some* text. In contrast, this function
-    # can also deal with empty text, in which case it returns an empty string.
-
-    text = element.text
-
-    end_element = _read_end_element(
-        element,
-        iterator
-    )
-
-    if text is None:
-        text = end_element.text
-
-    _raise_if_has_tail_or_attrib(element)
-    result = (
-        text
-        if text is not None
-        else ""
-    )
-
-    return result
 
 
 def _read_something_as_sequence(
@@ -1127,10 +857,10 @@ _READERS_FOR_SOMETHING: Mapping[
     str,
     _ContentReader[Any]
 ] = {
-    'interface': _read_str_from_element_text,
-    'type': _read_str_from_element_text,
-    'range': _read_str_from_element_text,
-    'void': _read_str_from_element_text,
+    'interface': read_str_from_element_text,
+    'type': read_str_from_element_text,
+    'range': read_str_from_element_text,
+    'void': read_str_from_element_text,
 }
 
 
@@ -1138,52 +868,6 @@ _READERS_FOR_SOMETHING: Mapping[
 
 
 # region Serialization
-
-
-class SerializationException(Exception):
-    """Signal that the XML serialization could not be performed."""
-
-    #: Human-readable explanation of the exception's cause
-    cause: Final[str]
-
-    def __init__(
-            self,
-            cause: str
-    ) -> None:
-        """Initialize with the given :paramref:`cause` and an empty path."""
-        self.cause = cause
-        self._segments = []  # type: List[str]
-
-    @property
-    def path(self) -> str:
-        """
-        Render the path to the erroneous value as a Python access expression.
-
-        The path points into the instance which you handed over for
-        the serialization, and *not* into an XML document -- at the point of
-        the failure, there is no document yet. For example, ``.submodels[0].id``
-        tells you that the serialization broke on ``that.submodels[0].id``.
-
-        Mind that the elements which the XML representation adds on top of
-        the instance contribute no segment, as they correspond to no attribute
-        access. This concerns the element enclosing the instance itself, and
-        the element which designates the model type of the value of a property.
-        """
-        return ''.join(self._segments)
-
-    def _prepend_property(self, name: str) -> None:
-        """Insert the access to the property :paramref:`name` before the path."""
-        self._segments.insert(0, f'.{name}')
-
-    def _prepend_index(self, index: int) -> None:
-        """Insert the access to the item at :paramref:`index` before the path."""
-        self._segments.insert(0, f'[{index}]')
-
-    def __str__(self) -> str:
-        if len(self._segments) == 0:
-            return self.cause
-
-        return f'{self.path}: {self.cause}'
 
 
 def _attribute_to_property(
@@ -1288,7 +972,7 @@ def _write_str_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
 
         # NOTE (mristin):
         # We ran ``timeit`` on manual code which escaped XML special characters with
@@ -1298,11 +982,11 @@ def _write_str_as_element(
         #
         # The escaping is written out here, and not put in a function of its own,
         # since a string is the commonest value in a meta-model and a call is not free.
-        serializer.stream.write(
+        serializer.writer.stream.write(
             value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         )
 
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -1325,141 +1009,21 @@ def _write_something_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_str_as_element('interface', 'interface', that.interface, serializer)
         _write_str_as_element('type', 'type', that.type, serializer)
         _write_str_as_element('range', 'range', that.range, serializer)
         _write_str_as_element('void', 'void', that.void, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
 
 class _Serializer(aas_types.AbstractVisitor):
-    """Encode instances as XML and write them to :py:attr:`~stream`."""
+    """Encode instances as XML and write them to :py:attr:`~writer`."""
 
-    #: Stream to be written to when we visit the instances
-    stream: Final[TextIO]
-
-    #: Method pointer to be invoked for writing the start element with or without
-    #: specifying a namespace (depending on the state of the serializer)
-    _write_start_element: Callable[
-        [str],
-        None
-    ]
-
-    #: Method pointer to be invoked for writing an empty element with or without
-    #: specifying a namespace (depending on the state of the serializer)
-    _write_empty_element: Callable[
-        [str],
-        None
-    ]
-
-    # NOTE (mristin):
-    # The serialization procedure is quite rigid. We leverage the specifics of
-    # the serialization procedure to optimize the code a bit.
-    #
-    # Namely, we model the writing of the XML elements as a state machine.
-    # The namespace is only specified for the very first element. All the subsequent
-    # elements will *not* have the namespace specified. We implement that behavior by
-    # using pointers to methods, as Python treats the methods as first-class citizens.
-    #
-    # The ``_write_start_element`` will point to
-    # ``_write_first_start_element_with_namespace`` on the *first* invocation.
-    # Afterwards, it will be redirected to ``_write_start_element_without_namespace``.
-    #
-    # Analogously for ``_write_empty_element``.
-    #
-    # Please see the implementation for the details, but this should give you at least
-    # a rough overview.
-
-    def _write_first_start_element_with_namespace(
-            self,
-            name: str
-    ) -> None:
-        """
-        Write the start element with the tag name :paramref:`name` and specify
-        its namespace.
-
-        The :py:attr:`~_write_start_element` is set to
-        :py:meth:`~_write_start_element_without_namespace` after the first invocation
-        of this method.
-
-        :param name: of the element tag. Expected to contain no XML special characters.
-        """
-        self.stream.write(f'<{name} xmlns="{NAMESPACE}">')
-
-        # NOTE (mristin):
-        # Any subsequence call to `_write_start_element` or `_write_empty_element`
-        # should not specify the namespace of the element as we specified now already
-        # specified it.
-        self._write_start_element = self._write_start_element_without_namespace
-        self._write_empty_element = self._write_empty_element_without_namespace
-
-    def _write_start_element_without_namespace(
-            self,
-            name: str
-    ) -> None:
-        """
-        Write the start element with the tag name :paramref:`name`.
-
-        The first element, written *before* this one, is expected to have been
-        already written with the namespace specified.
-
-        :param name: of the element tag. Expected to contain no XML special characters.
-        """
-        self.stream.write(f'<{name}>')
-
-    def _write_end_element(
-            self,
-            name: str
-    ) -> None:
-        """
-        Write the end element with the tag name :paramref:`name`.
-
-        :param name: of the element tag. Expected to contain no XML special characters.
-        """
-        self.stream.write(f'</{name}>')
-
-    def _write_first_empty_element_with_namespace(
-            self,
-            name: str
-    ) -> None:
-        """
-        Write the first (and only) empty element with the tag name :paramref:`name`.
-
-        No elements are expected to be written to the stream afterwards. The element
-        includes the namespace specification.
-
-        :param name: of the element tag. Expected to contain no XML special characters.
-        """
-        self.stream.write(f'<{name} xmlns="{NAMESPACE}"/>')
-        self._write_empty_element = self._rase_if_write_element_called_again
-        self._write_start_element = self._rase_if_write_element_called_again
-
-    def _rase_if_write_element_called_again(
-            self,
-            name: str
-    ) -> None:
-        raise AssertionError(
-            f"We expected to call ``_write_first_empty_element_with_namespace`` "
-            f"only once. This is an unexpected second call for writing "
-            f"an (empty or non-empty) element with the tag name: {name!r}"
-        )
-
-    def _write_empty_element_without_namespace(
-            self,
-            name: str
-    ) -> None:
-        """
-        Write the empty element with the tag name :paramref:`name`.
-
-        The call to this method is expected to occur *after* the enclosing element with
-        a specified namespace has been written.
-
-        :param name: of the element tag. Expected to contain no XML special characters.
-        """
-        self.stream.write(f'<{name}/>')
+    #: Frame the XML elements of the document which we are writing
+    writer: Final[aas_xmlcommon.Writer]
 
     def __init__(
         self,
@@ -1473,13 +1037,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param stream: where to write to
         """
-        self.stream = stream
-        self._write_start_element = (
-            self._write_first_start_element_with_namespace
-        )
-        self._write_empty_element = (
-            self._write_first_empty_element_with_namespace
-        )
+        self.writer = aas_xmlcommon.Writer(stream)
 
     def visit_something(
         self,

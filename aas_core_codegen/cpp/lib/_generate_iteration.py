@@ -257,6 +257,31 @@ struct IndexSegment : public ISegment {{
         Stripped(
             f"""\
 /**
+ * \\brief Represent an access to a key of a JSON-able object on a path.
+ *
+ * Unlike \\ref PropertySegment, which points to one of the properties of
+ * the meta-model, this segment points to a key of a JSON-able object, which
+ * can be an arbitrary string known only at runtime.
+ */
+struct KeySegment : public ISegment {{
+{I}/**
+{I} * Key of the JSON-able object
+{I} */
+{I}std::wstring key;
+
+{I}explicit KeySegment(
+{II}std::wstring a_key
+{I});
+
+{I}std::wstring ToWstring() const override;
+{I}std::unique_ptr<ISegment> Clone() const override;
+
+{I}~KeySegment() override = default;
+}};  // struct KeySegment"""
+        ),
+        Stripped(
+            f"""\
+/**
  * \\brief Represent a path to some value.
  *
  * This is a path akin to C++ expressions. It is not to be confused with different
@@ -680,6 +705,74 @@ std::unique_ptr<ISegment> IndexSegment::Clone() const {{
     ]
 
 
+def _generate_key_segment_implementation() -> List[Stripped]:
+    """Generate the implementation of ``KeySegment`` struct."""
+    return [
+        Stripped("// region struct KeySegment"),
+        Stripped(
+            f"""\
+KeySegment::KeySegment(std::wstring a_key) :
+{I}key(std::move(a_key)) {{
+{I}// Intentionally empty.
+}}"""
+        ),
+        Stripped(
+            f"""\
+std::wstring KeySegment::ToWstring() const {{
+{I}// NOTE (mristin):
+{I}// We escape the key the same way a JSON string is escaped so that
+{I}// the resulting path reads as a valid C++ expression on
+{I}// a ``nlohmann::json`` value, *e.g.*, ``.some_property["some key"]``.
+
+{I}std::wstring escaped;
+{I}escaped.reserve(key.size());
+
+{I}for (const wchar_t character : key) {{
+{II}switch (character) {{
+{III}case L'\\\\':
+{IIII}escaped.append(L"\\\\\\\\");
+{IIII}break;
+{III}case L'"':
+{IIII}escaped.append(L"\\\\\\"");
+{IIII}break;
+{III}case L'\\b':
+{IIII}escaped.append(L"\\\\b");
+{IIII}break;
+{III}case L'\\f':
+{IIII}escaped.append(L"\\\\f");
+{IIII}break;
+{III}case L'\\n':
+{IIII}escaped.append(L"\\\\n");
+{IIII}break;
+{III}case L'\\r':
+{IIII}escaped.append(L"\\\\r");
+{IIII}break;
+{III}case L'\\t':
+{IIII}escaped.append(L"\\\\t");
+{IIII}break;
+{III}default:
+{IIII}escaped.push_back(character);
+{IIII}break;
+{II}}}
+{I}}}
+
+{I}return common::Concat(
+{II}L"[\\"",
+{II}escaped,
+{II}L"\\"]"
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+std::unique_ptr<ISegment> KeySegment::Clone() const {{
+{I}return common::make_unique<KeySegment>(*this);
+}}"""
+        ),
+        Stripped("// endregion struct KeySegment"),
+    ]
+
+
 def _generate_path_implementation() -> List[Stripped]:
     """Generate the implementation of the ``Path`` struct."""
     return [
@@ -826,6 +919,20 @@ class IteratorQualities:
                     else:
                         assert_never(type_anno.items.our_type)
 
+                elif isinstance(
+                    type_anno.items,
+                    (
+                        intermediate.JsonValueTypeAnnotation,
+                        intermediate.JsonArrayTypeAnnotation,
+                        intermediate.JsonObjectTypeAnnotation,
+                    ),
+                ):
+                    # NOTE (mristin):
+                    # A JSON-able value is plain data (``nlohmann::json``), never
+                    # a reference to one of our own classes, so it is never
+                    # relevant for iteration/descent.
+                    pass
+
                 else:
                     raise NotImplementedError(
                         f"NOTE (mristin): We expect only lists of atomic values "
@@ -863,6 +970,20 @@ class IteratorQualities:
                 if contains_a_class:
                     cls_contains_a_list_or_tuple_property = True
                     relevant_properties.append(prop)
+
+            elif isinstance(
+                type_anno,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # A JSON-able value is plain data (``nlohmann::json``), never
+                # a reference to one of our own classes, so it is never
+                # relevant for iteration/descent.
+                pass
 
             else:
                 assert_never(type_anno)
@@ -2530,6 +2651,7 @@ def generate_implementation(
         _generate_property_to_wstring_implementation(symbol_table=symbol_table),
         *_generate_property_segment_implementation(),
         *_generate_index_segment_implementation(),
+        *_generate_key_segment_implementation(),
         *_generate_path_implementation(),
         Stripped("// endregion Pathing"),
         Stripped("// region Non-recursive iteration"),

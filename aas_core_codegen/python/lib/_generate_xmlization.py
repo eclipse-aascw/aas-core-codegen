@@ -39,6 +39,17 @@ def _generate_module_docstring(
     qualified_module_name: python_common.QualifiedModuleName,
 ) -> Stripped:
     """Generate the docstring of the whole module."""
+    # NOTE (mristin):
+    # The XML-RPC subset, over which the JSON-able values are de/serialized,
+    # is the one exception to the single namespace of a document.
+    xml_rpc_namespace_note = (
+        """ The elements of
+the XML-RPC subset, over which a JSON-able value is de/serialized, are the one
+exception: they live in no namespace at all."""
+        if intermediate.uses_json_types(symbol_table)
+        else ""
+    )
+
     first_cls = (
         symbol_table.concrete_classes[0]
         if len(symbol_table.concrete_classes) > 0
@@ -72,7 +83,7 @@ different from :py:mod:`xml.etree.ElementTree`. For example, you can pass in
 
 .. _defusedxml.ElementTree: https://pypi.org/project/defusedxml/#defusedxml-elementtree
 
-All XML elements are expected to live in the :py:attr:`~NAMESPACE`.
+All XML elements are expected to live in the :py:attr:`~NAMESPACE`.{xml_rpc_namespace_note}
 
 For writing, use the function :py:func:`{qualified_module_name}.xmlization.write` which
 translates the instance of the model into an XML document and writes it in one pass
@@ -855,7 +866,7 @@ _READ_FUNCTION_BY_PRIMITIVE_TYPE = {
     intermediate.PrimitiveType.BOOL: "_read_bool_from_element_text",
     intermediate.PrimitiveType.INT: "_read_int_from_element_text",
     intermediate.PrimitiveType.FLOAT: "_read_float_from_element_text",
-    intermediate.PrimitiveType.STR: "_read_str_from_element_text",
+    intermediate.PrimitiveType.STR: "read_str_from_element_text",
     intermediate.PrimitiveType.BYTEARRAY: "_read_bytes_from_element_text",
 }
 assert all(
@@ -931,7 +942,7 @@ def {function_name}(
 
 {I}{indent_but_first_line(item_reads, I)}
 
-{I}_read_end_element(element, iterator)
+{I}read_end_element(element, iterator)
 
 {I}return (
 {II}{indent_but_first_line(result_items, II)}
@@ -943,14 +954,39 @@ def _is_encoded_as_text(type_annotation: intermediate.TypeAnnotationUnion) -> bo
     """
     Check whether a value of the ``type_annotation`` is encoded as an element's text.
 
-    The primitives and the enumerations are; the instances are encoded as child
-    elements instead.
+    The primitives and the enumerations are; the instances and the JSON-able values
+    are encoded as child elements instead.
     """
     if intermediate.try_primitive_type(type_annotation) is not None:
         return True
 
     return isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
         type_annotation.our_type, intermediate.Enumeration
+    )
+
+
+def _is_enclosed_in_a_prescribed_element(
+    type_annotation: intermediate.TypeAnnotationUnion,
+) -> bool:
+    """
+    Check whether a value of the ``type_annotation`` needs the tag prescribed for it.
+
+    An instance element is self-describing -- its tag *is* its model type -- so it
+    carries its own tag wherever it occurs. Everything else is written into an
+    element whose tag comes from the position instead (``v`` in a list, ``v1``,
+    ``v2``, *etc.* in a tuple), and that tag therefore has to be checked against
+    what the enclosing element prescribes.
+    """
+    if _is_encoded_as_text(type_annotation):
+        return True
+
+    return isinstance(
+        type_annotation,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
     )
 
 
@@ -976,6 +1012,15 @@ def _content_reader_name(
 
     if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
         raise AssertionError("Expected to handle this case before")
+
+    elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Identifier("_read_json_value_content")
+
+    elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Identifier("_read_json_array_body")
+
+    elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Identifier("_read_json_object_body")
 
     elif isinstance(type_anno, intermediate.OurTypeAnnotation):
         our_type = type_anno.our_type
@@ -1052,7 +1097,7 @@ def _element_reader_name(
     """
     type_anno = intermediate.beneath_optional(type_annotation)
 
-    if _is_encoded_as_text(type_anno):
+    if _is_enclosed_in_a_prescribed_element(type_anno):
         return Identifier(
             f"_read_{python_common.atomic_moniker(type_anno)}__at_{expected_tag}"
         )
@@ -1157,7 +1202,7 @@ def {name}(
         # NOTE (mristin):
         # An instance element is self-describing, so it is read by the function which
         # is generated together with the class, and there is nothing to register.
-        if _is_encoded_as_text(type_annotation):
+        if _is_enclosed_in_a_prescribed_element(type_annotation):
             self._register_at_tag_reader(type_annotation, expected_tag=expected_tag)
 
     def _register_list_reader(
@@ -1336,6 +1381,16 @@ def {name}(
 
         if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
             raise AssertionError("Expected to handle this case before")
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            self.note_needed_helper(_content_reader_name(type_anno))
 
         elif isinstance(type_anno, intermediate.OurTypeAnnotation):
             our_type = type_anno.our_type
@@ -1863,6 +1918,24 @@ def _element_writer_call(
     if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
         raise AssertionError("Expected to handle this case before")
 
+    elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return (
+            Identifier("_write_json_value_as_element"),
+            [prop_literal, value, "serializer"],
+        )
+
+    elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return (
+            Identifier("_write_json_array_as_element"),
+            [prop_literal, value, "serializer"],
+        )
+
+    elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return (
+            Identifier("_write_json_object_as_element"),
+            [prop_literal, value, "serializer"],
+        )
+
     elif isinstance(type_anno, intermediate.OurTypeAnnotation):
         our_type = type_anno.our_type
 
@@ -1919,7 +1992,7 @@ def _element_writer_call(
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
         items_type_anno = intermediate.beneath_optional(type_anno.items)
 
-        if not _is_encoded_as_text(items_type_anno):
+        if not _is_enclosed_in_a_prescribed_element(items_type_anno):
             return (
                 Identifier("_write_list_of_instances"),
                 [prop_literal, value, "serializer"],
@@ -1930,6 +2003,12 @@ def _element_writer_call(
             write_item = Identifier(
                 _WRITE_FUNCTION_BY_PRIMITIVE_TYPE[items_primitive_type]
             )
+        elif isinstance(items_type_anno, intermediate.JsonValueTypeAnnotation):
+            write_item = Identifier("_write_json_value_as_element")
+        elif isinstance(items_type_anno, intermediate.JsonArrayTypeAnnotation):
+            write_item = Identifier("_write_json_array_as_element")
+        elif isinstance(items_type_anno, intermediate.JsonObjectTypeAnnotation):
+            write_item = Identifier("_write_json_object_as_element")
         else:
             assert isinstance(items_type_anno, intermediate.OurTypeAnnotation)
             assert isinstance(items_type_anno.our_type, intermediate.Enumeration)
@@ -2024,9 +2103,9 @@ class _WriterRegistry:
 
             # NOTE (mristin):
             # An instance is self-describing -- the element tag *is* its model type --
-            # so it writes its own element and the positional tag plays no role. Only
-            # a value encoded as text needs the tag which its position prescribes.
-            if not _is_encoded_as_text(item_type_anno):
+            # so it writes its own element and the positional tag plays no role.
+            # Everything else needs the tag which its position prescribes.
+            if not _is_enclosed_in_a_prescribed_element(item_type_anno):
                 write = Stripped(f"serializer.visit({item_value})")
             else:
                 self.register_property_writer(item_type_anno)
@@ -2080,11 +2159,11 @@ def {name}(
 {I}:raise: :py:class:`SerializationException` if the value could not be written
 {I}\"\"\"
 {I}try:
-{II}serializer._write_start_element(name)
+{II}serializer.writer.write_start_element(name)
 
 {II}{indent_but_first_line(statements_joined, II)}
 
-{II}serializer._write_end_element(name)
+{II}serializer.writer.write_end_element(name)
 {I}except Exception as exception:
 {II}_attribute_to_property(exception, prop_name)"""
             ),
@@ -2106,6 +2185,15 @@ def {name}(
 
         if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
             raise AssertionError("Expected to handle this case before")
+
+        elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+            self.note_needed_helper("_write_json_value_as_element")
+
+        elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+            self.note_needed_helper("_write_json_array_as_element")
+
+        elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+            self.note_needed_helper("_write_json_object_as_element")
 
         elif isinstance(type_anno, intermediate.OurTypeAnnotation):
             our_type = type_anno.our_type
@@ -2149,7 +2237,7 @@ def {name}(
                     "if you need this feature."
                 )
 
-            if not _is_encoded_as_text(items_type_anno):
+            if not _is_enclosed_in_a_prescribed_element(items_type_anno):
                 self.note_needed_helper("_write_list_of_instances")
                 return
 
@@ -2229,7 +2317,7 @@ empty."""
             )
         )
 
-        body_blocks.append(Stripped("serializer._write_empty_element(name)"))
+        body_blocks.append(Stripped("serializer.writer.write_empty_element(name)"))
     else:
         if _collapses_to_empty_element(cls):
             docstring_blocks.append(
@@ -2257,7 +2345,7 @@ if none of them is set."""
 if (
 {II}{indent_but_first_line(conjunction, II)}
 ):
-{I}serializer._write_empty_element(name)
+{I}serializer.writer.write_empty_element(name)
 {I}return"""
                 )
             )
@@ -2271,9 +2359,9 @@ if (
         body_blocks.append(
             Stripped(
                 f"""\
-serializer._write_start_element(name)
+serializer.writer.write_start_element(name)
 {property_blocks_joined}
-serializer._write_end_element(name)"""
+serializer.writer.write_end_element(name)"""
             )
         )
 
@@ -2351,166 +2439,20 @@ def {visit_name}(
     )
 
 
-# fmt: off
-@require(
-    lambda symbol_table:
-    '"' not in symbol_table.meta_model.xml_namespace,
-    "No single quotes expected in the XML namespace so that we can directly "
-    "write the namespace as-is"
-)
-# fmt: on
 def _generate_serializer(symbol_table: intermediate.SymbolTable) -> Stripped:
     """
     Generate the serializer as a visitor which writes to a stream on visits.
 
-    The serializer carries the state of the writing -- the stream and whether the XML
-    namespace still has to be specified -- and dispatches an instance to its writer.
-    Everything else is a module-level function which is given the serializer, so that
+    The serializer carries the state of the writing -- the writer which frames
+    the elements -- and dispatches an instance to its writer function. Everything
+    else is a module-level function which is given the serializer, so that
     the writers can be composed without allocating a closure or a bound method.
     """
     body_blocks = [
         Stripped(
             """\
-#: Stream to be written to when we visit the instances
-stream: Final[TextIO]"""
-        ),
-        Stripped(
-            f"""\
-#: Method pointer to be invoked for writing the start element with or without
-#: specifying a namespace (depending on the state of the serializer)
-_write_start_element: Callable[
-{I}[str],
-{I}None
-]"""
-        ),
-        Stripped(
-            f"""\
-#: Method pointer to be invoked for writing an empty element with or without
-#: specifying a namespace (depending on the state of the serializer)
-_write_empty_element: Callable[
-{I}[str],
-{I}None
-]"""
-        ),
-        Stripped(
-            """\
-# NOTE (mristin):
-# The serialization procedure is quite rigid. We leverage the specifics of
-# the serialization procedure to optimize the code a bit.
-#
-# Namely, we model the writing of the XML elements as a state machine.
-# The namespace is only specified for the very first element. All the subsequent
-# elements will *not* have the namespace specified. We implement that behavior by
-# using pointers to methods, as Python treats the methods as first-class citizens.
-#
-# The ``_write_start_element`` will point to
-# ``_write_first_start_element_with_namespace`` on the *first* invocation.
-# Afterwards, it will be redirected to ``_write_start_element_without_namespace``.
-#
-# Analogously for ``_write_empty_element``.
-#
-# Please see the implementation for the details, but this should give you at least
-# a rough overview."""
-        ),
-        Stripped(
-            f"""\
-def _write_first_start_element_with_namespace(
-{II}self,
-{II}name: str
-) -> None:
-{I}\"\"\"
-{I}Write the start element with the tag name :paramref:`name` and specify
-{I}its namespace.
-
-{I}The :py:attr:`~_write_start_element` is set to
-{I}:py:meth:`~_write_start_element_without_namespace` after the first invocation
-{I}of this method.
-
-{I}:param name: of the element tag. Expected to contain no XML special characters.
-{I}\"\"\"
-{I}self.stream.write(f'<{{name}} xmlns="{{NAMESPACE}}">')
-
-{I}# NOTE (mristin):
-{I}# Any subsequence call to `_write_start_element` or `_write_empty_element`
-{I}# should not specify the namespace of the element as we specified now already
-{I}# specified it.
-{I}self._write_start_element = self._write_start_element_without_namespace
-{I}self._write_empty_element = self._write_empty_element_without_namespace"""
-        ),
-        Stripped(
-            f"""\
-def _write_start_element_without_namespace(
-{II}self,
-{II}name: str
-) -> None:
-{I}\"\"\"
-{I}Write the start element with the tag name :paramref:`name`.
-
-{I}The first element, written *before* this one, is expected to have been
-{I}already written with the namespace specified.
-
-{I}:param name: of the element tag. Expected to contain no XML special characters.
-{I}\"\"\"
-{I}self.stream.write(f'<{{name}}>')"""
-        ),
-        Stripped(
-            f"""\
-def _write_end_element(
-{II}self,
-{II}name: str
-) -> None:
-{I}\"\"\"
-{I}Write the end element with the tag name :paramref:`name`.
-
-{I}:param name: of the element tag. Expected to contain no XML special characters.
-{I}\"\"\"
-{I}self.stream.write(f'</{{name}}>')"""
-        ),
-        Stripped(
-            f"""\
-def _write_first_empty_element_with_namespace(
-{II}self,
-{II}name: str
-) -> None:
-{I}\"\"\"
-{I}Write the first (and only) empty element with the tag name :paramref:`name`.
-
-{I}No elements are expected to be written to the stream afterwards. The element
-{I}includes the namespace specification.
-
-{I}:param name: of the element tag. Expected to contain no XML special characters.
-{I}\"\"\"
-{I}self.stream.write(f'<{{name}} xmlns="{{NAMESPACE}}"/>')
-{I}self._write_empty_element = self._rase_if_write_element_called_again
-{I}self._write_start_element = self._rase_if_write_element_called_again"""
-        ),
-        Stripped(
-            f"""\
-def _rase_if_write_element_called_again(
-{II}self,
-{II}name: str
-) -> None:
-{I}raise AssertionError(
-{II}f"We expected to call ``_write_first_empty_element_with_namespace`` "
-{II}f"only once. This is an unexpected second call for writing "
-{II}f"an (empty or non-empty) element with the tag name: {{name!r}}"
-{I})"""
-        ),
-        Stripped(
-            f"""\
-def _write_empty_element_without_namespace(
-{II}self,
-{II}name: str
-) -> None:
-{I}\"\"\"
-{I}Write the empty element with the tag name :paramref:`name`.
-
-{I}The call to this method is expected to occur *after* the enclosing element with
-{I}a specified namespace has been written.
-
-{I}:param name: of the element tag. Expected to contain no XML special characters.
-{I}\"\"\"
-{I}self.stream.write(f'<{{name}}/>')"""
+#: Frame the XML elements of the document which we are writing
+writer: Final[aas_xmlcommon.Writer]"""
         ),
         Stripped(
             f"""\
@@ -2526,13 +2468,7 @@ def __init__(
 
 {I}:param stream: where to write to
 {I}\"\"\"
-{I}self.stream = stream
-{I}self._write_start_element = (
-{II}self._write_first_start_element_with_namespace
-{I})
-{I}self._write_empty_element = (
-{II}self._write_first_empty_element_with_namespace
-{I})"""
+{I}self.writer = aas_xmlcommon.Writer(stream)"""
         ),
     ]  # type: List[Stripped]
 
@@ -2544,7 +2480,7 @@ def __init__(
         Stripped(
             f"""\
 class _Serializer(aas_types.AbstractVisitor):
-{I}\"\"\"Encode instances as XML and write them to :py:attr:`~stream`.\"\"\""""
+{I}\"\"\"Encode instances as XML and write them to :py:attr:`~writer`.\"\"\""""
         )
     )
 
@@ -2672,43 +2608,26 @@ _READING_PATTERN_NOTE = Stripped(
 #: the de-serialization and the serialization are covered, as they are gated
 #: the same way, see :py:func:`_collect_needed_helpers`.
 _HELPER_DEPENDENCIES = {
-    "_parse_element_tag": [],
-    "_raise_if_has_tail_or_attrib": [],
-    "_read_end_element": ["_raise_if_has_tail_or_attrib"],
-    "_read_named_element": ["_parse_element_tag"],
-    "_read_nested_element": ["_read_end_element"],
-    "_read_dispatched": ["_parse_element_tag"],
-    "_read_properties": ["_parse_element_tag", "_raise_if_has_tail_or_attrib"],
+    "_read_named_element": [],
+    "_read_nested_element": [],
+    "_read_dispatched": [],
+    "_read_properties": [],
     "_read_list_of_items": [],
     "_read_tuple_item": [],
     "_read_instance_from_iterparse": [],
-    "_read_text_from_element": ["_raise_if_has_tail_or_attrib", "_read_end_element"],
-    "_collapse_whitespace": [],
     "_remove_whitespace": [],
     "_matches_xs_base64_binary": [],
-    "_read_bool_from_element_text": [
-        "_read_text_from_element",
-        "_collapse_whitespace",
-    ],
-    "_read_int_from_element_text": [
-        "_read_text_from_element",
-        "_collapse_whitespace",
-    ],
-    "_read_float_from_element_text": [
-        "_read_text_from_element",
-        "_collapse_whitespace",
-    ],
-    "_read_str_from_element_text": [
-        "_read_end_element",
-        "_raise_if_has_tail_or_attrib",
-    ],
+    "_read_bool_from_element_text": [],
+    "_read_int_from_element_text": [],
+    "_read_float_from_element_text": [],
     "_read_bytes_from_element_text": [
-        "_read_end_element",
-        "_raise_if_has_tail_or_attrib",
         "_remove_whitespace",
         "_matches_xs_base64_binary",
     ],
-    "_read_enum_from_element_text": ["_read_text_from_element"],
+    "_read_enum_from_element_text": [],
+    "_read_json_value_content": [],
+    "_read_json_array_body": [],
+    "_read_json_object_body": [],
     "_write_nested_element": [],
     "_write_list_of_instances": [],
     "_write_list_of_items": [],
@@ -2718,6 +2637,9 @@ _HELPER_DEPENDENCIES = {
     "_write_float_as_element": [],
     "_write_str_as_element": [],
     "_write_bytes_as_element": [],
+    "_write_json_value_as_element": [],
+    "_write_json_array_as_element": [],
+    "_write_json_object_as_element": [],
 }  # type: Mapping[str, Sequence[str]]
 
 
@@ -2730,95 +2652,6 @@ def _generate_reading_helpers() -> Mapping[str, Stripped]:
     the readers which it never calls.
     """
     return {
-        "_parse_element_tag": Stripped(
-            f"""\
-def _parse_element_tag(element: Element) -> str:
-{I}\"\"\"
-{I}Extract the tag name without the namespace prefix from :paramref:`element`.
-
-{I}:param element: whose tag without namespace we want to extract
-{I}:return: tag name without the namespace prefix
-{I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`element`
-{I}\"\"\"
-{I}if not element.tag.startswith(_NAMESPACE_IN_CURLY_BRACKETS):
-{II}namespace, got_namespace, tag_wo_ns = (
-{III}element.tag.rpartition('}}')
-{II})
-{II}if got_namespace:
-{III}if namespace.startswith('{{'):
-{IIII}namespace = namespace[1:]
-
-{III}raise DeserializationException(
-{IIII}f"Expected the element in the namespace {{NAMESPACE!r}}, "
-{IIII}f"but got the element {{tag_wo_ns!r}} in the namespace {{namespace!r}}"
-{III})
-{II}else:
-{III}raise DeserializationException(
-{IIII}f"Expected the element in the namespace {{NAMESPACE!r}}, "
-{IIII}f"but got the element {{tag_wo_ns!r}} without the namespace prefix"
-{III})
-
-{I}return element.tag[len(_NAMESPACE_IN_CURLY_BRACKETS):]"""
-        ),
-        "_raise_if_has_tail_or_attrib": Stripped(
-            f"""\
-def _raise_if_has_tail_or_attrib(
-{II}element: Element
-) -> None:
-{I}\"\"\"
-{I}Check that :paramref:`element` has no trailing text and no attributes.
-
-{I}:param element: to be verified
-{I}:raise:
-{II}:py:class:`.DeserializationException` if trailing text or attributes;
-{II}conforming to the convention about handling error paths,
-{II}the exception path is left empty.
-{I}\"\"\"
-{I}if element.tail is not None and len(element.tail.strip()) != 0:
-{II}raise DeserializationException(
-{III}f"Expected no trailing text, but got: {{element.tail!r}}"
-{II})
-
-{I}if element.attrib is not None and len(element.attrib) > 0:
-{II}raise DeserializationException(
-{III}f"Expected no attributes, but got: {{element.attrib}}"
-{II})"""
-        ),
-        "_read_end_element": Stripped(
-            f"""\
-def _read_end_element(
-{II}element: Element,
-{II}iterator: Iterator[Tuple[str, Element]]
-) -> Element:
-{I}\"\"\"
-{I}Read the end element corresponding to the start :paramref:`element`
-{I}from :paramref:`iterator`.
-
-{I}:param element: corresponding start element
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}\"\"\"
-{I}next_event_element = next(iterator, None)
-{I}if next_event_element is None:
-{II}raise DeserializationException(
-{III}f"Expected the end element for {{element.tag}}, "
-{III}f"but got the end-of-input"
-{II})
-
-{I}next_event, next_element = next_event_element
-{I}if next_event != "end" or next_element.tag != element.tag:
-{II}raise DeserializationException(
-{III}f"Expected the end element for {{element.tag!r}}, "
-{III}f"but got the event {{next_event!r}} and element {{next_element.tag!r}}"
-{II})
-
-{I}_raise_if_has_tail_or_attrib(next_element)
-
-{I}return next_element"""
-        ),
         "_read_named_element": Stripped(
             f"""\
 def _read_named_element(
@@ -2845,7 +2678,7 @@ def _read_named_element(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed value
 {I}\"\"\"
-{I}tag_wo_ns = _parse_element_tag(element)
+{I}tag_wo_ns = parse_element_tag(element)
 {I}if tag_wo_ns != expected_tag:
 {II}raise DeserializationException(
 {III}f"Expected an element with the tag {{expected_tag!r}}, "
@@ -2905,7 +2738,7 @@ def _read_nested_element(
 {II}exception.path._prepend(ElementSegment(nested_element))
 {II}raise
 
-{I}_read_end_element(element, iterator)
+{I}read_end_element(element, iterator)
 
 {I}return result"""
         ),
@@ -2934,7 +2767,7 @@ def _read_dispatched(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed instance
 {I}\"\"\"
-{I}tag_wo_ns = _parse_element_tag(element)
+{I}tag_wo_ns = parse_element_tag(element)
 
 {I}read_as_sequence = dispatch.get(tag_wo_ns, None)
 {I}if read_as_sequence is None:
@@ -2979,7 +2812,7 @@ def _read_properties(
 {III}f"and whitespace text, but got text: {{element.text!r}}"
 {II})
 
-{I}_raise_if_has_tail_or_attrib(element)
+{I}raise_if_has_tail_or_attrib(element)
 
 {I}values = dict()  # type: Dict[str, Any]
 
@@ -3008,7 +2841,7 @@ def _read_properties(
 {III})
 
 {II}try:
-{III}tag_wo_ns = _parse_element_tag(prop_element)
+{III}tag_wo_ns = parse_element_tag(prop_element)
 
 {III}# NOTE (mristin):
 {III}# A tag already in ``values`` can only have got there by being read,
@@ -3160,51 +2993,13 @@ def _read_instance_from_iterparse(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed instance
 {I}\"\"\"
-{I}next_event_element = next(iterator, None)
-{I}if next_event_element is None:
-{II}raise DeserializationException(
-{III}f"Expected the start element for {{expected_what}}, "
-{III}f"but got the end-of-input"
-{II})
-
-{I}next_event, next_element = next_event_element
-{I}if next_event != 'start':
-{II}raise DeserializationException(
-{III}f"Expected the start element for {{expected_what}}, "
-{III}f"but got event {{next_event!r}} and element {{next_element.tag!r}}"
-{II})
+{I}next_element = read_next_start_element(iterator, expected_what)
 
 {I}try:
 {II}return read_as_element(next_element, iterator)
 {I}except DeserializationException as exception:
 {II}exception.path._prepend(ElementSegment(next_element))
 {II}raise exception"""
-        ),
-        "_collapse_whitespace": Stripped(
-            f'''\
-_XS_WHITESPACE_RE = re.compile(r"[ \\t\\n\\r]+")
-
-
-def _collapse_whitespace(text: str) -> str:
-{I}"""
-{I}Normalize :paramref:`text` the way ``whiteSpace="collapse"`` prescribes.
-
-{I}Every atomic XSD type except a string, and every type derived from one
-{I}by restriction, fixes ``whiteSpace`` to ``collapse``, and a schema author
-{I}can not change it. A tab, a line feed and a carriage return each become
-{I}a space, a run of spaces becomes one space, and the leading and trailing
-{I}spaces go. Only then is the result a lexical representation to be matched.
-
-{I}Mind that this strips only the whitespace *around* the value: a space
-{I}within it survives as a single space, so ``2  3`` becomes ``2 3``, which
-{I}is still no number.
-
-{I}See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
-
-{I}:param text: to be normalized
-{I}:return: normalized text
-{I}"""
-{I}return _XS_WHITESPACE_RE.sub(" ", text).strip(" ")'''
         ),
         "_remove_whitespace": Stripped(
             f'''\
@@ -3218,7 +3013,7 @@ def _remove_whitespace(text: str) -> str:
 {I}:param text: to be stripped of its whitespace
 {I}:return: text without any whitespace
 {I}"""
-{I}return _XS_WHITESPACE_RE.sub("", text)'''
+{I}return XS_WHITESPACE_RE.sub("", text)'''
         ),
         "_matches_xs_base64_binary": Stripped(
             f'''\
@@ -3286,45 +3081,6 @@ def _matches_xs_base64_binary(text: str) -> bool:
 
 {I}return True'''
         ),
-        "_read_text_from_element": Stripped(
-            f"""\
-def _read_text_from_element(
-{I}element: Element,
-{I}iterator: Iterator[Tuple[str, Element]]
-) -> str:
-{I}\"\"\"
-{I}Extract the text from the :paramref:`element`, and read
-{I}the end element from :paramref:`iterator`.
-
-{I}The :paramref:`element` is expected to contain text. Otherwise,
-{I}it is considered as unexpected input.
-
-{I}:param element: start element enclosing the text
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}\"\"\"
-{I}_raise_if_has_tail_or_attrib(element)
-
-{I}text = element.text
-
-{I}end_element = _read_end_element(
-{II}element,
-{II}iterator,
-{I})
-
-{I}if text is None:
-{II}if end_element.text is None:
-{III}raise DeserializationException(
-{IIII}"Expected an element with text, but got an element with no text."
-{III})
-
-{II}text = end_element.text
-
-{I}return text"""
-        ),
         "_read_bool_from_element_text": Stripped(
             f"""\
 _XS_BOOLEAN_LITERAL_SET = {{
@@ -3351,8 +3107,8 @@ def _read_bool_from_element_text(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed value
 {I}\"\"\"
-{I}text = _collapse_whitespace(
-{II}_read_text_from_element(
+{I}text = collapse_whitespace(
+{II}read_text_from_element(
 {III}element,
 {III}iterator
 {II})
@@ -3392,8 +3148,8 @@ def _read_int_from_element_text(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed value
 {I}\"\"\"
-{I}text = _collapse_whitespace(
-{II}_read_text_from_element(
+{I}text = collapse_whitespace(
+{II}read_text_from_element(
 {III}element,
 {III}iterator
 {II})
@@ -3481,8 +3237,8 @@ def _read_float_from_element_text(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed value
 {I}\"\"\"
-{I}text = _collapse_whitespace(
-{II}_read_text_from_element(
+{I}text = collapse_whitespace(
+{II}read_text_from_element(
 {III}element,
 {III}iterator
 {II})
@@ -3514,50 +3270,6 @@ def _read_float_from_element_text(
 
 {I}return value"""
         ),
-        "_read_str_from_element_text": Stripped(
-            f"""\
-def _read_str_from_element_text(
-{I}element: Element,
-{I}iterator: Iterator[Tuple[str, Element]]
-) -> str:
-{I}\"\"\"
-{I}Parse the text of :paramref:`element` as a string, and
-{I}read the corresponding end element from :paramref:`iterator`.
-
-{I}If there is no text, empty string is returned.
-
-{I}:param element: start element
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}:return: parsed value
-{I}\"\"\"
-{I}# NOTE (mristin):
-{I}# We do not use ``_read_text_from_element`` as that function expects
-{I}# the ``element`` to contain *some* text. In contrast, this function
-{I}# can also deal with empty text, in which case it returns an empty string.
-
-{I}text = element.text
-
-{I}end_element = _read_end_element(
-{II}element,
-{II}iterator
-{I})
-
-{I}if text is None:
-{II}text = end_element.text
-
-{I}_raise_if_has_tail_or_attrib(element)
-{I}result = (
-{II}text
-{II}if text is not None
-{II}else ""
-{I})
-
-{I}return result"""
-        ),
         "_read_bytes_from_element_text": Stripped(
             f"""\
 def _read_bytes_from_element_text(
@@ -3577,14 +3289,14 @@ def _read_bytes_from_element_text(
 {I}:return: parsed value
 {I}\"\"\"
 {I}# NOTE (mristin):
-{I}# We do not use ``_read_text_from_element`` as that function expects
+{I}# We do not use ``read_text_from_element`` as that function expects
 {I}# the ``element`` to contain *some* text. An empty ``xs:base64Binary``
 {I}# is a lexical form of its own, and stands for zero bytes -- its whole
 {I}# production is optional -- so it is read here just like an empty
 {I}# ``xs:string`` is.
 {I}raw_text = element.text
 
-{I}end_element = _read_end_element(
+{I}end_element = read_end_element(
 {II}element,
 {II}iterator
 {I})
@@ -3592,7 +3304,7 @@ def _read_bytes_from_element_text(
 {I}if raw_text is None:
 {II}raw_text = end_element.text
 
-{I}_raise_if_has_tail_or_attrib(element)
+{I}raise_if_has_tail_or_attrib(element)
 
 {I}text = _remove_whitespace(
 {II}raw_text
@@ -3639,7 +3351,7 @@ def _read_enum_from_element_text(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed literal
 {I}\"\"\"
-{I}text = _read_text_from_element(
+{I}text = read_text_from_element(
 {II}element,
 {II}iterator
 {I})
@@ -3652,6 +3364,63 @@ def _read_enum_from_element_text(
 {II})
 
 {I}return literal"""
+        ),
+        "_read_json_value_content": Stripped(
+            f'''\
+def _read_json_value_content(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.JsonValue:
+{I}"""
+{I}Read the content of :paramref:`element` as a JSON-able value.
+
+{I}:param element: start element enclosing the discriminator
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed JSON-able value
+{I}"""
+{I}return aas_xmlrpc.read_value_content(element, iterator)'''
+        ),
+        "_read_json_array_body": Stripped(
+            f'''\
+def _read_json_array_body(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.JsonArray:
+{I}"""
+{I}Read the content of :paramref:`element` as a ``<data>`` of ``<value>``'s.
+
+{I}:param element: start element enclosing the ``<data>``
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed JSON-able array
+{I}"""
+{I}return aas_xmlrpc.read_array_body(element, iterator)'''
+        ),
+        "_read_json_object_body": Stripped(
+            f'''\
+def _read_json_object_body(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.JsonObject:
+{I}"""
+{I}Read the content of :paramref:`element` as a sequence of ``<member>``'s.
+
+{I}:param element: start element enclosing the members
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed JSON-able object
+{I}"""
+{I}return aas_xmlrpc.read_struct_body(element, iterator)'''
         ),
     }
 
@@ -3694,9 +3463,9 @@ def _write_bool_as_element(
 {I}:raise: :py:class:`SerializationException` if the value could not be written
 {I}\"\"\"
 {I}try:
-{II}serializer._write_start_element(name)
-{II}serializer.stream.write('true' if value else 'false')
-{II}serializer._write_end_element(name)
+{II}serializer.writer.write_start_element(name)
+{II}serializer.writer.stream.write('true' if value else 'false')
+{II}serializer.writer.write_end_element(name)
 {I}except Exception as exception:
 {II}_attribute_to_property(exception, prop_name)"""
         ),
@@ -3721,9 +3490,9 @@ def _write_int_as_element(
 {I}:raise: :py:class:`SerializationException` if the value could not be written
 {I}\"\"\"
 {I}try:
-{II}serializer._write_start_element(name)
-{II}serializer.stream.write(str(value))
-{II}serializer._write_end_element(name)
+{II}serializer.writer.write_start_element(name)
+{II}serializer.writer.stream.write(str(value))
+{II}serializer.writer.write_end_element(name)
 {I}except Exception as exception:
 {II}_attribute_to_property(exception, prop_name)"""
         ),
@@ -3748,23 +3517,23 @@ def _write_float_as_element(
 {I}:raise: :py:class:`SerializationException` if the value could not be written
 {I}\"\"\"
 {I}try:
-{II}serializer._write_start_element(name)
+{II}serializer.writer.write_start_element(name)
 
 {II}if value == math.inf:
-{III}serializer.stream.write('INF')
+{III}serializer.writer.stream.write('INF')
 {II}elif value == -math.inf:
-{III}serializer.stream.write('-INF')
+{III}serializer.writer.stream.write('-INF')
 {II}elif math.isnan(value):
-{III}serializer.stream.write('NaN')
+{III}serializer.writer.stream.write('NaN')
 {II}elif value == 0:
 {III}if math.copysign(1.0, value) < 0.0:
-{IIII}serializer.stream.write('-0.0')
+{IIII}serializer.writer.stream.write('-0.0')
 {III}else:
-{IIII}serializer.stream.write('0.0')
+{IIII}serializer.writer.stream.write('0.0')
 {II}else:
-{III}serializer.stream.write(str(value))
+{III}serializer.writer.stream.write(str(value))
 
-{II}serializer._write_end_element(name)
+{II}serializer.writer.write_end_element(name)
 {I}except Exception as exception:
 {II}_attribute_to_property(exception, prop_name)"""
         ),
@@ -3789,7 +3558,7 @@ def _write_str_as_element(
 {I}:raise: :py:class:`SerializationException` if the value could not be written
 {I}\"\"\"
 {I}try:
-{II}serializer._write_start_element(name)
+{II}serializer.writer.write_start_element(name)
 
 {II}# NOTE (mristin):
 {II}# We ran ``timeit`` on manual code which escaped XML special characters with
@@ -3799,11 +3568,11 @@ def _write_str_as_element(
 {II}#
 {II}# The escaping is written out here, and not put in a function of its own,
 {II}# since a string is the commonest value in a meta-model and a call is not free.
-{II}serializer.stream.write(
+{II}serializer.writer.stream.write(
 {III}value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 {II})
 
-{II}serializer._write_end_element(name)
+{II}serializer.writer.write_end_element(name)
 {I}except Exception as exception:
 {II}_attribute_to_property(exception, prop_name)"""
         ),
@@ -3828,7 +3597,7 @@ def _write_bytes_as_element(
 {I}:raise: :py:class:`SerializationException` if the value could not be written
 {I}\"\"\"
 {I}try:
-{II}serializer._write_start_element(name)
+{II}serializer.writer.write_start_element(name)
 
 {II}# NOTE (mristin):
 {II}# We need to decode the result of the base64-encoding to ASCII since we are
@@ -3841,8 +3610,8 @@ def _write_bytes_as_element(
 {II}# write the ``encoded`` content to the stream as XML text.
 {II}#
 {II}# See: https://datatracker.ietf.org/doc/html/rfc4648#section-4
-{II}serializer.stream.write(encoded)
-{II}serializer._write_end_element(name)
+{II}serializer.writer.stream.write(encoded)
+{II}serializer.writer.write_end_element(name)
 {I}except Exception as exception:
 {II}_attribute_to_property(exception, prop_name)"""
         ),
@@ -3907,9 +3676,9 @@ def _write_nested_element(
 {I}:raise: :py:class:`SerializationException` if the value could not be written
 {I}\"\"\"
 {I}try:
-{II}serializer._write_start_element(name)
+{II}serializer.writer.write_start_element(name)
 {II}serializer.visit(value)
-{II}serializer._write_end_element(name)
+{II}serializer.writer.write_end_element(name)
 {I}except Exception as exception:
 {II}_attribute_to_property(exception, prop_name)"""
         ),
@@ -3938,9 +3707,9 @@ def _write_list_of_instances(
 {I}\"\"\"
 {I}try:
 {II}if len(items) == 0:
-{III}serializer._write_empty_element(name)
+{III}serializer.writer.write_empty_element(name)
 {II}else:
-{III}serializer._write_start_element(name)
+{III}serializer.writer.write_start_element(name)
 
 {III}for index, item in enumerate(items):
 {IIII}try:
@@ -3948,7 +3717,7 @@ def _write_list_of_instances(
 {IIII}except Exception as exception:
 {IIIII}_attribute_to_item(exception, index)
 
-{III}serializer._write_end_element(name)
+{III}serializer.writer.write_end_element(name)
 {I}except Exception as exception:
 {II}_attribute_to_property(exception, prop_name)"""
         ),
@@ -3979,9 +3748,9 @@ def _write_list_of_items(
 {I}\"\"\"
 {I}try:
 {II}if len(items) == 0:
-{III}serializer._write_empty_element(name)
+{III}serializer.writer.write_empty_element(name)
 {II}else:
-{III}serializer._write_start_element(name)
+{III}serializer.writer.write_start_element(name)
 
 {III}for index, item in enumerate(items):
 {IIII}try:
@@ -3989,9 +3758,96 @@ def _write_list_of_items(
 {IIII}except Exception as exception:
 {IIIII}_attribute_to_item(exception, index)
 
-{III}serializer._write_end_element(name)
+{III}serializer.writer.write_end_element(name)
 {I}except Exception as exception:
 {II}_attribute_to_property(exception, prop_name)"""
+        ),
+        "_write_json_value_as_element": Stripped(
+            f'''\
+def _write_json_value_as_element(
+{I}name: str,
+{I}prop_name: Optional[str],
+{I}value: aas_types.JsonValue,
+{I}serializer: '_Serializer'
+) -> None:
+{I}"""
+{I}Write the :paramref:`value` of a JSON-able value enclosed in
+{I}the :paramref:`name` element.
+
+{I}:param name: of the corresponding element tag
+{I}:param prop_name:
+{II}name of the property, as spelled in Python, whose value is written, or
+{II}``None`` if the access to the value is recorded by an enclosing writer
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}:raise: :py:class:`SerializationException` if the value could not be written
+{I}"""
+{I}try:
+{II}serializer.writer.write_start_element(name)
+{II}aas_xmlrpc.write_discriminator(value, serializer.writer)
+{II}serializer.writer.write_end_element(name)
+{I}except Exception as exception:
+{II}_attribute_to_property(exception, prop_name)'''
+        ),
+        "_write_json_array_as_element": Stripped(
+            f'''\
+def _write_json_array_as_element(
+{I}name: str,
+{I}prop_name: Optional[str],
+{I}value: aas_types.JsonArray,
+{I}serializer: '_Serializer'
+) -> None:
+{I}"""
+{I}Write the :paramref:`value` of a JSON-able array enclosed in
+{I}the :paramref:`name` element.
+
+{I}The ``<array>`` discriminator is the :paramref:`name` element itself, so
+{I}only its ``<data>`` is written here.
+
+{I}:param name: of the corresponding element tag
+{I}:param prop_name:
+{II}name of the property, as spelled in Python, whose value is written, or
+{II}``None`` if the access to the value is recorded by an enclosing writer
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}:raise: :py:class:`SerializationException` if the value could not be written
+{I}"""
+{I}try:
+{II}serializer.writer.write_start_element(name)
+{II}aas_xmlrpc.write_array_body(value, serializer.writer)
+{II}serializer.writer.write_end_element(name)
+{I}except Exception as exception:
+{II}_attribute_to_property(exception, prop_name)'''
+        ),
+        "_write_json_object_as_element": Stripped(
+            f'''\
+def _write_json_object_as_element(
+{I}name: str,
+{I}prop_name: Optional[str],
+{I}value: aas_types.JsonObject,
+{I}serializer: '_Serializer'
+) -> None:
+{I}"""
+{I}Write the :paramref:`value` of a JSON-able object enclosed in
+{I}the :paramref:`name` element.
+
+{I}The ``<struct>`` discriminator is the :paramref:`name` element itself, so
+{I}only its ``<member>``'s are written here.
+
+{I}:param name: of the corresponding element tag
+{I}:param prop_name:
+{II}name of the property, as spelled in Python, whose value is written, or
+{II}``None`` if the access to the value is recorded by an enclosing writer
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}:raise: :py:class:`SerializationException` if the value could not be written
+{I}"""
+{I}try:
+{II}serializer.writer.write_start_element(name)
+{II}aas_xmlrpc.write_struct_body(value, serializer.writer)
+{II}serializer.writer.write_end_element(name)
+{I}except Exception as exception:
+{II}_attribute_to_property(exception, prop_name)'''
         ),
     }
 
@@ -4056,8 +3912,13 @@ def generate(
 
     The ``qualified_module_name`` indicates the fully-qualified name of the base module.
     """
-    xml_namespace_literal = python_common.string_literal(
-        symbol_table.meta_model.xml_namespace
+    # NOTE (mristin):
+    # The XML-RPC subset is only reached through a JSON-able property, so a model
+    # which has none neither imports the module nor gets it generated at all.
+    xmlrpc_import = (
+        f"import {qualified_module_name}.xmlrpc as aas_xmlrpc\n"
+        if intermediate.uses_json_types(symbol_table)
+        else ""
     )
 
     blocks = [
@@ -4088,24 +3949,28 @@ from typing import (
 {I}TextIO,
 {I}Tuple,
 {I}TypeVar,
-{I}Union,
 {I}TYPE_CHECKING
 )
 import xml.etree.ElementTree
 
 if sys.version_info >= (3, 8):
-{I}from typing import (
-{II}Final,
-{II}Protocol
-{I})
+{I}from typing import Final
 else:
-{I}from typing_extensions import (
-{II}Final,
-{II}Protocol
-{I})
+{I}from typing_extensions import Final
 
 import {qualified_module_name}.stringification as aas_stringification
 import {qualified_module_name}.types as aas_types
+import {qualified_module_name}.xmlcommon as aas_xmlcommon
+{xmlrpc_import}from {qualified_module_name}.xmlcommon import (
+{I}XS_WHITESPACE_RE,
+{I}collapse_whitespace,
+{I}parse_element_tag,
+{I}raise_if_has_tail_or_attrib,
+{I}read_end_element,
+{I}read_next_start_element,
+{I}read_str_from_element_text,
+{I}read_text_from_element
+)
 
 # See: https://stackoverflow.com/questions/55076778/why-isnt-this-function-type-annotated-correctly-error-missing-type-parameters
 if TYPE_CHECKING:
@@ -4114,165 +3979,29 @@ else:
     PathLike = os.PathLike"""
         ),
         Stripped(
-            f"""\
+            """\
 #: XML namespace in which all the elements are expected to reside
-NAMESPACE = {xml_namespace_literal}"""
+NAMESPACE = aas_xmlcommon.NAMESPACE"""
         ),
         Stripped("# region De-serialization"),
+        # NOTE (mristin):
+        # The structural types, the vocabulary of the error paths and the two
+        # exceptions live in ``xmlcommon``, so that this module and ``xmlrpc``
+        # raise, catch and report with the very same classes. They are re-exported
+        # here, as they belonged to this module before the two were split apart.
         Stripped(
             """\
-#: XML namespace as a prefix specially tailored for
-#: :py:mod:`xml.etree.ElementTree`
-_NAMESPACE_IN_CURLY_BRACKETS = f'{{{NAMESPACE}}}'"""
-        ),
-        Stripped(
-            f"""\
-class Element(Protocol):
-{I}\"\"\"Behave like :py:meth:`xml.etree.ElementTree.Element`.\"\"\"
+Element = aas_xmlcommon.Element
+HasIterparse = aas_xmlcommon.HasIterparse
 
-{I}@property
-{I}def attrib(self) -> Optional[Mapping[str, str]]:
-{II}\"\"\"Attributes of the element\"\"\"
-{II}raise NotImplementedError()
+ElementSegment = aas_xmlcommon.ElementSegment
+IndexSegment = aas_xmlcommon.IndexSegment
+KeySegment = aas_xmlcommon.KeySegment
+Segment = aas_xmlcommon.Segment
+Path = aas_xmlcommon.Path
 
-{I}@property
-{I}def text(self) -> Optional[str]:
-{II}\"\"\"Text content of the element\"\"\"
-{II}raise NotImplementedError()
-
-{I}@property
-{I}def tail(self) -> Optional[str]:
-{II}\"\"\"Tail text of the element\"\"\"
-{II}raise NotImplementedError()
-
-{I}@property
-{I}def tag(self) -> str:
-{II}\"\"\"Tag of the element; with a namespace provided as a ``{{...}}`` prefix\"\"\"
-{II}raise NotImplementedError()
-
-{I}def clear(self) -> None:
-{II}\"\"\"Behave like :py:meth:`xml.etree.ElementTree.Element.clear`.\"\"\"
-{II}raise NotImplementedError()"""
-        ),
-        # pylint: disable=line-too-long
-        Stripped(
-            f"""\
-class HasIterparse(Protocol):
-{I}\"\"\"Parse an XML document incrementally.\"\"\"
-
-{I}# NOTE (mristin):
-{I}# ``self`` is not used in this context, but is necessary for Mypy,
-{I}# see: https://github.com/python/mypy/issues/5018 and
-{I}# https://github.com/python/mypy/commit/3efbc5c5e910296a60ed5b9e0e7eb11dd912c3ed#diff-e165eb7aed9dca0a5ebd93985c8cd263a6462d36ac185f9461348dc5a1396d76R9937
-
-{I}def iterparse(
-{III}self,
-{III}source: TextIO,
-{III}events: Optional[Sequence[str]] = None
-{I}) -> Iterator[Tuple[str, Element]]:
-{II}\"\"\"Behave like :py:func:`xml.etree.ElementTree.iterparse`.\"\"\""""
-        ),
-        Stripped(
-            f"""\
-class ElementSegment:
-{I}\"\"\"Represent an element on a path to the erroneous value.\"\"\"
-{I}#: Erroneous element
-{I}element: Final[Element]
-
-{I}def __init__(
-{III}self,
-{III}element: Element
-{I}) -> None:
-{II}\"\"\"Initialize with the given values.\"\"\"
-{II}self.element = element
-
-{I}def __str__(self) -> str:
-{II}\"\"\"
-{II}Render the segment as a tag without the namespace.
-
-{II}We deliberately omit the namespace in the tag names. If you want to actually
-{II}query with the resulting XPath, you have to insert the namespaces manually.
-{II}We did not know how to include the namespace in a meaningful way, as XPath
-{II}assumes namespace prefixes to be defined *outside* of the document. At least
-{II}the path thus rendered is informative, and you should be able to descend it
-{II}manually.
-{II}\"\"\"
-{II}_, has_namespace, tag_wo_ns = self.element.tag.rpartition('}}')
-{II}if not has_namespace:
-{III}return self.element.tag
-{II}else:
-{III}return tag_wo_ns"""
-        ),
-        Stripped(
-            f"""\
-class IndexSegment:
-{I}\"\"\"Represent an element in a sequence on a path to the erroneous value.\"\"\"
-{I}#: Erroneous element
-{I}element: Final[Element]
-
-{I}#: Index of the element in the sequence
-{I}index: Final[int]
-
-{I}def __init__(
-{III}self,
-{III}element: Element,
-{III}index: int
-{I}) -> None:
-{II}\"\"\"Initialize with the given values.\"\"\"
-{II}self.element = element
-{II}self.index = index
-
-{I}def __str__(self) -> str:
-{II}\"\"\"Render the segment as an element wildcard with the index.\"\"\"
-{II}return f'*[{{self.index}}]'"""
-        ),
-        Stripped(
-            """\
-Segment = Union[ElementSegment, IndexSegment]"""
-        ),
-        Stripped(
-            f"""\
-class Path:
-{I}\"\"\"Represent the relative path to the erroneous element.\"\"\"
-
-{I}def __init__(self) -> None:
-{II}\"\"\"Initialize as an empty path.\"\"\"
-{II}self._segments = []  # type: List[Segment]
-
-{I}@property
-{I}def segments(self) -> Sequence[Segment]:
-{II}\"\"\"Get the segments of the path.\"\"\"
-{II}return self._segments
-
-{I}def _prepend(self, segment: Segment) -> None:
-{II}\"\"\"Insert the :paramref:`segment` in front of other segments.\"\"\"
-{II}self._segments.insert(0, segment)
-
-{I}def __str__(self) -> str:
-{II}\"\"\"Render the path as a relative XPath.
-
-{II}We omit the leading ``/`` so that you can easily prefix it as you need.
-{II}\"\"\"
-{II}return "/".join(str(segment) for segment in self._segments)"""
-        ),
-        Stripped(
-            f"""\
-class DeserializationException(Exception):
-{I}\"\"\"Signal that the XML de-serialization could not be performed.\"\"\"
-
-{I}#: Human-readable explanation of the exception's cause
-{I}cause: Final[str]
-
-{I}#: Relative path to the erroneous value
-{I}path: Final[Path]
-
-{I}def __init__(
-{III}self,
-{III}cause: str
-{I}) -> None:
-{II}\"\"\"Initialize with the given :paramref:`cause` and an empty path.\"\"\"
-{II}self.cause = cause
-{II}self.path = Path()"""
+DeserializationException = aas_xmlcommon.DeserializationException
+SerializationException = aas_xmlcommon.SerializationException"""
         ),
         Stripped(
             f"""\
@@ -4513,56 +4242,6 @@ _ContentReader = Callable[
     # which we can not serialize. Every writer therefore funnels its failures through
     # ``_attribute_to_property`` and ``_attribute_to_item`` below, which build up
     # the path to the culprit as the stack unwinds.
-    blocks.append(
-        Stripped(
-            f"""\
-class SerializationException(Exception):
-{I}\"\"\"Signal that the XML serialization could not be performed.\"\"\"
-
-{I}#: Human-readable explanation of the exception's cause
-{I}cause: Final[str]
-
-{I}def __init__(
-{III}self,
-{III}cause: str
-{I}) -> None:
-{II}\"\"\"Initialize with the given :paramref:`cause` and an empty path.\"\"\"
-{II}self.cause = cause
-{II}self._segments = []  # type: List[str]
-
-{I}@property
-{I}def path(self) -> str:
-{II}\"\"\"
-{II}Render the path to the erroneous value as a Python access expression.
-
-{II}The path points into the instance which you handed over for
-{II}the serialization, and *not* into an XML document -- at the point of
-{II}the failure, there is no document yet. For example, ``.submodels[0].id``
-{II}tells you that the serialization broke on ``that.submodels[0].id``.
-
-{II}Mind that the elements which the XML representation adds on top of
-{II}the instance contribute no segment, as they correspond to no attribute
-{II}access. This concerns the element enclosing the instance itself, and
-{II}the element which designates the model type of the value of a property.
-{II}\"\"\"
-{II}return ''.join(self._segments)
-
-{I}def _prepend_property(self, name: str) -> None:
-{II}\"\"\"Insert the access to the property :paramref:`name` before the path.\"\"\"
-{II}self._segments.insert(0, f'.{{name}}')
-
-{I}def _prepend_index(self, index: int) -> None:
-{II}\"\"\"Insert the access to the item at :paramref:`index` before the path.\"\"\"
-{II}self._segments.insert(0, f'[{{index}}]')
-
-{I}def __str__(self) -> str:
-{II}if len(self._segments) == 0:
-{III}return self.cause
-
-{II}return f'{{self.path}}: {{self.cause}}'"""
-        )
-    )
-
     blocks.append(
         Stripped(
             f"""\

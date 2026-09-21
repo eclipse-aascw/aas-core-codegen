@@ -600,6 +600,17 @@ that->{setter_name}(
                 f"you need this feature."
             )
 
+        elif isinstance(
+            type_anno.items,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # Nothing to recurse into.
+            return Stripped("")
+
         else:
             assert_never(type_anno.items)
 
@@ -673,6 +684,20 @@ std::get<{i}>(wrapped) = Wrap<E>(
 {I});
 }}"""
         )
+
+    elif isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # A JSON-able value is plain data (``nlohmann::json``), never
+        # a reference to one of our own classes, so there is nothing to
+        # recurse into.
+        return Stripped("")
 
     else:
         # noinspection PyTypeChecker
@@ -905,6 +930,21 @@ if (that->{getter_name}().has_value()) {{
 {I});
 }}"""
         )
+
+    elif isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # A JSON-able value is plain data (``nlohmann::json``), never
+        # a reference to one of our own classes, so there is nothing to
+        # recurse into.
+        return Stripped("")
+
     else:
         # noinspection PyTypeChecker
         assert_never(type_anno)

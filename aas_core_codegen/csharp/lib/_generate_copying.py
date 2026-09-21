@@ -21,6 +21,7 @@ from aas_core_codegen.csharp import (
 from aas_core_codegen.csharp.common import (
     INDENT as I,
     INDENT2 as II,
+    INDENT3 as III,
 )
 
 
@@ -152,6 +153,46 @@ internal class ShallowCopier : Visitation.AbstractTransformer<Aas.IClass>
     writer.write("\n}  // internal class ShallowCopier")
 
     return Stripped(writer.getvalue()), None
+
+
+def _json_deep_copy_expr(
+    type_anno: intermediate.TypeAnnotationUnion, source_expr: str, what: str
+) -> Stripped:
+    """
+    Generate the expression deep-copying the JSON-able ``source_expr``.
+
+    Every other value in a deep copy is copied by sharing it: a primitive,
+    an enumeration literal and a class instance are all safe to hand to
+    the copy as they are. A ``System.Text.Json.Nodes.JsonNode`` is not,
+    because it remembers its parent, and attaching a node which already has
+    one throws "System.InvalidOperationException: The node already has
+    a parent". Sharing it would therefore make the deep copy and the original
+    fight over the same node the first time either of them is put into
+    a JSON document::
+
+        var copy = Copying.Deep(instance);
+        someJsonObject["a"] = instance.Value;  // attaches
+        someJsonObject["b"] = copy.Value;      // throws
+
+    ``DeepClone`` would say this in one call, but it arrived only in .NET 8
+    and the generated code has to build against .NET 6, where
+    ``SerializeToNode`` is the spelling of the same thing. Its return type is
+    nullable only because it serializes an arbitrary value, and a null one
+    gives a null node; ``source_expr`` is known not to be null here, so
+    the ``throw`` can not be reached.
+
+    The ``what`` names the copied thing in that unreachable message.
+    """
+    item_type = csharp_common.generate_type(type_anno)
+    return Stripped(
+        f"""\
+({item_type})(
+{I}System.Text.Json.JsonSerializer.SerializeToNode(
+{II}{source_expr})
+{I}?? throw new System.InvalidOperationException(
+{II}"Expected SerializeToNode to copy the non-null {what}, "
+{III}+ "but it returned null"))"""
+    )
 
 
 def _generate_deep_copy_transform_method(cls: intermediate.ConcreteClass) -> Stripped:
@@ -331,6 +372,51 @@ if (that.{prop_name} != null)
 }}"""
                         )
                     )
+            elif isinstance(
+                type_anno.items,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                item_copy_expr = _json_deep_copy_expr(
+                    type_anno=type_anno.items,
+                    source_expr="item",
+                    what="item of the property " + prop_name,
+                )
+
+                if not optional:
+                    body_blocks.append(
+                        Stripped(
+                            f"""\
+var {variable_name} = new {variable_type}(
+{I}that.{prop_name}.Count);
+foreach (var item in that.{prop_name})
+{{
+{I}{variable_name}.Add(
+{II}{indent_but_first_line(item_copy_expr, II)});
+}}"""
+                        )
+                    )
+                else:
+                    body_blocks.append(
+                        Stripped(
+                            f"""\
+{variable_type}? {variable_name} = null;
+if (that.{prop_name} != null)
+{{
+{I}{variable_name} = new {variable_type}(
+{II}that.{prop_name}.Count);
+{I}foreach (var item in that.{prop_name})
+{I}{{
+{II}{variable_name}.Add(
+{III}{indent_but_first_line(item_copy_expr, III)});
+{I}}}
+}}"""
+                        )
+                    )
+
             else:
                 raise NotImplementedError(
                     "(mristin) We handle only lists of atomic values in the deep "
@@ -448,6 +534,31 @@ if (that.{prop_name} != null)
                     )
                 else:
                     constructor_arg_exprs.append(tuple_literal)
+
+            elif isinstance(
+                type_anno,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                deep_copy_expr = _json_deep_copy_expr(
+                    type_anno=type_anno,
+                    source_expr=f"that.{prop_name}",
+                    what="property " + prop_name,
+                )
+
+                if optional:
+                    constructor_arg_exprs.append(
+                        f"""\
+(that.{prop_name} != null)
+{I}? {indent_but_first_line(deep_copy_expr, I)}
+{I}: null"""
+                    )
+                else:
+                    constructor_arg_exprs.append(deep_copy_expr)
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno)
@@ -532,7 +643,7 @@ def generate(
     """
     Generate code for copying instances in memory.
 
-    The ``namespace`` defines the AAS C# namespace.
+    The ``namespace`` defines the base C# namespace of the generated code.
     """
     errors = []  # type: List[Error]
 
@@ -547,6 +658,9 @@ def generate(
 using System.Collections.Generic;  // can't alias"""
         )
     )
+
+    if intermediate.uses_json_types(symbol_table):
+        using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
 
     # NOTE (mristin):
     # We wrap the shallow and deep copying in generic methods to allow for easier

@@ -5,8 +5,6 @@
 
 using Aas = AasCore.Aas3_0;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
-using Globalization = System.Globalization;
-using RegularExpressions = System.Text.RegularExpressions;
 using Xml = System.Xml;
 
 using System.Collections.Generic;  // can't alias
@@ -20,8 +18,7 @@ namespace AasCore.Aas3_0
     {
         /// The XML namespace of the meta-model
         [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-        public static readonly string NS = (
-            "https://admin-shell.io/aas/3/0");
+        public static readonly string NS = XmlCommon.NS;
 
         /// <summary>
         /// Implement the deserialization of meta-model classes from XML.
@@ -40,20 +37,6 @@ namespace AasCore.Aas3_0
         /// </remarks>
         internal static class DeserializeImplementation
         {
-            internal static void SkipNoneWhitespaceAndComments(
-                Xml.XmlReader reader)
-            {
-                while (
-                    !reader.EOF
-                    && (
-                        reader.NodeType == Xml.XmlNodeType.None
-                        || reader.NodeType == Xml.XmlNodeType.Whitespace
-                        || reader.NodeType == Xml.XmlNodeType.Comment))
-                {
-                    reader.Read();
-                }
-            }
-
             /// <summary>
             /// Read the whole content of an element into memory.
             /// </summary>
@@ -66,78 +49,16 @@ namespace AasCore.Aas3_0
                 // lenient in ways XSD is not -- it reads "SGk" although it is three
                 // characters long -- and it gives us nothing to check before it has
                 // already decoded.
-                string text = WhitespaceRunRegex.Replace(reader.ReadContentAsString(), "");
+                string text = XmlCommon.WhitespaceRunRegex.Replace(
+                    reader.ReadContentAsString(), "");
 
-                if (!MatchesXsBase64Binary(text))
+                if (!XmlCommon.MatchesXsBase64Binary(text))
                 {
                     throw new System.FormatException(
                         $"Expected a text as base64-encoded bytes, but got: {text}");
                 }
 
                 return System.Convert.FromBase64String(text);
-            }
-
-            /// <summary>
-            /// Check the namespace and extract the element's name.
-            /// </summary>
-            private static string TryElementName(
-                Xml.XmlReader reader,
-                out Reporting.Error? error
-                )
-            {
-                // Pre-condition
-                if (reader.NodeType != Xml.XmlNodeType.Element
-                    && reader.NodeType != Xml.XmlNodeType.EndElement)
-                {
-                    throw new System.InvalidOperationException(
-                        "Expected to be at a start or an end element " +
-                        $"in {nameof(TryElementName)}, " +
-                        $"but got: {reader.NodeType}");
-                }
-
-                error = null;
-                if (reader.NamespaceURI != NS)
-                {
-                    error = new Reporting.Error(
-                        $"Expected an element within a namespace {NS}, " +
-                        $"but got: {reader.NamespaceURI}");
-                        return "";
-                }
-
-                return reader.LocalName;
-            }
-
-            /// <summary>
-            /// Look ahead the name of the element at the current position of
-            /// <paramref name="reader" />, without consuming anything.
-            /// </summary>
-            private static string PeekElementName(
-                Xml.XmlReader reader,
-                out Reporting.Error? error
-                )
-            {
-                error = null;
-
-                SkipNoneWhitespaceAndComments(reader);
-
-                if (reader.EOF)
-                {
-                    error = new Reporting.Error(
-                        "Expected an XML element, but reached the end-of-file");
-                    return "";
-                }
-
-                if (reader.NodeType != Xml.XmlNodeType.Element)
-                {
-                    error = new Reporting.Error(
-                        "Expected an XML element, " +
-                        $"but got a node of type {reader.NodeType} " +
-                        $"with value {reader.Value}");
-                    return "";
-                }
-
-                return TryElementName(
-                    reader, out error);
             }
 
             /// <summary>
@@ -304,141 +225,6 @@ namespace AasCore.Aas3_0
             }
 
             /// <summary>
-            /// Match a run of the four characters which XML calls whitespace.
-            /// </summary>
-            private static readonly RegularExpressions.Regex WhitespaceRunRegex = (
-                new RegularExpressions.Regex(
-                    @"[ \t\n\r]+",
-                    RegularExpressions.RegexOptions.Compiled));
-
-            /// <summary>
-            /// Tell whether <paramref name="text" /> is a lexical form of
-            /// <c>xs:base64Binary</c>.
-            /// </summary>
-            /// <remarks>
-            /// The whitespace is expected to be gone already. What is left has to match
-            /// <c>(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=')
-            /// | (B64 B04 '=='))?</c> -- a length which is a multiple of four,
-            /// the alphabet and nothing else, an equals sign only at the very end, and,
-            /// easily missed, a constrained character <i>before</i> the padding, as
-            /// the bits which the padding drops have to be zero.
-            ///
-            /// The decoders do not agree on any of this, so every target does the same
-            /// check of its own and refuses the same texts.
-            ///
-            /// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
-            /// </remarks>
-            private static bool MatchesXsBase64Binary(string text)
-            {
-                if (text.Length % 4 != 0)
-                {
-                    return false;
-                }
-
-                if (text.Length == 0)
-                {
-                    return true;
-                }
-
-                int pads = 0;
-                if (text[text.Length - 1] == '=')
-                {
-                    pads = 1;
-                    if (text[text.Length - 2] == '=')
-                    {
-                        pads = 2;
-                    }
-                }
-
-                for (int i = 0; i < text.Length - pads; i++)
-                {
-                    char character = text[i];
-                    bool inAlphabet =
-                        (character >= 'A' && character <= 'Z')
-                            || (character >= 'a' && character <= 'z')
-                            || (character >= '0' && character <= '9')
-                            || character == '+'
-                            || character == '/';
-                    if (!inAlphabet)
-                    {
-                        return false;
-                    }
-                }
-
-                // NOTE (mristin):
-                // Only these sixteen characters leave the two dropped bits at zero, and
-                // only these four leave the four dropped bits at zero.
-                if (pads == 1)
-                {
-                    return "AEIMQUYcgkosw048".IndexOf(text[text.Length - 2]) >= 0;
-                }
-
-                if (pads == 2)
-                {
-                    return "AQgw".IndexOf(text[text.Length - 3]) >= 0;
-                }
-
-                return true;
-            }
-
-            /// <summary>
-            /// Consume the end tag matching <paramref name="elementName" />, unless
-            /// <paramref name="isEmptyElement" /> tells that the element was
-            /// self-closing and thus has no end tag at all.
-            /// </summary>
-            private static void ConsumeEndElement(
-                Xml.XmlReader reader,
-                string elementName,
-                bool isEmptyElement,
-                out Reporting.Error? error
-                )
-            {
-                error = null;
-
-                if (isEmptyElement)
-                {
-                    return;
-                }
-
-                SkipNoneWhitespaceAndComments(reader);
-
-                if (reader.EOF)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a closing element </{elementName}>, " +
-                        "but reached the end-of-file");
-                    return;
-                }
-
-                if (reader.NodeType != Xml.XmlNodeType.EndElement)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a closing element </{elementName}>, " +
-                        $"but got a node of type {reader.NodeType} " +
-                        $"with value {reader.Value}");
-                    return;
-                }
-
-                string endElementName = TryElementName(
-                    reader, out error);
-                if (error != null)
-                {
-                    return;
-                }
-
-                if (endElementName != elementName)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a closing element </{elementName}>, " +
-                        $"but got a closing element </{endElementName}>");
-                    return;
-                }
-
-                // Consume the end tag.
-                reader.Read();
-            }
-
-            /// <summary>
             /// Bind <paramref name="elementName" /> to <paramref name="readContent" />,
             /// so that the result reads the whole element, tags included.
             /// </summary>
@@ -453,25 +239,12 @@ namespace AasCore.Aas3_0
                     out Reporting.Error? error
                 ) =>
                 {
-                    string observedName = PeekElementName(
-                        reader, out error);
+                    bool isEmptyElement = XmlCommon.ReadStartElement(
+                        reader, elementName, out error);
                     if (error != null)
                     {
                         return default!;
                     }
-
-                    if (observedName != elementName)
-                    {
-                        error = new Reporting.Error(
-                            $"Expected a <{elementName}> element, " +
-                            $"but got a <{observedName}> element");
-                        return default!;
-                    }
-
-                    bool isEmptyElement = reader.IsEmptyElement;
-
-                    // Consume the start tag and go to the content.
-                    reader.Read();
 
                     T value = readContent(reader, isEmptyElement, out error);
                     if (error != null)
@@ -479,7 +252,7 @@ namespace AasCore.Aas3_0
                         return default!;
                     }
 
-                    ConsumeEndElement(
+                    XmlCommon.ConsumeEndElement(
                         reader, elementName, isEmptyElement, out error);
                     if (error != null)
                     {
@@ -513,7 +286,7 @@ namespace AasCore.Aas3_0
                 elementName = "";
                 isEmptyProperty = false;
 
-                SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (reader.NodeType == Xml.XmlNodeType.EndElement || reader.EOF)
                 {
@@ -529,7 +302,7 @@ namespace AasCore.Aas3_0
                     return false;
                 }
 
-                elementName = TryElementName(
+                elementName = XmlCommon.TryElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -619,7 +392,7 @@ namespace AasCore.Aas3_0
                 error = null;
                 var result = new List<T>();
 
-                SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 int index = 0;
                 while (reader.NodeType == Xml.XmlNodeType.Element)
@@ -636,7 +409,7 @@ namespace AasCore.Aas3_0
                     result.Add(item);
 
                     index++;
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                 }
 
                 return result;
@@ -699,7 +472,7 @@ namespace AasCore.Aas3_0
 
                     // We need to skip the whitespace here in order to be able to look ahead
                     // the discriminator element shortly.
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                     if (reader.EOF)
                     {
@@ -1229,7 +1002,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -1323,7 +1096,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -1414,7 +1187,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -1458,7 +1231,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -1533,7 +1306,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -1608,7 +1381,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -1641,7 +1414,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -1668,7 +1441,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -1761,7 +1534,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -1843,7 +1616,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -1876,7 +1649,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -1962,7 +1735,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -2062,7 +1835,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -2138,7 +1911,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -2274,7 +2047,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -2348,7 +2121,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -2430,7 +2203,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -2485,7 +2258,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -2540,7 +2313,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -2595,7 +2368,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -2677,7 +2450,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -2753,7 +2526,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -2907,7 +2680,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -2958,7 +2731,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -3045,7 +2818,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -3181,7 +2954,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -3240,7 +3013,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -3294,7 +3067,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -3457,7 +3230,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -3529,7 +3302,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -3656,7 +3429,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -3694,7 +3467,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -3758,7 +3531,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -3903,7 +3676,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -3974,7 +3747,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -4110,7 +3883,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -4171,7 +3944,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -4316,7 +4089,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -4386,7 +4159,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -4513,7 +4286,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -4572,7 +4345,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -4708,7 +4481,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -4778,7 +4551,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -4914,7 +4687,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -4985,7 +4758,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -5130,7 +4903,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -5213,7 +4986,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -5367,7 +5140,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -5436,7 +5209,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -5545,7 +5318,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -5611,7 +5384,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -5665,7 +5438,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -5855,7 +5628,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -5952,7 +5725,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -6097,7 +5870,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -6148,7 +5921,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -6194,7 +5967,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -6252,7 +6025,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -6370,7 +6143,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -6426,7 +6199,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -6544,7 +6317,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -6604,7 +6377,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -6668,7 +6441,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -6731,7 +6504,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -6786,7 +6559,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -6836,7 +6609,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -6887,7 +6660,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -6942,7 +6715,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -7004,7 +6777,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -7059,7 +6832,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -7122,7 +6895,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -7186,7 +6959,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -7217,7 +6990,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -7256,7 +7029,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -7311,7 +7084,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -7375,7 +7148,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -7448,7 +7221,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -7532,7 +7305,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -7587,7 +7360,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -7648,7 +7421,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -7694,7 +7467,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -7745,7 +7518,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -7800,7 +7573,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -7862,7 +7635,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -7917,7 +7690,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -7979,7 +7752,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -8034,7 +7807,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -8106,7 +7879,7 @@ namespace AasCore.Aas3_0
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -8251,7 +8024,7 @@ namespace AasCore.Aas3_0
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -8310,41 +8083,6 @@ namespace AasCore.Aas3_0
         }
 
         /// <summary>
-        /// Represent a critical error during the serialization.
-        /// </summary>
-        public class SerializationException : System.Exception
-        {
-            public readonly string Path;
-            public readonly string Cause;
-            public SerializationException(string path, string cause)
-                : base($"{cause} at: {path}")
-            {
-                Path = path;
-                Cause = cause;
-            }
-        }
-
-        /// <summary>
-        /// Signal a failure of the serialization, carrying the path to the culprit.
-        /// </summary>
-        /// <remarks>
-        /// The path is built as the stack unwinds -- every container prepends the one
-        /// segment it knows, the property its name and the list the index of the item
-        /// -- which is why this can not be a <see cref="SerializationException" />
-        /// already: that one renders its message in its constructor, so its path has
-        /// to be complete by then. <see cref="Serialize.To" /> renders and converts.
-        /// </remarks>
-        internal class SerializationFailure : System.Exception
-        {
-            public readonly Reporting.Error Error;
-            public SerializationFailure(Reporting.Error error)
-                : base(error.Cause)
-            {
-                Error = error;
-            }
-        }
-
-        /// <summary>
         /// Deserialize instances of meta-model classes from XML.
         /// </summary>
         /// <example>
@@ -8356,15 +8094,10 @@ namespace AasCore.Aas3_0
         /// </code>
         /// </example>
         ///
-        /// <example>
-        /// If the elements live in a namespace, you have to supply it. For example:
-        /// <code>
-        /// var reader = new System.Xml.XmlReader(/* some arguments */);
-        /// Aas.IHasSemantics anInstance = Deserialize.IHasSemanticsFrom(
-        ///     reader,
-        ///     "http://www.example.com/5/12");
-        /// </code>
-        /// </example>
+        /// <remarks>
+        /// The elements are expected to live in <see cref="NS" />, the one XML
+        /// namespace of the meta-model, so there is nothing to supply.
+        /// </remarks>
         public static class Deserialize
         {
             /// <summary>
@@ -8378,7 +8111,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IHasSemantics IHasSemanticsFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8412,7 +8145,7 @@ namespace AasCore.Aas3_0
             public static Aas.Extension ExtensionFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8446,7 +8179,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IHasExtensions IHasExtensionsFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8480,7 +8213,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IReferable IReferableFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8514,7 +8247,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IIdentifiable IIdentifiableFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8548,7 +8281,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IHasKind IHasKindFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8582,7 +8315,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IHasDataSpecification IHasDataSpecificationFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8616,7 +8349,7 @@ namespace AasCore.Aas3_0
             public static Aas.AdministrativeInformation AdministrativeInformationFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8650,7 +8383,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IQualifiable IQualifiableFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8684,7 +8417,7 @@ namespace AasCore.Aas3_0
             public static Aas.Qualifier QualifierFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8718,7 +8451,7 @@ namespace AasCore.Aas3_0
             public static Aas.AssetAdministrationShell AssetAdministrationShellFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8752,7 +8485,7 @@ namespace AasCore.Aas3_0
             public static Aas.AssetInformation AssetInformationFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8786,7 +8519,7 @@ namespace AasCore.Aas3_0
             public static Aas.Resource ResourceFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8820,7 +8553,7 @@ namespace AasCore.Aas3_0
             public static Aas.SpecificAssetId SpecificAssetIdFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8854,7 +8587,7 @@ namespace AasCore.Aas3_0
             public static Aas.Submodel SubmodelFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8888,7 +8621,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.ISubmodelElement ISubmodelElementFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8922,7 +8655,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IRelationshipElement IRelationshipElementFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8956,7 +8689,7 @@ namespace AasCore.Aas3_0
             public static Aas.RelationshipElement RelationshipElementFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -8990,7 +8723,7 @@ namespace AasCore.Aas3_0
             public static Aas.SubmodelElementList SubmodelElementListFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9024,7 +8757,7 @@ namespace AasCore.Aas3_0
             public static Aas.SubmodelElementCollection SubmodelElementCollectionFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9058,7 +8791,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IDataElement IDataElementFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9092,7 +8825,7 @@ namespace AasCore.Aas3_0
             public static Aas.Property PropertyFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9126,7 +8859,7 @@ namespace AasCore.Aas3_0
             public static Aas.MultiLanguageProperty MultiLanguagePropertyFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9160,7 +8893,7 @@ namespace AasCore.Aas3_0
             public static Aas.Range RangeFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9194,7 +8927,7 @@ namespace AasCore.Aas3_0
             public static Aas.ReferenceElement ReferenceElementFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9228,7 +8961,7 @@ namespace AasCore.Aas3_0
             public static Aas.Blob BlobFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9262,7 +8995,7 @@ namespace AasCore.Aas3_0
             public static Aas.File FileFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9296,7 +9029,7 @@ namespace AasCore.Aas3_0
             public static Aas.AnnotatedRelationshipElement AnnotatedRelationshipElementFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9330,7 +9063,7 @@ namespace AasCore.Aas3_0
             public static Aas.Entity EntityFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9364,7 +9097,7 @@ namespace AasCore.Aas3_0
             public static Aas.EventPayload EventPayloadFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9398,7 +9131,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IEventElement IEventElementFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9432,7 +9165,7 @@ namespace AasCore.Aas3_0
             public static Aas.BasicEventElement BasicEventElementFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9466,7 +9199,7 @@ namespace AasCore.Aas3_0
             public static Aas.Operation OperationFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9500,7 +9233,7 @@ namespace AasCore.Aas3_0
             public static Aas.OperationVariable OperationVariableFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9534,7 +9267,7 @@ namespace AasCore.Aas3_0
             public static Aas.Capability CapabilityFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9568,7 +9301,7 @@ namespace AasCore.Aas3_0
             public static Aas.ConceptDescription ConceptDescriptionFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9602,7 +9335,7 @@ namespace AasCore.Aas3_0
             public static Aas.Reference ReferenceFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9636,7 +9369,7 @@ namespace AasCore.Aas3_0
             public static Aas.Key KeyFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9670,7 +9403,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IAbstractLangString IAbstractLangStringFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9704,7 +9437,7 @@ namespace AasCore.Aas3_0
             public static Aas.LangStringNameType LangStringNameTypeFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9738,7 +9471,7 @@ namespace AasCore.Aas3_0
             public static Aas.LangStringTextType LangStringTextTypeFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9772,7 +9505,7 @@ namespace AasCore.Aas3_0
             public static Aas.Environment EnvironmentFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9806,7 +9539,7 @@ namespace AasCore.Aas3_0
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IDataSpecificationContent IDataSpecificationContentFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9840,7 +9573,7 @@ namespace AasCore.Aas3_0
             public static Aas.EmbeddedDataSpecification EmbeddedDataSpecificationFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9874,7 +9607,7 @@ namespace AasCore.Aas3_0
             public static Aas.LevelType LevelTypeFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9908,7 +9641,7 @@ namespace AasCore.Aas3_0
             public static Aas.ValueReferencePair ValueReferencePairFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9942,7 +9675,7 @@ namespace AasCore.Aas3_0
             public static Aas.ValueList ValueListFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -9976,7 +9709,7 @@ namespace AasCore.Aas3_0
             public static Aas.LangStringPreferredNameTypeIec61360 LangStringPreferredNameTypeIec61360From(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -10010,7 +9743,7 @@ namespace AasCore.Aas3_0
             public static Aas.LangStringShortNameTypeIec61360 LangStringShortNameTypeIec61360From(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -10044,7 +9777,7 @@ namespace AasCore.Aas3_0
             public static Aas.LangStringDefinitionTypeIec61360 LangStringDefinitionTypeIec61360From(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -10078,7 +9811,7 @@ namespace AasCore.Aas3_0
             public static Aas.DataSpecificationIec61360 DataSpecificationIec61360From(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {

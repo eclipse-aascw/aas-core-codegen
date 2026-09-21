@@ -7,13 +7,25 @@
 
 import * as AasXmlization from "../src/xmlization";
 
-test("xmlization path and segments format", () => {
+test("xmlization path renders as a relative XPath", () => {
   const path = new AasXmlization.Path();
 
   path.prepend(new AasXmlization.IndexSegment(3));
-  path.prepend(new AasXmlization.NameSegment("something"));
+  path.prepend(new AasXmlization.ElementSegment("something"));
 
-  expect(path.toString()).toStrictEqual("something[3]");
+  expect(path.toString()).toStrictEqual("something/*[3]");
+});
+
+test("xmlization key segment renders as a predicate on the name", () => {
+  const path = new AasXmlization.Path();
+
+  path.prepend(new AasXmlization.ElementSegment("value"));
+  path.prepend(new AasXmlization.KeySegment("a \"tricky\" <key>"));
+  path.prepend(new AasXmlization.ElementSegment("struct"));
+
+  expect(path.toString()).toStrictEqual(
+    "struct/member[name=\"a &quot;tricky&quot; &lt;key&gt;\"]/value"
+  );
 });
 
 test("xmlization errors default to empty path", () => {
@@ -23,7 +35,17 @@ test("xmlization errors default to empty path", () => {
 
   const serializationError = new AasXmlization.SerializationError("broken object graph");
   expect(serializationError.message).toStrictEqual("broken object graph");
-  expect(serializationError.path.toString()).toStrictEqual("");
+  expect(serializationError.path).toStrictEqual("");
+});
+
+test("xmlization serialization path renders as an access expression", () => {
+  const error = new AasXmlization.SerializationError("broken object graph");
+
+  error.prependKey("a b");
+  error.prependIndex(3);
+  error.prependProperty("something");
+
+  expect(error.path).toStrictEqual('.something[3]["a b"]');
 });
 
 test("xmlization fails on malformed XML", () => {

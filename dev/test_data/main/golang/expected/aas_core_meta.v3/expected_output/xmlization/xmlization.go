@@ -9,670 +9,27 @@ package xmlization
 // Do NOT edit or append.
 
 import (
-	b64 "encoding/base64"
 	"encoding/xml"
-	"errors"
 	"fmt"
-	"io"
-	"math"
-	"regexp"
-	"strconv"
-	"strings"
-	"unicode"
-	aascommon "github.com/aas-core-works/aas-core3.0-golang/common"
 	aasreporting "github.com/aas-core-works/aas-core3.0-golang/reporting"
 	aasstringification "github.com/aas-core-works/aas-core3.0-golang/stringification"
 	aastypes "github.com/aas-core-works/aas-core3.0-golang/types"
+	xmlcommon "github.com/aas-core-works/aas-core3.0-golang/internal/xmlcommon"
 )
+
+// Namespace is the XML namespace in which all the elements live.
+const Namespace = xmlcommon.Namespace
 
 // region De-serialization
 
 // Represent an error during the de-serialization.
 //
 // Implements `error`.
-type DeserializationError struct{
-	Path *aasreporting.Path
-	Message string
-}
-
-func newDeserializationError(message string) *DeserializationError {
-	return &DeserializationError{
-		Path: &aasreporting.Path{},
-		Message: message,
-	}
-}
-
-func (de *DeserializationError) Error() string {
-	return fmt.Sprintf(
-		"%s: %s",
-		de.PathString(),
-		de.Message,
-	)
-}
-
-// Render the path as a string.
-func (de *DeserializationError) PathString() string {
-	return aasreporting.ToRelativeXPath(de.Path)
-}
-
-// This is class for a sentinel token to signal the end-of-file.
-type eof struct{}
-
-// Check if the string `s` consists only of whitespace.
-//
-// An empty string causes panic — please cover that case before.
-func isWhitespace(s string) bool {
-	if len(s) == 0 {
-		panic("Unexpected empty string")
-	}
-	for _, c := range s {
-		if !unicode.IsSpace(c) {
-			return false
-		}
-	}
-	return true
-}
-
-// Read the next token from the `decoder` given the `current` token.
-//
-// If `current` token is [eof], return [eof].
-func readNext(decoder *xml.Decoder, current xml.Token) (next xml.Token, err error) {
-	if _, isEOF := current.(eof); isEOF {
-		next = current
-		return
-	}
-
-	var tokenErr error
-	next, tokenErr = decoder.Token()
-	if tokenErr != nil {
-		if tokenErr == io.EOF {
-			next = &eof{}
-			return
-		}
-
-		err = tokenErr
-		return
-	}
-
-	return
-}
-
-// Read all the possible whitespace and comments.
-//
-// Return the `next` token which is neither empty text, nor whitespace nor comment,
-// or [eof], if we reached the end-of-file.
-//
-// If we already reached the end-of-file, simply return [eof].
-func skipEmptyTextWhitespaceAndComments(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (next xml.Token, err error) {
-	stop := false
-	for !stop {
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		switch et := current.(type) {
-		case xml.CharData:
-			text := string(et)
-			if len(text) != 0 && !isWhitespace(text) {
-				stop = true
-			} else {
-				// We should proceed to the next token.
-			}
-		case xml.Comment:
-			// We should proceed to the next token.
-		default:
-			stop = true
-		}
-
-		if !stop {
-			current, err = readNext(decoder, current)
-			if err != nil {
-				return
-			}
-		}
-	}
-
-	next = current
-	return
-}
-
-// Consume the text tokens (char data).
-//
-// Any comment tokens are skipped.
-//
-// Match a run of the four characters which XML calls whitespace.
-var whitespaceRunRe = regexp.MustCompile("[ \t\n\r]+")
-
-// Normalize `text` the way `whiteSpace="collapse"` prescribes.
-//
-// Every atomic XSD type except a string, and every type derived from one by
-// restriction, fixes `whiteSpace` to `collapse`, and a schema author can not
-// change it. A tab, a line feed and a carriage return each become a space,
-// a run of spaces becomes one space, and the leading and trailing spaces go.
-// Only the result of that is a lexical representation to be matched.
-//
-// Mind that this strips only the whitespace *around* the value: a space
-// within it survives as a single space, so "2  3" becomes "2 3", which is
-// still no number.
-//
-// See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
-func collapseWhitespace(text string) string {
-	return strings.Trim(whitespaceRunRe.ReplaceAllString(text, " "), " ")
-}
-
-// Tell whether `text` is a lexical form of `xs:base64Binary`.
-//
-// The whitespace is expected to be gone already. What is left has to match
-// `(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 "=") | (B64 B04 "=="))?`
-// -- a length which is a multiple of four, the alphabet and nothing else,
-// an equals sign only at the very end, and, easily missed, a constrained
-// character *before* the padding, as the bits which the padding drops have to
-// be zero.
-//
-// The decoders do not agree on any of this, so every target does the same
-// check of its own and refuses the same texts.
-//
-// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
-func matchesXsBase64Binary(text string) bool {
-	if len(text)%4 != 0 {
-		return false
-	}
-
-	if len(text) == 0 {
-		return true
-	}
-
-	pads := 0
-	if text[len(text)-1] == '=' {
-		pads = 1
-		if text[len(text)-2] == '=' {
-			pads = 2
-		}
-	}
-
-	for i := 0; i < len(text)-pads; i++ {
-		character := text[i]
-		inAlphabet := (character >= 'A' && character <= 'Z') ||
-			(character >= 'a' && character <= 'z') ||
-			(character >= '0' && character <= '9') ||
-			character == '+' ||
-			character == '/'
-		if !inAlphabet {
-			return false
-		}
-	}
-
-	// NOTE:
-	// Only these sixteen characters leave the two dropped bits at zero, and
-	// only these four leave the four dropped bits at zero.
-	if pads == 1 {
-		return strings.IndexByte("AEIMQUYcgkosw048", text[len(text)-2]) >= 0
-	}
-
-	if pads == 2 {
-		return strings.IndexByte("AQgw", text[len(text)-3]) >= 0
-	}
-
-	return true
-}
-
-// Drop every whitespace character of `text`.
-//
-// This is what `xs:base64Binary` needs: it allows whitespace between
-// the characters and not only around them, so collapsing is not enough --
-// the decoder accepts none of it.
-func removeWhitespace(text string) string {
-	return whitespaceRunRe.ReplaceAllString(text, "")
-}
-
-// The resulting `next` token points to the first token which is neither text
-// nor comment.
-//
-// If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readText(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (text string, next xml.Token, err error) {
-	b := &strings.Builder{}
-
-	stop := false
-	for {
-		if _, isEOF := current.(eof); isEOF {
-			err = newDeserializationError(
-				"Expected to read text, but reached the end-of-file",
-			)
-			return
-		}
-
-		switch et := current.(type) {
-		case xml.CharData:
-			b.WriteString(string(et))
-			// Proceed to the next token.
-		case xml.Comment:
-			// Proceed to the next token.
-		default:
-			stop = true
-		}
-
-		if !stop {
-			current, err = readNext(decoder, current)
-			if err != nil {
-				return
-			}
-		} else {
-			break
-		}
-	}
-
-	next = current
-	text = b.String()
-	return
-}
-
-// Consume the text tokens (char data) as a representation of a `xs:boolean`.
-//
-// Any comment tokens are skipped.
-//
-// The resulting `next` token points to the first token which is neither text
-// nor comment.
-//
-// If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAs_bool(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (value bool, next xml.Token, err error) {
-	var text string
-	text, next, err = readText(decoder, current)
-	if err != nil {
-		return
-	}
-	text = collapseWhitespace(text)
-
-	switch text {
-	case "1":
-		value = true
-	case "true":
-		value = true
-	case "0":
-		value = false
-	case "false":
-		value = false
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a value as xs:boolean, but got: %s",
-				text,
-			),
-		)
-	}
-	if err != nil {
-		return
-	}
-
-	return
-}
-
-// Consume the text tokens (char data) as a representation of a `xs:long`.
-//
-// Any comment tokens are skipped.
-//
-// The resulting `next` token points to the first token which is neither text
-// nor comment.
-//
-// If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAs_long(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (value int64, next xml.Token, err error) {
-	var text string
-	text, next, err = readText(decoder, current)
-	if err != nil {
-		return
-	}
-	text = collapseWhitespace(text)
-
-	var parseErr error
-	value, parseErr = strconv.ParseInt(text, 10, 64)
-	if parseErr != nil {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a value as xs:long, but it could not be parsed: %s: %s",
-				parseErr.Error(), text,
-			),
-		)
-		return
-	}
-
-	return
-}
-
-func constructXsDoubleRe() *regexp.Regexp {
-	// NOTE:
-	// "+INF" is matched although it is written as "INF": XSD 1.1 admits it,
-	// its production being (\+|-)?INF, and being liberal in what we accept
-	// costs nothing here. strconv.ParseFloat reads it without complaint.
-	doubleRep := "((\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?|(\\+|-)?INF|NaN)"
-	pattern := aascommon.Concat(
-		"^",
-		doubleRep,
-		"$",
-	)
-
-	return regexp.MustCompile(
-		pattern,
-	)
-}
-
-var xsDoubleRe = constructXsDoubleRe()
-
-// Check that text conforms to the pattern of an `xs:double`.
-//
-// See: https://www.w3.org/TR/xmlschema-2/#double
-//
-//   - `text`: Text to be checked
-//   - Return True if the text conforms to the pattern
-func isValidXsDouble(text string) bool {
-	return xsDoubleRe.MatchString(
-		text,
-	)
-}
-
-// Consume the text tokens (char data) as a representation of a `xs:double`.
-//
-// Any comment tokens are skipped.
-//
-// The resulting `next` token points to the first token which is neither text
-// nor comment.
-//
-// If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAs_double(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (value float64, next xml.Token, err error) {
-	var text string
-	text, next, err = readText(decoder, current)
-	if err != nil {
-		return
-	}
-	text = collapseWhitespace(text)
-
-	// We need to check explicitly for the regular expression since
-	// strconv.ParseFloat is too permissive. For example, it accepts "nan"
-	// although only "NaN" is valid.
-	// See: https://www.w3.org/TR/xmlschema-2/#double
-	if !isValidXsDouble(text) {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a value as xs:double, but got: %s",
-				text,
-			),
-		)
-		return
-	}
-
-	var parseErr error
-	value, parseErr = strconv.ParseFloat(text, 64)
-	// NOTE:
-	// A literal too large for a double is not an error in XSD. It rounds to
-	// an infinity, which is in the value space of xs:double, and ParseFloat
-	// hands us exactly that infinity *together* with [strconv.ErrRange]. So
-	// the range is deliberately let through, and only a syntax error is
-	// reported -- and the pattern above has already excluded those.
-	//
-	// A literal too small rounds to zero, which ParseFloat reports without
-	// any error at all.
-	//
-	// See: https://www.w3.org/TR/xmlschema11-2/#double
-	if parseErr != nil && !errors.Is(parseErr, strconv.ErrRange) {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a value as xs:double, but it could not be parsed: %s: %s",
-				parseErr.Error(), text,
-			),
-		)
-		return
-	}
-
-	// NOTE:
-	// We explicitly do not check for loss of precision, as the majority of people will
-	// use string representation of the floating point numbers ignoring the precision
-	// issues. For example, the closest double-precision number to the number `359.9` is
-	// `359.8999999999999772626324556767940521240234375`, but most people will simply
-	// give `359.9` as the value.
-
-	return
-}
-
-// Consume the text tokens (char data) as a base64-encoded bytes.
-//
-// Any comment tokens are skipped.
-//
-// The resulting `next` token points to the first token which is neither text
-// nor comment.
-//
-// If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAs_bytes(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (value []byte, next xml.Token, err error) {
-	var text string
-	text, next, err = readText(decoder, current)
-	if err != nil {
-		return
-	}
-	// NOTE:
-	// xs:base64Binary allows whitespace between the characters, and not only
-	// around them, while the decoder accepts none of it. So every whitespace
-	// character is dropped, and not merely collapsed.
-	//
-	// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
-	text = removeWhitespace(text)
-
-	if !matchesXsBase64Binary(text) {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a text as base64-encoded bytes, but got: %s",
-				text,
-			),
-		)
-		return
-	}
-
-	var decodingErr error
-	value, decodingErr = b64.StdEncoding.DecodeString(text)
-	if decodingErr != nil {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Text could not be decoded as base64: %s",
-				decodingErr.Error(),
-			),
-		)
-		return
-	}
-
-	return
-}
-
-const Namespace = "https://admin-shell.io/aas/3/0"
-
-// Check that the `current` token is a valid start element, *i.e.*, lives in [Namespace]
-// and contains no attributes.
-func checkStartElement(
-	current xml.StartElement,
-) (err error) {
-	unexpectedAttr := 0
-	for _, attr := range current.Attr {
-		if (attr.Name.Space == "" && attr.Name.Local == "xmlns") ||
-			attr.Name.Space == "xmlns" {
-			continue
-		}
-
-		unexpectedAttr++
-	}
-	if unexpectedAttr != 0 {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected no attributes except 'xmlns' in the start element, "+
-					"but got %d in the start element %s",
-				unexpectedAttr, current.Name.Local,
-			),
-		)
-		return
-	}
-
-	if current.Name.Space != Namespace {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected only start elements in the namespace %s, "+
-					"but got a start element %s in the namespace %s",
-				Namespace, current.Name.Local, current.Name.Space,
-			),
-		)
-		return
-	}
-
-	return
-}
-
-// Expect a valid start element (as defined in [checkStartElement]) and extract its
-// `local` name.
-//
-// This function is meant to be called whenever you know the runtime type of a token.
-// If you do not know the runtime type, call [parseAsStartElementAndExtractLocalName]
-// so that you can succinctly check the runtime type as well.
-func extractLocalNameFromStartElement(
-	current xml.StartElement,
-) (local string, err error) {
-	err = checkStartElement(current)
-	if err != nil {
-		return
-	}
-
-	local = current.Name.Local
-	return
-}
-
-// Expect a valid start element (as defined in [checkStartElement]) and extract its
-// local name.
-//
-// Valid means that we check that the start element lives in [Namespace] and contains
-// no attributes.
-//
-// If you know the runtime type of `current` token, call
-// [parseLocalNameFromStartElement] instead to save a cast.
-func parseAsStartElementAndExtractLocalName(
-	current xml.Token,
-) (local string, err error) {
-	if _, isEOF := current.(eof); isEOF {
-		err = newDeserializationError(
-			"Expected a start element, but reached the end-of-file",
-		)
-		return
-	}
-
-	et, ok := current.(xml.StartElement)
-	if !ok {
-		switch v := current.(type) {
-		case xml.EndElement:
-			err = newDeserializationError(
-				fmt.Sprintf(
-					"Expected a start element, but got an end element %s in namespace %s",
-					v.Name.Local, v.Name.Space,
-				),
-			)
-		case xml.CharData:
-			err = newDeserializationError(
-				fmt.Sprintf(
-					"Expected a start element, but got text %s",
-					string(v),
-				),
-			)
-		default:
-			err = newDeserializationError(
-				fmt.Sprintf(
-					"Expected a start element, but got %T: %v",
-					current, current,
-				),
-			)
-		}
-		return
-	}
-
-	local, err = extractLocalNameFromStartElement(et)
-	return
-}
-
-// Check that the `current` token is an end element, living in [Namespace], and
-// having the `local` name.
-func checkEndElement(current xml.Token, local string) (err error) {
-	if _, isEOF := current.(eof); isEOF {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an end element %s, but reached the end-of-file",
-				local,
-			),
-		)
-		return
-	}
-
-	et, ok := current.(xml.EndElement)
-	if !ok {
-		switch v := current.(type) {
-		case xml.StartElement:
-			err = newDeserializationError(
-				fmt.Sprintf(
-					"Expected an end element %s, but got a start element %s in namespace %s",
-					local, v.Name.Local, v.Name.Space,
-				),
-			)
-		case xml.CharData:
-			err = newDeserializationError(
-				fmt.Sprintf(
-					"Expected an end element %s, but got text %s",
-					local, string(v),
-				),
-			)
-		default:
-			err = newDeserializationError(
-				fmt.Sprintf(
-					"Expected an end element %s, but got %T: %v",
-					local, current, current,
-				),
-			)
-		}
-		return
-	}
-
-	if et.Name.Space != Namespace {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an end element %s in the namespace %s, "+
-					"but got an end element in the namespace %s",
-				local, Namespace, et.Name.Space,
-			),
-		)
-		return
-	}
-
-	if et.Name.Local != local {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected an end element %s, but got an end element %s",
-				local, et.Name.Local,
-			),
-		)
-		return
-	}
-
-	return
-}
+type DeserializationError = xmlcommon.DeserializationError
 
 // Report that the required property with the given `name` has not been observed.
 func missingProperty(name string) error {
-	return newDeserializationError(
+	return xmlcommon.NewDeserializationError(
 		fmt.Sprintf(
 			"The required property '%s' is missing",
 			name,
@@ -683,7 +40,7 @@ func missingProperty(name string) error {
 // Report that the property with the given `local` name has been observed more
 // than once.
 func duplicatePropertyError(local string) error {
-	return newDeserializationError(
+	return xmlcommon.NewDeserializationError(
 		fmt.Sprintf(
 			"Property %s occurred more than once",
 			local,
@@ -694,7 +51,7 @@ func duplicatePropertyError(local string) error {
 // Report that we got a start element with the `local` name, but expected a start
 // element with the `expectedLocal` name.
 func unexpectedStartElement(local string, expectedLocal string) error {
-	return newDeserializationError(
+	return xmlcommon.NewDeserializationError(
 		fmt.Sprintf(
 			"Expected a start element with local name %s, "+
 				"but got a start element with local name %s",
@@ -706,7 +63,7 @@ func unexpectedStartElement(local string, expectedLocal string) error {
 // Report that the start element with the `local` name does not discriminate any of
 // the alternatives of `expectedType`.
 func unexpectedDiscriminator(local string, expectedType string) error {
-	return newDeserializationError(
+	return xmlcommon.NewDeserializationError(
 		fmt.Sprintf(
 			"Unexpected start element %s as discriminator for %s",
 			local, expectedType,
@@ -717,68 +74,13 @@ func unexpectedDiscriminator(local string, expectedType string) error {
 // Report that we got an item delimited by a start element with the `local` name,
 // but expected the delimiter with the `expectedLocal` name.
 func unexpectedItemElement(local string, expectedLocal string) error {
-	return newDeserializationError(
+	return xmlcommon.NewDeserializationError(
 		fmt.Sprintf(
 			"Expected start element %s as an item delimiter, "+
 				"but got %s",
 			expectedLocal, local,
 		),
 	)
-}
-
-// Read a value wrapped in a single XML element, dispatching on the local name of
-// that element.
-//
-// The element is read in full: the resulting `next` token points to the first token
-// just after the end element.
-//
-// This is the *only* place which frames an XML element around a value. Both
-// [readListOf] and the `readTuple*` functions delegate the framing here, so that
-// a scalar item and an instance item differ only in the given `readByLocal`, and
-// never in the container which reads them.
-//
-// `T` is left unconstrained (instead of `aastypes.IClass`) since this
-// function never invokes any `aastypes.IClass` method on `T` -- this lets it
-// be reused for a scalar and for a named union as well, the latter being
-// deliberately not an `aastypes.IClass` itself.
-func readElementDispatched[T any](
-	decoder *xml.Decoder,
-	current xml.Token,
-	readByLocal func(
-		aDecoder *xml.Decoder,
-		aCurrent xml.Token,
-		aLocal string,
-	) (value T, aNext xml.Token, anErr error),
-) (value T, next xml.Token, err error) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(current)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the content of the XML element
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	value, current, err = readByLocal(decoder, current, local)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	if err != nil {
-		return
-	}
-
-	next, err = readNext(decoder, current)
-	return
 }
 
 // Read a list of values as a sequence of XML elements.
@@ -788,7 +90,7 @@ func readElementDispatched[T any](
 //
 // That last non-start element is returned as `next` element.
 //
-// An item is read with [readElementDispatched], so `readItem` decides on its own
+// An item is read with [xmlcommon.ReadElementDispatched], so `readItem` decides on its own
 // which local names it accepts. A list of instances and a list of scalars therefore
 // share this one function: an instance is discriminated by its own element name,
 // while a scalar is expected in an element named `v`.
@@ -808,7 +110,7 @@ func readListOf[T any](
 ) (values []T, next xml.Token, err error) {
 	i := 0
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+		current, err = xmlcommon.SkipEmptyTextWhitespaceAndComments(decoder, current)
 		if err != nil {
 			return
 		}
@@ -819,7 +121,7 @@ func readListOf[T any](
 
 		var value T
 		var valueErr error
-		value, current, valueErr = readElementDispatched(
+		value, current, valueErr = xmlcommon.ReadElementDispatched(
 			decoder, current, readItem,
 		)
 		if valueErr != nil {
@@ -851,7 +153,7 @@ func readListOf[T any](
 // The arguments are the *results* of a read, not the reader itself. Go passes
 // a multi-valued call on as a complete argument list, so this composes with any read,
 // no matter how many arguments that read takes on its own --
-// `readOptional(readTextAs_long(decoder, current))` just as much as
+// `readOptional(xmlcommon.ReadTextAs_long(decoder, current))` just as much as
 // `readOptional(readTuple2(decoder, current, readAtV1_X, readAtV2_Y))`, which no
 // reader-taking signature could express, since the item readers of a tuple vary in
 // number and in type.
@@ -881,12 +183,12 @@ func nextProperty(
 	current xml.Token,
 	interfaceName string,
 ) (local string, next xml.Token, ok bool, err error) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+	current, err = xmlcommon.SkipEmptyTextWhitespaceAndComments(decoder, current)
 	if err != nil {
 		return
 	}
 
-	if _, isEOF := current.(eof); isEOF {
+	if _, isEOF := current.(xmlcommon.Eof); isEOF {
 		next = current
 		return
 	}
@@ -894,7 +196,7 @@ func nextProperty(
 	startElement, isStartElement := current.(xml.StartElement)
 	if !isStartElement {
 		if charData, isCharData := current.(xml.CharData); isCharData {
-			err = newDeserializationError(
+			err = xmlcommon.NewDeserializationError(
 				fmt.Sprintf(
 					"Expected a sequence of XML elements representing properties "+
 						"of %s, but got text: %s",
@@ -908,13 +210,13 @@ func nextProperty(
 		return
 	}
 
-	local, err = extractLocalNameFromStartElement(startElement)
+	local, err = xmlcommon.ExtractLocalNameFromStartElement(startElement)
 	if err != nil {
 		return
 	}
 
 	// Move the current to the content of the XML element
-	next, err = readNext(decoder, current)
+	next, err = xmlcommon.ReadNext(decoder, current)
 	if err != nil {
 		return
 	}
@@ -945,17 +247,17 @@ func concludeProperty(
 		return
 	}
 
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+	current, err = xmlcommon.SkipEmptyTextWhitespaceAndComments(decoder, current)
 	if err != nil {
 		return
 	}
 
-	err = checkEndElement(current, local)
+	err = xmlcommon.CheckEndElement(current, local)
 	if err != nil {
 		return
 	}
 
-	next, err = readNext(decoder, current)
+	next, err = xmlcommon.ReadNext(decoder, current)
 	return
 }
 
@@ -1022,7 +324,7 @@ func readExtensionAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theName, current, valueErr = readText(
+			theName, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundName = true
@@ -1041,7 +343,7 @@ func readExtensionAsSequence(
 				break
 			}
 			theValue, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundValue = true
 		case "refersTo":
@@ -1054,7 +356,7 @@ func readExtensionAsSequence(
 			)
 			foundRefersTo = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -1122,7 +424,7 @@ func readTextAs_ModellingKind(
 	err error,
 ) {
 	var text string
-	text, next, err = readText(decoder, current)
+	text, next, err = xmlcommon.ReadText(decoder, current)
 	if err != nil {
 		return
 	}
@@ -1130,7 +432,7 @@ func readTextAs_ModellingKind(
 	var ok bool
 	value, ok = aasstringification.ModellingKindFromString(text)
 	if !ok {
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected literal of ModellingKind: %v",
 				text,
@@ -1195,7 +497,7 @@ func readAdministrativeInformationAsSequence(
 				break
 			}
 			theVersion, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundVersion = true
 		case "revision":
@@ -1204,7 +506,7 @@ func readAdministrativeInformationAsSequence(
 				break
 			}
 			theRevision, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundRevision = true
 		case "creator":
@@ -1222,11 +524,11 @@ func readAdministrativeInformationAsSequence(
 				break
 			}
 			theTemplateID, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundTemplateID = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -1265,7 +567,7 @@ func readTextAs_QualifierKind(
 	err error,
 ) {
 	var text string
-	text, next, err = readText(decoder, current)
+	text, next, err = xmlcommon.ReadText(decoder, current)
 	if err != nil {
 		return
 	}
@@ -1273,7 +575,7 @@ func readTextAs_QualifierKind(
 	var ok bool
 	value, ok = aasstringification.QualifierKindFromString(text)
 	if !ok {
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected literal of QualifierKind: %v",
 				text,
@@ -1359,7 +661,7 @@ func readQualifierAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theType, current, valueErr = readText(
+			theType, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundType = true
@@ -1378,7 +680,7 @@ func readQualifierAsSequence(
 				break
 			}
 			theValue, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundValue = true
 		case "valueId":
@@ -1391,7 +693,7 @@ func readQualifierAsSequence(
 			)
 			foundValueID = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -1513,7 +815,7 @@ func readAssetAdministrationShellAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -1522,7 +824,7 @@ func readAssetAdministrationShellAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -1557,7 +859,7 @@ func readAssetAdministrationShellAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theID, current, valueErr = readText(
+			theID, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundID = true
@@ -1598,7 +900,7 @@ func readAssetAdministrationShellAsSequence(
 			)
 			foundSubmodels = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -1712,7 +1014,7 @@ func readAssetInformationAsSequence(
 				break
 			}
 			theGlobalAssetID, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundGlobalAssetID = true
 		case "specificAssetIds":
@@ -1730,7 +1032,7 @@ func readAssetInformationAsSequence(
 				break
 			}
 			theAssetType, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundAssetType = true
 		case "defaultThumbnail":
@@ -1743,7 +1045,7 @@ func readAssetInformationAsSequence(
 			)
 			foundDefaultThumbnail = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -1808,7 +1110,7 @@ func readResourceAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			thePath, current, valueErr = readText(
+			thePath, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundPath = true
@@ -1818,11 +1120,11 @@ func readResourceAsSequence(
 				break
 			}
 			theContentType, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundContentType = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -1864,7 +1166,7 @@ func readTextAs_AssetKind(
 	err error,
 ) {
 	var text string
-	text, next, err = readText(decoder, current)
+	text, next, err = xmlcommon.ReadText(decoder, current)
 	if err != nil {
 		return
 	}
@@ -1872,7 +1174,7 @@ func readTextAs_AssetKind(
 	var ok bool
 	value, ok = aasstringification.AssetKindFromString(text)
 	if !ok {
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected literal of AssetKind: %v",
 				text,
@@ -1945,7 +1247,7 @@ func readSpecificAssetIDAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theName, current, valueErr = readText(
+			theName, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundName = true
@@ -1954,7 +1256,7 @@ func readSpecificAssetIDAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theValue, current, valueErr = readText(
+			theValue, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundValue = true
@@ -1968,7 +1270,7 @@ func readSpecificAssetIDAsSequence(
 			)
 			foundExternalSubjectID = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -2092,7 +1394,7 @@ func readSubmodelAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -2101,7 +1403,7 @@ func readSubmodelAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -2136,7 +1438,7 @@ func readSubmodelAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theID, current, valueErr = readText(
+			theID, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundID = true
@@ -2195,7 +1497,7 @@ func readSubmodelAsSequence(
 			)
 			foundSubmodelElements = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -2366,7 +1668,7 @@ func readRelationshipElementAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -2375,7 +1677,7 @@ func readRelationshipElementAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -2451,7 +1753,7 @@ func readRelationshipElementAsSequence(
 			)
 			foundSecond = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -2507,7 +1809,7 @@ func readTextAs_AASSubmodelElements(
 	err error,
 ) {
 	var text string
-	text, next, err = readText(decoder, current)
+	text, next, err = xmlcommon.ReadText(decoder, current)
 	if err != nil {
 		return
 	}
@@ -2515,7 +1817,7 @@ func readTextAs_AASSubmodelElements(
 	var ok bool
 	value, ok = aasstringification.AASSubmodelElementsFromString(text)
 	if !ok {
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected literal of AASSubmodelElements: %v",
 				text,
@@ -2598,7 +1900,7 @@ func readSubmodelElementListAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -2607,7 +1909,7 @@ func readSubmodelElementListAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -2670,7 +1972,7 @@ func readSubmodelElementListAsSequence(
 				break
 			}
 			theOrderRelevant, current, valueErr = readOptional(
-				readTextAs_bool(decoder, current),
+				xmlcommon.ReadTextAs_bool(decoder, current),
 			)
 			foundOrderRelevant = true
 		case "semanticIdListElement":
@@ -2710,7 +2012,7 @@ func readSubmodelElementListAsSequence(
 			)
 			foundValue = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -2810,7 +2112,7 @@ func readSubmodelElementCollectionAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -2819,7 +2121,7 @@ func readSubmodelElementCollectionAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -2886,7 +2188,7 @@ func readSubmodelElementCollectionAsSequence(
 			)
 			foundValue = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -3012,7 +2314,7 @@ func readPropertyAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -3021,7 +2323,7 @@ func readPropertyAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -3093,7 +2395,7 @@ func readPropertyAsSequence(
 				break
 			}
 			theValue, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundValue = true
 		case "valueId":
@@ -3106,7 +2408,7 @@ func readPropertyAsSequence(
 			)
 			foundValueID = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -3206,7 +2508,7 @@ func readMultiLanguagePropertyAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -3215,7 +2517,7 @@ func readMultiLanguagePropertyAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -3291,7 +2593,7 @@ func readMultiLanguagePropertyAsSequence(
 			)
 			foundValueID = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -3386,7 +2688,7 @@ func readRangeAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -3395,7 +2697,7 @@ func readRangeAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -3467,7 +2769,7 @@ func readRangeAsSequence(
 				break
 			}
 			theMin, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundMin = true
 		case "max":
@@ -3476,11 +2778,11 @@ func readRangeAsSequence(
 				break
 			}
 			theMax, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundMax = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -3578,7 +2880,7 @@ func readReferenceElementAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -3587,7 +2889,7 @@ func readReferenceElementAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -3654,7 +2956,7 @@ func readReferenceElementAsSequence(
 			)
 			foundValue = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -3746,7 +3048,7 @@ func readBlobAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -3755,7 +3057,7 @@ func readBlobAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -3817,7 +3119,7 @@ func readBlobAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theValue, current, valueErr = readTextAs_bytes(
+			theValue, current, valueErr = xmlcommon.ReadTextAs_bytes(
 				decoder, current,
 			)
 			foundValue = true
@@ -3826,12 +3128,12 @@ func readBlobAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theContentType, current, valueErr = readText(
+			theContentType, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundContentType = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -3930,7 +3232,7 @@ func readFileAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -3939,7 +3241,7 @@ func readFileAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -4002,7 +3304,7 @@ func readFileAsSequence(
 				break
 			}
 			theValue, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundValue = true
 		case "contentType":
@@ -4010,12 +3312,12 @@ func readFileAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theContentType, current, valueErr = readText(
+			theContentType, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundContentType = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -4116,7 +3418,7 @@ func readAnnotatedRelationshipElementAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -4125,7 +3427,7 @@ func readAnnotatedRelationshipElementAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -4210,7 +3512,7 @@ func readAnnotatedRelationshipElementAsSequence(
 			)
 			foundAnnotations = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -4319,7 +3621,7 @@ func readEntityAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -4328,7 +3630,7 @@ func readEntityAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -4409,7 +3711,7 @@ func readEntityAsSequence(
 				break
 			}
 			theGlobalAssetID, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundGlobalAssetID = true
 		case "specificAssetIds":
@@ -4422,7 +3724,7 @@ func readEntityAsSequence(
 			)
 			foundSpecificAssetIDs = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -4475,7 +3777,7 @@ func readTextAs_EntityType(
 	err error,
 ) {
 	var text string
-	text, next, err = readText(decoder, current)
+	text, next, err = xmlcommon.ReadText(decoder, current)
 	if err != nil {
 		return
 	}
@@ -4483,7 +3785,7 @@ func readTextAs_EntityType(
 	var ok bool
 	value, ok = aasstringification.EntityTypeFromString(text)
 	if !ok {
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected literal of EntityType: %v",
 				text,
@@ -4512,7 +3814,7 @@ func readTextAs_Direction(
 	err error,
 ) {
 	var text string
-	text, next, err = readText(decoder, current)
+	text, next, err = xmlcommon.ReadText(decoder, current)
 	if err != nil {
 		return
 	}
@@ -4520,7 +3822,7 @@ func readTextAs_Direction(
 	var ok bool
 	value, ok = aasstringification.DirectionFromString(text)
 	if !ok {
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected literal of Direction: %v",
 				text,
@@ -4549,7 +3851,7 @@ func readTextAs_StateOfEvent(
 	err error,
 ) {
 	var text string
-	text, next, err = readText(decoder, current)
+	text, next, err = xmlcommon.ReadText(decoder, current)
 	if err != nil {
 		return
 	}
@@ -4557,7 +3859,7 @@ func readTextAs_StateOfEvent(
 	var ok bool
 	value, ok = aasstringification.StateOfEventFromString(text)
 	if !ok {
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected literal of StateOfEvent: %v",
 				text,
@@ -4655,7 +3957,7 @@ func readEventPayloadAsSequence(
 				break
 			}
 			theTopic, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundTopic = true
 		case "subjectId":
@@ -4672,7 +3974,7 @@ func readEventPayloadAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theTimeStamp, current, valueErr = readText(
+			theTimeStamp, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundTimeStamp = true
@@ -4681,12 +3983,12 @@ func readEventPayloadAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			thePayload, current, valueErr = readTextAs_bytes(
+			thePayload, current, valueErr = xmlcommon.ReadTextAs_bytes(
 				decoder, current,
 			)
 			foundPayload = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -4804,7 +4106,7 @@ func readBasicEventElementAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -4813,7 +4115,7 @@ func readBasicEventElementAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -4903,7 +4205,7 @@ func readBasicEventElementAsSequence(
 				break
 			}
 			theMessageTopic, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundMessageTopic = true
 		case "messageBroker":
@@ -4921,7 +4223,7 @@ func readBasicEventElementAsSequence(
 				break
 			}
 			theLastUpdate, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundLastUpdate = true
 		case "minInterval":
@@ -4930,7 +4232,7 @@ func readBasicEventElementAsSequence(
 				break
 			}
 			theMinInterval, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundMinInterval = true
 		case "maxInterval":
@@ -4939,11 +4241,11 @@ func readBasicEventElementAsSequence(
 				break
 			}
 			theMaxInterval, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundMaxInterval = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -5060,7 +4362,7 @@ func readOperationAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -5069,7 +4371,7 @@ func readOperationAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -5154,7 +4456,7 @@ func readOperationAsSequence(
 			)
 			foundInoutputVariables = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -5218,12 +4520,12 @@ func readOperationVariableAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theValue, current, valueErr = readElementDispatched(
+			theValue, current, valueErr = xmlcommon.ReadElementDispatched(
 				decoder, current, readSubmodelElementDispatched,
 			)
 			foundValue = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -5330,7 +4632,7 @@ func readCapabilityAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -5339,7 +4641,7 @@ func readCapabilityAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -5397,7 +4699,7 @@ func readCapabilityAsSequence(
 			)
 			foundEmbeddedDataSpecifications = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -5484,7 +4786,7 @@ func readConceptDescriptionAsSequence(
 				break
 			}
 			theCategory, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundCategory = true
 		case "idShort":
@@ -5493,7 +4795,7 @@ func readConceptDescriptionAsSequence(
 				break
 			}
 			theIDShort, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundIDShort = true
 		case "displayName":
@@ -5528,7 +4830,7 @@ func readConceptDescriptionAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theID, current, valueErr = readText(
+			theID, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundID = true
@@ -5551,7 +4853,7 @@ func readConceptDescriptionAsSequence(
 			)
 			foundIsCaseOf = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -5622,7 +4924,7 @@ func readTextAs_ReferenceTypes(
 	err error,
 ) {
 	var text string
-	text, next, err = readText(decoder, current)
+	text, next, err = xmlcommon.ReadText(decoder, current)
 	if err != nil {
 		return
 	}
@@ -5630,7 +4932,7 @@ func readTextAs_ReferenceTypes(
 	var ok bool
 	value, ok = aasstringification.ReferenceTypesFromString(text)
 	if !ok {
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected literal of ReferenceTypes: %v",
 				text,
@@ -5704,7 +5006,7 @@ func readReferenceAsSequence(
 			)
 			foundKeys = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -5803,12 +5105,12 @@ func readKeyAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theValue, current, valueErr = readText(
+			theValue, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundValue = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -5877,7 +5179,7 @@ func readTextAs_KeyTypes(
 	err error,
 ) {
 	var text string
-	text, next, err = readText(decoder, current)
+	text, next, err = xmlcommon.ReadText(decoder, current)
 	if err != nil {
 		return
 	}
@@ -5885,7 +5187,7 @@ func readTextAs_KeyTypes(
 	var ok bool
 	value, ok = aasstringification.KeyTypesFromString(text)
 	if !ok {
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected literal of KeyTypes: %v",
 				text,
@@ -5914,7 +5216,7 @@ func readTextAs_DataTypeDefXSD(
 	err error,
 ) {
 	var text string
-	text, next, err = readText(decoder, current)
+	text, next, err = xmlcommon.ReadText(decoder, current)
 	if err != nil {
 		return
 	}
@@ -5922,7 +5224,7 @@ func readTextAs_DataTypeDefXSD(
 	var ok bool
 	value, ok = aasstringification.DataTypeDefXSDFromString(text)
 	if !ok {
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected literal of DataTypeDefXSD: %v",
 				text,
@@ -5971,7 +5273,7 @@ func readLangStringNameTypeAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theLanguage, current, valueErr = readText(
+			theLanguage, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundLanguage = true
@@ -5980,12 +5282,12 @@ func readLangStringNameTypeAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theText, current, valueErr = readText(
+			theText, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundText = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -6074,7 +5376,7 @@ func readLangStringTextTypeAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theLanguage, current, valueErr = readText(
+			theLanguage, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundLanguage = true
@@ -6083,12 +5385,12 @@ func readLangStringTextTypeAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theText, current, valueErr = readText(
+			theText, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundText = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -6202,7 +5504,7 @@ func readEnvironmentAsSequence(
 			)
 			foundConceptDescriptions = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -6290,12 +5592,12 @@ func readEmbeddedDataSpecificationAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theDataSpecificationContent, current, valueErr = readElementDispatched(
+			theDataSpecificationContent, current, valueErr = xmlcommon.ReadElementDispatched(
 				decoder, current, readDataSpecificationContentDispatched,
 			)
 			foundDataSpecificationContent = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -6364,7 +5666,7 @@ func readTextAs_DataTypeIEC61360(
 	err error,
 ) {
 	var text string
-	text, next, err = readText(decoder, current)
+	text, next, err = xmlcommon.ReadText(decoder, current)
 	if err != nil {
 		return
 	}
@@ -6372,7 +5674,7 @@ func readTextAs_DataTypeIEC61360(
 	var ok bool
 	value, ok = aasstringification.DataTypeIEC61360FromString(text)
 	if !ok {
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected literal of DataTypeIEC61360: %v",
 				text,
@@ -6425,7 +5727,7 @@ func readLevelTypeAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theMin, current, valueErr = readTextAs_bool(
+			theMin, current, valueErr = xmlcommon.ReadTextAs_bool(
 				decoder, current,
 			)
 			foundMin = true
@@ -6434,7 +5736,7 @@ func readLevelTypeAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theNom, current, valueErr = readTextAs_bool(
+			theNom, current, valueErr = xmlcommon.ReadTextAs_bool(
 				decoder, current,
 			)
 			foundNom = true
@@ -6443,7 +5745,7 @@ func readLevelTypeAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theTyp, current, valueErr = readTextAs_bool(
+			theTyp, current, valueErr = xmlcommon.ReadTextAs_bool(
 				decoder, current,
 			)
 			foundTyp = true
@@ -6452,12 +5754,12 @@ func readLevelTypeAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theMax, current, valueErr = readTextAs_bool(
+			theMax, current, valueErr = xmlcommon.ReadTextAs_bool(
 				decoder, current,
 			)
 			foundMax = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -6536,7 +5838,7 @@ func readValueReferencePairAsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theValue, current, valueErr = readText(
+			theValue, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundValue = true
@@ -6550,7 +5852,7 @@ func readValueReferencePairAsSequence(
 			)
 			foundValueID = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -6642,7 +5944,7 @@ func readValueListAsSequence(
 			)
 			foundValueReferencePairs = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -6703,7 +6005,7 @@ func readLangStringPreferredNameTypeIEC61360AsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theLanguage, current, valueErr = readText(
+			theLanguage, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundLanguage = true
@@ -6712,12 +6014,12 @@ func readLangStringPreferredNameTypeIEC61360AsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theText, current, valueErr = readText(
+			theText, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundText = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -6806,7 +6108,7 @@ func readLangStringShortNameTypeIEC61360AsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theLanguage, current, valueErr = readText(
+			theLanguage, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundLanguage = true
@@ -6815,12 +6117,12 @@ func readLangStringShortNameTypeIEC61360AsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theText, current, valueErr = readText(
+			theText, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundText = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -6909,7 +6211,7 @@ func readLangStringDefinitionTypeIEC61360AsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theLanguage, current, valueErr = readText(
+			theLanguage, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundLanguage = true
@@ -6918,12 +6220,12 @@ func readLangStringDefinitionTypeIEC61360AsSequence(
 				valueErr = duplicatePropertyError(local)
 				break
 			}
-			theText, current, valueErr = readText(
+			theText, current, valueErr = xmlcommon.ReadText(
 				decoder, current,
 			)
 			foundText = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -7051,7 +6353,7 @@ func readDataSpecificationIEC61360AsSequence(
 				break
 			}
 			theUnit, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundUnit = true
 		case "unitId":
@@ -7069,7 +6371,7 @@ func readDataSpecificationIEC61360AsSequence(
 				break
 			}
 			theSourceOfDefinition, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundSourceOfDefinition = true
 		case "symbol":
@@ -7078,7 +6380,7 @@ func readDataSpecificationIEC61360AsSequence(
 				break
 			}
 			theSymbol, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundSymbol = true
 		case "dataType":
@@ -7105,7 +6407,7 @@ func readDataSpecificationIEC61360AsSequence(
 				break
 			}
 			theValueFormat, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundValueFormat = true
 		case "valueList":
@@ -7123,7 +6425,7 @@ func readDataSpecificationIEC61360AsSequence(
 				break
 			}
 			theValue, current, valueErr = readOptional(
-				readText(decoder, current),
+				xmlcommon.ReadText(decoder, current),
 			)
 			foundValue = true
 		case "levelType":
@@ -7136,7 +6438,7 @@ func readDataSpecificationIEC61360AsSequence(
 			)
 			foundLevelType = true
 		default:
-			valueErr = newDeserializationError(
+			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
 			)
 		}
@@ -7262,7 +6564,7 @@ func readClassDispatched(
 	case "dataSpecificationIec61360":
 		instance, next, err = readDataSpecificationIEC61360AsSequence(decoder, current)
 	default:
-		err = newDeserializationError(
+		err = xmlcommon.NewDeserializationError(
 			fmt.Sprintf(
 				"Unexpected XML element name %s as class discriminator",
 				local,
@@ -7279,12 +6581,12 @@ func Unmarshal(
 	decoder *xml.Decoder,
 ) (instance aastypes.IClass, err error) {
 	var current xml.Token
-	current, err = readNext(decoder, nil)
+	current, err = xmlcommon.ReadNext(decoder, nil)
 	if err != nil {
 		return
 	}
 
-	instance, _, err = readElementDispatched(
+	instance, _, err = xmlcommon.ReadElementDispatched(
 		decoder, current, readClassDispatched,
 	)
 	return
@@ -7297,200 +6599,7 @@ func Unmarshal(
 // Represent an error during the serialization.
 //
 // Implements `error`.
-type SerializationError struct {
-	Path    *aasreporting.Path
-	Message string
-}
-
-func newSerializationError(message string) *SerializationError {
-	return &SerializationError{
-		Path:    &aasreporting.Path{},
-		Message: message,
-	}
-}
-
-func (se *SerializationError) Error() string {
-	return fmt.Sprintf(
-		"%s: %s",
-		se.PathString(),
-		se.Message,
-	)
-}
-
-// Render the path as a string.
-func (se *SerializationError) PathString() string {
-	return aasreporting.ToGolangPath(se.Path)
-}
-
-// Write the start element with the given `local` name to the encoder.
-//
-// Do not flush.
-//
-// If the `withNamespace` is set, set the [xml.Name.Space] property in the element
-// accordingly.
-func writeStartElement(
-	encoder *xml.Encoder,
-	local string,
-	withNamespace bool,
-) (err error) {
-	startElement := xml.StartElement{Name: xml.Name{Local: local}}
-	if withNamespace {
-		startElement.Name.Space = Namespace
-	}
-
-	err = encoder.EncodeToken(startElement)
-	return
-}
-
-// Write the end element with the given `local` name to the encoder.
-//
-// Do not flush.
-//
-// If the `withNamespace` is set, set the [xml.Name.Space] property in the element
-// accordingly.
-func writeEndElement(
-	encoder *xml.Encoder,
-	local string,
-	withNamespace bool,
-) (err error) {
-	endElement := xml.EndElement{Name: xml.Name{Local: local}}
-	if withNamespace {
-		endElement.Name.Space = Namespace
-	}
-
-	err = encoder.EncodeToken(endElement)
-	return
-}
-
-// Write the `text` to the encoder.
-//
-// Do not flush.
-//
-// If `text` is empty, do nothing.
-func writeText(
-	encoder *xml.Encoder,
-	text string,
-) (err error) {
-	if len(text) > 0 {
-		err = encoder.EncodeToken(
-			xml.CharData([]byte(text)),
-		)
-	}
-	return
-}
-
-// Write the `value` as a `xs:boolean` in a text element.
-//
-// Do not flush.
-func writeAsText_bool(
-	encoder *xml.Encoder,
-	value bool,
-) (err error) {
-	text := "true"
-	if !value {
-		text = "false"
-	}
-	err = writeText(encoder, text)
-	return
-}
-
-// Write the `value` as a `xs:long` in a text element.
-//
-// Do not flush.
-func writeAsText_long(
-	encoder *xml.Encoder,
-	value int64,
-) (err error) {
-	text := strconv.FormatInt(value, 10)
-	err = writeText(encoder, text)
-	return
-}
-
-// Write the `value` as a `xs:double` in a text element.
-//
-// Do not flush.
-func writeAsText_double(
-	encoder *xml.Encoder,
-	value float64,
-) (err error) {
-	var text string
-
-	// See: https://www.w3.org/TR/xmlschema-2/#double
-	// for the exact literals.
-	if math.IsInf(value, 0) {
-		if value < 0 {
-			text = "-INF"
-		} else {
-			text = "INF"
-		}
-	} else if math.IsNaN(value) {
-		text = "NaN"
-	} else {
-		text = strconv.FormatFloat(value, 'g', -1, 64)
-	}
-
-	err = writeText(encoder, text)
-	return
-}
-
-// Write the `value` as a `xs:string` in a text element.
-//
-// Do not flush.
-func writeAsText_string(
-	encoder *xml.Encoder,
-	value string,
-) (err error) {
-	err = writeText(encoder, value)
-	return
-}
-
-// Write the `value` as a base64-encoded bytes in a text element.
-//
-// Do not flush.
-func writeAsText_bytes(
-	encoder *xml.Encoder,
-	value []byte,
-) (err error) {
-	text := b64.StdEncoding.EncodeToString(
-		value,
-	)
-
-	err = writeText(encoder, text)
-	return
-}
-
-// Write `that` as an XML element with the `local` name, its content written by
-// `writeContent`.
-//
-// Do not flush.
-//
-// This is the one place which frames an XML element around a *value*: a property,
-// a list item and a tuple item all go through it, and differ only in the given
-// `writeContent`. A list frames its own element in [writeList], and an instance
-// the element naming its model type in [writeClassElement], as neither of the two
-// can be reduced to a content writer without allocating a closure.
-//
-// The XML namespace is expected to have been defined outside of the resulting XML
-// element.
-func writeElement[T any](
-	encoder *xml.Encoder,
-	local string,
-	that T,
-	writeContent func(anEncoder *xml.Encoder, aValue T) (anErr error),
-) (err error) {
-	err = writeStartElement(encoder, local, false)
-	if err != nil {
-		return
-	}
-
-	err = writeContent(encoder, that)
-	if err != nil {
-		return
-	}
-
-	err = writeEndElement(encoder, local, false)
-	return
-}
+type SerializationError = xmlcommon.SerializationError
 
 // Write the optional `that` as an XML element with the `local` name, or write
 // nothing at all if it is not set.
@@ -7511,7 +6620,7 @@ func writeOptionalPointer[T any](
 		return
 	}
 
-	return writeElement(encoder, local, *that, writeContent)
+	return xmlcommon.WriteElement(encoder, local, *that, writeContent)
 }
 
 // Write the optional instance `that` as an XML element with the `local` name, or
@@ -7540,7 +6649,7 @@ func writeOptionalInstance[T any](
 		return
 	}
 
-	return writeElement(encoder, local, that, writeContent)
+	return xmlcommon.WriteElement(encoder, local, that, writeContent)
 }
 
 // Write the optional `that` as an XML element with the `local` name, or write
@@ -7563,7 +6672,7 @@ func writeOptionalSlice[T any](
 		return
 	}
 
-	return writeElement(encoder, local, that, writeContent)
+	return xmlcommon.WriteElement(encoder, local, that, writeContent)
 }
 
 // Write the items of the `list`, each as an XML element of its own.
@@ -7655,9 +6764,9 @@ func writeInstance[T aastypes.IClass](
 //
 // If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
 //
-// Unlike [writeElement], which frames a *property*, this function frames an instance
-// in the element which discriminates its model type, and is therefore the one place
-// where the XML namespace can be set.
+// Unlike [xmlcommon.WriteElement], which frames a *property*, this function frames
+// an instance in the element which discriminates its model type, and is therefore
+// the one place where the XML namespace can be set.
 func writeClassElement[T any](
 	encoder *xml.Encoder,
 	local string,
@@ -7665,7 +6774,7 @@ func writeClassElement[T any](
 	that T,
 	writeTAsSequence func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {
-	err = writeStartElement(encoder, local, withNamespace)
+	err = xmlcommon.WriteStartElement(encoder, local, withNamespace)
 	if err != nil {
 		return
 	}
@@ -7675,7 +6784,7 @@ func writeClassElement[T any](
 		return
 	}
 
-	err = writeEndElement(encoder, local, withNamespace)
+	err = xmlcommon.WriteEndElement(encoder, local, withNamespace)
 	return
 }
 
@@ -7932,8 +7041,8 @@ func writeExtensionAsSequence(
 
 	err = finishProperty(
 		"Name()",
-		writeElement(
-			encoder, "name", that.Name(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "name", that.Name(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -7953,7 +7062,7 @@ func writeExtensionAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalPointer(
-			encoder, "value", that.Value(), writeAsText_string,
+			encoder, "value", that.Value(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -7986,7 +7095,7 @@ func writeAsText_ModellingKind(
 		value,
 	)
 	if !ok {
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected literal of ModellingKind: %v",
 				value,
@@ -7995,7 +7104,7 @@ func writeAsText_ModellingKind(
 		return
 	}
 
-	err = writeText(encoder, text)
+	err = xmlcommon.WriteText(encoder, text)
 	return
 }
 
@@ -8027,7 +7136,7 @@ func writeAdministrativeInformationAsSequence(
 	err = finishProperty(
 		"Version()",
 		writeOptionalPointer(
-			encoder, "version", that.Version(), writeAsText_string,
+			encoder, "version", that.Version(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8037,7 +7146,7 @@ func writeAdministrativeInformationAsSequence(
 	err = finishProperty(
 		"Revision()",
 		writeOptionalPointer(
-			encoder, "revision", that.Revision(), writeAsText_string,
+			encoder, "revision", that.Revision(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8057,7 +7166,7 @@ func writeAdministrativeInformationAsSequence(
 	err = finishProperty(
 		"TemplateID()",
 		writeOptionalPointer(
-			encoder, "templateId", that.TemplateID(), writeAsText_string,
+			encoder, "templateId", that.TemplateID(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8080,7 +7189,7 @@ func writeAsText_QualifierKind(
 		value,
 	)
 	if !ok {
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected literal of QualifierKind: %v",
 				value,
@@ -8089,7 +7198,7 @@ func writeAsText_QualifierKind(
 		return
 	}
 
-	err = writeText(encoder, text)
+	err = xmlcommon.WriteText(encoder, text)
 	return
 }
 
@@ -8140,8 +7249,8 @@ func writeQualifierAsSequence(
 
 	err = finishProperty(
 		"Type()",
-		writeElement(
-			encoder, "type", that.Type(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "type", that.Type(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8150,7 +7259,7 @@ func writeQualifierAsSequence(
 
 	err = finishProperty(
 		"ValueType()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "valueType", that.ValueType(), writeAsText_DataTypeDefXSD,
 		),
 	)
@@ -8161,7 +7270,7 @@ func writeQualifierAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalPointer(
-			encoder, "value", that.Value(), writeAsText_string,
+			encoder, "value", that.Value(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8206,7 +7315,7 @@ func writeAssetAdministrationShellAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8216,7 +7325,7 @@ func writeAssetAdministrationShellAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8258,8 +7367,8 @@ func writeAssetAdministrationShellAsSequence(
 
 	err = finishProperty(
 		"ID()",
-		writeElement(
-			encoder, "id", that.ID(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "id", that.ID(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8291,7 +7400,7 @@ func writeAssetAdministrationShellAsSequence(
 
 	err = finishProperty(
 		"AssetInformation()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder,
 			"assetInformation",
 			that.AssetInformation(),
@@ -8329,7 +7438,7 @@ func writeAssetInformationAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"AssetKind()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "assetKind", that.AssetKind(), writeAsText_AssetKind,
 		),
 	)
@@ -8340,7 +7449,10 @@ func writeAssetInformationAsSequence(
 	err = finishProperty(
 		"GlobalAssetID()",
 		writeOptionalPointer(
-			encoder, "globalAssetId", that.GlobalAssetID(), writeAsText_string,
+			encoder,
+			"globalAssetId",
+			that.GlobalAssetID(),
+			xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8363,7 +7475,7 @@ func writeAssetInformationAsSequence(
 	err = finishProperty(
 		"AssetType()",
 		writeOptionalPointer(
-			encoder, "assetType", that.AssetType(), writeAsText_string,
+			encoder, "assetType", that.AssetType(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8400,8 +7512,8 @@ func writeResourceAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Path()",
-		writeElement(
-			encoder, "path", that.Path(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "path", that.Path(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8411,7 +7523,7 @@ func writeResourceAsSequence(
 	err = finishProperty(
 		"ContentType()",
 		writeOptionalPointer(
-			encoder, "contentType", that.ContentType(), writeAsText_string,
+			encoder, "contentType", that.ContentType(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8434,7 +7546,7 @@ func writeAsText_AssetKind(
 		value,
 	)
 	if !ok {
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected literal of AssetKind: %v",
 				value,
@@ -8443,7 +7555,7 @@ func writeAsText_AssetKind(
 		return
 	}
 
-	err = writeText(encoder, text)
+	err = xmlcommon.WriteText(encoder, text)
 	return
 }
 
@@ -8484,8 +7596,8 @@ func writeSpecificAssetIDAsSequence(
 
 	err = finishProperty(
 		"Name()",
-		writeElement(
-			encoder, "name", that.Name(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "name", that.Name(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8494,8 +7606,8 @@ func writeSpecificAssetIDAsSequence(
 
 	err = finishProperty(
 		"Value()",
-		writeElement(
-			encoder, "value", that.Value(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "value", that.Value(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8543,7 +7655,7 @@ func writeSubmodelAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8553,7 +7665,7 @@ func writeSubmodelAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8595,8 +7707,8 @@ func writeSubmodelAsSequence(
 
 	err = finishProperty(
 		"ID()",
-		writeElement(
-			encoder, "id", that.ID(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "id", that.ID(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8700,7 +7812,7 @@ func writeRelationshipElementAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8710,7 +7822,7 @@ func writeRelationshipElementAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8785,7 +7897,7 @@ func writeRelationshipElementAsSequence(
 
 	err = finishProperty(
 		"First()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "first", that.First(), writeReferenceAsSequence,
 		),
 	)
@@ -8795,7 +7907,7 @@ func writeRelationshipElementAsSequence(
 
 	err = finishProperty(
 		"Second()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "second", that.Second(), writeReferenceAsSequence,
 		),
 	)
@@ -8819,7 +7931,7 @@ func writeAsText_AASSubmodelElements(
 		value,
 	)
 	if !ok {
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected literal of AASSubmodelElements: %v",
 				value,
@@ -8828,7 +7940,7 @@ func writeAsText_AASSubmodelElements(
 		return
 	}
 
-	err = writeText(encoder, text)
+	err = xmlcommon.WriteText(encoder, text)
 	return
 }
 
@@ -8857,7 +7969,7 @@ func writeSubmodelElementListAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8867,7 +7979,7 @@ func writeSubmodelElementListAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -8943,7 +8055,7 @@ func writeSubmodelElementListAsSequence(
 	err = finishProperty(
 		"OrderRelevant()",
 		writeOptionalPointer(
-			encoder, "orderRelevant", that.OrderRelevant(), writeAsText_bool,
+			encoder, "orderRelevant", that.OrderRelevant(), xmlcommon.WriteAsText_bool,
 		),
 	)
 	if err != nil {
@@ -8965,7 +8077,7 @@ func writeSubmodelElementListAsSequence(
 
 	err = finishProperty(
 		"TypeValueListElement()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder,
 			"typeValueListElement",
 			that.TypeValueListElement(),
@@ -9027,7 +8139,7 @@ func writeSubmodelElementCollectionAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9037,7 +8149,7 @@ func writeSubmodelElementCollectionAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9148,7 +8260,7 @@ func writePropertyAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9158,7 +8270,7 @@ func writePropertyAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9233,7 +8345,7 @@ func writePropertyAsSequence(
 
 	err = finishProperty(
 		"ValueType()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "valueType", that.ValueType(), writeAsText_DataTypeDefXSD,
 		),
 	)
@@ -9244,7 +8356,7 @@ func writePropertyAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalPointer(
-			encoder, "value", that.Value(), writeAsText_string,
+			encoder, "value", that.Value(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9289,7 +8401,7 @@ func writeMultiLanguagePropertyAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9299,7 +8411,7 @@ func writeMultiLanguagePropertyAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9420,7 +8532,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9430,7 +8542,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9505,7 +8617,7 @@ func writeRangeAsSequence(
 
 	err = finishProperty(
 		"ValueType()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "valueType", that.ValueType(), writeAsText_DataTypeDefXSD,
 		),
 	)
@@ -9516,7 +8628,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"Min()",
 		writeOptionalPointer(
-			encoder, "min", that.Min(), writeAsText_string,
+			encoder, "min", that.Min(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9526,7 +8638,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"Max()",
 		writeOptionalPointer(
-			encoder, "max", that.Max(), writeAsText_string,
+			encoder, "max", that.Max(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9561,7 +8673,7 @@ func writeReferenceElementAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9571,7 +8683,7 @@ func writeReferenceElementAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9682,7 +8794,7 @@ func writeBlobAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9692,7 +8804,7 @@ func writeBlobAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9768,7 +8880,7 @@ func writeBlobAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalSlice(
-			encoder, "value", that.Value(), writeAsText_bytes,
+			encoder, "value", that.Value(), xmlcommon.WriteAsText_bytes,
 		),
 	)
 	if err != nil {
@@ -9777,8 +8889,8 @@ func writeBlobAsSequence(
 
 	err = finishProperty(
 		"ContentType()",
-		writeElement(
-			encoder, "contentType", that.ContentType(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "contentType", that.ContentType(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9813,7 +8925,7 @@ func writeFileAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9823,7 +8935,7 @@ func writeFileAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9899,7 +9011,7 @@ func writeFileAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalPointer(
-			encoder, "value", that.Value(), writeAsText_string,
+			encoder, "value", that.Value(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9908,8 +9020,8 @@ func writeFileAsSequence(
 
 	err = finishProperty(
 		"ContentType()",
-		writeElement(
-			encoder, "contentType", that.ContentType(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "contentType", that.ContentType(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9944,7 +9056,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -9954,7 +9066,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10029,7 +9141,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 
 	err = finishProperty(
 		"First()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "first", that.First(), writeReferenceAsSequence,
 		),
 	)
@@ -10039,7 +9151,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 
 	err = finishProperty(
 		"Second()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "second", that.Second(), writeReferenceAsSequence,
 		),
 	)
@@ -10085,7 +9197,7 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10095,7 +9207,7 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10180,7 +9292,7 @@ func writeEntityAsSequence(
 
 	err = finishProperty(
 		"EntityType()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "entityType", that.EntityType(), writeAsText_EntityType,
 		),
 	)
@@ -10191,7 +9303,10 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"GlobalAssetID()",
 		writeOptionalPointer(
-			encoder, "globalAssetId", that.GlobalAssetID(), writeAsText_string,
+			encoder,
+			"globalAssetId",
+			that.GlobalAssetID(),
+			xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10227,7 +9342,7 @@ func writeAsText_EntityType(
 		value,
 	)
 	if !ok {
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected literal of EntityType: %v",
 				value,
@@ -10236,7 +9351,7 @@ func writeAsText_EntityType(
 		return
 	}
 
-	err = writeText(encoder, text)
+	err = xmlcommon.WriteText(encoder, text)
 	return
 }
 
@@ -10253,7 +9368,7 @@ func writeAsText_Direction(
 		value,
 	)
 	if !ok {
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected literal of Direction: %v",
 				value,
@@ -10262,7 +9377,7 @@ func writeAsText_Direction(
 		return
 	}
 
-	err = writeText(encoder, text)
+	err = xmlcommon.WriteText(encoder, text)
 	return
 }
 
@@ -10279,7 +9394,7 @@ func writeAsText_StateOfEvent(
 		value,
 	)
 	if !ok {
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected literal of StateOfEvent: %v",
 				value,
@@ -10288,7 +9403,7 @@ func writeAsText_StateOfEvent(
 		return
 	}
 
-	err = writeText(encoder, text)
+	err = xmlcommon.WriteText(encoder, text)
 	return
 }
 
@@ -10306,7 +9421,7 @@ func writeEventPayloadAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Source()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "source", that.Source(), writeReferenceAsSequence,
 		),
 	)
@@ -10329,7 +9444,7 @@ func writeEventPayloadAsSequence(
 
 	err = finishProperty(
 		"ObservableReference()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder,
 			"observableReference",
 			that.ObservableReference(),
@@ -10356,7 +9471,7 @@ func writeEventPayloadAsSequence(
 	err = finishProperty(
 		"Topic()",
 		writeOptionalPointer(
-			encoder, "topic", that.Topic(), writeAsText_string,
+			encoder, "topic", that.Topic(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10375,8 +9490,8 @@ func writeEventPayloadAsSequence(
 
 	err = finishProperty(
 		"TimeStamp()",
-		writeElement(
-			encoder, "timeStamp", that.TimeStamp(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "timeStamp", that.TimeStamp(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10386,7 +9501,7 @@ func writeEventPayloadAsSequence(
 	err = finishProperty(
 		"Payload()",
 		writeOptionalSlice(
-			encoder, "payload", that.Payload(), writeAsText_bytes,
+			encoder, "payload", that.Payload(), xmlcommon.WriteAsText_bytes,
 		),
 	)
 	if err != nil {
@@ -10421,7 +9536,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10431,7 +9546,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10506,7 +9621,7 @@ func writeBasicEventElementAsSequence(
 
 	err = finishProperty(
 		"Observed()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "observed", that.Observed(), writeReferenceAsSequence,
 		),
 	)
@@ -10516,7 +9631,7 @@ func writeBasicEventElementAsSequence(
 
 	err = finishProperty(
 		"Direction()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "direction", that.Direction(), writeAsText_Direction,
 		),
 	)
@@ -10526,7 +9641,7 @@ func writeBasicEventElementAsSequence(
 
 	err = finishProperty(
 		"State()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "state", that.State(), writeAsText_StateOfEvent,
 		),
 	)
@@ -10537,7 +9652,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"MessageTopic()",
 		writeOptionalPointer(
-			encoder, "messageTopic", that.MessageTopic(), writeAsText_string,
+			encoder, "messageTopic", that.MessageTopic(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10557,7 +9672,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"LastUpdate()",
 		writeOptionalPointer(
-			encoder, "lastUpdate", that.LastUpdate(), writeAsText_string,
+			encoder, "lastUpdate", that.LastUpdate(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10567,7 +9682,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"MinInterval()",
 		writeOptionalPointer(
-			encoder, "minInterval", that.MinInterval(), writeAsText_string,
+			encoder, "minInterval", that.MinInterval(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10577,7 +9692,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"MaxInterval()",
 		writeOptionalPointer(
-			encoder, "maxInterval", that.MaxInterval(), writeAsText_string,
+			encoder, "maxInterval", that.MaxInterval(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10612,7 +9727,7 @@ func writeOperationAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10622,7 +9737,7 @@ func writeOperationAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10751,7 +9866,7 @@ func writeOperationVariableAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Value()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "value", that.Value(), writeInstance[aastypes.ISubmodelElement],
 		),
 	)
@@ -10787,7 +9902,7 @@ func writeCapabilityAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10797,7 +9912,7 @@ func writeCapabilityAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10898,7 +10013,7 @@ func writeConceptDescriptionAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeAsText_string,
+			encoder, "category", that.Category(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10908,7 +10023,7 @@ func writeConceptDescriptionAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeAsText_string,
+			encoder, "idShort", that.IDShort(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10950,8 +10065,8 @@ func writeConceptDescriptionAsSequence(
 
 	err = finishProperty(
 		"ID()",
-		writeElement(
-			encoder, "id", that.ID(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "id", that.ID(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -10997,7 +10112,7 @@ func writeAsText_ReferenceTypes(
 		value,
 	)
 	if !ok {
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected literal of ReferenceTypes: %v",
 				value,
@@ -11006,7 +10121,7 @@ func writeAsText_ReferenceTypes(
 		return
 	}
 
-	err = writeText(encoder, text)
+	err = xmlcommon.WriteText(encoder, text)
 	return
 }
 
@@ -11024,7 +10139,7 @@ func writeReferenceAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Type()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "type", that.Type(), writeAsText_ReferenceTypes,
 		),
 	)
@@ -11047,7 +10162,7 @@ func writeReferenceAsSequence(
 
 	err = finishProperty(
 		"Keys()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "keys", that.Keys(), writeListOf_IKey,
 		),
 	)
@@ -11072,7 +10187,7 @@ func writeKeyAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Type()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "type", that.Type(), writeAsText_KeyTypes,
 		),
 	)
@@ -11082,8 +10197,8 @@ func writeKeyAsSequence(
 
 	err = finishProperty(
 		"Value()",
-		writeElement(
-			encoder, "value", that.Value(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "value", that.Value(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11106,7 +10221,7 @@ func writeAsText_KeyTypes(
 		value,
 	)
 	if !ok {
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected literal of KeyTypes: %v",
 				value,
@@ -11115,7 +10230,7 @@ func writeAsText_KeyTypes(
 		return
 	}
 
-	err = writeText(encoder, text)
+	err = xmlcommon.WriteText(encoder, text)
 	return
 }
 
@@ -11132,7 +10247,7 @@ func writeAsText_DataTypeDefXSD(
 		value,
 	)
 	if !ok {
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected literal of DataTypeDefXSD: %v",
 				value,
@@ -11141,7 +10256,7 @@ func writeAsText_DataTypeDefXSD(
 		return
 	}
 
-	err = writeText(encoder, text)
+	err = xmlcommon.WriteText(encoder, text)
 	return
 }
 
@@ -11159,8 +10274,8 @@ func writeLangStringNameTypeAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Language()",
-		writeElement(
-			encoder, "language", that.Language(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "language", that.Language(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11169,8 +10284,8 @@ func writeLangStringNameTypeAsSequence(
 
 	err = finishProperty(
 		"Text()",
-		writeElement(
-			encoder, "text", that.Text(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "text", that.Text(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11194,8 +10309,8 @@ func writeLangStringTextTypeAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Language()",
-		writeElement(
-			encoder, "language", that.Language(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "language", that.Language(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11204,8 +10319,8 @@ func writeLangStringTextTypeAsSequence(
 
 	err = finishProperty(
 		"Text()",
-		writeElement(
-			encoder, "text", that.Text(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "text", that.Text(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11280,7 +10395,7 @@ func writeEmbeddedDataSpecificationAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"DataSpecification()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder,
 			"dataSpecification",
 			that.DataSpecification(),
@@ -11293,7 +10408,7 @@ func writeEmbeddedDataSpecificationAsSequence(
 
 	err = finishProperty(
 		"DataSpecificationContent()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder,
 			"dataSpecificationContent",
 			that.DataSpecificationContent(),
@@ -11320,7 +10435,7 @@ func writeAsText_DataTypeIEC61360(
 		value,
 	)
 	if !ok {
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected literal of DataTypeIEC61360: %v",
 				value,
@@ -11329,7 +10444,7 @@ func writeAsText_DataTypeIEC61360(
 		return
 	}
 
-	err = writeText(encoder, text)
+	err = xmlcommon.WriteText(encoder, text)
 	return
 }
 
@@ -11347,8 +10462,8 @@ func writeLevelTypeAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Min()",
-		writeElement(
-			encoder, "min", that.Min(), writeAsText_bool,
+		xmlcommon.WriteElement(
+			encoder, "min", that.Min(), xmlcommon.WriteAsText_bool,
 		),
 	)
 	if err != nil {
@@ -11357,8 +10472,8 @@ func writeLevelTypeAsSequence(
 
 	err = finishProperty(
 		"Nom()",
-		writeElement(
-			encoder, "nom", that.Nom(), writeAsText_bool,
+		xmlcommon.WriteElement(
+			encoder, "nom", that.Nom(), xmlcommon.WriteAsText_bool,
 		),
 	)
 	if err != nil {
@@ -11367,8 +10482,8 @@ func writeLevelTypeAsSequence(
 
 	err = finishProperty(
 		"Typ()",
-		writeElement(
-			encoder, "typ", that.Typ(), writeAsText_bool,
+		xmlcommon.WriteElement(
+			encoder, "typ", that.Typ(), xmlcommon.WriteAsText_bool,
 		),
 	)
 	if err != nil {
@@ -11377,8 +10492,8 @@ func writeLevelTypeAsSequence(
 
 	err = finishProperty(
 		"Max()",
-		writeElement(
-			encoder, "max", that.Max(), writeAsText_bool,
+		xmlcommon.WriteElement(
+			encoder, "max", that.Max(), xmlcommon.WriteAsText_bool,
 		),
 	)
 	if err != nil {
@@ -11402,8 +10517,8 @@ func writeValueReferencePairAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Value()",
-		writeElement(
-			encoder, "value", that.Value(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "value", that.Value(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11412,7 +10527,7 @@ func writeValueReferencePairAsSequence(
 
 	err = finishProperty(
 		"ValueID()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder, "valueId", that.ValueID(), writeReferenceAsSequence,
 		),
 	)
@@ -11437,7 +10552,7 @@ func writeValueListAsSequence(
 ) (err error) {
 	err = finishProperty(
 		"ValueReferencePairs()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder,
 			"valueReferencePairs",
 			that.ValueReferencePairs(),
@@ -11465,8 +10580,8 @@ func writeLangStringPreferredNameTypeIEC61360AsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Language()",
-		writeElement(
-			encoder, "language", that.Language(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "language", that.Language(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11475,8 +10590,8 @@ func writeLangStringPreferredNameTypeIEC61360AsSequence(
 
 	err = finishProperty(
 		"Text()",
-		writeElement(
-			encoder, "text", that.Text(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "text", that.Text(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11500,8 +10615,8 @@ func writeLangStringShortNameTypeIEC61360AsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Language()",
-		writeElement(
-			encoder, "language", that.Language(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "language", that.Language(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11510,8 +10625,8 @@ func writeLangStringShortNameTypeIEC61360AsSequence(
 
 	err = finishProperty(
 		"Text()",
-		writeElement(
-			encoder, "text", that.Text(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "text", that.Text(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11535,8 +10650,8 @@ func writeLangStringDefinitionTypeIEC61360AsSequence(
 ) (err error) {
 	err = finishProperty(
 		"Language()",
-		writeElement(
-			encoder, "language", that.Language(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "language", that.Language(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11545,8 +10660,8 @@ func writeLangStringDefinitionTypeIEC61360AsSequence(
 
 	err = finishProperty(
 		"Text()",
-		writeElement(
-			encoder, "text", that.Text(), writeAsText_string,
+		xmlcommon.WriteElement(
+			encoder, "text", that.Text(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11570,7 +10685,7 @@ func writeDataSpecificationIEC61360AsSequence(
 ) (err error) {
 	err = finishProperty(
 		"PreferredName()",
-		writeElement(
+		xmlcommon.WriteElement(
 			encoder,
 			"preferredName",
 			that.PreferredName(),
@@ -11597,7 +10712,7 @@ func writeDataSpecificationIEC61360AsSequence(
 	err = finishProperty(
 		"Unit()",
 		writeOptionalPointer(
-			encoder, "unit", that.Unit(), writeAsText_string,
+			encoder, "unit", that.Unit(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11620,7 +10735,7 @@ func writeDataSpecificationIEC61360AsSequence(
 			encoder,
 			"sourceOfDefinition",
 			that.SourceOfDefinition(),
-			writeAsText_string,
+			xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11630,7 +10745,7 @@ func writeDataSpecificationIEC61360AsSequence(
 	err = finishProperty(
 		"Symbol()",
 		writeOptionalPointer(
-			encoder, "symbol", that.Symbol(), writeAsText_string,
+			encoder, "symbol", that.Symbol(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11663,7 +10778,7 @@ func writeDataSpecificationIEC61360AsSequence(
 	err = finishProperty(
 		"ValueFormat()",
 		writeOptionalPointer(
-			encoder, "valueFormat", that.ValueFormat(), writeAsText_string,
+			encoder, "valueFormat", that.ValueFormat(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -11683,7 +10798,7 @@ func writeDataSpecificationIEC61360AsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalPointer(
-			encoder, "value", that.Value(), writeAsText_string,
+			encoder, "value", that.Value(), xmlcommon.WriteAsText_string,
 		),
 	)
 	if err != nil {
@@ -12008,7 +11123,7 @@ func writeClass(
 			writeDataSpecificationIEC61360AsSequence,
 		)
 	default:
-		err = newSerializationError(
+		err = xmlcommon.NewSerializationError(
 			fmt.Sprintf(
 				"Unexpected model type: %v",
 				that.ModelType(),

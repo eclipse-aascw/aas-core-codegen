@@ -331,6 +331,19 @@ for i, v := range {prop_var} {{
                     f"you need this feature."
                 )
 
+            elif isinstance(
+                type_anno.items,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # A JSON-able value is plain data, never one of our own
+                # classes, so there is nothing to enhance.
+                continue
+
             else:
                 assert_never(type_anno.items)
 
@@ -386,6 +399,19 @@ that.{prop_setter_name}(
 {I}{prop_var},
 )"""
             )
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # A JSON-able value is plain data, never one of our own classes, so
+            # there is nothing to enhance.
+            continue
 
         else:
             # noinspection PyTypeChecker

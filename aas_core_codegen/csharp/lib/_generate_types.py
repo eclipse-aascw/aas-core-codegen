@@ -725,6 +725,20 @@ foreach (var {_OUTER_ITEM_VAR} in {access_expr})
                     )
                 )
 
+            elif isinstance(
+                type_anno.items,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # A JSON-able value is plain data (``Nodes.JsonNode``), never
+                # a reference to one of our own classes, so there is nothing
+                # to descend into.
+                continue
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno.items)
@@ -762,6 +776,20 @@ foreach (var {_OUTER_ITEM_VAR} in {access_expr})
 
             if len(prop_blocks) == 0:
                 continue
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # A JSON-able value is plain data (``Nodes.JsonNode``), never
+            # a reference to one of our own classes, so there is nothing
+            # to descend into.
+            continue
 
         else:
             # noinspection PyTypeChecker
@@ -1409,7 +1437,7 @@ def generate(
     """
     Generate code of the data structures representing the meta-model.
 
-    The ``namespace`` defines the AAS C# namespace.
+    The ``namespace`` defines the base C# namespace of the generated code.
     """
     code_blocks = [
         Stripped(
@@ -1580,6 +1608,9 @@ using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;
 using System.Collections.Generic;  // can't alias"""
         )
     )
+
+    if intermediate.uses_json_types(symbol_table):
+        using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
 
     code_blocks_joined = "\n\n".join(code_blocks)
 

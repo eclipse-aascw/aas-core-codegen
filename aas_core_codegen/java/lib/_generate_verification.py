@@ -992,6 +992,71 @@ errorStream = Stream.<Reporting.Error>concat(errorStream,
                 )
             )
 
+    elif isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        json_verify_method: str
+        if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+            json_verify_method = "verifyJsonValue"
+        elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+            json_verify_method = "verifyJsonArray"
+        else:
+            json_verify_method = "verifyJsonObject"
+
+        stmts.append(
+            Stripped(
+                f"""\
+errorStream = Stream.<Reporting.Error>concat(errorStream,
+{I}Stream.of({source_expr})
+{II}.flatMap(Verification::{json_verify_method})
+{III}.map(error -> {{
+{IIII}error.prependSegment(
+{IIIII}new Reporting.NameSegment({prop_literal}));
+{IIII}return error;
+{III}}}));"""
+            )
+        )
+
+        key_constrained_primitive = (
+            intermediate.try_constrained_primitive(type_anno.key)
+            if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation)
+            else None
+        )
+
+        # NOTE (mristin):
+        # A bare ``str`` key has nothing to verify.
+        if key_constrained_primitive is not None:
+            key_verify_method = _generate_verify_method(
+                our_type=key_constrained_primitive
+            )
+
+            stmts.append(
+                Stripped(
+                    f"""\
+errorStream = Stream.<Reporting.Error>concat(errorStream,
+{I}Verification.streamOfFieldNames({source_expr})
+{II}.flatMap(key ->
+{III}Verification.{key_verify_method}(key)
+{IIII}.map(error -> {{
+{IIIII}// NOTE (mristin):
+{IIIII}// A member of an open JSON object is no property of one of
+{IIIII}// our classes, so it gets no segment of its own -- the key
+{IIIII}// goes into the message instead, as it does in
+{IIIII}// ``verifyJsonValue``.
+{IIIII}final Reporting.Error keyError = new Reporting.Error(
+{IIIIII}"In the member \\"" + key + "\\": " + error.getCause());
+{IIIII}keyError.prependSegment(
+{IIIIII}new Reporting.NameSegment({prop_literal}));
+{IIIII}return keyError;
+{IIII}}})));"""
+                )
+            )
+
     else:
         assert_never(type_anno)
 
@@ -1098,6 +1163,148 @@ public Stream<Reporting.Error> {transform_name}(
     writer.write("\n}")
 
     return Stripped(writer.getvalue()), None
+
+
+def _generate_verify_json_value(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the methods verifying that a value is JSON-able.
+
+    A JSON-able value is, recursively, exactly as JSON itself is defined, but
+    a Jackson node rules out neither of the two ways of not being one: a null
+    node and a non-finite number. Both are reported here, at any depth.
+
+    The path *within* a JSON-able value goes into the message rather than into
+    the structured path of the error: a name segment points at a property of
+    one of our classes and an index segment at an item of one of our lists,
+    and a member of an open JSON object is neither.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * Stream the field names of {{@code node}}.
+ *
+ * <p>Jackson gives an {{@link java.util.Iterator}}, which is not a stream.
+ */
+private static Stream<String> streamOfFieldNames(JsonNode node) {{
+{I}final List<String> names = new ArrayList<>();
+{I}node.fieldNames().forEachRemaining(names::add);
+{I}return names.stream();
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Verify that {{@code node}} is a JSON-able value, at any depth.
+ *
+ * @param node to be verified
+ * @param path JSON path to {{@code node}}, written into the messages
+ * @return a stream of errors, if any
+ */
+private static Stream<Reporting.Error> verifyJsonValueAt(
+{II}JsonNode node, String path) {{
+{I}if (node == null || node.isNull() || node.isMissingNode()) {{
+{II}return Stream.of(
+{III}new Reporting.Error(
+{IIII}"Expected a JSON-able value at " + path
+{IIIII}+ ", but got: " + node));
+{I}}}
+
+{I}if (node.isNumber()) {{
+{II}// NOTE (mristin):
+{II}// JSON knows neither an infinity nor a not-a-number, so neither is
+{II}// a JSON-able value, even though a Jackson node holds either.
+{II}final double value = node.doubleValue();
+{II}if (Double.isInfinite(value) || Double.isNaN(value)) {{
+{III}return Stream.of(
+{IIII}new Reporting.Error(
+{IIIII}"Expected a JSON-able value at " + path
+{IIIIII}+ ", but got the number " + value
+{IIIIII}+ ", which is neither finite nor representable in JSON"));
+{II}}}
+{II}return Stream.empty();
+{I}}}
+
+{I}if (node.isBoolean() || node.isTextual()) {{
+{II}return Stream.empty();
+{I}}}
+
+{I}if (node.isArray()) {{
+{II}return Verification.zip(
+{III}IntStream.iterate(0, i -> i + 1).boxed(),
+{III}StreamSupport.stream(node.spliterator(), false))
+{IIII}.flatMap(elemTuple -> verifyJsonValueAt(
+{IIIII}elemTuple.getSecond(),
+{IIIII}path + "[" + elemTuple.getFirst() + "]"));
+{I}}}
+
+{I}if (node.isObject()) {{
+{II}return streamOfFieldNames(node)
+{III}.flatMap(name -> verifyJsonValueAt(
+{IIII}node.get(name), path + "." + name));
+{I}}}
+
+{I}return Stream.of(
+{II}new Reporting.Error(
+{III}"Expected a JSON-able value (a boolean, a number, a string, "
+{IIII}+ "an array or an object) at " + path
+{IIII}+ ", but got: " + node.getNodeType()));
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Verify that {{@code node}} is a JSON-able value, at any depth.
+ *
+ * @param node to be verified
+ * @return a stream of errors, if any
+ */
+public static Stream<Reporting.Error> verifyJsonValue(JsonNode node) {{
+{I}return verifyJsonValueAt(node, "$");
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Verify that {{@code node}} is a JSON-able array.
+ *
+ * @param node to be verified
+ * @return a stream of errors, if any
+ */
+public static Stream<Reporting.Error> verifyJsonArray(ArrayNode node) {{
+{I}if (node == null) {{
+{II}return Stream.of(
+{III}new Reporting.Error(
+{IIII}"Expected a JSON-able array, but got: null"));
+{I}}}
+
+{I}return verifyJsonValue(node);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Verify that {{@code node}} is a JSON-able object.
+ *
+ * @param node to be verified
+ * @return a stream of errors, if any
+ */
+public static Stream<Reporting.Error> verifyJsonObject(ObjectNode node) {{
+{I}if (node == null) {{
+{II}return Stream.of(
+{III}new Reporting.Error(
+{IIII}"Expected a JSON-able object, but got: null"));
+{I}}}
+
+{I}return verifyJsonValue(node);
+}}"""
+        ),
+    ]
 
 
 def _generate_transformer(
@@ -1303,6 +1510,20 @@ def generate(
         Stripped(f"import {package}.visitation.AbstractTransformer;"),
     ]  # type: List[Stripped]
 
+    # NOTE (mristin):
+    # A JSON-able value is a Jackson node, and only the models which use one
+    # pay for the import and for the verification which goes with it.
+    if intermediate.uses_json_types(symbol_table):
+        imports.extend(
+            [
+                Stripped("import com.fasterxml.jackson.databind.JsonNode;"),
+                Stripped("import com.fasterxml.jackson.databind.node.ArrayNode;"),
+                Stripped("import com.fasterxml.jackson.databind.node.ObjectNode;"),
+                Stripped("import java.util.ArrayList;"),
+                Stripped("import java.util.List;"),
+            ]
+        )
+
     verification_blocks = []  # type: List[Stripped]
     errors = []  # type: List[Error]
 
@@ -1365,6 +1586,8 @@ def generate(
 private static final _Transformer transformer = new _Transformer();"""
         )
     )
+
+    verification_blocks.extend(_generate_verify_json_value(symbol_table=symbol_table))
 
     transformer_block, transformer_errors = _generate_transformer(
         symbol_table=symbol_table,

@@ -118,17 +118,27 @@ func forceSelfClosingTags(text string) string {{
 {II}return text
 {I}}}
 
+{I}// NOTE (mristin):
+{I}// The matches are walked in order, and the pieces of `b` between them are
+{I}// copied over as they are. Mind that `nb` starts out empty and that `b` is
+{I}// only ever *read*: an earlier version appended into `b[0:idx[0]]`, which
+{I}// writes into `b`'s own backing array, so a document with more than one
+{I}// empty tag came out garbled -- every turn of the loop then indexed into
+{I}// a `b` which the previous turn had already overwritten.
 {I}var nb []byte
+{I}previous := 0
 
 {I}for _, idx := range emptyTagIdxs {{
-{II}// Get everything in b up till the first of the submatch indexes (this is
-{II}// the start of an "empty" <thing></thing> tag), then get the name of the tag
-{II}// and put it in a self-closing tag.
-{II}nb = append(b[0:idx[0]], fmt.Sprintf("<%s/>", b[idx[2]:idx[3]])...)
+{II}// Copy everything since the previous match, then the tag itself --
+{II}// its name and its attributes -- as a self-closing one.
+{II}nb = append(nb, b[previous:idx[0]]...)
+{II}nb = append(nb, fmt.Sprintf("<%s/>", b[idx[2]:idx[3]])...)
 
-{II}// Finally, append everything *after* the submatch indexes
-{II}nb = append(nb, b[len(b)-(len(b)-idx[1]):]...)
+{II}previous = idx[1]
 {I}}}
+
+{I}// Finally, copy everything after the last match.
+{I}nb = append(nb, b[previous:]...)
 
 {I}return string(nb)
 }}"""

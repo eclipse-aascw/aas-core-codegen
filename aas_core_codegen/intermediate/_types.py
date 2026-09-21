@@ -332,12 +332,67 @@ class OptionalTypeAnnotation(TypeAnnotation):
         return f"Optional[{self.value}]"
 
 
+class JsonValueTypeAnnotation(TypeAnnotation):
+    """
+    Represent a type annotation for an arbitrary, open JSON-able value.
+
+    A JSON-able value is, recursively, exactly as JSON itself is defined:
+    a boolean, a number or a string, an open JSON-able array of such values
+    (see :class:`JsonArrayTypeAnnotation`), or an open, JSON-object-shaped
+    value with string-like keys and JSON-able values (see
+    :class:`JsonObjectTypeAnnotation`).
+    """
+
+    def __str__(self) -> str:
+        return "JSONValue"
+
+
+class JsonArrayTypeAnnotation(TypeAnnotation):
+    """
+    Represent a type annotation for an open, JSON-able array.
+
+    This denotes a homogeneous array whose items are themselves arbitrary
+    JSON-able values (see :class:`JsonValueTypeAnnotation`), without pinning
+    the array down to a fixed length or to a single, more specific item type.
+    """
+
+    def __str__(self) -> str:
+        return "JSONArray"
+
+
+class JsonObjectTypeAnnotation(TypeAnnotation):
+    """
+    Represent a type annotation for an open, JSON-object-shaped value.
+
+    This denotes a string-keyed mapping whose keys are given by ``key``
+    (``str`` or a class (transitively) constraining ``str``) and whose
+    values are always arbitrary JSON-able values (see
+    :class:`JsonValueTypeAnnotation`) -- the value can not be customized to
+    a more specific type.
+    """
+
+    def __init__(
+        self,
+        key: "TypeAnnotationUnion",
+        parsed: parse.TypeAnnotation,
+    ) -> None:
+        TypeAnnotation.__init__(self, parsed=parsed)
+
+        self.key = key
+
+    def __str__(self) -> str:
+        return f"JSONObject[{self.key}]"
+
+
 TypeAnnotationUnion = Union[
     PrimitiveTypeAnnotation,
     OurTypeAnnotation,
     ListTypeAnnotation,
     TupleTypeAnnotation,
     OptionalTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
 ]
 
 assert_union_of_descendants_exhaustive(
@@ -350,6 +405,9 @@ TypeAnnotationUnionAsTuple = (
     ListTypeAnnotation,
     TupleTypeAnnotation,
     OptionalTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
 )
 
 assert TypeAnnotationUnionAsTuple == get_args(TypeAnnotationUnion)
@@ -359,6 +417,9 @@ TypeAnnotationExceptOptional = Union[
     OurTypeAnnotation,
     ListTypeAnnotation,
     TupleTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
 ]
 
 assert_union_without_excluded(
@@ -372,18 +433,57 @@ TypeAnnotationExceptOptionalAsTuple = (
     OurTypeAnnotation,
     ListTypeAnnotation,
     TupleTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
 )
 assert TypeAnnotationExceptOptionalAsTuple == get_args(TypeAnnotationExceptOptional)
 
-AtomicTypeAnnotation = Union[PrimitiveTypeAnnotation, OurTypeAnnotation]
+# NOTE (mristin):
+# "Atomic" here does not mean "unsubscripted at the parse stage" -- it means
+# that a single item of this type can be handled by generated code with one
+# self-contained, non-recursive statement or function call (*e.g.*, "convert
+# this one value" or "de-/serialize this one object"), without the *caller*
+# (typically the code iterating over a ``List``'s items or unpacking a
+# ``Tuple``'s items) needing to unroll any further recursive structure of its
+# own. A primitive is atomic in this sense, and so is a reference to one of
+# our own types (``Enumeration``, ``ConstrainedPrimitive``, a ``Class`` or
+# a ``NamedUnion``) -- whatever internal complexity the referenced class
+# itself might have (even further lists, tuples or JSON objects) is entirely
+# the concern of that class's own, single, dedicated function, not of the
+# caller trying to handle one item of a collection. The very same reasoning
+# makes ``JsonValueTypeAnnotation``, ``JsonArrayTypeAnnotation`` and
+# ``JsonObjectTypeAnnotation`` atomic too: each is always handled by exactly
+# one call into a generic "parse/render an arbitrary JSON value" routine,
+# regardless of how deeply the JSON value happens to be nested at runtime.
+# ``List``, ``Tuple`` and ``Optional`` are excluded for the opposite reason:
+# handling one of them at the call site *does* require the caller itself to
+# generate a loop, per-index unpacking, or a null-check branch.
+AtomicTypeAnnotation = Union[
+    PrimitiveTypeAnnotation,
+    OurTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
+]
 
-AtomicTypeAnnotationAsTuple = (PrimitiveTypeAnnotation, OurTypeAnnotation)
+AtomicTypeAnnotationAsTuple = (
+    PrimitiveTypeAnnotation,
+    OurTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
+)
 assert AtomicTypeAnnotationAsTuple == get_args(AtomicTypeAnnotation)
 
 assert_union_without_excluded(
     original_union=TypeAnnotationUnion,
     subset_union=AtomicTypeAnnotation,
-    excluded=[ListTypeAnnotation, TupleTypeAnnotation, OptionalTypeAnnotation],
+    excluded=[
+        ListTypeAnnotation,
+        TupleTypeAnnotation,
+        OptionalTypeAnnotation,
+    ],
 )
 
 #: A type annotation which holds other values, and hence has to be de/serialized
@@ -397,7 +497,14 @@ assert ContainerTypeAnnotationAsTuple == get_args(ContainerTypeAnnotation)
 assert_union_without_excluded(
     original_union=TypeAnnotationUnion,
     subset_union=ContainerTypeAnnotation,
-    excluded=[PrimitiveTypeAnnotation, OurTypeAnnotation, OptionalTypeAnnotation],
+    excluded=[
+        PrimitiveTypeAnnotation,
+        OurTypeAnnotation,
+        JsonValueTypeAnnotation,
+        JsonArrayTypeAnnotation,
+        JsonObjectTypeAnnotation,
+        OptionalTypeAnnotation,
+    ],
 )
 
 
@@ -434,6 +541,18 @@ def type_annotations_equal(
     elif isinstance(that, OptionalTypeAnnotation):
         assert isinstance(other, OptionalTypeAnnotation)
         return type_annotations_equal(that.value, other.value)
+
+    elif isinstance(that, JsonValueTypeAnnotation):
+        assert isinstance(other, JsonValueTypeAnnotation)
+        return True
+
+    elif isinstance(that, JsonArrayTypeAnnotation):
+        assert isinstance(other, JsonArrayTypeAnnotation)
+        return True
+
+    elif isinstance(that, JsonObjectTypeAnnotation):
+        assert isinstance(other, JsonObjectTypeAnnotation)
+        return type_annotations_equal(that.key, other.key)
 
     else:
         assert_never(that)
@@ -3543,6 +3662,22 @@ def try_primitive_type(type_annotation: TypeAnnotationUnion) -> Optional[Primiti
         return None
 
 
+def try_constrained_primitive(
+    type_annotation: TypeAnnotationUnion,
+) -> Optional[ConstrainedPrimitive]:
+    """
+    Try to get the constrained primitive of the type annotation.
+
+    If the type annotation does not reference one, return ``None``.
+    """
+    if isinstance(type_annotation, OurTypeAnnotation) and isinstance(
+        type_annotation.our_type, ConstrainedPrimitive
+    ):
+        return type_annotation.our_type
+
+    return None
+
+
 def map_descendability(
     type_annotation: TypeAnnotationUnion,
 ) -> MutableMapping[TypeAnnotationUnion, bool]:
@@ -3607,6 +3742,23 @@ def map_descendability(
             mapping[a_type_annotation] = result
             return result
 
+        elif isinstance(a_type_annotation, JsonValueTypeAnnotation):
+            mapping[a_type_annotation] = False
+            return False
+
+        elif isinstance(a_type_annotation, JsonArrayTypeAnnotation):
+            mapping[a_type_annotation] = False
+            return False
+
+        elif isinstance(a_type_annotation, JsonObjectTypeAnnotation):
+            # NOTE (mristin):
+            # The key is ``str`` or a class constraining ``str`` (enforced by
+            # ``_verify_only_simple_type_patterns`` in ``_translate.py``) and
+            # the value is always ``JSONValue`` -- neither ever descends into
+            # a class, so a ``JsonObjectTypeAnnotation`` is never descendable.
+            mapping[a_type_annotation] = False
+            return False
+
         else:
             assert_never(a_type_annotation)
 
@@ -3645,6 +3797,9 @@ def over_type_annotation_and_nested_type_annotations(
     elif isinstance(type_annotation, TupleTypeAnnotation):
         for item in type_annotation.items:
             yield from over_type_annotation_and_nested_type_annotations(item)
+
+    elif isinstance(type_annotation, JsonObjectTypeAnnotation):
+        yield from over_type_annotation_and_nested_type_annotations(type_annotation.key)
 
     else:
         pass
@@ -3998,6 +4153,33 @@ def tuple_arities(symbol_table: SymbolTable) -> List[int]:
     return sorted(arities)
 
 
+def uses_json_types(symbol_table: SymbolTable) -> bool:
+    """
+    Check whether any property in the model refers to a JSON-able type.
+
+    This works recursively: a JSON-able type is picked up regardless of how
+    deeply it is nested within a property's type annotation (*e.g.*, inside
+    a ``List[...]`` or an ``Optional[...]``), not just when the property
+    itself is directly annotated as one.
+    """
+    for cls in symbol_table.classes:
+        for prop in cls.properties:
+            for type_anno in over_type_annotation_and_nested_type_annotations(
+                prop.type_annotation
+            ):
+                if isinstance(
+                    type_anno,
+                    (
+                        JsonValueTypeAnnotation,
+                        JsonArrayTypeAnnotation,
+                        JsonObjectTypeAnnotation,
+                    ),
+                ):
+                    return True
+
+    return False
+
+
 def collect_ids_of_our_types_in_properties(
     symbol_table: SymbolTable,
 ) -> Set[IdOfOurType]:
@@ -4023,6 +4205,12 @@ def collect_ids_of_our_types_in_properties(
                     pass
                 elif isinstance(type_anno, OurTypeAnnotation):
                     result.add(runtime_id(type_anno.our_type))
+                elif isinstance(type_anno, JsonValueTypeAnnotation):
+                    pass
+                elif isinstance(type_anno, JsonArrayTypeAnnotation):
+                    pass
+                elif isinstance(type_anno, JsonObjectTypeAnnotation):
+                    stack.append(type_anno.key)
                 else:
                     assert_never(type_anno)
 

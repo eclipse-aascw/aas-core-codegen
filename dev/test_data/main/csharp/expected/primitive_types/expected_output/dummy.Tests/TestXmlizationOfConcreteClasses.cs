@@ -106,9 +106,10 @@ namespace dummy.Tests
 
                 foreach (var child in gotDoc.Descendants())
                 {
-                    Assert.AreEqual(
-                        child.GetDefaultNamespace().NamespaceName,
-                        "https://dummy.com");
+                    Assert.IsTrue(
+                        child.GetDefaultNamespace().NamespaceName == "https://dummy.com",
+                        $"Unexpected namespace of {child.Name}: " +
+                            $"{child.GetDefaultNamespace().NamespaceName}");
                 }
 
                 var expectedDoc = XDocument.Load(path);

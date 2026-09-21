@@ -6,12 +6,14 @@ from aas_core_codegen.python.tests import (
     _generate_common_xmlization,
     _generate_test_descend_and_pass_through_visitor,
     _generate_test_descend_once,
+    _generate_test_json_value_verification,
     _generate_test_jsonization_of_classes_with_descendants,
     _generate_test_jsonization_of_concrete_classes,
     _generate_test_jsonization_of_enums,
     _generate_test_for_over_x_or_empty,
     _generate_test_for_x_or_default,
     _generate_test_verification,
+    _generate_test_xml_rpc,
     _generate_test_xmlization_of_classes_with_descendants,
     _generate_test_xmlization_of_concrete_classes,
 )
@@ -23,6 +25,7 @@ generate_test_descend_and_pass_through_visitor = (
     _generate_test_descend_and_pass_through_visitor.generate
 )
 generate_test_descend_once = _generate_test_descend_once.generate
+generate_test_json_value_verification = _generate_test_json_value_verification.generate
 generate_test_jsonization_of_classes_with_descendants = (
     _generate_test_jsonization_of_classes_with_descendants.generate
 )
@@ -33,6 +36,7 @@ generate_test_jsonization_of_enums = _generate_test_jsonization_of_enums.generat
 generate_test_for_over_x_or_empty = _generate_test_for_over_x_or_empty.generate
 generate_test_for_x_or_default = _generate_test_for_x_or_default.generate
 generate_test_verification = _generate_test_verification.generate
+generate_test_xml_rpc = _generate_test_xml_rpc.generate
 generate_test_xmlization_of_classes_with_descendants = (
     _generate_test_xmlization_of_classes_with_descendants.generate
 )

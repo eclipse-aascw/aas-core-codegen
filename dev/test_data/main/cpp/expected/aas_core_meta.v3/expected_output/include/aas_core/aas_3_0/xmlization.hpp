@@ -7,6 +7,7 @@
 #include "aas_core/aas_3_0/common.hpp"
 #include "aas_core/aas_3_0/iteration.hpp"
 #include "aas_core/aas_3_0/types.hpp"
+#include "aas_core/aas_3_0/xml_path.hpp"
 
 #pragma warning(push, 0)
 #include <deque>
@@ -28,86 +29,6 @@ namespace xmlization {
  */
 extern const std::string kNamespace;
 
-/**
- * Represent a segment of an XPath to an erroneous value.
- */
-class ISegment {
- public:
-  /**
-   * \brief Convert the segment to a string in an XPath.
-   *
-   * The result is escaped such that it can be directly inserted
-   * into an XPath.
-   */
-  virtual std::wstring ToWstring() const = 0;
-
-  virtual std::unique_ptr<ISegment> Clone() const = 0;
-
-  virtual ~ISegment() = default;
-};  // class ISegment
-
-/**
- * Represent an element on an XPath to the erroneous value.
- */
-struct ElementSegment : public ISegment {
-  /**
-   * \brief Name of the XML element, without the namespace
-   *
-   * We deliberately omit the namespace in the tag names. If you want to actually
-   * query with the resulting XPath, you have to insert the namespaces manually.
-   * We did not know how to include the namespace in a meaningful way, as XPath
-   * assumes namespace prefixes to be defined <em>outside</em> of the document.
-   * At least the path thus rendered is informative, and you should be able to
-   * descend it manually.
-   */
-  std::wstring name;
-
-  ElementSegment(
-    std::wstring a_name
-  );
-
-  std::wstring ToWstring() const override;
-
-  std::unique_ptr<ISegment> Clone() const override;
-
-  ~ElementSegment() override = default;
-};  // struct ElementSegment
-
-/**
- * Represent an element in a sequence on an XPath to the erroneous value.
- */
-struct IndexSegment : public ISegment {
-  /**
-   * Index of the element in the sequence
-   */
-  size_t index;
-
-  explicit IndexSegment(
-    size_t an_index
-  );
-
-  std::wstring ToWstring() const override;
-
-  std::unique_ptr<ISegment> Clone() const override;
-
-  ~IndexSegment() override = default;
-};  // struct IndexSegment
-
-/**
- * Represent the relative XPath to the erroneous element.
- */
-struct Path {
-  std::deque<std::unique_ptr<ISegment> > segments;
-
-  Path();
-  Path(const Path& other);
-  Path(Path&& other);
-  Path& operator=(const Path& other);
-  Path& operator=(Path&& other);
-
-  std::wstring ToWstring() const;
-};  // struct Path
-
 // region De-serialization
 
 /**
@@ -122,10 +43,10 @@ struct DeserializationError {
   /**
    * Path to the erroneous value
    */
-  Path path;
+  xml_path::Path path;
 
   explicit DeserializationError(std::wstring a_cause);
-  DeserializationError(std::wstring a_cause, Path a_path);
+  DeserializationError(std::wstring a_cause, xml_path::Path a_path);
 };  // struct DeserializationError
 
 struct ReadingOptions {

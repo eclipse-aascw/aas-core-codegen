@@ -21,6 +21,7 @@ Here is an example how to verify an instance of :py:class:`dummy.types.Something
 # Do NOT edit or append.
 
 
+import collections.abc
 import math
 import re
 import struct
@@ -46,93 +47,18 @@ else:
 
 from dummy import (
     constants as aas_constants,
+    reporting as aas_reporting,
     types as aas_types,
 )
 
 
-class PropertySegment:
-    """Represent a property access on a path to an erroneous value."""
+PropertySegment = aas_reporting.PropertySegment
+IndexSegment = aas_reporting.IndexSegment
+KeySegment = aas_reporting.KeySegment
+Segment = aas_reporting.Segment
+Path = aas_reporting.Path
 
-    #: Instance containing the property
-    instance: Final[aas_types.Class]
-
-    #: Name of the property
-    name: Final[str]
-
-    def __init__(
-            self,
-            instance: aas_types.Class,
-            name: str
-    ) -> None:
-        """Initialize with the given values."""
-        self.instance = instance
-        self.name = name
-
-    def __str__(self) -> str:
-        return f'.{self.name}'
-
-
-class IndexSegment:
-    """Represent an index access on a path to an erroneous value."""
-
-    #: Sequence containing the item at :py:attr:`~index`
-    sequence: Final[Sequence[Any]]
-
-    #: Index of the item
-    index: Final[int]
-
-    def __init__(
-            self,
-            sequence: Sequence[Any],
-            index: int
-    ) -> None:
-        """Initialize with the given values."""
-        self.sequence = sequence
-        self.index = index
-
-    def __str__(self) -> str:
-        return f'[{self.index}]'
-
-
-Segment = Union[PropertySegment, IndexSegment]
-
-
-class Path:
-    """Represent the relative path to the erroneous value."""
-
-    def __init__(self) -> None:
-        """Initialize as an empty path."""
-        self._segments = []  # type: List[Segment]
-
-    @property
-    def segments(self) -> Sequence[Segment]:
-        """Get the segments of the path."""
-        return self._segments
-
-    def _prepend(self, segment: Segment) -> None:
-        """Insert the :paramref:`segment` in front of other segments."""
-        self._segments.insert(0, segment)
-
-    def __str__(self) -> str:
-        return "".join(str(segment) for segment in self._segments)
-
-
-class Error:
-    """Represent a verification error in the data."""
-
-    #: Human-readable description of the error
-    cause: Final[str]
-
-    #: Path to the erroneous value
-    path: Final[Path]
-
-    def __init__(self, cause: str) -> None:
-        """Initialize as an error with an empty path."""
-        self.cause = cause
-        self.path = Path()
-
-    def __repr__(self) -> str:
-        return f"Error(path={self.path}, cause={self.cause})"
+Error = aas_reporting.Error
 
 
 class _Transformer(

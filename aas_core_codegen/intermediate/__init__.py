@@ -16,6 +16,9 @@ OurTypeAnnotation = _types.OurTypeAnnotation
 ListTypeAnnotation = _types.ListTypeAnnotation
 TupleTypeAnnotation = _types.TupleTypeAnnotation
 OptionalTypeAnnotation = _types.OptionalTypeAnnotation
+JsonValueTypeAnnotation = _types.JsonValueTypeAnnotation
+JsonArrayTypeAnnotation = _types.JsonArrayTypeAnnotation
+JsonObjectTypeAnnotation = _types.JsonObjectTypeAnnotation
 SummaryRemarksDescription = _types.SummaryRemarksDescription
 SummaryRemarksConstraintsDescription = _types.SummaryRemarksConstraintsDescription
 DescriptionOfMetaModel = _types.DescriptionOfMetaModel
@@ -70,12 +73,14 @@ type_annotations_equal = _types.type_annotations_equal
 beneath_optional = _types.beneath_optional
 TypeAnnotationExceptOptional = _types.TypeAnnotationExceptOptional
 try_primitive_type = _types.try_primitive_type
+try_constrained_primitive = _types.try_constrained_primitive
 map_descendability = _types.map_descendability
 collect_ids_of_our_types_in_properties = _types.collect_ids_of_our_types_in_properties
 over_type_annotation_and_nested_type_annotations = (
     _types.over_type_annotation_and_nested_type_annotations
 )
 tuple_arities = _types.tuple_arities
+uses_json_types = _types.uses_json_types
 
 NumericPlace = _types.NumericPlace
 numeric_places = _types.numeric_places

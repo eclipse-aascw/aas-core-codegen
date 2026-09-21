@@ -93,20 +93,20 @@ export const TEST_DATA_DIR = process.env[
 if (TEST_DATA_DIR === null || TEST_DATA_DIR === undefined) {{
 {I}throw new Error(
 {II}"The path to the test data directory is missing in the environment: " +
-{III}"AAS_CORE3_0_TYPESCRIPT_TEST_DATA_DIR"
+{III}"{environment_variable_prefix}_TEST_DATA_DIR"
 {I});
 }}
 if (!fs.existsSync(TEST_DATA_DIR)) {{
 {I}throw new Error(
 {II}"The path read from environment variable " +
-{III}"AAS_CORE3_0_TYPESCRIPT_TEST_DATA_DIR does not exist: " +
+{III}"{environment_variable_prefix}_TEST_DATA_DIR does not exist: " +
 {III}TEST_DATA_DIR
 {I});
 }}
 if (!fs.lstatSync(TEST_DATA_DIR).isDirectory()) {{
 {I}throw new Error(
 {II}"The path read from environment variable " +
-{III}"AAS_CORE3_0_TYPESCRIPT_TEST_DATA_DIR is not a directory: " +
+{III}"{environment_variable_prefix}_TEST_DATA_DIR is not a directory: " +
 {III}TEST_DATA_DIR
 {I});
 }}"""

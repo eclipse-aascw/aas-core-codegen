@@ -216,6 +216,19 @@ def _written_leaf_moniker(type_anno: intermediate.AtomicTypeAnnotation) -> str:
     if primitive_type is not None:
         return "stringified"
 
+    # NOTE (mristin):
+    # A JSON-able value is written by its own writer, and the three shapes do
+    # *not* collapse onto one: an array writes a ``<data>`` and an object
+    # a run of ``<member>``, which are different documents.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return "jsonValue"
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return "jsonArray"
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return "jsonObject"
+
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
     ), f"Expected a primitive, a constrained primitive or one of our types, but got: {type_anno}"
@@ -250,6 +263,20 @@ def _written_value_type(type_anno: intermediate.AtomicTypeAnnotation) -> Strippe
 
     if primitive_type is not None:
         return Stripped("Object")
+
+    # NOTE (mristin):
+    # A JSON-able value widens to nothing: its writer takes the very Jackson
+    # node which the property holds, and the three shapes have three writers
+    # of their own, unlike the classes, which share one.
+    if isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        return java_common.generate_type(type_anno)
 
     moniker = _written_leaf_moniker(type_anno)
 
@@ -336,6 +363,15 @@ def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
     if primitive_type is not None:
         return Identifier("writeStringifiedContent")
 
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Identifier("writeJsonValueContent")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Identifier("writeJsonArrayContent")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Identifier("writeJsonObjectContent")
+
     assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
         type_anno.our_type, intermediate.Enumeration
     ), f"Expected an enumeration, but got: {type_anno}"
@@ -405,6 +441,15 @@ def _content_writer_reference(type_anno: intermediate.TypeAnnotationUnion) -> St
             name = _as_sequence_name(our_type)
     else:
         name = _content_writer_name(type_anno)
+
+        # NOTE (mristin):
+        # These two write nothing but a text, and the XML-RPC writers need
+        # them as well, so they live in ``XmlCommon``.
+        if name in (
+            Identifier("writeStringifiedContent"),
+            Identifier("writeDoubleContent"),
+        ):
+            return Stripped(f"XmlCommon::{name}")
 
     return Stripped(f"{_VISITOR_NAME}::{name}")
 
@@ -539,6 +584,23 @@ def _collect_needed(symbol_table: intermediate.SymbolTable) -> _Needed:
             primitive_type = intermediate.try_primitive_type(type_anno)
             if primitive_type is not None:
                 needed.primitive_types.add(primitive_type)
+            elif isinstance(
+                type_anno,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # The XML-RPC de/serialization is emitted whenever the model
+                # uses a JSON-able type at all, so there is nothing to register
+                # per shape here. A ``<boolean>``, a ``<name>`` and a
+                # ``<string>`` are all written through
+                # ``writeStringifiedContent``, though, which is otherwise
+                # emitted only for a scalar.
+                needed.primitive_types.add(intermediate.PrimitiveType.STR)
+                needed.called_content_writers.add(Identifier("writeStringifiedContent"))
             else:
                 assert isinstance(type_anno, intermediate.OurTypeAnnotation) and (
                     isinstance(type_anno.our_type, intermediate.Enumeration)
@@ -626,146 +688,14 @@ def _collect_dispatching_writers(
 # region Shared helpers
 
 
-def _generate_current_event() -> Stripped:
-    """Generate the function to a single XML event."""
-
-    return Stripped(
-        f"""\
-private static XMLEvent currentEvent(XMLEventReader reader) {{
-{I}try {{
-{II}return reader.peek();
-{I}}} catch (XMLStreamException xmlStreamException) {{
-{II}throw new Xmlization.DeserializeException("",
-{III}"Failed in method peek because of: " +
-{III}xmlStreamException.getMessage());
-{I}}}
-}}"""
-    )
-
-
-def _generate_get_event_type_as_string() -> Stripped:
-    """Generate the function to map XML event types to their string representations."""
-
-    return Stripped(
-        f"""\
-private static String getEventTypeAsString(XMLEvent event) {{
-{I}switch (event.getEventType()) {{
-{II}case XMLStreamConstants.START_ELEMENT:
-{III}return "Start-Element";
-{II}case XMLStreamConstants.END_ELEMENT:
-{III}return "End-Element";
-{II}case XMLStreamConstants.PROCESSING_INSTRUCTION:
-{III}return "Processing-Instruction";
-{II}case XMLStreamConstants.CHARACTERS:
-{III}return "Characters";
-{II}case XMLStreamConstants.COMMENT:
-{III}return "Comment";
-{II}case XMLStreamConstants.SPACE:
-{III}return "Space";
-{II}case XMLStreamConstants.START_DOCUMENT:
-{III}return "Start-Document";
-{II}case XMLStreamConstants.END_DOCUMENT:
-{III}return "End-Document";
-{II}case XMLStreamConstants.ENTITY_REFERENCE:
-{III}return "Entity-Reference";
-{II}case XMLStreamConstants.ATTRIBUTE:
-{III}return "Attribute";
-{II}case XMLStreamConstants.NOTATION_DECLARATION:
-{III}return "Notation-Declaration";
-{II}default:
-{III}return "Unknown-Type";
-{I}}}
-}}"""
-    )
-
-
-def _generate_skip_whitespace_and_comments() -> Stripped:
-    """Generate the function to skip whitespace text and XML comments."""
-    return Stripped(
-        f"""\
-private static void skipWhitespaceAndComments(XMLEventReader reader) {{
-{I}while (whiteSpaceOrComment(reader)) {{
-{II}reader.next();
-{I}}}
-}}
-
-private static boolean whiteSpaceOrComment(XMLEventReader reader) {{
-{I}final XMLEvent currentEvent = currentEvent(reader);
-{I}final boolean isComment = (currentEvent != null &&
-{II}currentEvent.getEventType() == XMLStreamConstants.COMMENT);
-{I}final boolean isWhiteSpace = (currentEvent != null &&
-{II}currentEvent.getEventType() == XMLStreamConstants.CHARACTERS &&
-{II}currentEvent.asCharacters().isWhiteSpace());
-{I}return isComment || isWhiteSpace;
-}}"""
-    )
-
-
 def _generate_skip_start_document() -> Stripped:
     """Generate the function to skip start document."""
     return Stripped(
         f"""\
 private static void skipStartDocument(XMLEventReader reader){{
-{I}if (currentEvent(reader).isStartDocument()){{
+{I}if (XmlCommon.currentEvent(reader).isStartDocument()){{
 {II}reader.next();
 {I}}}
-}}"""
-    )
-
-
-def _generate_is_empty_element() -> Stripped:
-    """Generate the function to check if an element is empty."""
-    return Stripped(
-        f"""\
-private static boolean isEmptyElement(XMLEventReader reader) {{
-{I}// Skip the element node and go to the content
-{I}try {{
-{II}reader.nextEvent();
-{I}}} catch (XMLStreamException xmlStreamException) {{
-{II}throw new Xmlization.DeserializeException("",
-{III}"Failed in method isEmptyElement because of: " +
-{III}xmlStreamException.getMessage());
-{I}}}
-{I}return currentEvent(reader).isEndElement();
-}}"""
-    )
-
-
-def _generate_try_element_name() -> Stripped:
-    """Generate the function to strip the prefix and check the namespace."""
-    return Stripped(
-        f"""\
-private static boolean invalidNameSpace(XMLEvent event) {{
-{I}if (event.isStartElement()) {{
-{II}return !AAS_NAME_SPACE.equals(event.asStartElement().getName().getNamespaceURI());
-{I}}} else {{
-{II}return !AAS_NAME_SPACE.equals(event.asEndElement().getName().getNamespaceURI());
-{I}}}
-}}
-
-/**
- * Check the namespace and extract the element's name.
- */
-private static Reporting.Result<String> tryElementName(XMLEventReader reader) {{
-{I}final XMLEvent currentEvent = currentEvent(reader);
-{I}final boolean precondition = currentEvent.isStartElement() || currentEvent.isEndElement();
-{I}if (!precondition) {{
-{II}throw new IllegalStateException("Expected to be at a start or an end element "
-{IIII}+ "but got: " + getEventTypeAsString(currentEvent));
-{I}}}
-
-{I}if (invalidNameSpace(currentEvent)) {{
-{II}String namespace = currentEvent.isStartElement()
-{IIII}? currentEvent.asStartElement().getName().getNamespaceURI()
-{IIII}: currentEvent.asEndElement().getName().getNamespaceURI();
-{II}final Reporting.Error error = new Reporting.Error(
-{IIII}"Expected an element within a namespace " +
-{IIII}AAS_NAME_SPACE + ", " + "but got: " + namespace);
-{II}return Reporting.Result.failure(error);
-{I}}}
-{I}return Reporting.Result.success(currentEvent.isStartElement()
-{III}? currentEvent.asStartElement().getName().getLocalPart()
-{III}: currentEvent.asEndElement().getName().getLocalPart());
 }}"""
     )
 
@@ -799,7 +729,7 @@ private static Boolean readContentAsBool(XMLEventReader reader) throws XMLStream
 {II}}}
 {II}reader.nextEvent();
 {I}}}
-{I}final String text = collapseWhitespace(content.toString());
+{I}final String text = XmlCommon.collapseWhitespace(content.toString());
 
 {I}// NOTE (mristin):
 {I}// ``xs:boolean`` spells the two values in four ways, not two, so ``1`` and
@@ -832,7 +762,7 @@ private static Long readContentAsLong(XMLEventReader reader) throws XMLStreamExc
 {II}reader.nextEvent();
 {I}}}
 
-{I}return Long.valueOf(collapseWhitespace(content.toString()));
+{I}return Long.valueOf(XmlCommon.collapseWhitespace(content.toString()));
 }}"""
     ),
     intermediate.PrimitiveType.FLOAT: Stripped(
@@ -856,7 +786,7 @@ private static Double readContentAsDouble(XMLEventReader reader) throws XMLStrea
 {II}reader.nextEvent();
 {I}}}
 
-{I}final String text = collapseWhitespace(content.toString());
+{I}final String text = XmlCommon.collapseWhitespace(content.toString());
 
 {I}// NOTE (mristin):
 {I}// The two infinities have to be spelled out: Double.valueOf refuses
@@ -956,7 +886,7 @@ _COLLAPSE_WHITESPACE = Stripped(
  * <p>See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
  */
 private static String collapseWhitespace(String text) {{
-{I}return WHITESPACE_RUN.matcher(text).replaceAll(" ").trim();
+{I}return XmlCommon.WHITESPACE_RUN.matcher(text).replaceAll(" ").trim();
 }}"""
 )
 
@@ -1034,7 +964,7 @@ _REMOVE_WHITESPACE = Stripped(
  * enough -- the decoder accepts none of it.
  */
 private static String removeWhitespace(String text) {{
-{I}return WHITESPACE_RUN.matcher(text).replaceAll("");
+{I}return XmlCommon.WHITESPACE_RUN.matcher(text).replaceAll("");
 }}"""
 )
 
@@ -1051,242 +981,40 @@ def _generate_content_converters(
     primitive_types: Set[intermediate.PrimitiveType],
 ) -> List[Stripped]:
     """Generate the functions converting the text content of an element."""
+    # NOTE (mristin):
+    # ``readContentAsString`` and the collapsing live in ``XmlCommon``, as
+    # the XML-RPC module needs them whatever this meta-model uses.
     result = [
         _CONTENT_CONVERTER_BODY_BY_PRIMITIVE[primitive_type]
         for primitive_type in intermediate.PrimitiveType
         if primitive_type in primitive_types
+        and primitive_type is not intermediate.PrimitiveType.STR
     ]
 
     # NOTE (mristin):
-    # A string is the one primitive which keeps its whitespace -- it is
-    # ``preserve`` and not ``collapse`` -- so it asks for neither helper.
-    collapsing = {
-        intermediate.PrimitiveType.BOOL,
-        intermediate.PrimitiveType.INT,
-        intermediate.PrimitiveType.FLOAT,
-    }
-
-    needs_collapse = len(collapsing & primitive_types) > 0
+    # Only a byte array asks for a helper of its own here. The collapsing
+    # lives in ``XmlCommon``, which generates it for every model, as
+    # the XML-RPC module collapses the text of a ``<boolean>`` and of
+    # a ``<double>`` whatever this meta-model happens to use.
     needs_removal = intermediate.PrimitiveType.BYTEARRAY in primitive_types
 
-    if needs_collapse or needs_removal:
-        result.insert(0, _WHITESPACE_RUN)
-
-    if needs_collapse:
-        result.insert(1, _COLLAPSE_WHITESPACE)
-
     if needs_removal:
-        at = 2 if needs_collapse else 1
-        result.insert(at, _REMOVE_WHITESPACE)
-        result.insert(at + 1, _MATCHES_XS_BASE64_BINARY)
+        result.insert(0, _REMOVE_WHITESPACE)
+        result.insert(1, _MATCHES_XS_BASE64_BINARY)
 
     return result
 
 
 def _generate_reader_interfaces() -> Stripped:
-    """Generate the two shapes which every reader has."""
+    """Generate the shape of a converter of an element's text."""
     return Stripped(
         f"""\
-/**
- * Read the content of an element which has already been opened.
- *
- * <p>{{@code isEmpty}} tells whether that element was self-closing.
- */
-@FunctionalInterface
-private interface ContentReader<T> {{
-{I}Reporting.Result<? extends T> read(XMLEventReader reader, boolean isEmpty);
-}}
-
-/**
- * Read a whole element, opening and closing it.
- */
-@FunctionalInterface
-private interface ElementReader<T> {{
-{I}Reporting.Result<? extends T> read(XMLEventReader reader);
-}}
-
 /**
  * Convert the text content of an element which has already been opened.
  */
 @FunctionalInterface
 private interface ContentConverter<T> {{
 {I}T convert(XMLEventReader reader) throws XMLStreamException;
-}}"""
-    )
-
-
-def _generate_peek_element_name() -> Stripped:
-    """Generate the function to look up the name of the element ahead."""
-    return Stripped(
-        f"""\
-/**
- * Look up the name of the element which {{@code reader}} is positioned at.
- *
- * <p>This is the single primitive answering "we are at an element, and this is
- * its name": {{@link #readNamedElement}} checks that name against the one its
- * container supplied, a dispatcher switches on it, and a property loop uses it
- * to select the property. Nothing is consumed, which is what lets a dispatcher
- * hand the whole element on to the reader it selected.
- */
-private static Reporting.Result<String> peekElementName(XMLEventReader reader) {{
-{I}skipWhitespaceAndComments(reader);
-
-{I}final XMLEvent currentEvent = currentEvent(reader);
-{I}if (currentEvent.isEndDocument()) {{
-{II}return Reporting.Result.failure(new Reporting.Error(
-{III}"Expected an XML element, but reached the end-of-file"));
-{I}}}
-
-{I}if (!currentEvent.isStartElement()) {{
-{II}return Reporting.Result.failure(new Reporting.Error(
-{III}"Expected an XML element, but got the node of type " +
-{III}getEventTypeAsString(currentEvent) + " with the value " + currentEvent));
-{I}}}
-
-{I}return tryElementName(reader);
-}}"""
-    )
-
-
-def _generate_consume_end_element() -> Stripped:
-    """Generate the function to consume the end tag of an element."""
-    return Stripped(
-        f"""\
-/**
- * Consume the end tag concluding the element called {{@code elementName}}.
- */
-private static Reporting.Result<XMLEvent> consumeEndElement(
-{I}XMLEventReader reader, String elementName) {{
-{I}skipWhitespaceAndComments(reader);
-
-{I}final XMLEvent currentEvent = currentEvent(reader);
-{I}if (currentEvent.isEndDocument()) {{
-{II}return Reporting.Result.failure(new Reporting.Error(
-{III}"Expected an XML end element to conclude the element " + elementName +
-{III}", but got the end-of-file"));
-{I}}}
-
-{I}if (!currentEvent.isEndElement()) {{
-{II}return Reporting.Result.failure(new Reporting.Error(
-{III}"Expected an XML end element to conclude the element " + elementName +
-{III}", but got the node of type " + getEventTypeAsString(currentEvent) +
-{III}" with the value " + currentEvent));
-{I}}}
-
-{I}final Reporting.Result<String> tryEndElementName = tryElementName(reader);
-{I}if (tryEndElementName.isError()) {{
-{II}return tryEndElementName.castTo(XMLEvent.class);
-{I}}}
-
-{I}if (!elementName.equals(tryEndElementName.getResult())) {{
-{II}return Reporting.Result.failure(new Reporting.Error(
-{III}"Expected an XML end element to conclude the element " + elementName +
-{III}", but got the end element with the name " + tryEndElementName.getResult()));
-{I}}}
-
-{I}try {{
-{II}return Reporting.Result.success(reader.nextEvent());
-{I}}} catch (XMLStreamException xmlStreamException) {{
-{II}throw new Xmlization.DeserializeException("",
-{III}"Failed in method consumeEndElement because of: " +
-{III}xmlStreamException.getMessage());
-{I}}}
-}}"""
-    )
-
-
-def _generate_read_named_element() -> Stripped:
-    """Generate the framer binding a name to a content reader."""
-    return Stripped(
-        f"""\
-/**
- * Read a whole element which is expected to be called {{@code name}}, and read
- * its content with {{@code readContent}}.
- *
- * <p>The name is data, not a type: an instance reads the XML name of its own
- * class, a list item reads {{@code "v"}} and a tuple item reads {{@code "v1"}},
- * {{@code "v2"}}, ... by position. One framer therefore serves them all.
- */
-private static <T> Reporting.Result<? extends T> readNamedElement(
-{I}XMLEventReader reader, String name, ContentReader<T> readContent) {{
-{I}final Reporting.Result<String> tryElementName = peekElementName(reader);
-{I}if (tryElementName.isError()) {{
-{II}return Reporting.Result.failure(tryElementName.getError());
-{I}}}
-
-{I}if (!name.equals(tryElementName.getResult())) {{
-{II}return Reporting.Result.failure(new Reporting.Error(
-{III}"Expected an XML element " + name + ", but got an XML element " +
-{III}tryElementName.getResult()));
-{I}}}
-
-{I}final boolean isEmpty = isEmptyElement(reader);
-
-{I}final Reporting.Result<? extends T> result = readContent.read(reader, isEmpty);
-{I}if (result.isError()) {{
-{II}return result;
-{I}}}
-
-{I}final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, name);
-{I}if (endResult.isError()) {{
-{II}return Reporting.Result.failure(endResult.getError());
-{I}}}
-
-{I}return result;
-}}"""
-    )
-
-
-def _generate_read_nested_element() -> Stripped:
-    """Generate the reader of a property whose content is one instance element."""
-    return Stripped(
-        f"""\
-/**
- * Read a self-describing element as the content of the property element which
- * {{@code reader}} is already positioned inside.
- *
- * <p>This looks like a needless layer over {{@code read...FromElement}}: the
- * reader sits at the very same position in both cases, just before a start
- * element, whether that element is the only child of a property element or
- * the next item of a list. The layer exists for the error path alone.
- *
- * <p>A property wraps its instance in an element of its own, so the failing
- * node is one step deeper than the property and the discriminator's name has
- * to be prepended: {{@code value/property/idShort}}. A list item is not
- * wrapped -- the item element *is* the indexed child -- so prepending the name
- * there would give {{@code annotations/*[0]/property/idShort}}, which walks one
- * level past the element {{@code *[0]}} already selects and resolves to
- * nothing.
- *
- * <p>The two callers therefore need different segments, which is why the name
- * can not be prepended inside {{@code read...FromElement}}. Unifying them would
- * take a segment carrying a name *and* a position
- * ({{@code annotations/property[1]}}), and that is a change to
- * {{@link Reporting}}, which the verification and the JSON de-serialization
- * share.
- */
-private static <T> Reporting.Result<? extends T> readNestedElement(
-{I}XMLEventReader reader, boolean isEmpty, ElementReader<T> readInner) {{
-{I}if (isEmpty) {{
-{II}return Reporting.Result.failure(new Reporting.Error(
-{III}"Expected an XML element representing an instance, " +
-{III}"but encountered a self-closing element"));
-{I}}}
-
-{I}final Reporting.Result<String> tryElementName = peekElementName(reader);
-{I}if (tryElementName.isError()) {{
-{II}return Reporting.Result.failure(tryElementName.getError());
-{I}}}
-
-{I}final Reporting.Result<? extends T> result = readInner.read(reader);
-{I}if (result.isError()) {{
-{II}result.getError()
-{III}.prependSegment(
-{IIII}new Reporting.NameSegment(
-{IIIII}tryElementName.getResult()));
-{I}}}
-
-{I}return result;
 }}"""
     )
 
@@ -1315,7 +1043,7 @@ private static <T> Reporting.Result<T> readText(
 {III}", but encountered a self-closing element"));
 {I}}}
 
-{I}if (currentEvent(reader).isEndDocument()) {{
+{I}if (XmlCommon.currentEvent(reader).isEndDocument()) {{
 {II}return Reporting.Result.failure(new Reporting.Error(
 {III}"Expected an XML content representing " + typeName +
 {III}", but reached the end-of-file"));
@@ -1375,7 +1103,7 @@ private static <T> Reporting.Result<T> readEnum(
 {I}Function<String, Optional<T>> parseLiteral,
 {I}String enumName) {{
 {I}final Reporting.Result<String> tryText = readText(
-{II}reader, isEmpty, _DeserializeImplementation::readContentAsString, enumName);
+{II}reader, isEmpty, XmlCommon::readContentAsString, enumName);
 {I}if (tryText.isError()) {{
 {II}return Reporting.Result.failure(tryText.getError());
 {I}}}
@@ -1403,23 +1131,23 @@ def _generate_read_list() -> Stripped:
  * stops as soon as a non-start element is encountered.
  */
 private static <T> Reporting.Result<List<T>> readList(
-{I}XMLEventReader reader, boolean isEmpty, ElementReader<T> readItem) {{
+{I}XMLEventReader reader, boolean isEmpty, XmlCommon.ElementReader<T> readItem) {{
 {I}final List<T> result = new ArrayList<>();
 {I}if (isEmpty) {{
 {II}return Reporting.Result.success(result);
 {I}}}
 
-{I}skipWhitespaceAndComments(reader);
+{I}XmlCommon.skipWhitespaceAndComments(reader);
 {I}int index = 0;
-{I}if (!currentEvent(reader).isStartElement()) {{
+{I}if (!XmlCommon.currentEvent(reader).isStartElement()) {{
 {II}final Reporting.Error error = new Reporting.Error(
 {III}"Expected a start element opening an item of the list, " +
-{III}"but got an XML " + getEventTypeAsString(currentEvent(reader)));
+{III}"but got an XML " + XmlCommon.getEventTypeAsString(XmlCommon.currentEvent(reader)));
 {II}error.prependSegment(new Reporting.IndexSegment(index));
 {II}return Reporting.Result.failure(error);
 {I}}}
 
-{I}while (currentEvent(reader).isStartElement()) {{
+{I}while (XmlCommon.currentEvent(reader).isStartElement()) {{
 {II}final Reporting.Result<? extends T> itemResult = readItem.read(reader);
 {II}if (itemResult.isError()) {{
 {III}itemResult.getError()
@@ -1430,7 +1158,7 @@ private static <T> Reporting.Result<List<T>> readList(
 
 {II}result.add(itemResult.getResult());
 {II}index++;
-{II}skipWhitespaceAndComments(reader);
+{II}XmlCommon.skipWhitespaceAndComments(reader);
 {I}}}
 
 {I}return Reporting.Result.success(result);
@@ -1458,7 +1186,7 @@ private static <{", ".join(type_params)}> Reporting.Result<{tuple_type}> readTup
     )
 
     for i in range(arity):
-        writer.write(f"{I}ElementReader<T{i + 1}> readItem{i + 1}")
+        writer.write(f"{I}XmlCommon.ElementReader<T{i + 1}> readItem{i + 1}")
         writer.write(",\n" if i < arity - 1 else ") {\n")
 
     writer.write(
@@ -1513,8 +1241,8 @@ def _generate_at_end_of_sequence() -> Stripped:
  * property.
  */
 private static boolean atEndOfSequence(XMLEventReader reader) {{
-{I}skipWhitespaceAndComments(reader);
-{I}return currentEvent(reader).isEndElement();
+{I}XmlCommon.skipWhitespaceAndComments(reader);
+{I}return XmlCommon.currentEvent(reader).isEndElement();
 }}"""
     )
 
@@ -1590,6 +1318,21 @@ def _generate_content_reader(type_anno: intermediate.TypeAnnotationUnion) -> Str
     name = _content_reader_name(type_anno)
     value_type = java_common.generate_type(type_anno)
 
+    # NOTE (mristin):
+    # A JSON-able value is read over the XML-RPC subset, and those readers
+    # already wear the name which ``_content_reader_name`` gives -- see
+    # :py:func:`_generate_xml_rpc_readers` -- so there is nothing to generate
+    # per type here.
+    if isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        return Stripped("")
+
     body: Stripped
 
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
@@ -1619,10 +1362,19 @@ return readTuple{len(type_anno.items)}(
             display_name_literal = java_common.string_literal(display_name)
             empty_value = _EMPTY_VALUE_BY_PRIMITIVE.get(primitive_type, None)
 
+            # NOTE (mristin):
+            # The converter of a string lives in ``XmlCommon``, as the XML-RPC
+            # module needs it whatever this meta-model uses.
+            converter_holder = (
+                "XmlCommon"
+                if converter == "readContentAsString"
+                else "_DeserializeImplementation"
+            )
+
             arguments = [
                 Stripped("reader"),
                 Stripped("isEmpty"),
-                Stripped(f"_DeserializeImplementation::{converter}"),
+                Stripped(f"{converter_holder}::{converter}"),
                 Stripped(display_name_literal),
             ]
             if empty_value is not None:
@@ -1677,7 +1429,7 @@ def _generate_at_v_reader(
         f"""\
 private static Reporting.Result<? extends {value_type}> {name}(
 {I}XMLEventReader reader) {{
-{I}return readNamedElement(
+{I}return XmlCommon.readNamedElement(
 {II}reader,
 {II}{v_name_literal},
 {II}_DeserializeImplementation::{content_reader});
@@ -1709,7 +1461,7 @@ def _generate_deserialize_property(
             result_type = f"? extends {java_common.generate_type(type_anno)}"
             read_expr = Stripped(
                 f"""\
-readNestedElement(
+XmlCommon.readNestedElement(
 {I}reader,
 {I}isEmptyProperty,
 {I}_DeserializeImplementation::{_from_element_name(our_type)})"""
@@ -1835,13 +1587,13 @@ default:
             f"""\
 if (!isEmptySequence) {{
 {I}while (!atEndOfSequence(reader)) {{
-{II}final Reporting.Result<String> tryElementName = peekElementName(reader);
+{II}final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
 {II}if (tryElementName.isError()) {{
 {III}return Reporting.Result.failure(tryElementName.getError());
 {II}}}
 
 {II}final String elementName = tryElementName.getResult();
-{II}final boolean isEmptyProperty = isEmptyElement(reader);
+{II}final boolean isEmptyProperty = XmlCommon.isEmptyElement(reader);
 
 {II}Reporting.Error valueError = null;
 
@@ -1856,7 +1608,7 @@ if (!isEmptySequence) {{
 {III}return Reporting.Result.failure(valueError);
 {II}}}
 
-{II}final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+{II}final Reporting.Result<XMLEvent> endResult = XmlCommon.consumeEndElement(reader, elementName);
 {II}if (endResult.isError()) {{
 {III}return Reporting.Result.failure(endResult.getError());
 {II}}}
@@ -1987,7 +1739,7 @@ def _generate_deserialize_impl_concrete_cls_from_element(
  */
 private static Reporting.Result<? extends {name}> {_concrete_from_element_name(cls)}(
 {I}XMLEventReader reader) {{
-{I}return readNamedElement(
+{I}return XmlCommon.readNamedElement(
 {II}reader,
 {II}{xml_name_literal},
 {II}_DeserializeImplementation::{_from_sequence_name(cls)});
@@ -2022,7 +1774,7 @@ private static Reporting.Result<? extends {value_type}> {function_name}(
 {I}// NOTE (mristin):
 {I}// We only peek the name, so that the whole element can be handed on to
 {I}// the reader which we select below.
-{I}final Reporting.Result<String> tryElementName = peekElementName(reader);
+{I}final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
 {I}if (tryElementName.isError()) {{
 {II}return Reporting.Result.failure(tryElementName.getError());
 {I}}}
@@ -2119,6 +1871,103 @@ case {implementer_xml_name_literal}: {{
 # endregion
 
 
+def _generate_json_value_readers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the readers which hand a JSON-able value over to ``XmlRpc``.
+
+    A content reader of this module is a static method taking nothing but
+    the reader and the emptiness of the element, which is what lets it be
+    passed as a method reference without allocating. These three give
+    the readers of ``XmlRpc`` the name which this module's registry of
+    the readers expects.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * Read the content of an element holding a JSON-able value.
+ */
+private static Reporting.Result<JsonNode> readTextAs_jsonValue(
+{I}XMLEventReader reader, boolean isEmpty) {{
+{I}return XmlRpc.readValueContent(reader, isEmpty);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Read the content of an element holding a JSON-able array.
+ */
+private static Reporting.Result<ArrayNode> readTextAs_jsonArray(
+{I}XMLEventReader reader, boolean isEmpty) {{
+{I}return XmlRpc.readArrayContent(reader, isEmpty);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Read the content of an element holding a JSON-able object.
+ */
+private static Reporting.Result<ObjectNode> readTextAs_jsonObject(
+{I}XMLEventReader reader, boolean isEmpty) {{
+{I}return XmlRpc.readObjectContent(reader, isEmpty);
+}}"""
+        ),
+    ]
+
+
+def _generate_json_value_writers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the writers which hand a JSON-able value over to ``XmlRpc``.
+
+    These mirror :py:func:`_generate_json_value_readers`.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+/**
+ * Write {{@code that}} as the content of an element holding a JSON-able
+ * value.
+ */
+private static void writeJsonValueContent(
+{I}JsonNode that, XMLStreamWriter writer) {{
+{I}XmlRpc.writeValueContent(that, writer);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Write {{@code that}} as the content of an element holding a JSON-able
+ * array.
+ */
+private static void writeJsonArrayContent(
+{I}ArrayNode that, XMLStreamWriter writer) {{
+{I}XmlRpc.writeArrayContent(that, writer);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Write {{@code that}} as the content of an element holding a JSON-able
+ * object.
+ */
+private static void writeJsonObjectContent(
+{I}ObjectNode that, XMLStreamWriter writer) {{
+{I}XmlRpc.writeObjectContent(that, writer);
+}}"""
+        ),
+    ]
+
+
 def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
@@ -2126,20 +1975,9 @@ def _generate_deserialize_impl(
     needed = _collect_needed(symbol_table)
 
     blocks = [
-        _generate_current_event(),
-        _generate_get_event_type_as_string(),
-        _generate_is_empty_element(),
-        _generate_skip_whitespace_and_comments(),
         _generate_skip_start_document(),
-        _generate_try_element_name(),
         _generate_reader_interfaces(),
-        _generate_peek_element_name(),
-        _generate_consume_end_element(),
-        _generate_read_named_element(),
     ]  # type: List[Stripped]
-
-    if needed.nested_elements:
-        blocks.append(_generate_read_nested_element())
 
     blocks.extend(_generate_content_converters(needed.primitive_types))
 
@@ -2167,8 +2005,12 @@ def _generate_deserialize_impl(
     ):
         blocks.append(_generate_missing_required_property())
 
+    blocks.extend(_generate_json_value_readers(symbol_table=symbol_table))
+
     for type_anno in needed.content_readers.values():
-        blocks.append(_generate_content_reader(type_anno))
+        content_reader = _generate_content_reader(type_anno)
+        if content_reader != "":
+            blocks.append(content_reader)
 
     for type_anno, v_name in needed.at_v_readers.values():
         blocks.append(_generate_at_v_reader(type_anno, v_name))
@@ -2271,7 +2113,7 @@ public static {name} deserialize{name}(
 {I}XMLEventReader reader) {{
 
 {I}_DeserializeImplementation.skipStartDocument(reader);
-{I}_DeserializeImplementation.skipWhitespaceAndComments(reader);
+{I}XmlCommon.skipWhitespaceAndComments(reader);
 
 {I}Reporting.Result<? extends {name}> result =
 {II}_DeserializeImplementation.read{name}FromElement(
@@ -2279,7 +2121,7 @@ public static {name} deserialize{name}(
 
 {I}return result.onError(error -> {{
 {II}error.prependSegment(new Reporting.NameSegment({xml_prop_name_literal}));
-{II}throw new DeserializeException(
+{II}throw new XmlCommon.DeserializeException(
 {III}Reporting.generateRelativeXPath(error.getPathSegments()),
 {III}error.getCause());
 {I}}});
@@ -2426,87 +2268,6 @@ private static final {_VISITOR_NAME} ROOT =
     )
 
 
-def _generate_content_writer_interface() -> Stripped:
-    """Generate the single shape which every writer has."""
-    return Stripped(
-        f"""\
-/**
- * Write {{@code that}} where {{@code writer}} already is.
- *
- * <p>Every value is written through this one shape, so that the writing
- * composes: {{@link #writeElement}} frames it in a start and an end tag, and
- * a class's own {{@code write...AsSequence}} already is one.
- *
- * <p>There is deliberately no second shape for a whole element, as there is
- * on the reading side. An element differs from a content only in what it
- * writes, never in its shape; the reading needs the distinction because
- * a content reader has to be told whether its element was self-closing, and
- * a writer has nothing to be told.
- *
- * <p>Use sites take a {{@code ContentWriter<? super T>}} -- Java's spelling
- * of the contravariance -- so that the single writer of an {{@link IClass}}
- * serves wherever the writer of a more specific interface is expected.
- */
-@FunctionalInterface
-private interface ContentWriter<T> {{
-{I}void write(T that, XMLStreamWriter writer) throws XMLStreamException;
-}}"""
-    )
-
-
-def _generate_write_element() -> Stripped:
-    """Generate the framer writing a value as a named XML element."""
-    return Stripped(
-        f"""\
-/**
- * Write {{@code that}} as an XML element named {{@code name}}, its content
- * written by {{@code writeContent}}.
- *
- * <p>An element is nothing but a start and an end tag around a content, so
- * there is no writer per property kind: only the content writer differs,
- * and the type of the value alone decides which one it is.
- *
- * <p>{{@code withNamespace}} declares the XML namespace on the element,
- * which only the outermost element does.
- */
-private static <T> void writeElement(
-{I}String name,
-{I}T that,
-{I}XMLStreamWriter writer,
-{I}boolean withNamespace,
-{I}ContentWriter<? super T> writeContent) {{
-{I}try {{
-{II}writer.writeStartElement(name);
-{II}if (withNamespace) {{
-{III}writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-{II}}}
-{II}writeContent.write(that, writer);
-{II}writer.writeEndElement();
-{I}}} catch (XMLStreamException exception) {{
-{II}throw new _SerializeFailure(
-{III}new Reporting.Error(exception.getMessage()));
-{I}}}
-}}
-
-/**
- * Write {{@code that}} as an XML element named {{@code name}} nested in
- * another element, so that the XML namespace is not re-declared.
- *
- * <p>This is what an item of a list or of a tuple is written with. It
- * contributes no segment to the error path: its container has already
- * contributed the item's index, and the index selects this very element
- * (see {{@link #writeListOf}} in the generated writers).
- */
-private static <T> void writeElement(
-{I}String name,
-{I}T that,
-{I}XMLStreamWriter writer,
-{I}ContentWriter<? super T> writeContent) {{
-{I}writeElement(name, that, writer, false, writeContent);
-}}"""
-    )
-
-
 def _generate_write_property() -> Stripped:
     """Generate the framer writing a property, naming it on the error path."""
     return Stripped(
@@ -2528,10 +2289,10 @@ private static <T> void writeProperty(
 {I}String getterName,
 {I}T that,
 {I}XMLStreamWriter writer,
-{I}ContentWriter<? super T> writeContent) {{
+{I}XmlCommon.ContentWriter<? super T> writeContent) {{
 {I}try {{
-{II}writeElement(name, that, writer, false, writeContent);
-{I}}} catch (_SerializeFailure failure) {{
+{II}XmlCommon.writeElement(name, that, writer, writeContent);
+{I}}} catch (XmlCommon.SerializeFailure failure) {{
 {II}failure.getError().prependSegment(
 {III}new Reporting.NameSegment(getterName));
 {II}throw failure;
@@ -2558,7 +2319,7 @@ private static <T> void writeOptionalProperty(
 {I}String getterName,
 {I}Optional<T> that,
 {I}XMLStreamWriter writer,
-{I}ContentWriter<? super T> writeContent) {{
+{I}XmlCommon.ContentWriter<? super T> writeContent) {{
 {I}final T value = that.orElse(null);
 {I}if (value != null) {{
 {II}writeProperty(name, getterName, value, writer, writeContent);
@@ -2612,59 +2373,6 @@ private static void writeUnion(
 {I}IUnion<?> that,
 {I}XMLStreamWriter writer) {{
 {I}writeClass(that.getUnderlying(), writer);
-}}"""
-    )
-
-
-def _generate_write_stringified_content() -> Stripped:
-    """Generate the writer rendering a value through its ``toString``."""
-    return Stripped(
-        f"""\
-/**
- * Write {{@code that.toString()}} as XML content.
- *
- * <p>This is the {{@link ContentWriter}} of every {{@code boolean}}/
- * {{@code long}}/{{@code double}}/{{@code String}}-typed value, be it
- * a property, a list item or a tuple item.
- */
-private static <T> void writeStringifiedContent(
-{I}T that,
-{I}XMLStreamWriter writer) throws XMLStreamException {{
-{I}writer.writeCharacters(that.toString());
-}}"""
-    )
-
-
-def _generate_write_double_content() -> Stripped:
-    """Generate the writer rendering a double as ``xs:double``."""
-    return Stripped(
-        f"""\
-/**
- * Write {{@code that}} as XML content in the lexical form of
- * {{@code xs:double}}.
- *
- * <p>This is the {{@link ContentWriter}} of every {{@code double}}-typed
- * value, be it a property, a list item or a tuple item. A double can not
- * share {{@link #writeStringifiedContent}} with the other primitives:
- * {{@code Double.toString}} renders an infinity as {{@code Infinity}}, where
- * {{@code xs:double}} spells it {{@code INF}}. Only the two infinities differ
- * -- {{@code NaN}} is spelled the same way in both, and a finite number is
- * rendered by {{@code Double.toString}} in a form which {{@code xs:double}}
- * accepts.
- *
- * <p>See: https://www.w3.org/TR/xmlschema-2/#double
- */
-private static void writeDoubleContent(
-{I}Double that,
-{I}XMLStreamWriter writer) throws XMLStreamException {{
-{I}final String text;
-{I}if (that.isInfinite()) {{
-{II}text = (that > 0) ? "INF" : "-INF";
-{I}}} else {{
-{II}text = that.toString();
-{I}}}
-
-{I}writer.writeCharacters(text);
 }}"""
     )
 
@@ -2792,7 +2500,7 @@ try {{
 {II}{item_writer}(item, writer);
 {II}index++;
 {I}}}
-}} catch (_SerializeFailure failure) {{
+}} catch (XmlCommon.SerializeFailure failure) {{
 {I}failure.getError().prependSegment(
 {II}new Reporting.IndexSegment(index));
 {I}throw failure;
@@ -2820,7 +2528,7 @@ try {{
 int index = 0;
 try {{
 {joined_item_writes}
-}} catch (_SerializeFailure failure) {{
+}} catch (XmlCommon.SerializeFailure failure) {{
 {I}failure.getError().prependSegment(
 {II}new Reporting.IndexSegment(index));
 {I}throw failure;
@@ -2858,7 +2566,7 @@ def _generate_at_v_writer(
 private static void {name}(
 {I}{value_type} that,
 {I}XMLStreamWriter writer) {{
-{I}writeElement(
+{I}XmlCommon.writeElement(
 {II}{v_name_literal},
 {II}that,
 {II}writer,
@@ -2947,7 +2655,7 @@ def _generate_visit_for_class(cls: intermediate.ConcreteClass) -> Stripped:
 public void {visit_name}(
 {I}{interface_name} that,
 {I}XMLStreamWriter writer) {{
-{I}writeElement(
+{I}XmlCommon.writeElement(
 {II}{xml_cls_name_literal},
 {II}that,
 {II}writer,
@@ -2979,8 +2687,6 @@ def _generate_visitor(
 
     blocks = [
         _generate_visitors(with_nested=write_classes),
-        _generate_content_writer_interface(),
-        _generate_write_element(),
     ]  # type: List[Stripped]
 
     if any(len(cls.properties) > 0 for cls in symbol_table.concrete_classes):
@@ -3003,17 +2709,13 @@ def _generate_visitor(
     # The gating follows the call graph literally: the very function which
     # names a call decides whether that call can occur at all, so a shared
     # writer can not be gated on one condition and called under another.
-    if Identifier("writeStringifiedContent") in needed.called_content_writers:
-        blocks.append(_generate_write_stringified_content())
-
-    if Identifier("writeDoubleContent") in needed.called_content_writers:
-        blocks.append(_generate_write_double_content())
-
     if Identifier("writeByteArrayContent") in needed.called_content_writers:
         blocks.append(_generate_write_byte_array_content())
 
     if Identifier("writeEnum") in needed.called_content_writers:
         blocks.append(_generate_write_enum())
+
+    blocks.extend(_generate_json_value_writers(symbol_table=symbol_table))
 
     for container_type_anno in needed.content_writers.values():
         blocks.append(_generate_content_writer(container_type_anno))
@@ -3069,34 +2771,32 @@ def _generate_serialize(
  * <p>{{@code writer}} is flushed exactly once, here at the end. Nothing is
  * flushed in-between, which is what lets {{@link XMLStreamWriter}} buffer,
  * and the single flush at the end is what lets a failure of the underlying
- * stream be reported as a {{@link SerializeException}} from this method --
+ * stream be reported as a {{@link XmlCommon.SerializeException}} from this method --
  * were it left to the caller, the failure would surface at their own flush,
  * after the serialization has long returned.
  *
- * <p>The path of a {{@link SerializeException}} is rendered as a Java
- * expression on the instance the caller handed over, and not as the XPath
- * which the de-serialization reports: this error answers a call the caller
- * made on that instance, and not on a document which has not been written
- * yet -- {{@code getSubmodelElements().get(0).getValue()}}. Two things it
- * deliberately does not name: the outermost element, since this method
+ * <p>The path of a {{@link XmlCommon.SerializeException}} is rendered as
+ * a Java access path, and not as the relative XPath the de-serialization
+ * reports: the caller invoked this on an <em>instance</em>, and not on
+ * a document, which has not been written yet. It names the getters and
+ * the indices leading to the culprit, so that
+ * {{@code getSubmodelElements().get(0).getValue()}} can be pasted as it
+ * stands. The outermost element is deliberately not named, as this method
  * takes any {{@link IClass}} and the name would say nothing the caller does
- * not already know; and the discriminator element of a polymorphic
- * property, which the de-serialization does prepend. The de-serialization
- * is pointing into a document it is reading, where that element is a real
- * extra level; here it is not.
+ * not already know.
  */
 public static void to(
 {I}IClass that,
-{I}XMLStreamWriter writer) throws SerializeException {{
+{I}XMLStreamWriter writer) throws XmlCommon.SerializeException {{
 {I}try {{
 {II}{_VISITOR_NAME}.ROOT.visit(
 {III}that, writer);
 {II}writer.flush();
 {I}}} catch (XMLStreamException exception) {{
-{II}throw new SerializeException("", exception.getMessage());
-{I}}} catch (_SerializeFailure failure) {{
+{II}throw new XmlCommon.SerializeException("", exception.getMessage());
+{I}}} catch (XmlCommon.SerializeFailure failure) {{
 {II}final Reporting.Error error = failure.getError();
-{II}throw new SerializeException(
+{II}throw new XmlCommon.SerializeException(
 {III}Reporting.generateJavaPath(error.getPathSegments()),
 {III}error.getCause());
 {I}}}
@@ -3195,13 +2895,27 @@ def generate(
         Stripped(f"import {package}.types.impl.*;"),
         Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.visitation.*;"),
+        Stripped(f"import {package}.xmlcommon.XmlCommon;"),
     ]  # type: List[Stripped]
 
-    # region Deserialization helpers
+    # NOTE (mristin):
+    # A JSON-able value is a Jackson node, and only the models which use one
+    # pay for the import and for the XML-RPC de/serialization which goes
+    # with it.
+    if intermediate.uses_json_types(symbol_table):
+        imports.extend(
+            [
+                *(
+                    Stripped(f"import {json_import};")
+                    for json_import in java_common.JSON_IMPORTS
+                ),
+                Stripped("import com.fasterxml.jackson.databind.node.JsonNodeFactory;"),
+                Stripped("import java.util.Iterator;"),
+                Stripped(f"import {package}.xmlrpc.XmlRpc;"),
+            ]
+        )
 
-    xml_namespace_literal = java_common.string_literal(
-        symbol_table.meta_model.xml_namespace
-    )
+    # region Deserialization helpers
 
     # endregion
 
@@ -3247,80 +2961,11 @@ def generate(
  */
 public class Xmlization {{
 {I}/**
-{I} * Represent a critical error during the deserialization.
-{I} */
-{I}@SuppressWarnings("serial")
-{I}public static class DeserializeException extends RuntimeException {{
-{II}private final String path;
-{II}private final String reason;
-
-{II}public DeserializeException(String path, String reason) {{
-{III}super(reason + " at: " + ("".equals(path) ? "the beginning" : path));
-{III}this.path = path;
-{III}this.reason = reason;
-{II}}}
-
-{II}public Optional<String> getPath() {{
-{III}return Optional.ofNullable(path);
-{II}}}
-
-{II}public Optional<String> getReason() {{
-{III}return Optional.ofNullable(reason);
-{II}}}
-{I}}}
-
-{I}/**
-{I} * Represent a critical error during the serialization.
-{I} */
-{I}@SuppressWarnings("serial")
-{I}public static class SerializeException extends RuntimeException {{
-{II}private final String path;
-{II}private final String reason;
-
-{II}public SerializeException(String path, String reason) {{
-{III}super(reason + " at: " + ("".equals(path) ? "the beginning" : path));
-{III}this.path = path;
-{III}this.reason = reason;
-{II}}}
-
-{II}public Optional<String> getPath() {{
-{III}return Optional.ofNullable(path);
-{II}}}
-
-{II}public Optional<String> getReason() {{
-{III}return Optional.ofNullable(reason);
-{II}}}
-{I}}}
-
-{I}/**
-{I} * Signal a failure of the serialization, carrying the path to the culprit.
-{I} *
-{I} * <p>The path is built as the stack unwinds -- every container prepends
-{I} * the one segment it knows, the property its name and the list the index
-{I} * of the item -- which is why this can not be a
-{I} * {{@link SerializeException}} already: that one renders its message in
-{I} * its constructor, so its path has to be complete by then.
-{I} * {{@link Serialize#to}} renders and converts.
-{I} */
-{I}@SuppressWarnings("serial")
-{I}private static class _SerializeFailure extends RuntimeException {{
-{II}private final Reporting.Error error;
-
-{II}_SerializeFailure(Reporting.Error error) {{
-{III}super(error.getCause());
-{III}this.error = error;
-{II}}}
-
-{II}Reporting.Error getError() {{
-{III}return error;
-{II}}}
-{I}}}
-
-{I}/**
 {I} * The XML namespace of the meta-model
 {I} */
 {I}public static final String AAS_NAME_SPACE =
-{II}{xml_namespace_literal};
+{II}XmlCommon.NAMESPACE;
+
 
 {I}{indent_but_first_line(deserialize_impl_block, I)}
 

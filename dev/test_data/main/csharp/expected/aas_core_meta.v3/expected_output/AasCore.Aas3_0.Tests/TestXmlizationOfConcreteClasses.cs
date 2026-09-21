@@ -106,9 +106,10 @@ namespace AasCore.Aas3_0.Tests
 
                 foreach (var child in gotDoc.Descendants())
                 {
-                    Assert.AreEqual(
-                        child.GetDefaultNamespace().NamespaceName,
-                        "https://admin-shell.io/aas/3/0");
+                    Assert.IsTrue(
+                        child.GetDefaultNamespace().NamespaceName == "https://admin-shell.io/aas/3/0",
+                        $"Unexpected namespace of {child.Name}: " +
+                            $"{child.GetDefaultNamespace().NamespaceName}");
                 }
 
                 var expectedDoc = XDocument.Load(path);

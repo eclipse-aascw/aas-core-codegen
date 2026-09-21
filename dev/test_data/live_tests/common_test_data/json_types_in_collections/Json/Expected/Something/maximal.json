@@ -1,0 +1,29 @@
+{
+  "values": [
+    true,
+    3.14,
+    "three",
+    [
+      1.5,
+      2.5
+    ],
+    {
+      "nested": "obj"
+    }
+  ],
+  "tupleWithJson": [
+    "world",
+    {
+      "nested": true
+    },
+    [
+      1.5,
+      "two",
+      false
+    ],
+    {
+      "x": 1.5,
+      "y": 2.5
+    }
+  ]
+}

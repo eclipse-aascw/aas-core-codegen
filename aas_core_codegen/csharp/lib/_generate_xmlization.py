@@ -18,6 +18,10 @@ from aas_core_codegen.csharp import (
     common as csharp_common,
     naming as csharp_naming,
 )
+from aas_core_codegen.csharp.lib._generate_xml_common import (
+    NeededCombinators,
+    needed_combinators,
+)
 from aas_core_codegen.csharp.common import (
     INDENT as I,
     INDENT2 as II,
@@ -26,26 +30,6 @@ from aas_core_codegen.csharp.common import (
     INDENT5 as IIIII,
     INDENT6 as IIIIII,
 )
-
-
-def _generate_skip_whitespace_and_comments() -> Stripped:
-    """Generate the function to skip whitespace text and XML comments."""
-    return Stripped(
-        f"""\
-internal static void SkipNoneWhitespaceAndComments(
-{I}Xml.XmlReader reader)
-{{
-{I}while (
-{II}!reader.EOF
-{II}&& (
-{III}reader.NodeType == Xml.XmlNodeType.None
-{III}|| reader.NodeType == Xml.XmlNodeType.Whitespace
-{III}|| reader.NodeType == Xml.XmlNodeType.Comment))
-{I}{{
-{II}reader.Read();
-{I}}}
-}}"""
-    )
 
 
 def _generate_read_whole_content_as_base_64() -> Stripped:
@@ -64,51 +48,16 @@ private static byte[] ReadWholeContentAsBase64(
 {I}// lenient in ways XSD is not -- it reads "SGk" although it is three
 {I}// characters long -- and it gives us nothing to check before it has
 {I}// already decoded.
-{I}string text = WhitespaceRunRegex.Replace(reader.ReadContentAsString(), "");
+{I}string text = XmlCommon.WhitespaceRunRegex.Replace(
+{II}reader.ReadContentAsString(), "");
 
-{I}if (!MatchesXsBase64Binary(text))
+{I}if (!XmlCommon.MatchesXsBase64Binary(text))
 {I}{{
 {II}throw new System.FormatException(
 {III}$"Expected a text as base64-encoded bytes, but got: {{text}}");
 {I}}}
 
 {I}return System.Convert.FromBase64String(text);
-}}"""
-    )
-
-
-def _generate_extract_element_name() -> Stripped:
-    """Generate the function to strip the prefix and check the namespace."""
-    return Stripped(
-        f"""\
-/// <summary>
-/// Check the namespace and extract the element's name.
-/// </summary>
-private static string TryElementName(
-{I}Xml.XmlReader reader,
-{I}out Reporting.Error? error
-{I})
-{{
-{I}// Pre-condition
-{I}if (reader.NodeType != Xml.XmlNodeType.Element
-{II}&& reader.NodeType != Xml.XmlNodeType.EndElement)
-{I}{{
-{II}throw new System.InvalidOperationException(
-{III}"Expected to be at a start or an end element " +
-{III}$"in {{nameof(TryElementName)}}, " +
-{III}$"but got: {{reader.NodeType}}");
-{I}}}
-
-{I}error = null;
-{I}if (reader.NamespaceURI != NS)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected an element within a namespace {{NS}}, " +
-{III}$"but got: {{reader.NamespaceURI}}");
-{III}return "";
-{I}}}
-
-{I}return reader.LocalName;
 }}"""
     )
 
@@ -193,7 +142,7 @@ private static List<T> ReadList<T>(
 {I}error = null;
 {I}var result = new List<T>();
 
-{I}SkipNoneWhitespaceAndComments(reader);
+{I}XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
 {I}int index = 0;
 {I}while (reader.NodeType == Xml.XmlNodeType.Element)
@@ -210,7 +159,7 @@ private static List<T> ReadList<T>(
 {II}result.Add(item);
 
 {II}index++;
-{II}SkipNoneWhitespaceAndComments(reader);
+{II}XmlCommon.SkipNoneWhitespaceAndComments(reader);
 {I}}}
 
 {I}return result;
@@ -258,7 +207,7 @@ if (error != null)
         )
         if i < arity - 1:
             item_block = Stripped(
-                f"{item_block}\nSkipNoneWhitespaceAndComments(reader);"
+                f"{item_block}\nXmlCommon.SkipNoneWhitespaceAndComments(reader);"
             )
         item_blocks.append(item_block)
 
@@ -303,7 +252,7 @@ private static ContentReader<{tuple_type}> AsTuple{arity}<{type_params_joined}>(
 {III}return default!;
 {II}}}
 
-{II}SkipNoneWhitespaceAndComments(reader);
+{II}XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
 {II}{indent_but_first_line(item_blocks_joined, II)}
 
@@ -329,7 +278,7 @@ _CONTENT_READER_BY_PRIMITIVE: Final[
     intermediate.PrimitiveType.FLOAT: (
         "ReadContentAsDouble",
         "double",
-        f"ParseXsDouble(\n{II}reader.ReadContentAsString())",
+        f"XmlCommon.ParseXsDouble(\n{II}reader.ReadContentAsString())",
     ),
     intermediate.PrimitiveType.STR: (
         "ReadContentAsString",
@@ -358,133 +307,8 @@ _EMPTY_VALUE_BY_PRIMITIVE: Final[Mapping[intermediate.PrimitiveType, str]] = {
 }
 
 
-class _NeededCombinators:
-    """Capture which of the shared combinators a model actually needs."""
-
-    def __init__(
-        self,
-        primitive_types: Set[intermediate.PrimitiveType],
-        enumerations: bool,
-        polymorphic: bool,
-        lists: bool,
-        v_elements: bool,
-    ) -> None:
-        """Initialize with the given values."""
-        self.primitive_types = primitive_types
-        self.enumerations = enumerations
-        self.polymorphic = polymorphic
-        self.lists = lists
-        self.v_elements = v_elements
-
-    @property
-    def text(self) -> bool:
-        """Check whether the skeleton reading a content as text is needed."""
-        return any(
-            a_type in self.primitive_types for a_type in _CONTENT_READER_BY_PRIMITIVE
-        )
-
-
-def _needed_combinators(
-    symbol_table: intermediate.SymbolTable,
-) -> _NeededCombinators:
-    """
-    Determine which shared combinators need to be generated.
-
-    The reading and the writing are composed out of the very same shapes --
-    a text, an enumeration literal, a list, a tuple, a self-describing
-    element -- so one pass answers for both. Only the properties of
-    the concrete classes matter, as they are the only thing de/serialized as
-    a sequence of XML elements.
-
-    The pass recurses into the items of a list and of a tuple: an item is
-    de/serialized by the same combinators, only one nesting level deeper, and
-    the combinator it needs may occur nowhere else in the model.
-
-    This mirrors how the tuple helpers are already emitted only for
-    the arities which actually occur (see
-    :py:func:`aas_core_codegen.intermediate.tuple_arities`) -- without it,
-    a model would pay for the combinators it never calls.
-    """
-    primitive_types = set()  # type: Set[intermediate.PrimitiveType]
-    enumerations = False
-    polymorphic = False
-    lists = False
-    v_elements = False
-
-    def register(type_anno: intermediate.TypeAnnotationUnion, nested: bool) -> None:
-        """
-        Register what ``type_anno`` needs.
-
-        ``nested`` tells whether the value is an item of a list or of
-        a tuple. Everything but a class, an interface and a named union is
-        then wrapped in a ``<v>`` element of its own, while those three
-        de/serialize their own, self-describing element and hence need no
-        dispatching combinator.
-        """
-        nonlocal enumerations, polymorphic, lists, v_elements
-
-        if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
-            primitive_types.add(type_anno.a_type)
-            v_elements = v_elements or nested
-
-        elif isinstance(type_anno, intermediate.OurTypeAnnotation):
-            our_type = type_anno.our_type
-
-            if isinstance(our_type, intermediate.Enumeration):
-                enumerations = True
-                primitive_types.add(intermediate.PrimitiveType.STR)
-                v_elements = v_elements or nested
-
-            elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-                primitive_types.add(our_type.constrainee)
-                v_elements = v_elements or nested
-
-            elif isinstance(
-                our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-            ):
-                if not nested and (
-                    isinstance(our_type, intermediate.AbstractClass)
-                    or len(our_type.concrete_descendants) > 0
-                ):
-                    polymorphic = True
-
-            elif isinstance(our_type, intermediate.NamedUnion):
-                polymorphic = polymorphic or not nested
-
-            else:
-                assert_never(our_type)
-
-        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-            lists = True
-            v_elements = v_elements or nested
-            register(type_anno.items, nested=True)
-
-        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            v_elements = v_elements or nested
-            for item_type_anno in type_anno.items:
-                register(item_type_anno, nested=True)
-
-        elif isinstance(type_anno, intermediate.OptionalTypeAnnotation):
-            register(type_anno.value, nested=nested)
-
-        else:
-            assert_never(type_anno)
-
-    for cls in symbol_table.concrete_classes:
-        for prop in cls.properties:
-            register(intermediate.beneath_optional(prop.type_annotation), nested=False)
-
-    return _NeededCombinators(
-        primitive_types=primitive_types,
-        enumerations=enumerations,
-        polymorphic=polymorphic,
-        lists=lists,
-        v_elements=v_elements,
-    )
-
-
 def _generate_as_text_combinators(
-    needed: _NeededCombinators,
+    needed: NeededCombinators,
 ) -> List[Stripped]:
     """
     Generate the shared skeletons for reading a content as text.
@@ -628,75 +452,6 @@ private static ContentReader<T> AsText<T>(
     return result
 
 
-def _generate_consume_end_element() -> Stripped:
-    """
-    Generate the shared helper consuming the end tag of an element.
-
-    Reading a whole element and reading a property of a sequence conclude
-    in exactly the same way, so this is shared by ``AtElement`` and by
-    the property loop of every ``...FromSequence``.
-    """
-    return Stripped(
-        f"""\
-/// <summary>
-/// Consume the end tag matching <paramref name="elementName" />, unless
-/// <paramref name="isEmptyElement" /> tells that the element was
-/// self-closing and thus has no end tag at all.
-/// </summary>
-private static void ConsumeEndElement(
-{I}Xml.XmlReader reader,
-{I}string elementName,
-{I}bool isEmptyElement,
-{I}out Reporting.Error? error
-{I})
-{{
-{I}error = null;
-
-{I}if (isEmptyElement)
-{I}{{
-{II}return;
-{I}}}
-
-{I}SkipNoneWhitespaceAndComments(reader);
-
-{I}if (reader.EOF)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a closing element </{{elementName}}>, " +
-{III}"but reached the end-of-file");
-{II}return;
-{I}}}
-
-{I}if (reader.NodeType != Xml.XmlNodeType.EndElement)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a closing element </{{elementName}}>, " +
-{III}$"but got a node of type {{reader.NodeType}} " +
-{III}$"with value {{reader.Value}}");
-{II}return;
-{I}}}
-
-{I}string endElementName = TryElementName(
-{II}reader, out error);
-{I}if (error != null)
-{I}{{
-{II}return;
-{I}}}
-
-{I}if (endElementName != elementName)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a closing element </{{elementName}}>, " +
-{III}$"but got a closing element </{{endElementName}}>");
-{II}return;
-{I}}}
-
-{I}// Consume the end tag.
-{I}reader.Read();
-}}"""
-    )
-
-
 def _generate_try_next_property() -> Stripped:
     """
     Generate the shared helper reading the start tag of the next property.
@@ -735,7 +490,7 @@ private static bool TryNextProperty(
 {I}elementName = "";
 {I}isEmptyProperty = false;
 
-{I}SkipNoneWhitespaceAndComments(reader);
+{I}XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
 {I}if (reader.NodeType == Xml.XmlNodeType.EndElement || reader.EOF)
 {I}{{
@@ -751,7 +506,7 @@ private static bool TryNextProperty(
 {II}return false;
 {I}}}
 
-{I}elementName = TryElementName(
+{I}elementName = XmlCommon.TryElementName(
 {II}reader, out error);
 {I}if (error != null)
 {I}{{
@@ -820,25 +575,12 @@ private static ElementReader<T> AtElement<T>(
 {II}out Reporting.Error? error
 {I}) =>
 {I}{{
-{II}string observedName = PeekElementName(
-{III}reader, out error);
+{II}bool isEmptyElement = XmlCommon.ReadStartElement(
+{III}reader, elementName, out error);
 {II}if (error != null)
 {II}{{
 {III}return default!;
 {II}}}
-
-{II}if (observedName != elementName)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}$"Expected a <{{elementName}}> element, " +
-{IIII}$"but got a <{{observedName}}> element");
-{III}return default!;
-{II}}}
-
-{II}bool isEmptyElement = reader.IsEmptyElement;
-
-{II}// Consume the start tag and go to the content.
-{II}reader.Read();
 
 {II}T value = readContent(reader, isEmptyElement, out error);
 {II}if (error != null)
@@ -846,7 +588,7 @@ private static ElementReader<T> AtElement<T>(
 {III}return default!;
 {II}}}
 
-{II}ConsumeEndElement(
+{II}XmlCommon.ConsumeEndElement(
 {III}reader, elementName, isEmptyElement, out error);
 {II}if (error != null)
 {II}{{
@@ -883,180 +625,6 @@ def _generate_content_converters(
 private static {csharp_type} {function_name}(Xml.XmlReader reader)
 {{
 {I}return {conversion_expr};
-}}"""
-            )
-        )
-
-    if (
-        intermediate.PrimitiveType.FLOAT in primitive_types
-        or intermediate.PrimitiveType.BYTEARRAY in primitive_types
-    ):
-        result.append(
-            Stripped(
-                f"""\
-/// <summary>
-/// Match a run of the four characters which XML calls whitespace.
-/// </summary>
-private static readonly RegularExpressions.Regex WhitespaceRunRegex = (
-{I}new RegularExpressions.Regex(
-{II}@"[ \\t\\n\\r]+",
-{II}RegularExpressions.RegexOptions.Compiled));"""
-            )
-        )
-
-    if intermediate.PrimitiveType.BYTEARRAY in primitive_types:
-        result.append(
-            Stripped(
-                f"""\
-/// <summary>
-/// Tell whether <paramref name="text" /> is a lexical form of
-/// <c>xs:base64Binary</c>.
-/// </summary>
-/// <remarks>
-/// The whitespace is expected to be gone already. What is left has to match
-/// <c>(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=')
-/// | (B64 B04 '=='))?</c> -- a length which is a multiple of four,
-/// the alphabet and nothing else, an equals sign only at the very end, and,
-/// easily missed, a constrained character <i>before</i> the padding, as
-/// the bits which the padding drops have to be zero.
-///
-/// The decoders do not agree on any of this, so every target does the same
-/// check of its own and refuses the same texts.
-///
-/// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
-/// </remarks>
-private static bool MatchesXsBase64Binary(string text)
-{{
-{I}if (text.Length % 4 != 0)
-{I}{{
-{II}return false;
-{I}}}
-
-{I}if (text.Length == 0)
-{I}{{
-{II}return true;
-{I}}}
-
-{I}int pads = 0;
-{I}if (text[text.Length - 1] == '=')
-{I}{{
-{II}pads = 1;
-{II}if (text[text.Length - 2] == '=')
-{II}{{
-{III}pads = 2;
-{II}}}
-{I}}}
-
-{I}for (int i = 0; i < text.Length - pads; i++)
-{I}{{
-{II}char character = text[i];
-{II}bool inAlphabet =
-{III}(character >= 'A' && character <= 'Z')
-{IIII}|| (character >= 'a' && character <= 'z')
-{IIII}|| (character >= '0' && character <= '9')
-{IIII}|| character == '+'
-{IIII}|| character == '/';
-{II}if (!inAlphabet)
-{II}{{
-{III}return false;
-{II}}}
-{I}}}
-
-{I}// NOTE (mristin):
-{I}// Only these sixteen characters leave the two dropped bits at zero, and
-{I}// only these four leave the four dropped bits at zero.
-{I}if (pads == 1)
-{I}{{
-{II}return "AEIMQUYcgkosw048".IndexOf(text[text.Length - 2]) >= 0;
-{I}}}
-
-{I}if (pads == 2)
-{I}{{
-{II}return "AQgw".IndexOf(text[text.Length - 3]) >= 0;
-{I}}}
-
-{I}return true;
-}}"""
-            )
-        )
-
-    if intermediate.PrimitiveType.FLOAT in primitive_types:
-        result.append(
-            Stripped(
-                f"""\
-/// <summary>
-/// Match the lexical space of <c>xs:double</c>, save for the three named
-/// literals, which <see cref="ParseXsDouble" /> takes care of.
-/// </summary>
-/// <remarks>
-/// The pattern ends in <c>\\z</c>, and not in <c>$</c>: <c>$</c> matches not
-/// only at the end of the text but also just before a trailing newline, so
-/// <c>"1.0\\n"</c> would pass.
-///
-/// See: https://www.w3.org/TR/xmlschema-2/#double
-/// </remarks>
-private static readonly RegularExpressions.Regex XsDoubleRegex = (
-{I}new RegularExpressions.Regex(
-{II}@"^(\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?\\z",
-{II}RegularExpressions.RegexOptions.Compiled));
-
-/// <summary>
-/// Parse <paramref name="text" /> as a <c>xs:double</c>.
-/// </summary>
-/// <remarks>
-/// <c>XmlReader.ReadContentAsDouble</c> can not be used directly. It reads
-/// the three named literals correctly, but it also takes <c>Infinity</c>,
-/// <c>-Infinity</c>, <c>nan</c> and <c>NAN</c>, none of which
-/// <c>xs:double</c> admits -- it spells them <c>INF</c>, <c>-INF</c> and
-/// <c>NaN</c>, and it is case-sensitive.
-/// </remarks>
-/// <exception cref="System.FormatException">
-/// Thrown when <paramref name="text" /> is not a <c>xs:double</c>
-/// </exception>
-private static double ParseXsDouble(string rawText)
-{{
-{I}// NOTE (mristin):
-{I}// Every atomic XSD type except a string fixes whiteSpace to collapse,
-{I}// and a schema author can not change it, so the text is normalized
-{I}// before it is matched: a tab, a line feed and a carriage return each
-{I}// become a space, a run of spaces becomes one space, and the leading
-{I}// and trailing spaces go. Mind that this strips only the whitespace
-{I}// *around* the value: a space within it survives as a single space, so
-{I}// "2  3" becomes "2 3", which is still no number.
-{I}//
-{I}// The other readers of this class need no such thing -- XmlConvert,
-{I}// which XmlReader.ReadContentAs* goes through, already collapses.
-{I}//
-{I}// See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
-{I}string text = WhitespaceRunRegex.Replace(rawText, " ").Trim(' ');
-
-{I}switch (text)
-{I}{{
-{II}// NOTE (mristin):
-{II}// "+INF" is read although it is written as "INF": XSD 1.1 admits it,
-{II}// its production being (\\+|-)?INF, and being liberal in what we
-{II}// accept costs nothing here.
-{II}case "INF":
-{II}case "+INF":
-{III}return System.Double.PositiveInfinity;
-{II}case "-INF":
-{III}return System.Double.NegativeInfinity;
-{II}case "NaN":
-{III}return System.Double.NaN;
-{II}default:
-{III}break;
-{I}}}
-
-{I}if (!XsDoubleRegex.IsMatch(text))
-{I}{{
-{II}throw new System.FormatException(
-{III}$"Expected a value as xs:double, but got: {{text}}");
-{I}}}
-
-{I}return System.Double.Parse(
-{II}text,
-{II}Globalization.NumberStyles.Float,
-{II}Globalization.CultureInfo.InvariantCulture);
 }}"""
             )
         )
@@ -1221,7 +789,7 @@ private static ContentReader<T> AsElement<T>(
 
 {II}// We need to skip the whitespace here in order to be able to look ahead
 {II}// the discriminator element shortly.
-{II}SkipNoneWhitespaceAndComments(reader);
+{II}XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
 {II}if (reader.EOF)
 {II}{{
@@ -1328,6 +896,21 @@ def _content_reader_initializer(
     type_anno: intermediate.TypeAnnotationUnion,
 ) -> Stripped:
     """Generate the expression initializing the reader of ``type_anno``."""
+    # NOTE (mristin):
+    # A JSON-able value reads its content through ``XmlRpc``, wrapped in
+    # a function of the very shape which a content-reader field expects --
+    # see :py:func:`_generate_read_json_content_functions` -- so it binds as
+    # a bare method group, exactly as a concrete class's ``...FromSequence``
+    # does below.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("ReadJsonValueContent")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("ReadJsonArrayContent")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("ReadJsonObjectContent")
+
     primitive_type = intermediate.try_primitive_type(type_anno)
     if primitive_type is not None:
         content_reader, csharp_type, _ = _CONTENT_READER_BY_PRIMITIVE[primitive_type]
@@ -1663,7 +1246,7 @@ internal static Aas.{name} {name}FromSequence(
     blocks_for_non_empty.append(
         Stripped(
             f"""\
-SkipNoneWhitespaceAndComments(reader);
+XmlCommon.SkipNoneWhitespaceAndComments(reader);
 if (reader.EOF)
 {{
 {I}error = new Reporting.Error(
@@ -1742,7 +1325,7 @@ while (TryNextProperty(
 {II}return default!;
 {I}}}
 
-{I}ConsumeEndElement(
+{I}XmlCommon.ConsumeEndElement(
 {II}reader, elementName, isEmptyProperty, out error);
 {I}if (error != null)
 {I}{{
@@ -1893,52 +1476,6 @@ internal static Aas.{name} {name}FromSequence(
     return Stripped(writer.getvalue()), None
 
 
-def _generate_peek_element_name() -> Stripped:
-    """
-    Generate the shared helper looking ahead the name of the current element.
-
-    Nothing is consumed, so the caller can still decide what to do with
-    the element: ``AtElement`` checks the name against the one it expects,
-    while a de-serialization dispatching on a discriminator element uses
-    the name to pick the reader.
-    """
-    return Stripped(
-        f"""\
-/// <summary>
-/// Look ahead the name of the element at the current position of
-/// <paramref name="reader" />, without consuming anything.
-/// </summary>
-private static string PeekElementName(
-{I}Xml.XmlReader reader,
-{I}out Reporting.Error? error
-{I})
-{{
-{I}error = null;
-
-{I}SkipNoneWhitespaceAndComments(reader);
-
-{I}if (reader.EOF)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected an XML element, but reached the end-of-file");
-{II}return "";
-{I}}}
-
-{I}if (reader.NodeType != Xml.XmlNodeType.Element)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected an XML element, " +
-{III}$"but got a node of type {{reader.NodeType}} " +
-{III}$"with value {{reader.Value}}");
-{II}return "";
-{I}}}
-
-{I}return TryElementName(
-{II}reader, out error);
-}}"""
-    )
-
-
 def _generate_deserialize_impl_interface_from_element(
     interface: intermediate.Interface,
 ) -> Stripped:
@@ -1977,7 +1514,7 @@ default:
     switch_writer = io.StringIO()
     switch_writer.write(
         f"""\
-string elementName = PeekElementName(
+string elementName = XmlCommon.PeekElementName(
 {I}reader, out error);
 if (error != null)
 {{
@@ -2069,7 +1606,7 @@ default:
     switch_writer = io.StringIO()
     switch_writer.write(
         f"""\
-string elementName = PeekElementName(
+string elementName = XmlCommon.PeekElementName(
 {I}reader, out error);
 if (error != null)
 {{
@@ -2112,30 +1649,110 @@ internal static Aas.{name} {name}FromElement(
     return Stripped(writer.getvalue())
 
 
+def _generate_read_json_content_functions() -> List[Stripped]:
+    """
+    Generate the functions to read a JSON-able value as an element's content.
+
+    These are :py:func:`_generate_content_reader_delegate`-shaped, so each is
+    bound to its content-reader field as a bare method group, exactly as
+    a concrete class's ``...FromSequence`` is. ``XmlRpc``'s own functions can
+    not be bound directly: they know nothing of a self-closing element and
+    they return a nullable, so these thin wrappers handle the one and unwrap
+    the other.
+    """
+    result = []  # type: List[Stripped]
+
+    for function_name, csharp_type, xml_rpc_function, empty_case in (
+        (
+            "ReadJsonValueContent",
+            "Nodes.JsonNode",
+            "DeserializeValueFrom",
+            Stripped(
+                f"""\
+error = new Reporting.Error(
+{I}"Expected one of the elements <boolean>, <double>, <string>, " +
+{I}"<array> or <struct> as the content of the element, " +
+{I}"but the element was self-closing");
+return default!;"""
+            ),
+        ),
+        (
+            "ReadJsonArrayContent",
+            "Nodes.JsonArray",
+            "DeserializeArrayBodyFrom",
+            Stripped(
+                f"""\
+error = new Reporting.Error(
+{I}"Expected a <data> element as the content of the element, " +
+{I}"but the element was self-closing");
+return default!;"""
+            ),
+        ),
+        (
+            "ReadJsonObjectContent",
+            "Nodes.JsonObject",
+            "DeserializeStructBodyFrom",
+            Stripped(
+                """\
+// NOTE (mristin):
+// A self-closing element represents a JSON-able object with no members
+// at all. A JSON-able array, in contrast, always needs an explicit, if
+// empty, <data> element, so the two differ here.
+error = null;
+return new Nodes.JsonObject();"""
+            ),
+        ),
+    ):
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Read the content of an element typed as <c>{csharp_type}</c>.
+/// </summary>
+private static {csharp_type} {function_name}(
+{I}Xml.XmlReader reader,
+{I}bool isEmpty,
+{I}out Reporting.Error? error)
+{{
+{I}if (isEmpty)
+{I}{{
+{II}{indent_but_first_line(empty_case, II)}
+{I}}}
+
+{I}{csharp_type}? result = XmlRpc.{xml_rpc_function}(
+{II}reader, out error);
+{I}if (error != null)
+{I}{{
+{II}return default!;
+{I}}}
+
+{I}return result
+{II}?? throw new System.InvalidOperationException(
+{III}"Unexpected result null when error is null");
+}}"""
+            )
+        )
+
+    return result
+
+
 def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the implementation for deserialization functions."""
-    needed_readers = _needed_combinators(symbol_table)
+    needed_readers = needed_combinators(symbol_table)
 
-    blocks = [
-        _generate_skip_whitespace_and_comments(),
-    ]  # type: List[Stripped]
+    blocks = []  # type: List[Stripped]
 
     # NOTE (mristin):
-    # The base-64 reader leans on ``WhitespaceRunRegex`` and
-    # ``MatchesXsBase64Binary``, which are only generated for a meta-model with
-    # a byte array in it, so the reader has to be gated on the very same thing.
+    # The base-64 reader leans on ``XmlCommon.WhitespaceRunRegex`` and
+    # ``XmlCommon.MatchesXsBase64Binary``, which are only generated for
+    # a meta-model with a byte array in it, so the reader has to be gated on
+    # the very same thing.
     if intermediate.PrimitiveType.BYTEARRAY in needed_readers.primitive_types:
         blocks.append(_generate_read_whole_content_as_base_64())
 
-    blocks.extend(
-        [
-            _generate_extract_element_name(),
-            _generate_peek_element_name(),
-            _generate_element_reader_delegates(),
-        ]
-    )
+    blocks.append(_generate_element_reader_delegates())
     from_element_fields = _generate_from_element_fields(symbol_table)
 
     blocks.extend(_generate_as_text_combinators(needed=needed_readers))
@@ -2147,7 +1764,6 @@ def _generate_deserialize_impl(
     # A class reads its own element through ``AtElement`` as well, so this is
     # needed as soon as there is anything at all to read.
     if needed_readers.v_elements or len(from_element_fields) > 0:
-        blocks.append(_generate_consume_end_element())
         blocks.append(_generate_at_element_combinator())
 
     if any(len(cls.constructor.arguments) > 0 for cls in symbol_table.concrete_classes):
@@ -2178,6 +1794,14 @@ def _generate_deserialize_impl(
     # A field initializer reads the fields it composes, and a reader of
     # a list or of a tuple of a class composes that class's reader, so
     # the classes have to come first.
+
+    # NOTE (mristin):
+    # These delegate into ``XmlRpc``, which is only generated when the model
+    # actually uses a JSON-able type, so they have to precede the fields
+    # which bind them.
+    if needed_readers.json_shapes:
+        blocks.extend(_generate_read_json_content_functions())
+
     blocks.extend(from_element_fields)
     blocks.extend(_generate_content_reader_fields(symbol_table))
 
@@ -2285,7 +1909,7 @@ def _generate_deserialize_from(name: Identifier) -> Stripped:
 public static Aas.{name} {name}From(
 {I}Xml.XmlReader reader)
 {{
-{I}DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+{I}XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
 {I}if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
 {I}{{
@@ -2374,15 +1998,10 @@ def _generate_deserialize(symbol_table: intermediate.SymbolTable) -> Stripped:
 /// </code>
 /// </example>
 ///
-/// <example>
-/// If the elements live in a namespace, you have to supply it. For example:
-/// <code>
-/// var reader = new System.Xml.XmlReader(/* some arguments */);
-/// Aas.{cls_name} {an_instance_variable} = Deserialize.{cls_name}From(
-/// {I}reader,
-/// {I}"http://www.example.com/5/12");
-/// </code>
-/// </example>
+/// <remarks>
+/// The elements are expected to live in <see cref="NS" />, the one XML
+/// namespace of the meta-model, so there is nothing to supply.
+/// </remarks>
 """
         )
 
@@ -2861,6 +2480,19 @@ def _content_writer_initializer(
     type_anno: intermediate.TypeAnnotationUnion,
 ) -> Stripped:
     """Generate the expression initializing the writer of ``type_anno``."""
+    # NOTE (mristin):
+    # The serializers of ``XmlRpc`` already wear the shape of
+    # a ``ContentWriter``, so they are bound as a bare method group, exactly
+    # as a concrete class's ``...ToSequence`` is.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("XmlRpc.SerializeValueTo")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("XmlRpc.SerializeArrayBodyTo")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("XmlRpc.SerializeStructBodyTo")
+
     primitive_type = intermediate.try_primitive_type(type_anno)
     if primitive_type is not None:
         return Stripped(
@@ -3126,7 +2758,7 @@ def _generate_visitor(
 
     blocks = []  # type: List[Stripped]
 
-    needed = _needed_combinators(symbol_table)
+    needed = needed_combinators(symbol_table)
 
     if any(len(cls.properties) > 0 for cls in symbol_table.concrete_classes):
         blocks.append(_generate_content_writer_delegate())
@@ -3309,7 +2941,7 @@ def generate(
     """
     Generate code for XML de/serialization.
 
-    The ``namespace`` defines the AAS C# namespace.
+    The ``namespace`` defines the base C# namespace of the generated code.
     """
     xmlization_blocks = []  # type: List[Stripped]
 
@@ -3340,41 +2972,6 @@ public class Exception : System.Exception
 {II}Path = path;
 {II}Cause = cause;
 {I}}}
-}}
-
-/// <summary>
-/// Represent a critical error during the serialization.
-/// </summary>
-public class SerializationException : System.Exception
-{{
-{I}public readonly string Path;
-{I}public readonly string Cause;
-{I}public SerializationException(string path, string cause)
-{II}: base($"{{cause}} at: {{path}}")
-{I}{{
-{II}Path = path;
-{II}Cause = cause;
-{I}}}
-}}
-
-/// <summary>
-/// Signal a failure of the serialization, carrying the path to the culprit.
-/// </summary>
-/// <remarks>
-/// The path is built as the stack unwinds -- every container prepends the one
-/// segment it knows, the property its name and the list the index of the item
-/// -- which is why this can not be a <see cref="SerializationException" />
-/// already: that one renders its message in its constructor, so its path has
-/// to be complete by then. <see cref="Serialize.To" /> renders and converts.
-/// </remarks>
-internal class SerializationFailure : System.Exception
-{{
-{I}public readonly Reporting.Error Error;
-{I}public SerializationFailure(Reporting.Error error)
-{II}: base(error.Cause)
-{I}{{
-{II}Error = error;
-{I}}}
 }}"""
         )
     )
@@ -3395,10 +2992,6 @@ internal class SerializationFailure : System.Exception
 
     xmlization_writer = io.StringIO()
 
-    xml_namespace_literal = csharp_common.string_literal(
-        symbol_table.meta_model.xml_namespace
-    )
-
     xmlization_writer.write(
         f"""\
 namespace {namespace}
@@ -3410,8 +3003,7 @@ namespace {namespace}
 {I}{{
 {II}/// The XML namespace of the meta-model
 {II}[CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-{II}public static readonly string NS = (
-{III}{xml_namespace_literal});
+{II}public static readonly string NS = XmlCommon.NS;
 
 """
     )
@@ -3434,13 +3026,14 @@ namespace {namespace}
         Stripped(
             """\
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
-using Globalization = System.Globalization;
-using RegularExpressions = System.Text.RegularExpressions;
 using Xml = System.Xml;
 
 using System.Collections.Generic;  // can't alias"""
         )
     )
+
+    if intermediate.uses_json_types(symbol_table):
+        using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
 
     # pylint: disable=line-too-long
     blocks = [

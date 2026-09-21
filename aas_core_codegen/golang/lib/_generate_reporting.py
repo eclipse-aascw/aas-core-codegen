@@ -55,6 +55,17 @@ type IndexSegment struct{{
         ),
         Stripped(
             f"""\
+// Represent a member of an open JSON-able object on a path to
+// the erroneous value.
+//
+// Unlike a [NameSegment], which names a property of one of our classes, a key
+// is known only at run time, and can be any string at all.
+type KeySegment struct{{
+{I}Key string
+}}"""
+        ),
+        Stripped(
+            f"""\
 type Path struct{{
 {I}// A segments is expected to be either a name segment or an index segment.
 {I}segments []interface{{}}
@@ -100,9 +111,16 @@ func (p *Path) PrependIndex(segment *IndexSegment) {{
         ),
         Stripped(
             f"""\
+// Prepend the key segment to the path.
+func (p *Path) PrependKey(segment *KeySegment) {{
+{I}p.prepend(segment)
+}}"""
+        ),
+        Stripped(
+            f"""\
 // Apply the `callback` on each segment.
 //
-// The segment object is either a [NameSegment] or a [IndexSegment].
+// The segment object is a [NameSegment], an [IndexSegment] or a [KeySegment].
 func (p *Path) OverSegments(callback func(interface{{}})) {{
 {I}start := p.start
 {I}for i := start; i < len(p.segments); i++ {{
@@ -132,6 +150,10 @@ func ToJSONPath(p *Path) string {{
 {III}b.WriteString("[")
 {III}b.WriteString(strconv.Itoa(v.Index))
 {III}b.WriteString("]")
+{II}case *KeySegment:
+{III}b.WriteString(`["`)
+{III}b.WriteString(escapeForJSONString(v.Key))
+{III}b.WriteString(`"]`)
 {II}default:
 {III}panic(
 {III}{I}fmt.Sprintf(
@@ -159,6 +181,27 @@ func ToGolangPath(p *Path) string {{
 {I}// the name segments are expected (Golang property names instead
 {I}// of JSON property names).
 {I}return ToJSONPath(p)
+}}"""
+        ),
+        Stripped(
+            f"""\
+var replacerForJSONString = strings.NewReplacer(
+{I}"\\\\", "\\\\\\\\",
+{I}"\\"", "\\\\\\"",
+{I}"\\b", "\\\\b",
+{I}"\\f", "\\\\f",
+{I}"\\n", "\\\\n",
+{I}"\\r", "\\\\r",
+{I}"\\t", "\\\\t",
+)"""
+        ),
+        Stripped(
+            f"""\
+// Escape the characters which a JSON string may not hold as they are.
+func escapeForJSONString(
+{I}text string,
+) string {{
+{I}return replacerForJSONString.Replace(text)
 }}"""
         ),
         Stripped(
@@ -202,7 +245,14 @@ func ToRelativeXPath(
 {IIII}b.WriteString(escapeForXPath(v.Name))
 {III}case *IndexSegment:
 {IIII}b.WriteString(fmt.Sprintf("*[%d]", v.Index))
-{IIIII}{I}
+{III}case *KeySegment:
+{IIII}// NOTE (mristin):
+{IIII}// A JSON-able object is written as an XML-RPC `<struct>`, which holds
+{IIII}// the key of a member in a `<name>` child element, and not in
+{IIII}// an attribute, so the XPath has to match on that child element.
+{IIII}b.WriteString(
+{IIIII}fmt.Sprintf(`member[name="%s"]`, escapeForXPath(v.Key)),
+{IIII})
 {III}default:
 {IIII}panic(fmt.Sprintf("Unexpected segment of type %T: %v", s, s))
 {II}}}

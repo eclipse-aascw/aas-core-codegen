@@ -295,6 +295,32 @@ def generate_type(
 
         return Stripped(f"{COMMON_PACKAGE}.{tuple_type_name}[{joined_item_types}]")
 
+    elif isinstance(
+        type_annotation,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # The three JSON-able aliases are declared in the types package, next to
+        # the structs whose fields are annotated with them. All three are
+        # nilable, so an optional one needs no pointer -- see
+        # :py:func:`aas_core_codegen.golang.pointering.is_pointer_type`.
+        json_name: Identifier
+        if isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+            json_name = Identifier("JsonValue")
+        elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+            json_name = Identifier("JsonArray")
+        else:
+            json_name = Identifier("JsonObject")
+
+        if types_package is None:
+            return Stripped(json_name)
+
+        return Stripped(f"{types_package}.{json_name}")
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value_type = generate_type(
             type_annotation=type_annotation.value, types_package=types_package
@@ -337,6 +363,8 @@ INDENT3 = INDENT * 3
 INDENT4 = INDENT * 4
 INDENT5 = INDENT * 5
 INDENT6 = INDENT * 6
+INDENT7 = INDENT * 7
+INDENT8 = INDENT * 8
 
 #: Maximum number of columns of a line of the generated code, with a tab counted as
 #: :py:data:`TAB_WIDTH` columns

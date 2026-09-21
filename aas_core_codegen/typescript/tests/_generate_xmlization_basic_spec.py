@@ -7,7 +7,7 @@ from icontract import ensure
 
 from aas_core_codegen.common import Stripped
 from aas_core_codegen.typescript import common as typescript_common
-from aas_core_codegen.typescript.common import INDENT as I
+from aas_core_codegen.typescript.common import INDENT as I, INDENT2 as II
 
 
 # fmt: off
@@ -32,13 +32,25 @@ import * as AasXmlization from "../src/xmlization";"""
         ),
         Stripped(
             f"""\
-test("xmlization path and segments format", () => {{
+test("xmlization path renders as a relative XPath", () => {{
 {I}const path = new AasXmlization.Path();
 
 {I}path.prepend(new AasXmlization.IndexSegment(3));
-{I}path.prepend(new AasXmlization.NameSegment("something"));
+{I}path.prepend(new AasXmlization.ElementSegment("something"));
 
-{I}expect(path.toString()).toStrictEqual("something[3]");
+{I}expect(path.toString()).toStrictEqual("something/*[3]");
+}});
+
+test("xmlization key segment renders as a predicate on the name", () => {{
+{I}const path = new AasXmlization.Path();
+
+{I}path.prepend(new AasXmlization.ElementSegment("value"));
+{I}path.prepend(new AasXmlization.KeySegment("a \\"tricky\\" <key>"));
+{I}path.prepend(new AasXmlization.ElementSegment("struct"));
+
+{I}expect(path.toString()).toStrictEqual(
+{II}"struct/member[name=\\"a &quot;tricky&quot; &lt;key&gt;\\"]/value"
+{I});
 }});"""
         ),
         Stripped(
@@ -50,7 +62,17 @@ test("xmlization errors default to empty path", () => {{
 
 {I}const serializationError = new AasXmlization.SerializationError("broken object graph");
 {I}expect(serializationError.message).toStrictEqual("broken object graph");
-{I}expect(serializationError.path.toString()).toStrictEqual("");
+{I}expect(serializationError.path).toStrictEqual("");
+}});
+
+test("xmlization serialization path renders as an access expression", () => {{
+{I}const error = new AasXmlization.SerializationError("broken object graph");
+
+{I}error.prependKey("a b");
+{I}error.prependIndex(3);
+{I}error.prependProperty("something");
+
+{I}expect(error.path).toStrictEqual('.something[3]["a b"]');
 }});"""
         ),
         Stripped(

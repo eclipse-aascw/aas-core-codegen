@@ -9,6 +9,8 @@ from aas_core_codegen.typescript.lib import (
     _generate_stringification,
     _generate_types,
     _generate_verification,
+    _generate_xml_common,
+    _generate_xml_rpc,
 )
 
 generate_common = _generate_common.generate
@@ -28,3 +30,7 @@ verify_for_types = _generate_types.verify
 
 generate_verification = _generate_verification.generate
 verify_verification_functions = _generate_verification.verify
+
+generate_xml_common = _generate_xml_common.generate
+
+generate_xml_rpc = _generate_xml_rpc.generate

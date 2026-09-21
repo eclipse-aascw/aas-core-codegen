@@ -932,6 +932,84 @@ foreach (
                 )
             )
 
+    elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        stmts.append(
+            Stripped(
+                f"""\
+foreach (
+{I}var error in JsonValueVerification.Verify(
+{II}{source_expr}, JsonValueVerification.ExpectedShape.Any))
+{{
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{prop_literal}));
+{I}yield return error;
+}}"""
+            )
+        )
+
+    elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        stmts.append(
+            Stripped(
+                f"""\
+foreach (
+{I}var error in JsonValueVerification.Verify(
+{II}{source_expr}, JsonValueVerification.ExpectedShape.Array))
+{{
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{prop_literal}));
+{I}yield return error;
+}}"""
+            )
+        )
+
+    elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        stmts.append(
+            Stripped(
+                f"""\
+foreach (
+{I}var error in JsonValueVerification.Verify(
+{II}{source_expr}, JsonValueVerification.ExpectedShape.Object))
+{{
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{prop_literal}));
+{I}yield return error;
+}}"""
+            )
+        )
+
+        key_constrained_primitive = intermediate.try_constrained_primitive(
+            type_anno.key
+        )
+
+        # NOTE (mristin):
+        # A bare ``str`` key has nothing to verify.
+        if key_constrained_primitive is not None:
+            key_verify_method = _generate_verify_method(
+                our_type=key_constrained_primitive
+            )
+
+            stmts.append(
+                Stripped(
+                    f"""\
+foreach (var member in {source_expr})
+{{
+{I}foreach (var error in {key_verify_method}(member.Key))
+{I}{{
+{II}error.PrependSegment(
+{III}new Reporting.KeySegment(
+{IIII}member.Key));
+{II}error.PrependSegment(
+{III}new Reporting.NameSegment(
+{IIII}{prop_literal}));
+{II}yield return error;
+{I}}}
+}}"""
+                )
+            )
+
     else:
         assert_never(type_anno)
 
@@ -1287,7 +1365,7 @@ def generate(
     """
     Generate code of verification logic.
 
-    The ``namespace`` defines the AAS C# namespace.
+    The ``namespace`` defines the base C# namespace of the generated code.
     """
     using_directives = []  # type: List[Stripped]
     using_directives.extend(

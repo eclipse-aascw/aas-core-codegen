@@ -87,6 +87,64 @@ std::unique_ptr<ISegment> IndexSegment::Clone() const {
 
 // endregion struct IndexSegment
 
+// region struct KeySegment
+
+KeySegment::KeySegment(std::wstring a_key) :
+  key(std::move(a_key)) {
+  // Intentionally empty.
+}
+
+std::wstring KeySegment::ToWstring() const {
+  // NOTE (mristin):
+  // We escape the key the same way a JSON string is escaped so that
+  // the resulting path reads as a valid C++ expression on
+  // a ``nlohmann::json`` value, *e.g.*, ``.some_property["some key"]``.
+
+  std::wstring escaped;
+  escaped.reserve(key.size());
+
+  for (const wchar_t character : key) {
+    switch (character) {
+      case L'\\':
+        escaped.append(L"\\\\");
+        break;
+      case L'"':
+        escaped.append(L"\\\"");
+        break;
+      case L'\b':
+        escaped.append(L"\\b");
+        break;
+      case L'\f':
+        escaped.append(L"\\f");
+        break;
+      case L'\n':
+        escaped.append(L"\\n");
+        break;
+      case L'\r':
+        escaped.append(L"\\r");
+        break;
+      case L'\t':
+        escaped.append(L"\\t");
+        break;
+      default:
+        escaped.push_back(character);
+        break;
+    }
+  }
+
+  return common::Concat(
+    L"[\"",
+    escaped,
+    L"\"]"
+  );
+}
+
+std::unique_ptr<ISegment> KeySegment::Clone() const {
+  return common::make_unique<KeySegment>(*this);
+}
+
+// endregion struct KeySegment
+
 // region struct Path
 
 Path::Path() {

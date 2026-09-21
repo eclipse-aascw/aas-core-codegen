@@ -73,6 +73,17 @@ func (de *DeserializationError) prependIndex(
 	return de
 }
 
+// Prepend the `key` segment to the path, and return the error back
+// for chaining.
+func (de *DeserializationError) prependKey(
+	key string,
+) *DeserializationError {
+	de.Path.PrependKey(
+		&aasreporting.KeySegment{Key: key},
+	)
+	return de
+}
+
 // Cast `err` to a de-serialization error, or panic.
 //
 // Every error which originates in this package is
@@ -782,6 +793,17 @@ func (se *SerializationError) prependIndex(
 ) *SerializationError {
 	se.Path.PrependIndex(
 		&aasreporting.IndexSegment{Index: index},
+	)
+	return se
+}
+
+// Prepend the `key` segment to the path, and return the error back
+// for chaining.
+func (se *SerializationError) prependKey(
+	key string,
+) *SerializationError {
+	se.Path.PrependKey(
+		&aasreporting.KeySegment{Key: key},
 	)
 	return se
 }

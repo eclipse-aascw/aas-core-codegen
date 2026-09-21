@@ -222,14 +222,21 @@ Most languages share the following components in the generated SDK:
 * ``xmlization`` -- de/serialization of model instances to and from XML.
 * ``verification`` -- functions that check the invariants defined in the meta-model.
 * ``common`` -- helpers shared across the generated SDK components.
+* ``xmlcommon`` -- the XML primitives which every reader and writer of XML shares: the whitespace of XSD, the checks of the namespace, the consumption of the tags and the path into the document.
+  It exists so that the de/serialization of the model and the ``xmlrpc`` below do not each carry a copy of them.
 
 Additional components appear where the language or its community conventions require them:
 
-* ``reporting`` (C#, Go, Java) -- data structures and utilities for collecting and formatting de/serialization and verification errors, used in languages where exception-based error propagation is not the preferred idiom.
+* ``reporting`` (C#, Go, Java, Python) -- data structures and utilities for collecting and formatting de/serialization and verification errors, used in languages where exception-based error propagation is not the preferred idiom.
+  In Python it is narrower: it carries only the error paths of the verification, as the de/serialization there reports through exceptions instead.
 * ``enhancing`` (C#, C++, Go, Java) -- wrapping and unwrapping model instances with custom user-defined data without modifying the generated types; see the `documentation on enhancing in Go`_.
 * ``visitation`` (C#, C++, Java) -- ``Visitor`` and ``Transformer`` base classes for traversing the model hierarchy; see `Visitor pattern`_.
 * ``copying`` (C#, Java) -- functions to produce deep copies of model instances.
 * ``generation`` (Java) -- builder classes for constructing model instances incrementally.
+* ``xmlrpc`` (C#, C++, Go, Java, Python, TypeScript) -- the subset of XML-RPC -- ``<boolean>``, ``<double>``, ``<string>``, ``<array>`` and ``<struct>`` -- which carries a JSON-able value, since JSON prescribes no XML representation of its own.
+  Generated only for a meta-model which actually uses a JSON-able type.
+* ``jsonvalueverification`` (C#, C++, Python) -- the walk which checks that a value is JSON-able at any depth, split out of ``verification`` where the language rewards a module which depends on no class of the meta-model.
+  Generated only for a meta-model which actually uses a JSON-able type.
 * ``index`` (TypeScript) -- a barrel ``index.ts`` file that re-exports all public symbols from the other SDK modules.
 * ``iteration`` (C++) -- free functions to descend into and iterate over model instances, serving the same role that ``visitation`` fills for class-based languages.
 * ``revm`` (C++) -- regular expressions, emitted because C++ lacks a cross-platform, linear-time regex engine in its standard library.

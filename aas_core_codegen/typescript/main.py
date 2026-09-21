@@ -100,6 +100,7 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
         (
             src_rel_path / "index.ts",
             lambda: typescript_lib.generate_index(
+                symbol_table=context.symbol_table,
                 spec_impls=context.spec_impls,
             ),
         ),
@@ -107,6 +108,15 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             src_rel_path / "jsonization.ts",
             lambda: typescript_lib.generate_jsonization(
                 symbol_table=context.symbol_table,
+            ),
+        ),
+        (
+            src_rel_path / "xmlcommon.ts",
+            lambda: (
+                typescript_lib.generate_xml_common(
+                    symbol_table=context.symbol_table,
+                ),
+                None,
             ),
         ),
         (
@@ -360,6 +370,36 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             ),
         ),
     ]
+
+    # NOTE (mristin):
+    # ``xmlrpc.ts``, and the two specs which exercise the XML-RPC and the
+    # verification of a JSON-able value in isolation, are only needed when
+    # the meta-model actually uses a JSON-able type (``JSONValue``, ``JSONArray``
+    # or ``JSONObject[K]``) -- unlike the other modules above, which are always
+    # generated regardless of the model.
+    if intermediate.uses_json_types(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                src_rel_path / "xmlrpc.ts",
+                lambda: (typescript_lib.generate_xml_rpc(), None),
+            ),
+            (
+                test_rel_path / "verification.jsonValue.spec.ts",
+                lambda: (
+                    typescript_tests.generate_verification_json_value_spec(),
+                    None,
+                ),
+            ),
+            (
+                test_rel_path / "xmlrpc.spec.ts",
+                lambda: (
+                    typescript_tests.generate_xml_rpc_spec(
+                        symbol_table=context.symbol_table,
+                    ),
+                    None,
+                ),
+            ),
+        ]
 
     for rel_path, generator_func in rel_paths_generators:
         assert not rel_path.is_absolute()

@@ -41,6 +41,42 @@ namespace dummy
             }
         }
 
+        /// <summary>
+        /// Capture a member of an open JSON-able object on a path to
+        /// the erroneous value.
+        /// </summary>
+        /// <remarks>
+        /// Unlike a <see cref="NameSegment" />, which names a property of one of
+        /// our classes, a key is known only at run time, and can be any string
+        /// at all.
+        /// </remarks>
+        public class KeySegment : Segment
+        {
+            public readonly string Key;
+            public KeySegment(string key)
+            {
+                Key = key;
+            }
+        }
+
+        /// <summary>
+        /// Escape the characters which a JSON string may not hold as they are.
+        /// </summary>
+        private static string EscapeForJsonString(
+            string text)
+        {
+            return (
+                text
+                    .Replace("\\", "\\\\")
+                    .Replace("\"", "\\\"")
+                    .Replace("\b", "\\b")
+                    .Replace("\f", "\\f")
+                    .Replace("\n", "\\n")
+                    .Replace("\r", "\\r")
+                    .Replace("\t", "\\t")
+            );
+        }
+
         private static readonly System.Text.RegularExpressions.Regex VariableNameRe = (
             new System.Text.RegularExpressions.Regex(
                 @"^[a-zA-Z_][a-zA-Z_0-9]*$"));
@@ -69,19 +105,18 @@ namespace dummy
                         }
                         else
                         {
-                            string escaped = nameSegment.Name
-                                .Replace("\\", "\\\\")
-                                .Replace("\"", "\\\"")
-                                .Replace("\b", "\\b")
-                                .Replace("\f", "\\f")
-                                .Replace("\n", "\\n")
-                                .Replace("\r", "\\r")
-                                .Replace("\t", "\\t");
-                            part = $"[\"{escaped}\"]";
+                            part = (
+                                $"[\"{EscapeForJsonString(nameSegment.Name)}\"]");
                         }
                         break;
                     case IndexSegment indexSegment:
                         part = $"[{indexSegment.Index}]";
+                        break;
+                    case KeySegment keySegment:
+                        // A key is no name of a property of one of our classes, so it is
+                        // always bracketed, whatever it looks like.
+                        part = (
+                            $"[\"{EscapeForJsonString(keySegment.Key)}\"]");
                         break;
                     default:
                         throw new System.InvalidOperationException(
@@ -101,6 +136,11 @@ namespace dummy
         /// C#, not the JSON property names. This is the path to report where in
         /// an *instance* something went wrong -- on the serialization, say, where
         /// the caller holds the instance and not a document.
+        ///
+        /// A key and an index segment need no spelling of their own: a JSON-able
+        /// value is a <see cref="System.Text.Json.Nodes.JsonNode" />, which indexes
+        /// by both, so the path reads as a C# expression on the instance, *e.g.*,
+        /// <c>.SomeProperty["some key"][2]</c>.
         /// </remarks>
         public static string GenerateCSharpPath(
             ICollection<Segment> segments)
@@ -156,6 +196,13 @@ namespace dummy
                         break;
                     case IndexSegment indexSegment:
                         part = $"*[{indexSegment.Index}]";
+                        break;
+                    case KeySegment keySegment:
+                        // A JSON-able object is written as an XML-RPC <struct>, which
+                        // holds the key of a member in a <name> child element, and not in
+                        // an attribute, so the XPath has to match on that child element.
+                        part = (
+                            $"member[name=\"{EscapeForXPath(keySegment.Key)}\"]");
                         break;
                     default:
                         throw new System.InvalidOperationException(

@@ -65,6 +65,8 @@ from aas_core_codegen.parse._types import (
     UnverifiedSymbolTable,
     PRIMITIVE_TYPES,
     GENERIC_TYPES,
+    JSON_VALUE_TYPE_NAME,
+    JSON_ARRAY_TYPE_NAME,
     Description,
     MetaModel,
     ImplementationSpecificMethod,
@@ -122,6 +124,9 @@ class _ExpectedImportsVisitor(ast.NodeVisitor):
             ("verification", "aas_core_meta.marker"),
             ("non_mutating", "aas_core_meta.marker"),
             ("xml_name", "aas_core_meta.marker"),
+            ("JSONArray", "aas_core_meta.marker"),
+            ("JSONObject", "aas_core_meta.marker"),
+            ("JSONValue", "aas_core_meta.marker"),
         ]
     )
 
@@ -2440,6 +2445,25 @@ def _verify_arity_of_type_annotation_subscript(
 
         return None
 
+    if type_annotation.identifier == "JSONObject":
+        # NOTE (mristin):
+        # ``JSONObject`` only takes the key type as its generic parameter --
+        # the value is always an arbitrary JSON-able value (``JSONValue``)
+        # and can not be customized, so it is not spelled out as a second
+        # subscript.
+        if len(type_annotation.subscripts) != 1:
+            return Error(
+                type_annotation.node,
+                f"Expected exactly 1 argument (the key type) of "
+                f"a subscripted type annotation {type_annotation.identifier!r}, "
+                f"but got {len(type_annotation.subscripts)}: {type_annotation}. "
+                f"The value of a JSONObject is always an arbitrary JSON-able "
+                f"value (JSONValue) and can not be customized at the moment. "
+                f"Please contact the developers if you need to customize it.",
+            )
+
+        return None
+
     expected_arity_map = {"List": 1, "Optional": 1}
     expected_arity = expected_arity_map.get(type_annotation.identifier, None)
     if expected_arity is None:
@@ -2521,6 +2545,19 @@ def _verify_symbol_table(
         # ``Union`` would be ambiguous with the ``typing.Union[...]`` marker syntax
         # used to declare a named union of classes (``Xxx = Union[Yyy, Zzz]``).
         "union",
+        # NOTE (mristin):
+        # ``JSONValue``, ``JSONArray`` and ``JSONObject`` are reserved since they
+        # name the special JSON-able types recognized by the parser (see
+        # ``parse._types.JSON_VALUE_TYPE_NAME``, ``JSON_ARRAY_TYPE_NAME`` and
+        # ``GENERIC_TYPES``). We also reserve the snake_case spelling
+        # (``json_value``, ``json_array``, ``json_object``) since it is easily
+        # confused with those special types despite being a different identifier.
+        "jsonvalue",
+        "jsonarray",
+        "jsonobject",
+        "json_value",
+        "json_array",
+        "json_object",
     }
 
     # NOTE (mristin):
@@ -2543,6 +2580,16 @@ def _verify_symbol_table(
         "set_enhancement",
         "get_enhancement",
         "enhancement",
+        # NOTE (mristin):
+        # See the note on ``reserved_type_names`` above regarding ``JSONValue``,
+        # ``JSONArray`` and ``JSONObject`` -- we reserve the same spellings here
+        # for methods, properties, constants and verification functions.
+        "jsonvalue",
+        "jsonarray",
+        "jsonobject",
+        "json_value",
+        "json_array",
+        "json_object",
     }
 
     for our_type in symbol_table.our_types:
@@ -2928,6 +2975,12 @@ def _verify_symbol_table(
         """
         if isinstance(type_annotation, AtomicTypeAnnotation):
             if type_annotation.identifier in PRIMITIVE_TYPES:
+                return None
+
+            if type_annotation.identifier in (
+                JSON_VALUE_TYPE_NAME,
+                JSON_ARRAY_TYPE_NAME,
+            ):
                 return None
 
             if type_annotation.identifier in expected_subscripted_types:

@@ -215,6 +215,13 @@ public {builder_name} {setter_name}({arg_type} {arg_name}) {{
 
     builder = Stripped("\n\n".join(builder_blocks))
 
+    json_imports = "".join(
+        f"import {json_import};\n"
+        for json_import in java_common.json_imports_if_necessary(
+            prop.type_annotation for prop in cls.properties
+        )
+    )
+
     return (
         java_common.JavaFile(
             name=file_name,
@@ -228,6 +235,7 @@ import {package}.types.model.*;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+{json_imports}\
 
 /**
  * Builder for the {class_name} type.
