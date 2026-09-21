@@ -47,6 +47,16 @@ func (ve *VerificationError) PathString() string {
 	return aasreporting.ToGolangPath(ve.Path)
 }
 
+// Check that the mapping specifies the type.
+func SpecifiesTheType(
+	mapping aastypes.JsonObject,
+) bool {
+	return aascommon.MapContains(
+			mapping,
+			"type",
+		)
+}
+
 // Verify that `value` is a JSON-able value, at any depth.
 //
 // The path of an error is relative to `value`, and the caller is expected to
@@ -192,6 +202,18 @@ func VerifySomething(
 	onError func(*VerificationError) bool,
 ) (abort bool) {
 	abort = false
+
+	if !SpecifiesTheType(that.Mapping()) {
+		abort = onError(
+			newVerificationError(
+				"The mapping must specify the type, checked in " +
+				"a verification function",
+			),
+		)
+		if abort {
+			return
+		}
+	}
 
 	if !(
 		!(that.OptionalMapping() != nil) ||

@@ -6,6 +6,7 @@
 using Aas = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
 using Regex = System.Text.RegularExpressions.Regex;
+using Nodes = System.Text.Json.Nodes;
 
 using System.Collections.Generic;  // can't alias
 using System.Linq;  // can't alias

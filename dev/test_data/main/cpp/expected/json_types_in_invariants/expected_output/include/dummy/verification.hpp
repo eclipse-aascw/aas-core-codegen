@@ -212,6 +212,15 @@ class RecursiveVerification : public IVerification {
   const std::shared_ptr<types::IClass>& instance_;
 };  // class RecursiveVerification
 
+// region Verification functions
+
+/// \brief Check that the \p mapping specifies the type.
+bool SpecifiesTheType(
+  const nlohmann::json& mapping
+);
+
+// endregion Verification functions
+
 }  // namespace verification
 /**@}*/
 

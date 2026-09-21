@@ -91,6 +91,22 @@ std::unique_ptr<impl::IVerificator> AlwaysDoneVerificator::Clone() const {
 
 // endregion class AlwaysDoneVerificator
 
+// region Verification functions
+
+bool SpecifiesTheType(
+  const nlohmann::json& mapping
+) {
+  return (
+    mapping.contains(
+      common::WstringToUtf8(
+        L"type"
+      )
+    )
+  );
+}
+
+// endregion Verification functions
+
 /**
  * Produce a non-recursive verificator of the instance given its runtime model type.
  */
@@ -288,11 +304,8 @@ void OfSomething::Execute() {
         index_ = -1;
 
         if (
-          !(instance_->optional_mapping().has_value())
-          || (*(instance_->optional_mapping())).contains(
-            common::WstringToUtf8(
-              L"type"
-            )
+          SpecifiesTheType(
+            instance_->mapping()
           )
         ) {
           state_ = 1;
@@ -300,7 +313,8 @@ void OfSomething::Execute() {
         }
 
         error_ = common::make_unique<Error>(
-          L"The optional mapping must specify the type"
+          L"The mapping must specify the type, checked in "
+          L"a verification function"
         );
         // No path is prepended as the error refers to the instance itself.
         ++index_;
@@ -311,7 +325,8 @@ void OfSomething::Execute() {
 
       case 1: {
         if (
-          instance_->mapping().contains(
+          !(instance_->optional_mapping().has_value())
+          || (*(instance_->optional_mapping())).contains(
             common::WstringToUtf8(
               L"type"
             )
@@ -322,7 +337,7 @@ void OfSomething::Execute() {
         }
 
         error_ = common::make_unique<Error>(
-          L"The mapping must specify the type"
+          L"The optional mapping must specify the type"
         );
         // No path is prepended as the error refers to the instance itself.
         ++index_;
@@ -332,6 +347,28 @@ void OfSomething::Execute() {
       }
 
       case 2: {
+        if (
+          instance_->mapping().contains(
+            common::WstringToUtf8(
+              L"type"
+            )
+          )
+        ) {
+          state_ = 3;
+          continue;
+        }
+
+        error_ = common::make_unique<Error>(
+          L"The mapping must specify the type"
+        );
+        // No path is prepended as the error refers to the instance itself.
+        ++index_;
+
+        state_ = 3;
+        return;
+      }
+
+      case 3: {
         json_value_verificator_ = (
           common::make_unique<JsonValueVerificator>(
             instance_->mapping(),
@@ -341,9 +378,9 @@ void OfSomething::Execute() {
         json_value_verificator_->Start();
       }
 
-      case 3: {
+      case 4: {
         if (!(!json_value_verificator_->Done())) {
-          state_ = 5;
+          state_ = 6;
           continue;
         }
 
@@ -364,22 +401,22 @@ void OfSomething::Execute() {
 
         ++index_;
 
-        state_ = 4;
+        state_ = 5;
         return;
       }
 
-      case 4: {
+      case 5: {
         json_value_verificator_->Next();
 
-        state_ = 3;
+        state_ = 4;
         continue;
       }
 
-      case 5: {
+      case 6: {
         json_value_verificator_ = nullptr;
 
         if (!(instance_->optional_mapping().has_value())) {
-          state_ = 9;
+          state_ = 10;
           continue;
         }
 
@@ -392,9 +429,9 @@ void OfSomething::Execute() {
         json_value_verificator_->Start();
       }
 
-      case 6: {
+      case 7: {
         if (!(!json_value_verificator_->Done())) {
-          state_ = 8;
+          state_ = 9;
           continue;
         }
 
@@ -415,28 +452,28 @@ void OfSomething::Execute() {
 
         ++index_;
 
-        state_ = 7;
+        state_ = 8;
         return;
       }
 
-      case 7: {
+      case 8: {
         json_value_verificator_->Next();
 
-        state_ = 6;
+        state_ = 7;
         continue;
       }
 
-      case 8: {
+      case 9: {
         json_value_verificator_ = nullptr;
       }
 
-      case 9: {
+      case 10: {
         done_ = true;
         error_ = nullptr;
         index_ = -1;
 
         // We invalidate the state since we reached the end of the routine.
-        state_ = 10;
+        state_ = 11;
         return;
       }
 
