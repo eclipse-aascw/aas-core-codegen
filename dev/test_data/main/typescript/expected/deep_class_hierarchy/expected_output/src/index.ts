@@ -12,6 +12,7 @@
 export * as common from "./common";
 export * as constants from "./constants";
 export * as jsonization from "./jsonization";
+export * as xmlcommon from "./xmlcommon";
 export * as xmlization from "./xmlization";
 export * as stringification from "./stringification";
 export * as types from "./types";

@@ -2,7 +2,7 @@
 import enum
 import io
 import re
-from typing import List, cast, Tuple, Optional, Mapping
+from typing import List, cast, Tuple, Optional, Mapping, Type, Final
 
 from icontract import ensure, require
 
@@ -308,6 +308,19 @@ assert all(
 )
 
 
+# NOTE (mristin):
+# A JSON-able type is not one of our types either, so it needs a moniker for
+# the very same reason as a primitive above, and it is checked against our
+# types by :py:func:`errors_in_monikers` in the very same way.
+MONIKER_BY_JSON_TYPE_ANNOTATION: Mapping[
+    Type[intermediate.TypeAnnotationUnion], str
+] = {
+    intermediate.JsonValueTypeAnnotation: "json_value",
+    intermediate.JsonArrayTypeAnnotation: "json_array",
+    intermediate.JsonObjectTypeAnnotation: "json_object",
+}
+
+
 # fmt: off
 @ensure(
     lambda result:
@@ -327,6 +340,10 @@ def atomic_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> Identif
     if primitive_type is not None:
         return Identifier(MONIKER_BY_PRIMITIVE_TYPE[primitive_type])
 
+    json_moniker = MONIKER_BY_JSON_TYPE_ANNOTATION.get(type(type_annotation), None)
+    if json_moniker is not None:
+        return Identifier(json_moniker)
+
     assert isinstance(
         type_annotation, intermediate.OurTypeAnnotation
     ), f"Expected an atomic type annotation, but got: {type_annotation}"
@@ -338,23 +355,31 @@ def errors_in_monikers(symbol_table: intermediate.SymbolTable) -> List[Error]:
     """
     Check that no type of the meta-model gives the moniker of a primitive.
 
+    The JSON-able monikers are checked alongside the primitive ones, as they
+    are reserved in exactly the same way.
+
     Otherwise, the de/serializers of the two would be given the same name, and one
     would silently redefine the other in the generated code.
     """
     errors = []  # type: List[Error]
 
+    reserved_monikers = set(MONIKER_BY_PRIMITIVE_TYPE.values()) | set(
+        MONIKER_BY_JSON_TYPE_ANNOTATION.values()
+    )
+
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.ConstrainedPrimitive):
             continue
 
-        if naming.lower_snake_case(our_type.name) in MONIKER_BY_PRIMITIVE_TYPE.values():
+        if naming.lower_snake_case(our_type.name) in reserved_monikers:
             errors.append(
                 Error(
                     our_type.parsed.node,
                     f"The name of the type {our_type.name!r} gives the same moniker "
-                    f"as one of the primitive types, so the de/serializers of the two "
-                    f"would be given the same name. Please rename the type, or "
-                    f"contact the developers if you need this feature.",
+                    f"as one of the primitive or the JSON-able types, so "
+                    f"the de/serializers of the two would be given the same name. "
+                    f"Please rename the type, or contact the developers if you need "
+                    f"this feature.",
                 )
             )
 
@@ -368,6 +393,15 @@ def describe_atomic_type(type_annotation: intermediate.TypeAnnotationUnion) -> S
         type_annotation, intermediate.PrimitiveTypeAnnotation
     ):
         return Stripped(f"``{MONIKER_BY_PRIMITIVE_TYPE[primitive_type]}``")
+
+    if isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        return Stripped("a JSON-able value")
+
+    if isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("a JSON-able array")
+
+    if isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("a JSON-able object")
 
     assert isinstance(
         type_annotation, intermediate.OurTypeAnnotation
@@ -386,6 +420,16 @@ def describe_atomic_type(type_annotation: intermediate.TypeAnnotationUnion) -> S
 
 
 INDENT = "    "
+
+
+#: Name the JSON-able aliases emitted into the types module
+_JSON_TYPE_ANNOTATION_NAME: Final[
+    Mapping[Type[intermediate.TypeAnnotationUnion], Identifier]
+] = {
+    intermediate.JsonValueTypeAnnotation: Identifier("JsonValue"),
+    intermediate.JsonArrayTypeAnnotation: Identifier("JsonArray"),
+    intermediate.JsonObjectTypeAnnotation: Identifier("JsonObject"),
+}
 
 
 def generate_type(
@@ -482,6 +526,26 @@ Tuple[
 ]"""
         )
 
+    elif isinstance(
+        type_annotation,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # The three JSON-able aliases are defined in the types module, next to
+        # the classes which use them -- see ``_generate_json_aliases`` in
+        # ``_generate_types.py``. Inside that very module the alias is already
+        # in scope, so it needs no qualification, and it is a plain alias and
+        # not a class, so it needs no quoting for a forward reference either.
+        name = _JSON_TYPE_ANNOTATION_NAME[type(type_annotation)]
+        if types_module is None:
+            return Stripped(name)
+
+        return Stripped(f"{types_module}.{name}")
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value = generate_type(
             type_annotation=type_annotation.value, types_module=types_module
@@ -522,6 +586,49 @@ WARNING = Stripped(
 QUALIFIED_MODULE_NAME_RE = re.compile(
     r"[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)*"
 )
+
+
+def generate_note_on_the_three_error_paths(qualified_module_name: str) -> Stripped:
+    """
+    Generate the note explaining why the SDK carries three error-path vocabularies.
+
+    The very same note goes into every one of the three modules which define one,
+    so that a reader who lands on any of them learns about the other two.
+    """
+    return Stripped(
+        f"""\
+# NOTE (mristin):
+# The SDK defines three of these path vocabularies: this one, the one in
+# :py:mod:`{qualified_module_name}.jsonization`, and the one in
+# :py:mod:`{qualified_module_name}.xmlcommon`.
+# They look alike, and it is tempting to merge them, but they are not
+# interchangeable.
+#
+# Each of them points into a different thing, and every segment carries
+# a back-pointer to the container it stepped through, so the type of that
+# back-pointer differs from one to the next:
+#
+# * This one points into the instances which you built, so a property
+#   segment holds a class of the meta-model.
+# * The jsonization's points into the JSON-able structure being read or
+#   written, so a property segment holds the JSON-able mapping instead:
+#   while a document is being parsed, the instance which the property would
+#   belong to does not exist yet.
+# * The xmlcommon's points into the XML document, where there are no
+#   properties at all, only elements, so it names an element instead.
+#
+# The three also render differently: a path into the instances is a Python
+# access expression, a path into a JSON-able structure starts at the root of
+# the document and carries no leading dot, and a path into an XML document
+# is a relative XPath.
+#
+# Merging them would mean either dropping the back-pointers, which have been
+# part of the public API of this SDK since before these modules were split
+# apart, or defining a single path over the union of all the segment kinds --
+# in which case every consumer would have to handle segments which can never
+# occur in its world. Three small vocabularies which each say exactly what
+# they can say cost less than one large one which lies about its range."""
+    )
 
 
 class QualifiedModuleName(str):

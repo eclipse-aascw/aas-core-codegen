@@ -15,7 +15,6 @@ import base64
 import collections.abc
 import sys
 from typing import (
-    cast,
     Any,
     Callable,
     Dict,
@@ -38,6 +37,39 @@ else:
 import aas_core3.common as aas_common
 import aas_core3.stringification as aas_stringification
 import aas_core3.types as aas_types
+
+
+# NOTE (mristin):
+# The SDK defines three of these path vocabularies: this one, the one in
+# :py:mod:`aas_core3.jsonization`, and the one in
+# :py:mod:`aas_core3.xmlcommon`.
+# They look alike, and it is tempting to merge them, but they are not
+# interchangeable.
+#
+# Each of them points into a different thing, and every segment carries
+# a back-pointer to the container it stepped through, so the type of that
+# back-pointer differs from one to the next:
+#
+# * This one points into the instances which you built, so a property
+#   segment holds a class of the meta-model.
+# * The jsonization's points into the JSON-able structure being read or
+#   written, so a property segment holds the JSON-able mapping instead:
+#   while a document is being parsed, the instance which the property would
+#   belong to does not exist yet.
+# * The xmlcommon's points into the XML document, where there are no
+#   properties at all, only elements, so it names an element instead.
+#
+# The three also render differently: a path into the instances is a Python
+# access expression, a path into a JSON-able structure starts at the root of
+# the document and carries no leading dot, and a path into an XML document
+# is a relative XPath.
+#
+# Merging them would mean either dropping the back-pointers, which have been
+# part of the public API of this SDK since before these modules were split
+# apart, or defining a single path over the union of all the segment kinds --
+# in which case every consumer would have to handle segments which can never
+# occur in its world. Three small vocabularies which each say exactly what
+# they can say cost less than one large one which lies about its range.
 
 
 class PropertySegment:
@@ -78,7 +110,33 @@ class IndexSegment:
         self.index = index
 
 
-Segment = Union[PropertySegment, IndexSegment]
+class KeySegment:
+    """
+    Represent a member access on a path to the erroneous value.
+
+    Unlike a :py:class:`PropertySegment`, which names a property of one of our
+    classes, a key names a member of an open JSON-able object. It is known only
+    at run time, and can be any string at all, so it is always rendered
+    as a subscript.
+    """
+
+    #: Mapping that contains the value at :py:attr:`~key`
+    mapping: Final[Mapping[str, Any]]
+
+    #: Key of the value
+    key: Final[str]
+
+    def __init__(
+            self,
+            mapping: Mapping[str, Any],
+            key: str
+    ) -> None:
+        """Initialize with the given values."""
+        self.mapping = mapping
+        self.key = key
+
+
+Segment = Union[PropertySegment, IndexSegment, KeySegment]
 
 
 class Path:
@@ -109,6 +167,8 @@ class Path:
             parts.append(f"{first.name}")
         elif isinstance(first, IndexSegment):
             parts.append(f"[{first.index}]")
+        elif isinstance(first, KeySegment):
+            parts.append(f"[{first.key!r}]")
         else:
             aas_common.assert_never(first)
 
@@ -117,6 +177,8 @@ class Path:
                 parts.append(f".{segment.name}")
             elif isinstance(segment, IndexSegment):
                 parts.append(f"[{segment.index}]")
+            elif isinstance(segment, KeySegment):
+                parts.append(f"[{segment.key!r}]")
             else:
                 aas_common.assert_never(segment)
 
@@ -299,64 +361,6 @@ def _bytes_from_jsonable(
     )
 
 
-def _try_to_cast_to_array_like(
-    jsonable: Jsonable
-) -> Optional[Iterable[Any]]:
-    """
-    Try to cast the ``jsonable`` to something like a JSON array.
-
-    In particular, we explicitly check that the ``jsonable`` is not a mapping, as we
-    do not want to mistake dictionaries (*i.e.* de-serialized JSON objects) for lists.
-
-    >>> assert _try_to_cast_to_array_like(True) is None
-
-    >>> assert _try_to_cast_to_array_like(0) is None
-
-    >>> assert _try_to_cast_to_array_like(2.2) is None
-
-    >>> assert _try_to_cast_to_array_like("hello") is None
-
-    >>> assert _try_to_cast_to_array_like(b"hello") is None
-
-    >>> _try_to_cast_to_array_like([1, 2])
-    [1, 2]
-
-    >>> assert _try_to_cast_to_array_like({"a": 3}) is None
-
-    >>> assert _try_to_cast_to_array_like(collections.OrderedDict()) is None
-
-    >>> _try_to_cast_to_array_like(range(1, 2))
-    range(1, 2)
-
-    >>> _try_to_cast_to_array_like((1, 2))
-    (1, 2)
-
-    >>> assert _try_to_cast_to_array_like({1, 2, 3}) is None
-    """
-    # NOTE (mristin):
-    # A ``list`` is what :py:mod:`json` gives us, and the general checks below cost
-    # about ten times as much -- measured on CPython 3.10, ~550 ns against ~60 ns --
-    # so we shortcut it here.
-    if isinstance(jsonable, list):
-        return jsonable
-
-    if (
-        not isinstance(jsonable, (str, bytearray, bytes))
-        and hasattr(jsonable, "__iter__")
-        and not hasattr(jsonable, "keys")
-        # NOTE (mristin):
-        # There is no easy way to check for sets as opposed to sequence except
-        # for checking for direct inheritance. A sequence also inherits from
-        # a collection, so both sequences and sets provide ``__contains__`` method.
-        #
-        # See: https://docs.python.org/3/library/collections.abc.html
-        and not isinstance(jsonable, collections.abc.Set)
-    ):
-        return cast(Iterable[Any], jsonable)
-
-    return None
-
-
 def _list_from_jsonable(
     jsonable: Jsonable,
     parse_item: _Parser[_ValueT]
@@ -370,7 +374,7 @@ def _list_from_jsonable(
     :return: parsed list
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    array_like = _try_to_cast_to_array_like(jsonable)
+    array_like = aas_common.try_to_cast_to_array_like(jsonable)
     if array_like is None:
         raise DeserializationException(
             f"Expected something array-like, but got: {type(jsonable)}"
@@ -4410,6 +4414,16 @@ class SerializationException(Exception):
         """Insert the access to the item at :paramref:`index` before the path."""
         self._segments.insert(0, f'[{index}]')
 
+    def _prepend_key(self, key: str) -> None:
+        """
+        Insert the access to the member :paramref:`key` before the path.
+
+        Unlike a property of one of our classes, a member of an open JSON-able
+        object is known only at run time and can be any string at all, so it is
+        always rendered as a subscript.
+        """
+        self._segments.insert(0, f'[{key!r}]')
+
     def __str__(self) -> str:
         if len(self._segments) == 0:
             return self.cause
@@ -4441,12 +4455,18 @@ def _list_of__asset_administration_shell_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _asset_administration_shell_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _asset_administration_shell_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__concept_description_to_jsonable(
@@ -4459,12 +4479,18 @@ def _list_of__concept_description_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _concept_description_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _concept_description_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__data_element_to_jsonable(
@@ -4477,10 +4503,16 @@ def _list_of__data_element_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        item.transform(_SERIALIZER)
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                item.transform(_SERIALIZER)
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__embedded_data_specification_to_jsonable(
@@ -4493,12 +4525,18 @@ def _list_of__embedded_data_specification_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _embedded_data_specification_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _embedded_data_specification_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__extension_to_jsonable(
@@ -4511,12 +4549,18 @@ def _list_of__extension_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _extension_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _extension_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__key_to_jsonable(
@@ -4529,12 +4573,18 @@ def _list_of__key_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _key_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _key_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__lang_string_definition_type_iec_61360_to_jsonable(
@@ -4547,12 +4597,18 @@ def _list_of__lang_string_definition_type_iec_61360_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _lang_string_definition_type_iec_61360_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _lang_string_definition_type_iec_61360_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__lang_string_name_type_to_jsonable(
@@ -4565,12 +4621,18 @@ def _list_of__lang_string_name_type_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _lang_string_name_type_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _lang_string_name_type_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__lang_string_preferred_name_type_iec_61360_to_jsonable(
@@ -4583,12 +4645,18 @@ def _list_of__lang_string_preferred_name_type_iec_61360_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _lang_string_preferred_name_type_iec_61360_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _lang_string_preferred_name_type_iec_61360_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__lang_string_short_name_type_iec_61360_to_jsonable(
@@ -4601,12 +4669,18 @@ def _list_of__lang_string_short_name_type_iec_61360_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _lang_string_short_name_type_iec_61360_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _lang_string_short_name_type_iec_61360_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__lang_string_text_type_to_jsonable(
@@ -4619,12 +4693,18 @@ def _list_of__lang_string_text_type_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _lang_string_text_type_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _lang_string_text_type_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__operation_variable_to_jsonable(
@@ -4637,12 +4717,18 @@ def _list_of__operation_variable_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _operation_variable_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _operation_variable_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__qualifier_to_jsonable(
@@ -4655,12 +4741,18 @@ def _list_of__qualifier_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _qualifier_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _qualifier_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__reference_to_jsonable(
@@ -4673,12 +4765,18 @@ def _list_of__reference_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _reference_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _reference_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__specific_asset_id_to_jsonable(
@@ -4691,12 +4789,18 @@ def _list_of__specific_asset_id_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _specific_asset_id_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _specific_asset_id_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__submodel_element_to_jsonable(
@@ -4709,10 +4813,16 @@ def _list_of__submodel_element_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        item.transform(_SERIALIZER)
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                item.transform(_SERIALIZER)
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__submodel_to_jsonable(
@@ -4725,12 +4835,18 @@ def _list_of__submodel_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _submodel_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _submodel_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__value_reference_pair_to_jsonable(
@@ -4743,12 +4859,18 @@ def _list_of__value_reference_pair_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _value_reference_pair_to_jsonable(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _value_reference_pair_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _extension_to_jsonable(
@@ -4757,22 +4879,46 @@ def _extension_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
-    jsonable['name'] = that.name
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
+    try:
+        jsonable['name'] = that.name
+    except SerializationException as exception:
+        exception._prepend_property('name')
+        raise
     if that.value_type is not None:
-        jsonable['valueType'] = that.value_type.value
+        try:
+            jsonable['valueType'] = that.value_type.value
+        except SerializationException as exception:
+            exception._prepend_property('value_type')
+            raise
     if that.value is not None:
-        jsonable['value'] = that.value
+        try:
+            jsonable['value'] = that.value
+        except SerializationException as exception:
+            exception._prepend_property('value')
+            raise
     if that.refers_to is not None:
-        jsonable['refersTo'] = _list_of__reference_to_jsonable(
-            that.refers_to
-        )
+        try:
+            jsonable['refersTo'] = _list_of__reference_to_jsonable(
+                that.refers_to
+            )
+        except SerializationException as exception:
+            exception._prepend_property('refers_to')
+            raise
     return jsonable
 
 
@@ -4782,19 +4928,39 @@ def _administrative_information_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.version is not None:
-        jsonable['version'] = that.version
+        try:
+            jsonable['version'] = that.version
+        except SerializationException as exception:
+            exception._prepend_property('version')
+            raise
     if that.revision is not None:
-        jsonable['revision'] = that.revision
+        try:
+            jsonable['revision'] = that.revision
+        except SerializationException as exception:
+            exception._prepend_property('revision')
+            raise
     if that.creator is not None:
-        jsonable['creator'] = _reference_to_jsonable(
-            that.creator
-        )
+        try:
+            jsonable['creator'] = _reference_to_jsonable(
+                that.creator
+            )
+        except SerializationException as exception:
+            exception._prepend_property('creator')
+            raise
     if that.template_id is not None:
-        jsonable['templateId'] = that.template_id
+        try:
+            jsonable['templateId'] = that.template_id
+        except SerializationException as exception:
+            exception._prepend_property('template_ID')
+            raise
     return jsonable
 
 
@@ -4804,23 +4970,51 @@ def _qualifier_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.kind is not None:
-        jsonable['kind'] = that.kind.value
-    jsonable['type'] = that.type
-    jsonable['valueType'] = that.value_type.value
+        try:
+            jsonable['kind'] = that.kind.value
+        except SerializationException as exception:
+            exception._prepend_property('kind')
+            raise
+    try:
+        jsonable['type'] = that.type
+    except SerializationException as exception:
+        exception._prepend_property('type')
+        raise
+    try:
+        jsonable['valueType'] = that.value_type.value
+    except SerializationException as exception:
+        exception._prepend_property('value_type')
+        raise
     if that.value is not None:
-        jsonable['value'] = that.value
+        try:
+            jsonable['value'] = that.value
+        except SerializationException as exception:
+            exception._prepend_property('value')
+            raise
     if that.value_id is not None:
-        jsonable['valueId'] = _reference_to_jsonable(
-            that.value_id
-        )
+        try:
+            jsonable['valueId'] = _reference_to_jsonable(
+                that.value_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('value_ID')
+            raise
     return jsonable
 
 
@@ -4830,41 +5024,85 @@ def _asset_administration_shell_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.administration is not None:
-        jsonable['administration'] = _administrative_information_to_jsonable(
-            that.administration
-        )
-    jsonable['id'] = that.id
+        try:
+            jsonable['administration'] = _administrative_information_to_jsonable(
+                that.administration
+            )
+        except SerializationException as exception:
+            exception._prepend_property('administration')
+            raise
+    try:
+        jsonable['id'] = that.id
+    except SerializationException as exception:
+        exception._prepend_property('ID')
+        raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.derived_from is not None:
-        jsonable['derivedFrom'] = _reference_to_jsonable(
-            that.derived_from
+        try:
+            jsonable['derivedFrom'] = _reference_to_jsonable(
+                that.derived_from
+            )
+        except SerializationException as exception:
+            exception._prepend_property('derived_from')
+            raise
+    try:
+        jsonable['assetInformation'] = _asset_information_to_jsonable(
+            that.asset_information
         )
-    jsonable['assetInformation'] = _asset_information_to_jsonable(
-        that.asset_information
-    )
+    except SerializationException as exception:
+        exception._prepend_property('asset_information')
+        raise
     if that.submodels is not None:
-        jsonable['submodels'] = _list_of__reference_to_jsonable(
-            that.submodels
-        )
+        try:
+            jsonable['submodels'] = _list_of__reference_to_jsonable(
+                that.submodels
+            )
+        except SerializationException as exception:
+            exception._prepend_property('submodels')
+            raise
     jsonable['modelType'] = 'AssetAdministrationShell'
     return jsonable
 
@@ -4874,19 +5112,39 @@ def _asset_information_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['assetKind'] = that.asset_kind.value
+    try:
+        jsonable['assetKind'] = that.asset_kind.value
+    except SerializationException as exception:
+        exception._prepend_property('asset_kind')
+        raise
     if that.global_asset_id is not None:
-        jsonable['globalAssetId'] = that.global_asset_id
+        try:
+            jsonable['globalAssetId'] = that.global_asset_id
+        except SerializationException as exception:
+            exception._prepend_property('global_asset_ID')
+            raise
     if that.specific_asset_ids is not None:
-        jsonable['specificAssetIds'] = _list_of__specific_asset_id_to_jsonable(
-            that.specific_asset_ids
-        )
+        try:
+            jsonable['specificAssetIds'] = _list_of__specific_asset_id_to_jsonable(
+                that.specific_asset_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('specific_asset_IDs')
+            raise
     if that.asset_type is not None:
-        jsonable['assetType'] = that.asset_type
+        try:
+            jsonable['assetType'] = that.asset_type
+        except SerializationException as exception:
+            exception._prepend_property('asset_type')
+            raise
     if that.default_thumbnail is not None:
-        jsonable['defaultThumbnail'] = _resource_to_jsonable(
-            that.default_thumbnail
-        )
+        try:
+            jsonable['defaultThumbnail'] = _resource_to_jsonable(
+                that.default_thumbnail
+            )
+        except SerializationException as exception:
+            exception._prepend_property('default_thumbnail')
+            raise
     return jsonable
 
 
@@ -4895,9 +5153,17 @@ def _resource_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['path'] = that.path
+    try:
+        jsonable['path'] = that.path
+    except SerializationException as exception:
+        exception._prepend_property('path')
+        raise
     if that.content_type is not None:
-        jsonable['contentType'] = that.content_type
+        try:
+            jsonable['contentType'] = that.content_type
+        except SerializationException as exception:
+            exception._prepend_property('content_type')
+            raise
     return jsonable
 
 
@@ -4907,19 +5173,39 @@ def _specific_asset_id_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
-    jsonable['name'] = that.name
-    jsonable['value'] = that.value
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
+    try:
+        jsonable['name'] = that.name
+    except SerializationException as exception:
+        exception._prepend_property('name')
+        raise
+    try:
+        jsonable['value'] = that.value
+    except SerializationException as exception:
+        exception._prepend_property('value')
+        raise
     if that.external_subject_id is not None:
-        jsonable['externalSubjectId'] = _reference_to_jsonable(
-            that.external_subject_id
-        )
+        try:
+            jsonable['externalSubjectId'] = _reference_to_jsonable(
+                that.external_subject_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('external_subject_ID')
+            raise
     return jsonable
 
 
@@ -4929,48 +5215,100 @@ def _submodel_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.administration is not None:
-        jsonable['administration'] = _administrative_information_to_jsonable(
-            that.administration
-        )
-    jsonable['id'] = that.id
+        try:
+            jsonable['administration'] = _administrative_information_to_jsonable(
+                that.administration
+            )
+        except SerializationException as exception:
+            exception._prepend_property('administration')
+            raise
+    try:
+        jsonable['id'] = that.id
+    except SerializationException as exception:
+        exception._prepend_property('ID')
+        raise
     if that.kind is not None:
-        jsonable['kind'] = that.kind.value
+        try:
+            jsonable['kind'] = that.kind.value
+        except SerializationException as exception:
+            exception._prepend_property('kind')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.submodel_elements is not None:
-        jsonable['submodelElements'] = _list_of__submodel_element_to_jsonable(
-            that.submodel_elements
-        )
+        try:
+            jsonable['submodelElements'] = _list_of__submodel_element_to_jsonable(
+                that.submodel_elements
+            )
+        except SerializationException as exception:
+            exception._prepend_property('submodel_elements')
+            raise
     jsonable['modelType'] = 'Submodel'
     return jsonable
 
@@ -4981,43 +5319,87 @@ def _relationship_element_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
+    try:
+        jsonable['first'] = _reference_to_jsonable(
+            that.first
         )
-    jsonable['first'] = _reference_to_jsonable(
-        that.first
-    )
-    jsonable['second'] = _reference_to_jsonable(
-        that.second
-    )
+    except SerializationException as exception:
+        exception._prepend_property('first')
+        raise
+    try:
+        jsonable['second'] = _reference_to_jsonable(
+            that.second
+        )
+    except SerializationException as exception:
+        exception._prepend_property('second')
+        raise
     jsonable['modelType'] = 'RelationshipElement'
     return jsonable
 
@@ -5028,50 +5410,106 @@ def _submodel_element_list_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.order_relevant is not None:
-        jsonable['orderRelevant'] = that.order_relevant
+        try:
+            jsonable['orderRelevant'] = that.order_relevant
+        except SerializationException as exception:
+            exception._prepend_property('order_relevant')
+            raise
     if that.semantic_id_list_element is not None:
-        jsonable['semanticIdListElement'] = _reference_to_jsonable(
-            that.semantic_id_list_element
-        )
-    jsonable['typeValueListElement'] = that.type_value_list_element.value
+        try:
+            jsonable['semanticIdListElement'] = _reference_to_jsonable(
+                that.semantic_id_list_element
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID_list_element')
+            raise
+    try:
+        jsonable['typeValueListElement'] = that.type_value_list_element.value
+    except SerializationException as exception:
+        exception._prepend_property('type_value_list_element')
+        raise
     if that.value_type_list_element is not None:
-        jsonable['valueTypeListElement'] = that.value_type_list_element.value
+        try:
+            jsonable['valueTypeListElement'] = that.value_type_list_element.value
+        except SerializationException as exception:
+            exception._prepend_property('value_type_list_element')
+            raise
     if that.value is not None:
-        jsonable['value'] = _list_of__submodel_element_to_jsonable(
-            that.value
-        )
+        try:
+            jsonable['value'] = _list_of__submodel_element_to_jsonable(
+                that.value
+            )
+        except SerializationException as exception:
+            exception._prepend_property('value')
+            raise
     jsonable['modelType'] = 'SubmodelElementList'
     return jsonable
 
@@ -5082,41 +5520,81 @@ def _submodel_element_collection_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.value is not None:
-        jsonable['value'] = _list_of__submodel_element_to_jsonable(
-            that.value
-        )
+        try:
+            jsonable['value'] = _list_of__submodel_element_to_jsonable(
+                that.value
+            )
+        except SerializationException as exception:
+            exception._prepend_property('value')
+            raise
     jsonable['modelType'] = 'SubmodelElementCollection'
     return jsonable
 
@@ -5127,44 +5605,92 @@ def _property_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
-    jsonable['valueType'] = that.value_type.value
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
+    try:
+        jsonable['valueType'] = that.value_type.value
+    except SerializationException as exception:
+        exception._prepend_property('value_type')
+        raise
     if that.value is not None:
-        jsonable['value'] = that.value
+        try:
+            jsonable['value'] = that.value
+        except SerializationException as exception:
+            exception._prepend_property('value')
+            raise
     if that.value_id is not None:
-        jsonable['valueId'] = _reference_to_jsonable(
-            that.value_id
-        )
+        try:
+            jsonable['valueId'] = _reference_to_jsonable(
+                that.value_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('value_ID')
+            raise
     jsonable['modelType'] = 'Property'
     return jsonable
 
@@ -5175,45 +5701,89 @@ def _multi_language_property_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.value is not None:
-        jsonable['value'] = _list_of__lang_string_text_type_to_jsonable(
-            that.value
-        )
+        try:
+            jsonable['value'] = _list_of__lang_string_text_type_to_jsonable(
+                that.value
+            )
+        except SerializationException as exception:
+            exception._prepend_property('value')
+            raise
     if that.value_id is not None:
-        jsonable['valueId'] = _reference_to_jsonable(
-            that.value_id
-        )
+        try:
+            jsonable['valueId'] = _reference_to_jsonable(
+                that.value_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('value_ID')
+            raise
     jsonable['modelType'] = 'MultiLanguageProperty'
     return jsonable
 
@@ -5224,42 +5794,90 @@ def _range_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
-    jsonable['valueType'] = that.value_type.value
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
+    try:
+        jsonable['valueType'] = that.value_type.value
+    except SerializationException as exception:
+        exception._prepend_property('value_type')
+        raise
     if that.min is not None:
-        jsonable['min'] = that.min
+        try:
+            jsonable['min'] = that.min
+        except SerializationException as exception:
+            exception._prepend_property('min')
+            raise
     if that.max is not None:
-        jsonable['max'] = that.max
+        try:
+            jsonable['max'] = that.max
+        except SerializationException as exception:
+            exception._prepend_property('max')
+            raise
     jsonable['modelType'] = 'Range'
     return jsonable
 
@@ -5270,41 +5888,81 @@ def _reference_element_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.value is not None:
-        jsonable['value'] = _reference_to_jsonable(
-            that.value
-        )
+        try:
+            jsonable['value'] = _reference_to_jsonable(
+                that.value
+            )
+        except SerializationException as exception:
+            exception._prepend_property('value')
+            raise
     jsonable['modelType'] = 'ReferenceElement'
     return jsonable
 
@@ -5315,42 +5973,86 @@ def _blob_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.value is not None:
-        jsonable['value'] = _bytes_to_base64_str(
-            that.value
-        )
-    jsonable['contentType'] = that.content_type
+        try:
+            jsonable['value'] = _bytes_to_base64_str(
+                that.value
+            )
+        except SerializationException as exception:
+            exception._prepend_property('value')
+            raise
+    try:
+        jsonable['contentType'] = that.content_type
+    except SerializationException as exception:
+        exception._prepend_property('content_type')
+        raise
     jsonable['modelType'] = 'Blob'
     return jsonable
 
@@ -5361,40 +6063,84 @@ def _file_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.value is not None:
-        jsonable['value'] = that.value
-    jsonable['contentType'] = that.content_type
+        try:
+            jsonable['value'] = that.value
+        except SerializationException as exception:
+            exception._prepend_property('value')
+            raise
+    try:
+        jsonable['contentType'] = that.content_type
+    except SerializationException as exception:
+        exception._prepend_property('content_type')
+        raise
     jsonable['modelType'] = 'File'
     return jsonable
 
@@ -5405,47 +6151,95 @@ def _annotated_relationship_element_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
+    try:
+        jsonable['first'] = _reference_to_jsonable(
+            that.first
         )
-    jsonable['first'] = _reference_to_jsonable(
-        that.first
-    )
-    jsonable['second'] = _reference_to_jsonable(
-        that.second
-    )
+    except SerializationException as exception:
+        exception._prepend_property('first')
+        raise
+    try:
+        jsonable['second'] = _reference_to_jsonable(
+            that.second
+        )
+    except SerializationException as exception:
+        exception._prepend_property('second')
+        raise
     if that.annotations is not None:
-        jsonable['annotations'] = _list_of__data_element_to_jsonable(
-            that.annotations
-        )
+        try:
+            jsonable['annotations'] = _list_of__data_element_to_jsonable(
+                that.annotations
+            )
+        except SerializationException as exception:
+            exception._prepend_property('annotations')
+            raise
     jsonable['modelType'] = 'AnnotatedRelationshipElement'
     return jsonable
 
@@ -5456,48 +6250,100 @@ def _entity_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.statements is not None:
-        jsonable['statements'] = _list_of__submodel_element_to_jsonable(
-            that.statements
-        )
-    jsonable['entityType'] = that.entity_type.value
+        try:
+            jsonable['statements'] = _list_of__submodel_element_to_jsonable(
+                that.statements
+            )
+        except SerializationException as exception:
+            exception._prepend_property('statements')
+            raise
+    try:
+        jsonable['entityType'] = that.entity_type.value
+    except SerializationException as exception:
+        exception._prepend_property('entity_type')
+        raise
     if that.global_asset_id is not None:
-        jsonable['globalAssetId'] = that.global_asset_id
+        try:
+            jsonable['globalAssetId'] = that.global_asset_id
+        except SerializationException as exception:
+            exception._prepend_property('global_asset_ID')
+            raise
     if that.specific_asset_ids is not None:
-        jsonable['specificAssetIds'] = _list_of__specific_asset_id_to_jsonable(
-            that.specific_asset_ids
-        )
+        try:
+            jsonable['specificAssetIds'] = _list_of__specific_asset_id_to_jsonable(
+                that.specific_asset_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('specific_asset_IDs')
+            raise
     jsonable['modelType'] = 'Entity'
     return jsonable
 
@@ -5507,31 +6353,63 @@ def _event_payload_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['source'] = _reference_to_jsonable(
-        that.source
-    )
+    try:
+        jsonable['source'] = _reference_to_jsonable(
+            that.source
+        )
+    except SerializationException as exception:
+        exception._prepend_property('source')
+        raise
     if that.source_semantic_id is not None:
-        jsonable['sourceSemanticId'] = _reference_to_jsonable(
-            that.source_semantic_id
+        try:
+            jsonable['sourceSemanticId'] = _reference_to_jsonable(
+                that.source_semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('source_semantic_ID')
+            raise
+    try:
+        jsonable['observableReference'] = _reference_to_jsonable(
+            that.observable_reference
         )
-    jsonable['observableReference'] = _reference_to_jsonable(
-        that.observable_reference
-    )
+    except SerializationException as exception:
+        exception._prepend_property('observable_reference')
+        raise
     if that.observable_semantic_id is not None:
-        jsonable['observableSemanticId'] = _reference_to_jsonable(
-            that.observable_semantic_id
-        )
+        try:
+            jsonable['observableSemanticId'] = _reference_to_jsonable(
+                that.observable_semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('observable_semantic_ID')
+            raise
     if that.topic is not None:
-        jsonable['topic'] = that.topic
+        try:
+            jsonable['topic'] = that.topic
+        except SerializationException as exception:
+            exception._prepend_property('topic')
+            raise
     if that.subject_id is not None:
-        jsonable['subjectId'] = _reference_to_jsonable(
-            that.subject_id
-        )
-    jsonable['timeStamp'] = that.time_stamp
+        try:
+            jsonable['subjectId'] = _reference_to_jsonable(
+                that.subject_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('subject_ID')
+            raise
+    try:
+        jsonable['timeStamp'] = that.time_stamp
+    except SerializationException as exception:
+        exception._prepend_property('time_stamp')
+        raise
     if that.payload is not None:
-        jsonable['payload'] = _bytes_to_base64_str(
-            that.payload
-        )
+        try:
+            jsonable['payload'] = _bytes_to_base64_str(
+                that.payload
+            )
+        except SerializationException as exception:
+            exception._prepend_property('payload')
+            raise
     return jsonable
 
 
@@ -5541,54 +6419,122 @@ def _basic_event_element_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
+    try:
+        jsonable['observed'] = _reference_to_jsonable(
+            that.observed
         )
-    jsonable['observed'] = _reference_to_jsonable(
-        that.observed
-    )
-    jsonable['direction'] = that.direction.value
-    jsonable['state'] = that.state.value
+    except SerializationException as exception:
+        exception._prepend_property('observed')
+        raise
+    try:
+        jsonable['direction'] = that.direction.value
+    except SerializationException as exception:
+        exception._prepend_property('direction')
+        raise
+    try:
+        jsonable['state'] = that.state.value
+    except SerializationException as exception:
+        exception._prepend_property('state')
+        raise
     if that.message_topic is not None:
-        jsonable['messageTopic'] = that.message_topic
+        try:
+            jsonable['messageTopic'] = that.message_topic
+        except SerializationException as exception:
+            exception._prepend_property('message_topic')
+            raise
     if that.message_broker is not None:
-        jsonable['messageBroker'] = _reference_to_jsonable(
-            that.message_broker
-        )
+        try:
+            jsonable['messageBroker'] = _reference_to_jsonable(
+                that.message_broker
+            )
+        except SerializationException as exception:
+            exception._prepend_property('message_broker')
+            raise
     if that.last_update is not None:
-        jsonable['lastUpdate'] = that.last_update
+        try:
+            jsonable['lastUpdate'] = that.last_update
+        except SerializationException as exception:
+            exception._prepend_property('last_update')
+            raise
     if that.min_interval is not None:
-        jsonable['minInterval'] = that.min_interval
+        try:
+            jsonable['minInterval'] = that.min_interval
+        except SerializationException as exception:
+            exception._prepend_property('min_interval')
+            raise
     if that.max_interval is not None:
-        jsonable['maxInterval'] = that.max_interval
+        try:
+            jsonable['maxInterval'] = that.max_interval
+        except SerializationException as exception:
+            exception._prepend_property('max_interval')
+            raise
     jsonable['modelType'] = 'BasicEventElement'
     return jsonable
 
@@ -5599,49 +6545,97 @@ def _operation_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.input_variables is not None:
-        jsonable['inputVariables'] = _list_of__operation_variable_to_jsonable(
-            that.input_variables
-        )
+        try:
+            jsonable['inputVariables'] = _list_of__operation_variable_to_jsonable(
+                that.input_variables
+            )
+        except SerializationException as exception:
+            exception._prepend_property('input_variables')
+            raise
     if that.output_variables is not None:
-        jsonable['outputVariables'] = _list_of__operation_variable_to_jsonable(
-            that.output_variables
-        )
+        try:
+            jsonable['outputVariables'] = _list_of__operation_variable_to_jsonable(
+                that.output_variables
+            )
+        except SerializationException as exception:
+            exception._prepend_property('output_variables')
+            raise
     if that.inoutput_variables is not None:
-        jsonable['inoutputVariables'] = _list_of__operation_variable_to_jsonable(
-            that.inoutput_variables
-        )
+        try:
+            jsonable['inoutputVariables'] = _list_of__operation_variable_to_jsonable(
+                that.inoutput_variables
+            )
+        except SerializationException as exception:
+            exception._prepend_property('inoutput_variables')
+            raise
     jsonable['modelType'] = 'Operation'
     return jsonable
 
@@ -5651,7 +6645,11 @@ def _operation_variable_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['value'] = that.value.transform(_SERIALIZER)
+    try:
+        jsonable['value'] = that.value.transform(_SERIALIZER)
+    except SerializationException as exception:
+        exception._prepend_property('value')
+        raise
     return jsonable
 
 
@@ -5661,37 +6659,73 @@ def _capability_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.semantic_id is not None:
-        jsonable['semanticId'] = _reference_to_jsonable(
-            that.semantic_id
-        )
+        try:
+            jsonable['semanticId'] = _reference_to_jsonable(
+                that.semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('semantic_ID')
+            raise
     if that.supplemental_semantic_ids is not None:
-        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
-            that.supplemental_semantic_ids
-        )
+        try:
+            jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+                that.supplemental_semantic_ids
+            )
+        except SerializationException as exception:
+            exception._prepend_property('supplemental_semantic_IDs')
+            raise
     if that.qualifiers is not None:
-        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
-            that.qualifiers
-        )
+        try:
+            jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+                that.qualifiers
+            )
+        except SerializationException as exception:
+            exception._prepend_property('qualifiers')
+            raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     jsonable['modelType'] = 'Capability'
     return jsonable
 
@@ -5702,34 +6736,70 @@ def _concept_description_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.extensions is not None:
-        jsonable['extensions'] = _list_of__extension_to_jsonable(
-            that.extensions
-        )
+        try:
+            jsonable['extensions'] = _list_of__extension_to_jsonable(
+                that.extensions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('extensions')
+            raise
     if that.category is not None:
-        jsonable['category'] = that.category
+        try:
+            jsonable['category'] = that.category
+        except SerializationException as exception:
+            exception._prepend_property('category')
+            raise
     if that.id_short is not None:
-        jsonable['idShort'] = that.id_short
+        try:
+            jsonable['idShort'] = that.id_short
+        except SerializationException as exception:
+            exception._prepend_property('ID_short')
+            raise
     if that.display_name is not None:
-        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
-            that.display_name
-        )
+        try:
+            jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+                that.display_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('display_name')
+            raise
     if that.description is not None:
-        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
-            that.description
-        )
+        try:
+            jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+                that.description
+            )
+        except SerializationException as exception:
+            exception._prepend_property('description')
+            raise
     if that.administration is not None:
-        jsonable['administration'] = _administrative_information_to_jsonable(
-            that.administration
-        )
-    jsonable['id'] = that.id
+        try:
+            jsonable['administration'] = _administrative_information_to_jsonable(
+                that.administration
+            )
+        except SerializationException as exception:
+            exception._prepend_property('administration')
+            raise
+    try:
+        jsonable['id'] = that.id
+    except SerializationException as exception:
+        exception._prepend_property('ID')
+        raise
     if that.embedded_data_specifications is not None:
-        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
-            that.embedded_data_specifications
-        )
+        try:
+            jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+                that.embedded_data_specifications
+            )
+        except SerializationException as exception:
+            exception._prepend_property('embedded_data_specifications')
+            raise
     if that.is_case_of is not None:
-        jsonable['isCaseOf'] = _list_of__reference_to_jsonable(
-            that.is_case_of
-        )
+        try:
+            jsonable['isCaseOf'] = _list_of__reference_to_jsonable(
+                that.is_case_of
+            )
+        except SerializationException as exception:
+            exception._prepend_property('is_case_of')
+            raise
     jsonable['modelType'] = 'ConceptDescription'
     return jsonable
 
@@ -5739,14 +6809,26 @@ def _reference_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['type'] = that.type.value
+    try:
+        jsonable['type'] = that.type.value
+    except SerializationException as exception:
+        exception._prepend_property('type')
+        raise
     if that.referred_semantic_id is not None:
-        jsonable['referredSemanticId'] = _reference_to_jsonable(
-            that.referred_semantic_id
+        try:
+            jsonable['referredSemanticId'] = _reference_to_jsonable(
+                that.referred_semantic_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('referred_semantic_ID')
+            raise
+    try:
+        jsonable['keys'] = _list_of__key_to_jsonable(
+            that.keys
         )
-    jsonable['keys'] = _list_of__key_to_jsonable(
-        that.keys
-    )
+    except SerializationException as exception:
+        exception._prepend_property('keys')
+        raise
     return jsonable
 
 
@@ -5755,8 +6837,16 @@ def _key_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['type'] = that.type.value
-    jsonable['value'] = that.value
+    try:
+        jsonable['type'] = that.type.value
+    except SerializationException as exception:
+        exception._prepend_property('type')
+        raise
+    try:
+        jsonable['value'] = that.value
+    except SerializationException as exception:
+        exception._prepend_property('value')
+        raise
     return jsonable
 
 
@@ -5765,8 +6855,16 @@ def _lang_string_name_type_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['language'] = that.language
-    jsonable['text'] = that.text
+    try:
+        jsonable['language'] = that.language
+    except SerializationException as exception:
+        exception._prepend_property('language')
+        raise
+    try:
+        jsonable['text'] = that.text
+    except SerializationException as exception:
+        exception._prepend_property('text')
+        raise
     return jsonable
 
 
@@ -5775,8 +6873,16 @@ def _lang_string_text_type_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['language'] = that.language
-    jsonable['text'] = that.text
+    try:
+        jsonable['language'] = that.language
+    except SerializationException as exception:
+        exception._prepend_property('language')
+        raise
+    try:
+        jsonable['text'] = that.text
+    except SerializationException as exception:
+        exception._prepend_property('text')
+        raise
     return jsonable
 
 
@@ -5786,17 +6892,29 @@ def _environment_to_jsonable(
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
     if that.asset_administration_shells is not None:
-        jsonable['assetAdministrationShells'] = _list_of__asset_administration_shell_to_jsonable(
-            that.asset_administration_shells
-        )
+        try:
+            jsonable['assetAdministrationShells'] = _list_of__asset_administration_shell_to_jsonable(
+                that.asset_administration_shells
+            )
+        except SerializationException as exception:
+            exception._prepend_property('asset_administration_shells')
+            raise
     if that.submodels is not None:
-        jsonable['submodels'] = _list_of__submodel_to_jsonable(
-            that.submodels
-        )
+        try:
+            jsonable['submodels'] = _list_of__submodel_to_jsonable(
+                that.submodels
+            )
+        except SerializationException as exception:
+            exception._prepend_property('submodels')
+            raise
     if that.concept_descriptions is not None:
-        jsonable['conceptDescriptions'] = _list_of__concept_description_to_jsonable(
-            that.concept_descriptions
-        )
+        try:
+            jsonable['conceptDescriptions'] = _list_of__concept_description_to_jsonable(
+                that.concept_descriptions
+            )
+        except SerializationException as exception:
+            exception._prepend_property('concept_descriptions')
+            raise
     return jsonable
 
 
@@ -5805,10 +6923,18 @@ def _embedded_data_specification_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['dataSpecification'] = _reference_to_jsonable(
-        that.data_specification
-    )
-    jsonable['dataSpecificationContent'] = that.data_specification_content.transform(_SERIALIZER)
+    try:
+        jsonable['dataSpecification'] = _reference_to_jsonable(
+            that.data_specification
+        )
+    except SerializationException as exception:
+        exception._prepend_property('data_specification')
+        raise
+    try:
+        jsonable['dataSpecificationContent'] = that.data_specification_content.transform(_SERIALIZER)
+    except SerializationException as exception:
+        exception._prepend_property('data_specification_content')
+        raise
     return jsonable
 
 
@@ -5817,10 +6943,26 @@ def _level_type_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['min'] = that.min
-    jsonable['nom'] = that.nom
-    jsonable['typ'] = that.typ
-    jsonable['max'] = that.max
+    try:
+        jsonable['min'] = that.min
+    except SerializationException as exception:
+        exception._prepend_property('min')
+        raise
+    try:
+        jsonable['nom'] = that.nom
+    except SerializationException as exception:
+        exception._prepend_property('nom')
+        raise
+    try:
+        jsonable['typ'] = that.typ
+    except SerializationException as exception:
+        exception._prepend_property('typ')
+        raise
+    try:
+        jsonable['max'] = that.max
+    except SerializationException as exception:
+        exception._prepend_property('max')
+        raise
     return jsonable
 
 
@@ -5829,10 +6971,18 @@ def _value_reference_pair_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['value'] = that.value
-    jsonable['valueId'] = _reference_to_jsonable(
-        that.value_id
-    )
+    try:
+        jsonable['value'] = that.value
+    except SerializationException as exception:
+        exception._prepend_property('value')
+        raise
+    try:
+        jsonable['valueId'] = _reference_to_jsonable(
+            that.value_id
+        )
+    except SerializationException as exception:
+        exception._prepend_property('value_ID')
+        raise
     return jsonable
 
 
@@ -5841,9 +6991,13 @@ def _value_list_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['valueReferencePairs'] = _list_of__value_reference_pair_to_jsonable(
-        that.value_reference_pairs
-    )
+    try:
+        jsonable['valueReferencePairs'] = _list_of__value_reference_pair_to_jsonable(
+            that.value_reference_pairs
+        )
+    except SerializationException as exception:
+        exception._prepend_property('value_reference_pairs')
+        raise
     return jsonable
 
 
@@ -5852,8 +7006,16 @@ def _lang_string_preferred_name_type_iec_61360_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['language'] = that.language
-    jsonable['text'] = that.text
+    try:
+        jsonable['language'] = that.language
+    except SerializationException as exception:
+        exception._prepend_property('language')
+        raise
+    try:
+        jsonable['text'] = that.text
+    except SerializationException as exception:
+        exception._prepend_property('text')
+        raise
     return jsonable
 
 
@@ -5862,8 +7024,16 @@ def _lang_string_short_name_type_iec_61360_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['language'] = that.language
-    jsonable['text'] = that.text
+    try:
+        jsonable['language'] = that.language
+    except SerializationException as exception:
+        exception._prepend_property('language')
+        raise
+    try:
+        jsonable['text'] = that.text
+    except SerializationException as exception:
+        exception._prepend_property('text')
+        raise
     return jsonable
 
 
@@ -5872,8 +7042,16 @@ def _lang_string_definition_type_iec_61360_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['language'] = that.language
-    jsonable['text'] = that.text
+    try:
+        jsonable['language'] = that.language
+    except SerializationException as exception:
+        exception._prepend_property('language')
+        raise
+    try:
+        jsonable['text'] = that.text
+    except SerializationException as exception:
+        exception._prepend_property('text')
+        raise
     return jsonable
 
 
@@ -5882,41 +7060,89 @@ def _data_specification_iec_61360_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['preferredName'] = _list_of__lang_string_preferred_name_type_iec_61360_to_jsonable(
-        that.preferred_name
-    )
+    try:
+        jsonable['preferredName'] = _list_of__lang_string_preferred_name_type_iec_61360_to_jsonable(
+            that.preferred_name
+        )
+    except SerializationException as exception:
+        exception._prepend_property('preferred_name')
+        raise
     if that.short_name is not None:
-        jsonable['shortName'] = _list_of__lang_string_short_name_type_iec_61360_to_jsonable(
-            that.short_name
-        )
+        try:
+            jsonable['shortName'] = _list_of__lang_string_short_name_type_iec_61360_to_jsonable(
+                that.short_name
+            )
+        except SerializationException as exception:
+            exception._prepend_property('short_name')
+            raise
     if that.unit is not None:
-        jsonable['unit'] = that.unit
+        try:
+            jsonable['unit'] = that.unit
+        except SerializationException as exception:
+            exception._prepend_property('unit')
+            raise
     if that.unit_id is not None:
-        jsonable['unitId'] = _reference_to_jsonable(
-            that.unit_id
-        )
+        try:
+            jsonable['unitId'] = _reference_to_jsonable(
+                that.unit_id
+            )
+        except SerializationException as exception:
+            exception._prepend_property('unit_ID')
+            raise
     if that.source_of_definition is not None:
-        jsonable['sourceOfDefinition'] = that.source_of_definition
+        try:
+            jsonable['sourceOfDefinition'] = that.source_of_definition
+        except SerializationException as exception:
+            exception._prepend_property('source_of_definition')
+            raise
     if that.symbol is not None:
-        jsonable['symbol'] = that.symbol
+        try:
+            jsonable['symbol'] = that.symbol
+        except SerializationException as exception:
+            exception._prepend_property('symbol')
+            raise
     if that.data_type is not None:
-        jsonable['dataType'] = that.data_type.value
+        try:
+            jsonable['dataType'] = that.data_type.value
+        except SerializationException as exception:
+            exception._prepend_property('data_type')
+            raise
     if that.definition is not None:
-        jsonable['definition'] = _list_of__lang_string_definition_type_iec_61360_to_jsonable(
-            that.definition
-        )
+        try:
+            jsonable['definition'] = _list_of__lang_string_definition_type_iec_61360_to_jsonable(
+                that.definition
+            )
+        except SerializationException as exception:
+            exception._prepend_property('definition')
+            raise
     if that.value_format is not None:
-        jsonable['valueFormat'] = that.value_format
+        try:
+            jsonable['valueFormat'] = that.value_format
+        except SerializationException as exception:
+            exception._prepend_property('value_format')
+            raise
     if that.value_list is not None:
-        jsonable['valueList'] = _value_list_to_jsonable(
-            that.value_list
-        )
+        try:
+            jsonable['valueList'] = _value_list_to_jsonable(
+                that.value_list
+            )
+        except SerializationException as exception:
+            exception._prepend_property('value_list')
+            raise
     if that.value is not None:
-        jsonable['value'] = that.value
+        try:
+            jsonable['value'] = that.value
+        except SerializationException as exception:
+            exception._prepend_property('value')
+            raise
     if that.level_type is not None:
-        jsonable['levelType'] = _level_type_to_jsonable(
-            that.level_type
-        )
+        try:
+            jsonable['levelType'] = _level_type_to_jsonable(
+                that.level_type
+            )
+        except SerializationException as exception:
+            exception._prepend_property('level_type')
+            raise
     jsonable['modelType'] = 'DataSpecificationIec61360'
     return jsonable
 

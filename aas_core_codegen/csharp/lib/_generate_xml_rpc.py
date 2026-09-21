@@ -1,0 +1,969 @@
+"""Generate code for de/serializing JSON-able values to and from XML."""
+
+import io
+import textwrap
+from typing import List
+
+from icontract import ensure
+
+from aas_core_codegen.common import Stripped
+from aas_core_codegen.csharp import common as csharp_common
+from aas_core_codegen.csharp.common import (
+    INDENT as I,
+    INDENT2 as II,
+    INDENT3 as III,
+    INDENT4 as IIII,
+    INDENT5 as IIIII,
+    INDENT6 as IIIIII,
+    INDENT7 as IIIIIII,
+)
+
+
+# fmt: off
+@ensure(
+    lambda result: result.endswith('\n'),
+    "Trailing newline mandatory for valid end-of-files"
+)
+# fmt: on
+def generate(namespace: csharp_common.NamespaceIdentifier) -> str:
+    """
+    Generate code for de/serializing JSON-able values to and from XML.
+
+    This implements a restricted subset of XML-RPC's own element vocabulary --
+    ``<boolean>``, ``<double>``, ``<string>``, ``<array>``, ``<data>``,
+    ``<struct>``, ``<member>``, ``<name>`` and ``<value>`` -- to de/serialize
+    a ``System.Text.Json.Nodes.JsonNode`` which is JSON-able (*i.e.*,
+    recursively a boolean, a number, a string, an array of JSON-able values or
+    an object of JSON-able values with string keys; never JSON ``null``).
+
+    This class does not depend on the meta-model at all, and can be used in
+    two different ways:
+
+    * Stand-alone, over a whole ``<value>`` element (see
+      <see cref="DeserializeValue" /> and <see cref="SerializeValue" />) --
+      this is how it is tested in isolation, and how a user could use it
+      directly; and
+    * Embedded within a larger XML document, one JSON-able property at
+      a time (see <see cref="DeserializeValueFrom" />,
+      <see cref="DeserializeArrayBodyFrom" /> and
+      <see cref="DeserializeStructBodyFrom" />, and their serialization
+      counterparts), consuming/producing nodes on the *same*, already-open
+      <c>Xml.XmlReader</c>/<c>Xml.XmlWriter</c> that the rest of the document
+      is being read from or written to.
+
+    The low-level reading -- the skipping of the whitespace and of
+    the comments, the check of the XML namespace and the consuming of a start
+    and of an end tag -- is not repeated here, but taken from ``XmlCommon``,
+    which the xmlization reads the enclosing document with.
+
+    The ``namespace`` defines the base C# namespace of the generated code.
+    """
+    blocks = [
+        Stripped(
+            f"""\
+/// <summary>
+/// Read the text content of the current element (assuming its start
+/// element has already been consumed) as a <c>&lt;boolean&gt;</c>'s
+/// strict <c>"0"</c>/<c>"1"</c> lexical form.
+/// </summary>
+/// <remarks>
+/// We deliberately do *not* use <see cref="Xml.XmlReader.ReadContentAsBoolean" />,
+/// as it accepts <c>true</c>/<c>false</c> -- the lexical form expected
+/// everywhere else in this code base -- whereas real XML-RPC tooling
+/// expects a strict <c>1</c>/<c>0</c>.
+/// </remarks>
+private static bool? DeserializeBooleanTextFrom(
+{I}Xml.XmlReader reader,
+{I}out Reporting.Error? error)
+{{
+{I}error = null;
+
+{I}string text;
+{I}try
+{I}{{
+{II}text = reader.ReadContentAsString();
+{I}}}
+{I}catch (System.Exception exception)
+{IIII}when (exception is System.FormatException
+{IIIII}|| exception is Xml.XmlException)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected \\"0\\" or \\"1\\" as the text of a <boolean> element, " +
+{III}$"but the content could not be read: {{exception}}");
+{II}return null;
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// `whiteSpace` is fixed to `collapse` for every atomic XSD type but
+{I}// a string, so a pretty-printed <boolean> has to be read as well.
+{I}// Only a <string> keeps its whitespace.
+{I}text = text.Trim();
+
+{I}if (text == "1")
+{I}{{
+{II}return true;
+{I}}}
+{I}if (text == "0")
+{I}{{
+{II}return false;
+{I}}}
+
+{I}error = new Reporting.Error(
+{II}"Expected \\"0\\" or \\"1\\" as the text of a <boolean> element, " +
+{II}$"but got: {{text}}");
+{I}return null;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Read the text content of the current element (assuming its start
+/// element has already been consumed) as a <c>&lt;double&gt;</c>.
+/// </summary>
+private static double? DeserializeDoubleTextFrom(
+{I}Xml.XmlReader reader,
+{I}out Reporting.Error? error)
+{{
+{I}error = null;
+
+{I}double result;
+{I}try
+{I}{{
+{II}result = XmlCommon.ParseXsDouble(
+{III}reader.ReadContentAsString());
+{I}}}
+{I}catch (System.Exception exception)
+{IIII}when (exception is System.FormatException
+{IIIII}|| exception is System.OverflowException
+{IIIII}|| exception is Xml.XmlException)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected a number as the text of a <double> element, " +
+{III}$"but the content could not be read: {{exception}}");
+{II}return null;
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// xs:double names "INF", "-INF" and "NaN". A <double> carries a JSON
+{I}// number, and JSON knows neither an infinity nor a not-a-number, so
+{I}// there is no JSON-able value for such a text to de-serialize into.
+{I}if (!System.Double.IsFinite(result))
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected a number representable as a JSON-able value as " +
+{III}"the text of a <double> element, " +
+{III}$"but got: {{result}}");
+{II}return null;
+{I}}}
+
+{I}return result;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Read the text content of the current element (assuming its start
+/// element has already been consumed) as a <c>&lt;string&gt;</c>
+/// (or a <c>&lt;name&gt;</c>, which shares the same lexical form).
+/// </summary>
+private static string? DeserializeStringTextFrom(
+{I}Xml.XmlReader reader,
+{I}out Reporting.Error? error)
+{{
+{I}error = null;
+
+{I}try
+{I}{{
+{II}return reader.ReadContentAsString();
+{I}}}
+{I}catch (System.Exception exception)
+{IIII}when (exception is System.FormatException
+{IIIII}|| exception is Xml.XmlException)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected text as the content of a <string> element, " +
+{III}$"but the content could not be read: {{exception}}");
+{II}return null;
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Deserialize a JSON-able value, embedded within a larger XML document
+/// which is already being read through <paramref name="reader" />.
+/// </summary>
+/// <remarks>
+/// <paramref name="reader" /> is expected to be positioned at the start
+/// element of the discriminator (<c>&lt;boolean&gt;</c>,
+/// <c>&lt;double&gt;</c>, <c>&lt;string&gt;</c>, <c>&lt;array&gt;</c> or
+/// <c>&lt;struct&gt;</c>). On success, <paramref name="reader" /> is left
+/// positioned at the node right after the discriminator's own end
+/// element.
+/// </remarks>
+public static Nodes.JsonNode? DeserializeValueFrom(
+{I}Xml.XmlReader reader,
+{I}out Reporting.Error? error)
+{{
+{I}error = null;
+
+{I}XmlCommon.SkipNoneWhitespaceAndComments(reader);
+
+{I}if (reader.EOF || reader.NodeType != Xml.XmlNodeType.Element)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected one of the elements <boolean>, <double>, <string>, " +
+{III}"<array> or <struct>, but got " +
+{III}(
+{IIII}reader.EOF
+{IIIII}? "an end-of-file"
+{IIIII}: $"the node of type {{reader.NodeType}} " +
+{IIIIII}$"with the value {{reader.Value}}"
+{III}));
+{II}return null;
+{I}}}
+
+{I}string discriminator = XmlCommon.TryElementNameInNoNamespace(
+{II}reader, out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+
+{I}bool isEmpty = reader.IsEmptyElement;
+{I}reader.Read();
+
+{I}// NOTE (mristin):
+{I}// The discriminator element has been entered, so it is a step of the path
+{I}// of every error raised from here on. Each branch below therefore breaks
+{I}// out of the switch instead of returning, and the prepending happens once,
+{I}// where the switch ends.
+{I}Nodes.JsonNode? result = null;
+{I}switch (discriminator)
+{I}{{
+{II}case "boolean":
+{III}if (isEmpty)
+{III}{{
+{IIII}error = new Reporting.Error(
+{IIIII}"Expected \\"0\\" or \\"1\\" as the text of a <boolean> " +
+{IIIII}"element, but got no content at all");
+{IIII}break;
+{III}}}
+
+{III}bool? boolValue = DeserializeBooleanTextFrom(
+{IIII}reader, out error);
+{III}if (error != null)
+{III}{{
+{IIII}break;
+{III}}}
+
+{III}result = Nodes.JsonValue.Create(
+{IIII}boolValue
+{IIIII}?? throw new System.InvalidOperationException(
+{IIIIII}"Unexpected boolValue null when error null"));
+{III}break;
+
+{II}case "double":
+{III}if (isEmpty)
+{III}{{
+{IIII}error = new Reporting.Error(
+{IIIII}"Expected a number as the text of a <double> element, " +
+{IIIII}"but got no content at all");
+{IIII}break;
+{III}}}
+
+{III}double? doubleValue = DeserializeDoubleTextFrom(
+{IIII}reader, out error);
+{III}if (error != null)
+{III}{{
+{IIII}break;
+{III}}}
+
+{III}result = Nodes.JsonValue.Create(
+{IIII}doubleValue
+{IIIII}?? throw new System.InvalidOperationException(
+{IIIIII}"Unexpected doubleValue null when error null"));
+{III}break;
+
+{II}case "string":
+{III}string stringValue;
+{III}if (isEmpty)
+{III}{{
+{IIII}stringValue = "";
+{III}}}
+{III}else
+{III}{{
+{IIII}string? maybeString = DeserializeStringTextFrom(
+{IIIII}reader, out error);
+{IIII}if (error != null)
+{IIII}{{
+{IIIII}break;
+{IIII}}}
+
+{IIII}stringValue = maybeString
+{IIIII}?? throw new System.InvalidOperationException(
+{IIIIII}"Unexpected string value null when error null");
+{III}}}
+
+{III}result = Nodes.JsonValue.Create(stringValue);
+{III}break;
+
+{II}case "array":
+{III}if (isEmpty)
+{III}{{
+{IIII}error = new Reporting.Error(
+{IIIII}"Expected a <data> element as the content of an <array> " +
+{IIIII}"element, but got no content at all");
+{IIII}break;
+{III}}}
+
+{III}result = DeserializeArrayBodyFrom(
+{IIII}reader, out error);
+{III}break;
+
+{II}case "struct":
+{III}result = isEmpty
+{IIII}? new Nodes.JsonObject()
+{IIII}: DeserializeStructBodyFrom(reader, out error);
+{III}break;
+
+{II}default:
+{III}// NOTE (mristin):
+{III}// It is this very element which does not belong here, so naming it
+{III}// in the path as well as in the message would say nothing more.
+{III}error = new Reporting.Error(
+{IIII}"Expected one of the elements <boolean>, <double>, <string>, " +
+{IIII}$"<array> or <struct>, but got: <{{discriminator}}>");
+{III}return null;
+{I}}}
+
+{I}if (error == null)
+{I}{{
+{II}XmlCommon.ConsumeEndElementInNoNamespace(
+{III}reader, discriminator, isEmpty, out error);
+{I}}}
+
+{I}if (error != null)
+{I}{{
+{II}error.PrependSegment(
+{III}new Reporting.NameSegment(discriminator));
+{II}return null;
+{I}}}
+
+{I}return result;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Deserialize a single item of a <c>&lt;data&gt;</c> array, positioned
+/// at the item's own <c>&lt;value&gt;</c> start element.
+/// </summary>
+private static Nodes.JsonNode? DeserializeArrayItemFrom(
+{I}Xml.XmlReader reader,
+{I}out Reporting.Error? error)
+{{
+{I}bool isEmpty = XmlCommon.ReadStartElementInNoNamespace(
+{II}reader, "value", out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+
+{I}if (isEmpty)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected one of the elements <boolean>, <double>, <string>, " +
+{III}"<array> or <struct> as the content of a <value> element, " +
+{III}"but got no content at all");
+{II}return null;
+{I}}}
+
+{I}Nodes.JsonNode? result = DeserializeValueFrom(
+{II}reader, out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+
+{I}XmlCommon.ConsumeEndElementInNoNamespace(
+{II}reader, "value", false, out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+
+{I}return result;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Deserialize a JSON array's body, embedded within a larger XML document
+/// which is already being read through <paramref name="reader" />.
+/// </summary>
+/// <remarks>
+/// <paramref name="reader" /> is expected to be positioned at the start
+/// element <c>&lt;data&gt;</c>. On success, <paramref name="reader" /> is
+/// left positioned at the node right after the <c>&lt;data&gt;</c>
+/// element's own end element.
+/// </remarks>
+public static Nodes.JsonArray? DeserializeArrayBodyFrom(
+{I}Xml.XmlReader reader,
+{I}out Reporting.Error? error)
+{{
+{I}bool isEmptyData = XmlCommon.ReadStartElementInNoNamespace(
+{II}reader, "data", out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+
+{I}var result = new Nodes.JsonArray();
+
+{I}if (isEmptyData)
+{I}{{
+{II}return result;
+{I}}}
+
+{I}int index = 0;
+{I}while (true)
+{I}{{
+{II}XmlCommon.SkipNoneWhitespaceAndComments(reader);
+{II}if (reader.NodeType != Xml.XmlNodeType.Element)
+{II}{{
+{III}break;
+{II}}}
+
+{II}Nodes.JsonNode? item = DeserializeArrayItemFrom(
+{III}reader, out error);
+{II}if (error != null)
+{II}{{
+{III}// NOTE (mristin):
+{III}// Every item of a <data> element is a <value> element, so the index
+{III}// already names the element which was entered, and there is no step
+{III}// of its own for it.
+{III}error.PrependSegment(
+{IIII}new Reporting.IndexSegment(index));
+{III}error.PrependSegment(
+{IIII}new Reporting.NameSegment("data"));
+{III}return null;
+{II}}}
+
+{II}result.Add(item);
+{II}index++;
+{I}}}
+
+{I}XmlCommon.ConsumeEndElementInNoNamespace(
+{II}reader, "data", false, out error);
+{I}if (error != null)
+{I}{{
+{II}error.PrependSegment(
+{III}new Reporting.NameSegment("data"));
+{II}return null;
+{I}}}
+
+{I}return result;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Deserialize a single <c>&lt;member&gt;</c> of a <c>&lt;struct&gt;</c>,
+/// positioned at the member's own start element.
+/// </summary>
+private static Nodes.JsonNode? DeserializeMemberFrom(
+{I}Xml.XmlReader reader,
+{I}out string key,
+{I}out Reporting.Error? error)
+{{
+{I}key = "";
+
+{I}bool isEmptyMember = XmlCommon.ReadStartElementInNoNamespace(
+{II}reader, "member", out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+{I}if (isEmptyMember)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected a <name> and a <value> element as the content of " +
+{III}"a <member> element, but got no content at all");
+{II}return null;
+{I}}}
+
+{I}bool isEmptyName = XmlCommon.ReadStartElementInNoNamespace(
+{II}reader, "name", out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+
+{I}if (isEmptyName)
+{I}{{
+{II}key = "";
+{I}}}
+{I}else
+{I}{{
+{II}key = DeserializeStringTextFrom(reader, out error)
+{III}?? throw new System.InvalidOperationException(
+{IIII}"Unexpected key null when error null");
+{II}if (error != null)
+{II}{{
+{III}return null;
+{II}}}
+
+{II}XmlCommon.ConsumeEndElementInNoNamespace(
+{III}reader, "name", false, out error);
+{II}if (error != null)
+{II}{{
+{III}return null;
+{II}}}
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// A <struct> holds the key of a member in a <name> child element instead
+{I}// of an attribute, so the key segment renders as a predicate on that
+{I}// child element, and the <value> element is a step of its own.
+{I}bool isEmptyValue = XmlCommon.ReadStartElementInNoNamespace(
+{II}reader, "value", out error);
+{I}if (error != null)
+{I}{{
+{II}error.PrependSegment(
+{III}new Reporting.KeySegment(key));
+{II}return null;
+{I}}}
+{I}if (isEmptyValue)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected one of the elements <boolean>, <double>, <string>, " +
+{III}"<array> or <struct> as the content of a <value> element, " +
+{III}"but got no content at all");
+{II}error.PrependSegment(
+{III}new Reporting.NameSegment("value"));
+{II}error.PrependSegment(
+{III}new Reporting.KeySegment(key));
+{II}return null;
+{I}}}
+
+{I}Nodes.JsonNode? item = DeserializeValueFrom(
+{II}reader, out error);
+{I}if (error != null)
+{I}{{
+{II}error.PrependSegment(
+{III}new Reporting.NameSegment("value"));
+{II}error.PrependSegment(
+{III}new Reporting.KeySegment(key));
+{II}return null;
+{I}}}
+
+{I}XmlCommon.ConsumeEndElementInNoNamespace(
+{II}reader, "value", false, out error);
+{I}if (error != null)
+{I}{{
+{II}error.PrependSegment(
+{III}new Reporting.NameSegment("value"));
+{II}error.PrependSegment(
+{III}new Reporting.KeySegment(key));
+{II}return null;
+{I}}}
+
+{I}XmlCommon.ConsumeEndElementInNoNamespace(
+{II}reader, "member", false, out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+
+{I}return item;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Deserialize a JSON object's body, embedded within a larger XML document
+/// which is already being read through <paramref name="reader" />.
+/// </summary>
+/// <remarks>
+/// <paramref name="reader" /> is expected to be positioned either at
+/// the first <c>&lt;member&gt;</c> start element, or already at
+/// the enclosing element's own end element if there are no members at
+/// all. On success, <paramref name="reader" /> is left positioned at
+/// that same enclosing element's end element -- unlike
+/// <see cref="DeserializeArrayBodyFrom" />, this function does *not*
+/// consume a wrapper element of its own, mirroring how a
+/// <c>JSONObject</c>-typed property is represented directly as
+/// zero or more <c>&lt;member&gt;</c> elements with no enclosing
+/// <c>&lt;struct&gt;</c>.
+/// </remarks>
+public static Nodes.JsonObject? DeserializeStructBodyFrom(
+{I}Xml.XmlReader reader,
+{I}out Reporting.Error? error)
+{{
+{I}error = null;
+
+{I}var result = new Nodes.JsonObject();
+
+{I}while (true)
+{I}{{
+{II}XmlCommon.SkipNoneWhitespaceAndComments(reader);
+{II}if (reader.NodeType != Xml.XmlNodeType.Element)
+{II}{{
+{III}break;
+{II}}}
+
+{II}Nodes.JsonNode? item = DeserializeMemberFrom(
+{III}reader, out string key, out error);
+{II}if (error != null)
+{II}{{
+{III}return null;
+{II}}}
+
+{II}// NOTE (mristin):
+{II}// A repeated <member> name is refused, just as a repeated property
+{II}// element is refused in the xmlization. Letting the later member win
+{II}// -- what Nodes.JsonObject's own indexer assignment would do --
+{II}// would silently accept a document which says two different things
+{II}// about the same key.
+{II}if (result.ContainsKey(key))
+{II}{{
+{III}error = new Reporting.Error(
+{IIII}"The member occurred more than once");
+{III}error.PrependSegment(
+{IIII}new Reporting.KeySegment(key));
+{III}return null;
+{II}}}
+
+{II}result[key] = item;
+{I}}}
+
+{I}return result;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Deserialize a JSON-able value from a stand-alone XML-RPC
+/// <c>&lt;value&gt;</c> element.
+/// </summary>
+/// <remarks>
+/// <paramref name="reader" /> is expected to be positioned at
+/// the <c>&lt;value&gt;</c> start element itself (as opposed to
+/// <see cref="DeserializeValueFrom" />, which expects to be positioned at
+/// the discriminator directly).
+/// </remarks>
+public static Nodes.JsonNode? DeserializeValue(
+{I}Xml.XmlReader reader,
+{I}out Reporting.Error? error)
+{{
+{I}bool isEmpty = XmlCommon.ReadStartElementInNoNamespace(
+{II}reader, "value", out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+
+{I}if (isEmpty)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected one of the elements <boolean>, <double>, <string>, " +
+{III}"<array> or <struct> as the content of a <value> element, " +
+{III}"but got no content at all");
+{II}return null;
+{I}}}
+
+{I}Nodes.JsonNode? result = DeserializeValueFrom(
+{II}reader, out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+
+{I}XmlCommon.ConsumeEndElementInNoNamespace(
+{II}reader, "value", false, out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+
+{I}return result;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Serialize <paramref name="that" />, embedded within a larger XML
+/// document which is already being written through
+/// <paramref name="writer" />.
+/// </summary>
+/// <remarks>
+/// This writes exactly one discriminator element (<c>&lt;boolean&gt;</c>,
+/// <c>&lt;double&gt;</c>, <c>&lt;string&gt;</c>, <c>&lt;array&gt;</c> or
+/// <c>&lt;struct&gt;</c>). <paramref name="that" /> must be JSON-able
+/// (recursively a boolean, a number, a string, an array or an object with
+/// string keys), and never <c>null</c>, or a
+/// <see cref="SerializationFailure" /> is thrown, carrying
+/// the path to the culprit within <paramref name="that" />. The enclosing
+/// serializer converts it -- <see cref="Xmlization.Serialize.To" /> does,
+/// and so does <see cref="SerializeValue" /> -- so a caller driving this
+/// method itself catches <see cref="SerializationException" /> around
+/// the whole document instead.
+/// </remarks>
+public static void SerializeValueTo(
+{I}Nodes.JsonNode? that,
+{I}Xml.XmlWriter writer)
+{{
+{I}switch (that)
+{I}{{
+{II}case null:
+{III}throw new SerializationFailure(
+{IIII}new Reporting.Error(
+{IIIII}"Expected a JSON-able value (a boolean, a number, " +
+{IIIII}"a string, an array or an object), but got null"));
+
+{II}case Nodes.JsonArray jsonArray:
+{III}writer.WriteStartElement("array", "");
+{III}SerializeArrayBodyTo(jsonArray, writer);
+{III}writer.WriteEndElement();
+{III}break;
+
+{II}case Nodes.JsonObject jsonObject:
+{III}writer.WriteStartElement("struct", "");
+{III}SerializeStructBodyTo(jsonObject, writer);
+{III}writer.WriteEndElement();
+{III}break;
+
+{II}case Nodes.JsonValue jsonValue:
+{III}if (jsonValue.TryGetValue(out bool boolValue))
+{III}{{
+{IIII}writer.WriteStartElement("boolean", "");
+{IIII}// NOTE (mristin):
+{IIII}// We deliberately do *not* use ``writer.WriteValue(bool)``, as it
+{IIII}// writes ``true``/``false`` -- the lexical form expected
+{IIII}// everywhere else in this code base -- whereas real XML-RPC
+{IIII}// tooling expects a strict ``1``/``0``, which is also what
+{IIII}// DeserializeBooleanTextFrom requires.
+{IIII}writer.WriteString(boolValue ? "1" : "0");
+{IIII}writer.WriteEndElement();
+{III}}}
+{III}else if (jsonValue.TryGetValue(out double doubleValue))
+{III}{{
+{IIII}// NOTE (mristin):
+{IIII}// JSON knows neither an infinity nor a not-a-number, so neither
+{IIII}// is a JSON-able value. XmlWriter would happily write "INF" or
+{IIII}// "NaN" -- the xs:double spellings -- which
+{IIII}// DeserializeDoubleTextFrom deliberately refuses to read back.
+{IIII}if (!System.Double.IsFinite(doubleValue))
+{IIII}{{
+{IIIII}throw new SerializationFailure(
+{IIIIII}new Reporting.Error(
+{IIIIIII}"Expected a JSON-able value, but got the number " +
+{IIIIIII}$"{{doubleValue}}, which is neither finite nor " +
+{IIIIIII}"representable in JSON"));
+{IIII}}}
+
+{IIII}writer.WriteStartElement("double", "");
+{IIII}writer.WriteValue(doubleValue);
+{IIII}writer.WriteEndElement();
+{III}}}
+{III}else if (jsonValue.TryGetValue(out string? stringValue))
+{III}{{
+{IIII}writer.WriteStartElement("string", "");
+{IIII}writer.WriteValue(stringValue!);
+{IIII}writer.WriteEndElement();
+{III}}}
+{III}else
+{III}{{
+{IIII}throw new SerializationFailure(
+{IIIII}new Reporting.Error(
+{IIIIII}"Expected a JSON-able value (a boolean, a number, " +
+{IIIIII}"a string, an array or an object), but got a value of " +
+{IIIIII}$"an unexpected underlying type: {{jsonValue}}"));
+{III}}}
+{III}break;
+
+{II}default:
+{III}throw new SerializationFailure(
+{IIII}new Reporting.Error(
+{IIIII}"Expected a JSON-able value (a boolean, a number, " +
+{IIIII}"a string, an array or an object), but got: " +
+{IIIII}$"{{that.GetType()}}"));
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Serialize the JSON array <paramref name="that" />'s body, embedded
+/// within a larger XML document which is already being written through
+/// <paramref name="writer" />.
+/// </summary>
+/// <remarks>
+/// This writes exactly one <c>&lt;data&gt;</c> element.
+/// </remarks>
+public static void SerializeArrayBodyTo(
+{I}Nodes.JsonArray that,
+{I}Xml.XmlWriter writer)
+{{
+{I}writer.WriteStartElement("data", "");
+
+{I}int index = 0;
+{I}foreach (Nodes.JsonNode? item in that)
+{I}{{
+{II}writer.WriteStartElement("value", "");
+{II}try
+{II}{{
+{III}SerializeValueTo(item, writer);
+{II}}}
+{II}catch (SerializationFailure failure)
+{II}{{
+{III}failure.Error.PrependSegment(
+{IIII}new Reporting.IndexSegment(index));
+{III}throw;
+{II}}}
+{II}writer.WriteEndElement();
+{II}index++;
+{I}}}
+
+{I}writer.WriteEndElement();
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Serialize the JSON object <paramref name="that" />'s body, embedded
+/// within a larger XML document which is already being written through
+/// <paramref name="writer" />.
+/// </summary>
+/// <remarks>
+/// This writes zero or more <c>&lt;member&gt;</c> elements, with no
+/// enclosing element of its own -- mirrors
+/// <see cref="DeserializeStructBodyFrom" /> on the reading side.
+/// </remarks>
+public static void SerializeStructBodyTo(
+{I}Nodes.JsonObject that,
+{I}Xml.XmlWriter writer)
+{{
+{I}foreach (
+{II}System.Collections.Generic.KeyValuePair<string, Nodes.JsonNode?> member
+{III}in that)
+{I}{{
+{II}writer.WriteStartElement("member", "");
+
+{II}writer.WriteStartElement("name", "");
+{II}writer.WriteValue(member.Key);
+{II}writer.WriteEndElement();
+
+{II}writer.WriteStartElement("value", "");
+{II}try
+{II}{{
+{III}SerializeValueTo(member.Value, writer);
+{II}}}
+{II}catch (SerializationFailure failure)
+{II}{{
+{III}failure.Error.PrependSegment(
+{IIII}new Reporting.KeySegment(member.Key));
+{III}throw;
+{II}}}
+{II}writer.WriteEndElement();
+
+{II}writer.WriteEndElement();
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Serialize <paramref name="that" /> to a stand-alone XML-RPC
+/// <c>&lt;value&gt;</c> element, written through <paramref name="writer" />.
+/// </summary>
+/// <exception cref="SerializationException">
+/// Thrown when <paramref name="that" /> is not JSON-able, carrying the path
+/// to the culprit within it
+/// </exception>
+public static void SerializeValue(
+{I}Nodes.JsonNode? that,
+{I}Xml.XmlWriter writer)
+{{
+{I}writer.WriteStartElement("value", "");
+{I}try
+{I}{{
+{II}SerializeValueTo(that, writer);
+{I}}}
+{I}catch (SerializationFailure failure)
+{I}{{
+{II}throw new SerializationException(
+{III}Reporting.GenerateCSharpPath(failure.Error.PathSegments),
+{III}failure.Error.Cause);
+{I}}}
+{I}writer.WriteEndElement();
+}}"""
+        ),
+    ]  # type: List[Stripped]
+
+    writer = io.StringIO()
+    writer.write(
+        f"""\
+namespace {namespace}
+{{
+{I}/// <summary>
+{I}/// Provide de/serialization of JSON-able values to/from a restricted
+{I}/// subset of XML-RPC's own element vocabulary.
+{I}/// </summary>
+{I}/// <remarks>
+{I}/// These elements reside in no namespace at all, as the XML-RPC
+{I}/// specification prescribes, and not in the namespace of the enclosing
+{I}/// document. The outermost one therefore undeclares the default namespace
+{I}/// with <c>xmlns=""</c>, and the elements nested in it inherit that.
+{I}/// </remarks>
+{I}public static class XmlRpc
+{I}{{
+"""
+    )
+
+    for i, block in enumerate(blocks):
+        if i > 0:
+            writer.write("\n\n")
+
+        writer.write(textwrap.indent(block, II))
+
+    writer.write(f"\n{I}}}  // public static class XmlRpc")
+    writer.write(f"\n}}  // namespace {namespace}")
+
+    using_directives = []  # type: List[Stripped]
+    using_directives.extend(
+        csharp_common.generate_using_aas_directive_if_necessary(namespace)
+    )
+
+    using_directives.append(
+        Stripped(
+            """\
+using Xml = System.Xml;
+using Nodes = System.Text.Json.Nodes;"""
+        )
+    )
+
+    final_blocks = [
+        csharp_common.WARNING,
+        Stripped("\n".join(using_directives)),
+        Stripped(writer.getvalue()),
+        csharp_common.WARNING,
+    ]
+
+    final_writer = io.StringIO()
+    for i, block in enumerate(final_blocks):
+        if i > 0:
+            final_writer.write("\n\n")
+
+        assert not block.startswith("\n")
+        assert not block.endswith("\n")
+        final_writer.write(block)
+
+    final_writer.write("\n")
+
+    return final_writer.getvalue()
+
+
+assert generate.__doc__ is not None
+assert generate.__doc__.strip().startswith(__doc__.strip())

@@ -197,6 +197,22 @@ def generate(
         symbol_table.meta_model.xml_namespace
     )
 
+    # NOTE (mristin):
+    # The elements of the XML-RPC subset, over which a JSON-able value is
+    # de/serialized, reside in no namespace at all, unlike everything which
+    # the meta-model itself prescribes.
+    descendant_namespace_condition = (
+        Stripped(
+            f"""\
+child.GetDefaultNamespace().NamespaceName == {xml_namespace_literal}
+{I}|| child.GetDefaultNamespace().NamespaceName.Length == 0"""
+        )
+        if intermediate.uses_json_types(symbol_table)
+        else Stripped(
+            f"child.GetDefaultNamespace().NamespaceName == {xml_namespace_literal}"
+        )
+    )
+
     blocks = [
         Stripped(
             f"""\
@@ -292,9 +308,10 @@ private static void AssertSerializeDeserializeEqualsOriginal(
 
 {II}foreach (var child in gotDoc.Descendants())
 {II}{{
-{III}Assert.AreEqual(
-{IIII}child.GetDefaultNamespace().NamespaceName,
-{IIII}{xml_namespace_literal});
+{III}Assert.IsTrue(
+{IIII}{indent_but_first_line(descendant_namespace_condition, IIII)},
+{IIII}$"Unexpected namespace of {{child.Name}}: " +
+{IIIII}$"{{child.GetDefaultNamespace().NamespaceName}}");
 {II}}}
 
 {II}var expectedDoc = XDocument.Load(path);

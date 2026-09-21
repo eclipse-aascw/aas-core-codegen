@@ -166,6 +166,16 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             ),
         ),
         (
+            project_rel_path / "xmlcommon.cs",
+            lambda: (
+                csharp_lib.generate_xml_common(
+                    symbol_table=context.symbol_table,
+                    namespace=namespace,
+                ),
+                None,
+            ),
+        ),
+        (
             project_rel_path / "xmlization.cs",
             lambda: csharp_lib.generate_xmlization(
                 symbol_table=context.symbol_table,
@@ -307,6 +317,31 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             ),
         ),
     ]
+
+    # NOTE (mristin):
+    # ``xmlrpc.cs``, ``jsonvalueverification.cs`` and the former's isolated
+    # unit test are only needed when the meta-model actually uses
+    # a JSON-able type (``JSONValue``, ``JSONArray`` or ``JSONObject[K]``)
+    # -- unlike the other library modules above, which are always generated
+    # regardless of the model.
+    if intermediate.uses_json_types(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                project_rel_path / "xmlrpc.cs",
+                lambda: (csharp_lib.generate_xml_rpc(namespace=namespace), None),
+            ),
+            (
+                project_rel_path / "jsonvalueverification.cs",
+                lambda: (
+                    csharp_lib.generate_json_value_verification(namespace=namespace),
+                    None,
+                ),
+            ),
+            (
+                tests_rel_path / "TestXmlRpc.cs",
+                lambda: (csharp_tests.generate_test_xml_rpc(namespace=namespace), None),
+            ),
+        ]
 
     for rel_path, generator_func in rel_paths_generators:
         assert not rel_path.is_absolute()

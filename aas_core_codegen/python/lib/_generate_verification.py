@@ -946,6 +946,34 @@ for error in self.transform(
                 # noinspection PyTypeChecker
                 assert_never(type_anno.items.our_type)
 
+        elif isinstance(
+            type_anno.items,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            if isinstance(type_anno.items, intermediate.JsonValueTypeAnnotation):
+                item_verify_function = Stripped(
+                    "aas_json_value_verification.verify_json_value"
+                )
+            elif isinstance(type_anno.items, intermediate.JsonArrayTypeAnnotation):
+                item_verify_function = Stripped(
+                    "aas_json_value_verification.verify_json_array"
+                )
+            else:
+                item_verify_function = Stripped(
+                    "aas_json_value_verification.verify_json_object"
+                )
+
+            for_error = Stripped(
+                f"""\
+for error in {item_verify_function}(
+{II}{loop_variable}
+)"""
+            )
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno.items)
@@ -1069,6 +1097,35 @@ for error in self.transform(
                 else:
                     # noinspection PyTypeChecker
                     assert_never(item_type_anno.our_type)
+
+            elif isinstance(
+                item_type_anno,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                if isinstance(item_type_anno, intermediate.JsonValueTypeAnnotation):
+                    item_verify_function = Stripped(
+                        "aas_json_value_verification.verify_json_value"
+                    )
+                elif isinstance(item_type_anno, intermediate.JsonArrayTypeAnnotation):
+                    item_verify_function = Stripped(
+                        "aas_json_value_verification.verify_json_array"
+                    )
+                else:
+                    item_verify_function = Stripped(
+                        "aas_json_value_verification.verify_json_object"
+                    )
+
+                for_error_in_verification = Stripped(
+                    f"""\
+for error in {item_verify_function}(
+{II}{item_access}
+)"""
+                )
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(item_type_anno)
@@ -1093,6 +1150,75 @@ for error in self.transform(
 {II})
 {I})
 {I}yield error"""
+                )
+            )
+
+    elif isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+            verify_function = Stripped("aas_json_value_verification.verify_json_value")
+        elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+            verify_function = Stripped("aas_json_value_verification.verify_json_array")
+        else:
+            verify_function = Stripped("aas_json_value_verification.verify_json_object")
+
+        stmts.append(
+            Stripped(
+                f"""\
+for error in {verify_function}(
+{II}that.{prop_name}
+):
+{I}error.path._prepend(
+{II}PropertySegment(
+{III}that,
+{III}{prop_name_literal}
+{II})
+{I})
+{I}yield error"""
+            )
+        )
+
+        key_constrained_primitive = (
+            intermediate.try_constrained_primitive(type_anno.key)
+            if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation)
+            else None
+        )
+
+        # NOTE (mristin):
+        # A bare ``str`` key has nothing to verify.
+        if key_constrained_primitive is not None:
+            key_verify_function = python_naming.function_name(
+                Identifier(f"verify_{key_constrained_primitive.name}")
+            )
+
+            stmts.append(
+                Stripped(
+                    f"""\
+for key in that.{prop_name}:
+{I}for error in {key_verify_function}(key):
+{II}# NOTE (mristin):
+{II}# The key segment names the member whose key is erroneous. The path
+{II}# thus leads to the member, and the cause says what is wrong with
+{II}# the key which names it.
+{II}error.path._prepend(
+{III}KeySegment(
+{IIII}that.{prop_name},
+{IIII}key
+{III})
+{II})
+{II}error.path._prepend(
+{III}PropertySegment(
+{IIII}that,
+{IIII}{prop_name_literal}
+{III})
+{II})
+{II}yield error"""
                 )
             )
 
@@ -1416,6 +1542,16 @@ def generate(
 
     The ``qualified_module_name`` indicates the fully-qualified name of the base module.
     """
+    # NOTE (mristin):
+    # The JSON-able values are verified in a module of their own, which is only
+    # generated where the meta-model actually has such a value.
+    json_value_verification_import = (
+        f"\nimport {qualified_module_name}.jsonvalueverification"
+        f" as aas_json_value_verification"
+        if intermediate.uses_json_types(symbol_table)
+        else ""
+    )
+
     # region Module docstring
     blocks = [
         _generate_module_docstring(
@@ -1424,6 +1560,7 @@ def generate(
         python_common.WARNING,
         Stripped(
             f"""\
+import collections.abc
 import math
 import re
 import struct
@@ -1449,95 +1586,24 @@ else:
 
 from {qualified_module_name} import (
 {I}constants as aas_constants,
+{I}reporting as aas_reporting,
 {I}types as aas_types,
-)"""
+){json_value_verification_import}"""
         ),
+        # NOTE (mristin):
+        # The vocabulary of the error paths lives in ``reporting``, so that this
+        # module and the verification of a JSON-able value report with the very
+        # same classes. It is re-exported here, as it belonged to this module
+        # before the two were split apart.
         Stripped(
-            f"""\
-class PropertySegment:
-{I}\"\"\"Represent a property access on a path to an erroneous value.\"\"\"
+            """\
+PropertySegment = aas_reporting.PropertySegment
+IndexSegment = aas_reporting.IndexSegment
+KeySegment = aas_reporting.KeySegment
+Segment = aas_reporting.Segment
+Path = aas_reporting.Path
 
-{I}#: Instance containing the property
-{I}instance: Final[aas_types.Class]
-
-{I}#: Name of the property
-{I}name: Final[str]
-
-{I}def __init__(
-{III}self,
-{III}instance: aas_types.Class,
-{III}name: str
-{I}) -> None:
-{II}\"\"\"Initialize with the given values.\"\"\"
-{II}self.instance = instance
-{II}self.name = name
-
-{I}def __str__(self) -> str:
-{II}return f'.{{self.name}}'"""
-        ),
-        Stripped(
-            f"""\
-class IndexSegment:
-{I}\"\"\"Represent an index access on a path to an erroneous value.\"\"\"
-
-{I}#: Sequence containing the item at :py:attr:`~index`
-{I}sequence: Final[Sequence[Any]]
-
-{I}#: Index of the item
-{I}index: Final[int]
-
-{I}def __init__(
-{III}self,
-{III}sequence: Sequence[Any],
-{III}index: int
-{I}) -> None:
-{II}\"\"\"Initialize with the given values.\"\"\"
-{II}self.sequence = sequence
-{II}self.index = index
-
-{I}def __str__(self) -> str:
-{II}return f'[{{self.index}}]'"""
-        ),
-        Stripped("Segment = Union[PropertySegment, IndexSegment]"),
-        Stripped(
-            f"""\
-class Path:
-{I}\"\"\"Represent the relative path to the erroneous value.\"\"\"
-
-{I}def __init__(self) -> None:
-{II}\"\"\"Initialize as an empty path.\"\"\"
-{II}self._segments = []  # type: List[Segment]
-
-{I}@property
-{I}def segments(self) -> Sequence[Segment]:
-{II}\"\"\"Get the segments of the path.\"\"\"
-{II}return self._segments
-
-{I}def _prepend(self, segment: Segment) -> None:
-{II}\"\"\"Insert the :paramref:`segment` in front of other segments.\"\"\"
-{II}self._segments.insert(0, segment)
-
-{I}def __str__(self) -> str:
-{II}return "".join(str(segment) for segment in self._segments)"""
-        ),
-        Stripped(
-            f"""\
-class Error:
-{I}\"\"\"Represent a verification error in the data.\"\"\"
-
-{I}#: Human-readable description of the error
-{I}cause: Final[str]
-
-{I}#: Path to the erroneous value
-{I}path: Final[Path]
-
-{I}def __init__(self, cause: str) -> None:
-{II}\"\"\"Initialize as an error with an empty path.\"\"\"
-{II}self.cause = cause
-{II}self.path = Path()
-
-{I}def __repr__(self) -> str:
-{II}return f"Error(path={{self.path}}, cause={{self.cause}})\""""
+Error = aas_reporting.Error"""
         ),
     ]  # type: List[Stripped]
 

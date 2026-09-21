@@ -195,6 +195,23 @@ def generate(
     """
     Generate code to test the XML de/serialization of concrete classes.
     """
+    # NOTE (mristin):
+    # The elements of the XML-RPC subset, over which a JSON-able value is
+    # de/serialized, reside in no namespace at all, unlike everything which
+    # the meta-model itself prescribes. ``EVENT`` stands for the start or
+    # the end element which the condition is checked on.
+    namespace_condition = (
+        Stripped(
+            f"""\
+Xmlization.AAS_NAME_SPACE.equals(EVENT.getName().getNamespaceURI())
+{I}|| EVENT.getName().getNamespaceURI().isEmpty()"""
+        )
+        if intermediate.uses_json_types(symbol_table)
+        else Stripped(
+            "Xmlization.AAS_NAME_SPACE.equals(EVENT.getName().getNamespaceURI())"
+        )
+    )
+
     blocks = [
         Stripped(
             f"""\
@@ -312,10 +329,14 @@ final Map<XMLEvent, String> outputMap = buildElementsMap(outputReader);
 // check output for aas-name-space
 for (XMLEvent event : outputMap.keySet()) {{
 {I}if (event.isStartElement()) {{
-{II}assertEquals(Xmlization.AAS_NAME_SPACE, event.asStartElement().getName().getNamespaceURI());
+{II}assertTrue(
+{III}{indent_but_first_line(namespace_condition.replace("EVENT", "event.asStartElement()"), III)},
+{III}"Unexpected namespace of " + event.asStartElement().getName());
 {I}}}
 {I}if (event.isEndElement()) {{
-{II}assertEquals(Xmlization.AAS_NAME_SPACE, event.asEndElement().getName().getNamespaceURI());
+{II}assertTrue(
+{III}{indent_but_first_line(namespace_condition.replace("EVENT", "event.asEndElement()"), III)},
+{III}"Unexpected namespace of " + event.asEndElement().getName());
 {I}}}
 }}
 
@@ -582,6 +603,7 @@ package {package}.tests;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import {package}.reporting.Reporting;

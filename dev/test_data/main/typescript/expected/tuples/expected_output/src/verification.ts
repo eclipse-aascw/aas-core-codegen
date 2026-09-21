@@ -29,6 +29,37 @@ import * as AasTypes from "./types";
 // is not fulfilled. Therefore, we disable this linting rule.
 /* eslint no-extra-boolean-cast: 0 */
 
+// NOTE (mristin):
+// The SDK defines three of these path vocabularies: this one, the one in
+// the `jsonization` module, and the one in the `xmlcommon` module. They look
+// alike, and it is tempting to merge them, but they are not interchangeable.
+//
+// Each of them points into a different thing:
+//
+// * This one points into the instances which you built, so a property segment
+//   holds a class of the meta-model.
+// * The jsonization's points into the JSON-able structure being read or
+//   written, so a property segment holds the JSON-able object instead: while
+//   a document is being parsed, the instance which the property would belong
+//   to does not exist yet.
+// * The xmlcommon's points into the XML document, where there are no
+//   properties at all, only elements, so it names an element instead. It is
+//   also the only one whose segments carry no back-pointer, as the reading is
+//   a single pass over a token stream and the element is gone by the time
+//   the error comes back out.
+//
+// The three also render differently: a path into the instances is
+// a TypeScript access expression, a path into a JSON-able structure starts at
+// the root of the document and carries no leading dot, and a path into an XML
+// document is a relative XPath.
+//
+// Merging them would mean either dropping the back-pointers, which have been
+// part of the public API of this SDK since before these modules were split
+// apart, or defining a single path over the union of all the segment kinds --
+// in which case every consumer would have to handle segments which can never
+// occur in its world. Three small vocabularies which each say exactly what
+// they can say cost less than one large one which lies about its range.
+
 /**
  * Represent a property access on a path to an erroneous value.
  */
@@ -77,7 +108,38 @@ export class IndexSegment {
   }
 }
 
-export type Segment = PropertySegment | IndexSegment;
+/**
+ * Represent a member access on a path to an erroneous value.
+ *
+ * @remarks
+ *
+ * Unlike a {@link PropertySegment}, which names a property of one of our
+ * classes, a key names a member of an open JSON-able object. It is known only
+ * at run time, and can be any string at all, so it is always rendered as
+ * a subscript.
+ */
+export class KeySegment {
+  /**
+   * Object containing the value at {@link key}
+   */
+  readonly object: { readonly [key: string]: unknown };
+
+  /**
+   * Key of the value in the {@link object}
+   */
+  readonly key: string;
+
+  constructor(object: { readonly [key: string]: unknown }, key: string) {
+    this.object = object;
+    this.key = key;
+  }
+
+  toString(): string {
+    return `[${JSON.stringify(this.key)}]`;
+  }
+}
+
+export type Segment = PropertySegment | IndexSegment | KeySegment;
 
 /**
  * Represent the relative path to the erroneous value.

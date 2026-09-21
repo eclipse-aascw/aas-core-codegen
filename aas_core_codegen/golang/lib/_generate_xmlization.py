@@ -70,6 +70,20 @@ def _leaf_moniker(type_anno: intermediate.AtomicTypeAnnotation) -> str:
     if primitive_type is not None:
         return _PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
 
+    # NOTE (mristin):
+    # A JSON-able type is no type of the meta-model, so it needs a moniker of
+    # its own, for the same reason as a primitive above. The initial is
+    # *lower-case* so that it can never be confused for one of our types, which
+    # all go through ``capitalized_camel_case``.
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return "jsonValue"
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return "jsonArray"
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return "jsonObject"
+
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
     ), f"Unexpected type annotation for a moniker: {type_anno}"
@@ -113,7 +127,7 @@ class _ScalarItem:
 
 # NOTE (mristin):
 # Every name which spells out a *type* puts the moniker last, after an underscore:
-# ``readAtV{i}_{M}``, ``readTextAs_{M}``, ``writeListOf_{M}``,
+# ``readAtV{i}_{M}``, ``xmlcommon.ReadTextAs_{M}``, ``writeListOf_{M}``,
 # ``writeTupleOf{N}_{M}_{M}...`` and their duals. A tuple states its arity and
 # separates its items, so these names are a Polish notation over ``_``-separated
 # tokens. Since a leaf moniker never contains an underscore (see
@@ -307,736 +321,6 @@ def _collect_requirements(
 # region De-serialization
 
 
-def _generate_deserialization_error_and_its_methods() -> List[Stripped]:
-    """Generate code to represent the deserialization error."""
-    return [
-        Stripped(
-            f"""\
-// Represent an error during the de-serialization.
-//
-// Implements `error`.
-type DeserializationError struct{{
-{I}Path *aasreporting.Path
-{I}Message string
-}}"""
-        ),
-        Stripped(
-            f"""\
-func newDeserializationError(message string) *DeserializationError {{
-{I}return &DeserializationError{{
-{II}Path: &aasreporting.Path{{}},
-{II}Message: message,
-{I}}}
-}}"""
-        ),
-        Stripped(
-            f"""\
-func (de *DeserializationError) Error() string {{
-{I}return fmt.Sprintf(
-{II}"%s: %s",
-{II}de.PathString(),
-{II}de.Message,
-{I})
-}}"""
-        ),
-        Stripped(
-            f"""\
-// Render the path as a string.
-func (de *DeserializationError) PathString() string {{
-{I}return aasreporting.ToRelativeXPath(de.Path)
-}}"""
-        ),
-    ]
-
-
-def _generate_is_whitespace() -> Stripped:
-    return Stripped(
-        f"""\
-// Check if the string `s` consists only of whitespace.
-//
-// An empty string causes panic — please cover that case before.
-func isWhitespace(s string) bool {{
-{I}if len(s) == 0 {{
-{II}panic("Unexpected empty string")
-{I}}}
-{I}for _, c := range s {{
-{II}if !unicode.IsSpace(c) {{
-{III}return false
-{II}}}
-{I}}}
-{I}return true
-}}"""
-    )
-
-
-def _generate_read_next() -> Stripped:
-    return Stripped(
-        f"""\
-// Read the next token from the `decoder` given the `current` token.
-//
-// If `current` token is [eof], return [eof].
-func readNext(decoder *xml.Decoder, current xml.Token) (next xml.Token, err error) {{
-{I}if _, isEOF := current.(eof); isEOF {{
-{II}next = current
-{II}return
-{I}}}
-
-{I}var tokenErr error
-{I}next, tokenErr = decoder.Token()
-{I}if tokenErr != nil {{
-{II}if tokenErr == io.EOF {{
-{III}next = &eof{{}}
-{III}return
-{II}}}
-
-{II}err = tokenErr
-{II}return
-{I}}}
-
-{I}return
-}}"""
-    )
-
-
-def _generate_skip_empty_text_whitespace_and_comments() -> Stripped:
-    return Stripped(
-        f"""\
-// Read all the possible whitespace and comments.
-//
-// Return the `next` token which is neither empty text, nor whitespace nor comment,
-// or [eof], if we reached the end-of-file.
-//
-// If we already reached the end-of-file, simply return [eof].
-func skipEmptyTextWhitespaceAndComments(
-{I}decoder *xml.Decoder,
-{I}current xml.Token,
-) (next xml.Token, err error) {{
-{I}stop := false
-{I}for !stop {{
-{II}if _, isEOF := current.(eof); isEOF {{
-{III}break
-{II}}}
-
-{II}switch et := current.(type) {{
-{II}case xml.CharData:
-{III}text := string(et)
-{III}if len(text) != 0 && !isWhitespace(text) {{
-{IIII}stop = true
-{III}}} else {{
-{IIII}// We should proceed to the next token.
-{III}}}
-{II}case xml.Comment:
-{III}// We should proceed to the next token.
-{II}default:
-{III}stop = true
-{II}}}
-
-{II}if !stop {{
-{III}current, err = readNext(decoder, current)
-{III}if err != nil {{
-{IIII}return
-{III}}}
-{II}}}
-{I}}}
-
-{I}next = current
-{I}return
-}}"""
-    )
-
-
-def _generate_read_text() -> Stripped:
-    return Stripped(
-        f"""\
-// Consume the text tokens (char data).
-//
-// Any comment tokens are skipped.
-//
-// Match a run of the four characters which XML calls whitespace.
-var whitespaceRunRe = regexp.MustCompile("[ \\t\\n\\r]+")
-
-// Normalize `text` the way `whiteSpace="collapse"` prescribes.
-//
-// Every atomic XSD type except a string, and every type derived from one by
-// restriction, fixes `whiteSpace` to `collapse`, and a schema author can not
-// change it. A tab, a line feed and a carriage return each become a space,
-// a run of spaces becomes one space, and the leading and trailing spaces go.
-// Only the result of that is a lexical representation to be matched.
-//
-// Mind that this strips only the whitespace *around* the value: a space
-// within it survives as a single space, so "2  3" becomes "2 3", which is
-// still no number.
-//
-// See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
-func collapseWhitespace(text string) string {{
-{I}return strings.Trim(whitespaceRunRe.ReplaceAllString(text, " "), " ")
-}}
-
-// Tell whether `text` is a lexical form of `xs:base64Binary`.
-//
-// The whitespace is expected to be gone already. What is left has to match
-// `(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 "=") | (B64 B04 "=="))?`
-// -- a length which is a multiple of four, the alphabet and nothing else,
-// an equals sign only at the very end, and, easily missed, a constrained
-// character *before* the padding, as the bits which the padding drops have to
-// be zero.
-//
-// The decoders do not agree on any of this, so every target does the same
-// check of its own and refuses the same texts.
-//
-// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
-func matchesXsBase64Binary(text string) bool {{
-{I}if len(text)%4 != 0 {{
-{II}return false
-{I}}}
-
-{I}if len(text) == 0 {{
-{II}return true
-{I}}}
-
-{I}pads := 0
-{I}if text[len(text)-1] == '=' {{
-{II}pads = 1
-{II}if text[len(text)-2] == '=' {{
-{III}pads = 2
-{II}}}
-{I}}}
-
-{I}for i := 0; i < len(text)-pads; i++ {{
-{II}character := text[i]
-{II}inAlphabet := (character >= 'A' && character <= 'Z') ||
-{III}(character >= 'a' && character <= 'z') ||
-{III}(character >= '0' && character <= '9') ||
-{III}character == '+' ||
-{III}character == '/'
-{II}if !inAlphabet {{
-{III}return false
-{II}}}
-{I}}}
-
-{I}// NOTE:
-{I}// Only these sixteen characters leave the two dropped bits at zero, and
-{I}// only these four leave the four dropped bits at zero.
-{I}if pads == 1 {{
-{II}return strings.IndexByte("AEIMQUYcgkosw048", text[len(text)-2]) >= 0
-{I}}}
-
-{I}if pads == 2 {{
-{II}return strings.IndexByte("AQgw", text[len(text)-3]) >= 0
-{I}}}
-
-{I}return true
-}}
-
-// Drop every whitespace character of `text`.
-//
-// This is what `xs:base64Binary` needs: it allows whitespace between
-// the characters and not only around them, so collapsing is not enough --
-// the decoder accepts none of it.
-func removeWhitespace(text string) string {{
-{I}return whitespaceRunRe.ReplaceAllString(text, "")
-}}
-
-// The resulting `next` token points to the first token which is neither text
-// nor comment.
-//
-// If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readText(
-{I}decoder *xml.Decoder,
-{I}current xml.Token,
-) (text string, next xml.Token, err error) {{
-{I}b := &strings.Builder{{}}
-
-{I}stop := false
-{I}for {{
-{II}if _, isEOF := current.(eof); isEOF {{
-{III}err = newDeserializationError(
-{IIII}"Expected to read text, but reached the end-of-file",
-{III})
-{III}return
-{II}}}
-
-{II}switch et := current.(type) {{
-{II}case xml.CharData:
-{III}b.WriteString(string(et))
-{III}// Proceed to the next token.
-{II}case xml.Comment:
-{III}// Proceed to the next token.
-{II}default:
-{III}stop = true
-{II}}}
-
-{II}if !stop {{
-{III}current, err = readNext(decoder, current)
-{III}if err != nil {{
-{IIII}return
-{III}}}
-{II}}} else {{
-{III}break
-{II}}}
-{I}}}
-
-{I}next = current
-{I}text = b.String()
-{I}return
-}}"""
-    )
-
-
-def _generate_read_text_as_bool() -> Stripped:
-    return Stripped(
-        f"""\
-// Consume the text tokens (char data) as a representation of a `xs:boolean`.
-//
-// Any comment tokens are skipped.
-//
-// The resulting `next` token points to the first token which is neither text
-// nor comment.
-//
-// If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAs_bool(
-{I}decoder *xml.Decoder,
-{I}current xml.Token,
-) (value bool, next xml.Token, err error) {{
-{I}var text string
-{I}text, next, err = readText(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-{I}text = collapseWhitespace(text)
-
-{I}switch text {{
-{I}case "1":
-{II}value = true
-{I}case "true":
-{II}value = true
-{I}case "0":
-{II}value = false
-{I}case "false":
-{II}value = false
-{I}default:
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected a value as xs:boolean, but got: %s",
-{IIII}text,
-{III}),
-{II})
-{I}}}
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}return
-}}"""
-    )
-
-
-def _generate_read_text_as_long() -> Stripped:
-    return Stripped(
-        f"""\
-// Consume the text tokens (char data) as a representation of a `xs:long`.
-//
-// Any comment tokens are skipped.
-//
-// The resulting `next` token points to the first token which is neither text
-// nor comment.
-//
-// If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAs_long(
-{I}decoder *xml.Decoder,
-{I}current xml.Token,
-) (value int64, next xml.Token, err error) {{
-{I}var text string
-{I}text, next, err = readText(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-{I}text = collapseWhitespace(text)
-
-{I}var parseErr error
-{I}value, parseErr = strconv.ParseInt(text, 10, 64)
-{I}if parseErr != nil {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected a value as xs:long, but it could not be parsed: %s: %s",
-{IIII}parseErr.Error(), text,
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}return
-}}"""
-    )
-
-
-def _generate_is_valid_xs_double() -> List[Stripped]:
-    """
-    Generate regular expression to check ``xs:double`` values.
-
-    While there might be a function in the meta-model itself with the same name in
-    the verification, we provide a separate function here so that it works for all
-    meta-models.
-    """
-    return [
-        Stripped(
-            f"""\
-func constructXsDoubleRe() *regexp.Regexp {{
-{I}// NOTE:
-{I}// "+INF" is matched although it is written as "INF": XSD 1.1 admits it,
-{I}// its production being (\\+|-)?INF, and being liberal in what we accept
-{I}// costs nothing here. strconv.ParseFloat reads it without complaint.
-{I}doubleRep := "((\\\\+|-)?([0-9]+(\\\\.[0-9]*)?|\\\\.[0-9]+)([Ee](\\\\+|-)?[0-9]+)?|(\\\\+|-)?INF|NaN)"
-{I}pattern := aascommon.Concat(
-{II}"^",
-{II}doubleRep,
-{II}"$",
-{I})
-
-{I}return regexp.MustCompile(
-{II}pattern,
-{I})
-}}"""
-        ),
-        Stripped(
-            """\
-var xsDoubleRe = constructXsDoubleRe()"""
-        ),
-        Stripped(
-            f"""\
-// Check that text conforms to the pattern of an `xs:double`.
-//
-// See: https://www.w3.org/TR/xmlschema-2/#double
-//
-//   - `text`: Text to be checked
-//   - Return True if the text conforms to the pattern
-func isValidXsDouble(text string) bool {{
-{I}return xsDoubleRe.MatchString(
-{II}text,
-{I})
-}}"""
-        ),
-    ]
-
-
-def _generate_read_text_as_double() -> Stripped:
-    return Stripped(
-        f"""\
-// Consume the text tokens (char data) as a representation of a `xs:double`.
-//
-// Any comment tokens are skipped.
-//
-// The resulting `next` token points to the first token which is neither text
-// nor comment.
-//
-// If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAs_double(
-{I}decoder *xml.Decoder,
-{I}current xml.Token,
-) (value float64, next xml.Token, err error) {{
-{I}var text string
-{I}text, next, err = readText(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-{I}text = collapseWhitespace(text)
-
-{I}// We need to check explicitly for the regular expression since
-{I}// strconv.ParseFloat is too permissive. For example, it accepts "nan"
-{I}// although only "NaN" is valid.
-{I}// See: https://www.w3.org/TR/xmlschema-2/#double
-{I}if !isValidXsDouble(text) {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected a value as xs:double, but got: %s",
-{IIII}text,
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}var parseErr error
-{I}value, parseErr = strconv.ParseFloat(text, 64)
-{I}// NOTE:
-{I}// A literal too large for a double is not an error in XSD. It rounds to
-{I}// an infinity, which is in the value space of xs:double, and ParseFloat
-{I}// hands us exactly that infinity *together* with [strconv.ErrRange]. So
-{I}// the range is deliberately let through, and only a syntax error is
-{I}// reported -- and the pattern above has already excluded those.
-{I}//
-{I}// A literal too small rounds to zero, which ParseFloat reports without
-{I}// any error at all.
-{I}//
-{I}// See: https://www.w3.org/TR/xmlschema11-2/#double
-{I}if parseErr != nil && !errors.Is(parseErr, strconv.ErrRange) {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected a value as xs:double, but it could not be parsed: %s: %s",
-{IIII}parseErr.Error(), text,
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}// NOTE:
-{I}// We explicitly do not check for loss of precision, as the majority of people will
-{I}// use string representation of the floating point numbers ignoring the precision
-{I}// issues. For example, the closest double-precision number to the number `359.9` is
-{I}// `359.8999999999999772626324556767940521240234375`, but most people will simply
-{I}// give `359.9` as the value.
-
-{I}return
-}}"""
-    )
-
-
-def _generate_read_text_as_bytes() -> Stripped:
-    return Stripped(
-        f"""\
-// Consume the text tokens (char data) as a base64-encoded bytes.
-//
-// Any comment tokens are skipped.
-//
-// The resulting `next` token points to the first token which is neither text
-// nor comment.
-//
-// If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAs_bytes(
-{I}decoder *xml.Decoder,
-{I}current xml.Token,
-) (value []byte, next xml.Token, err error) {{
-{I}var text string
-{I}text, next, err = readText(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-{I}// NOTE:
-{I}// xs:base64Binary allows whitespace between the characters, and not only
-{I}// around them, while the decoder accepts none of it. So every whitespace
-{I}// character is dropped, and not merely collapsed.
-{I}//
-{I}// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
-{I}text = removeWhitespace(text)
-
-{I}if !matchesXsBase64Binary(text) {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected a text as base64-encoded bytes, but got: %s",
-{IIII}text,
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}var decodingErr error
-{I}value, decodingErr = b64.StdEncoding.DecodeString(text)
-{I}if decodingErr != nil {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Text could not be decoded as base64: %s",
-{IIII}decodingErr.Error(),
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}return
-}}"""
-    )
-
-
-def _generate_check_start_element() -> Stripped:
-    return Stripped(
-        f"""\
-// Check that the `current` token is a valid start element, *i.e.*, lives in [Namespace]
-// and contains no attributes.
-func checkStartElement(
-{I}current xml.StartElement,
-) (err error) {{
-{I}unexpectedAttr := 0
-{I}for _, attr := range current.Attr {{
-{II}if (attr.Name.Space == "" && attr.Name.Local == "xmlns") ||
-{III}attr.Name.Space == "xmlns" {{
-{III}continue
-{II}}}
-
-{II}unexpectedAttr++
-{I}}}
-{I}if unexpectedAttr != 0 {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected no attributes except 'xmlns' in the start element, "+
-{IIIII}"but got %d in the start element %s",
-{IIII}unexpectedAttr, current.Name.Local,
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}if current.Name.Space != Namespace {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected only start elements in the namespace %s, "+
-{IIIII}"but got a start element %s in the namespace %s",
-{IIII}Namespace, current.Name.Local, current.Name.Space,
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}return
-}}"""
-    )
-
-
-def _generate_extract_local_name_from_start_element() -> Stripped:
-    return Stripped(
-        f"""\
-// Expect a valid start element (as defined in [checkStartElement]) and extract its
-// `local` name.
-//
-// This function is meant to be called whenever you know the runtime type of a token.
-// If you do not know the runtime type, call [parseAsStartElementAndExtractLocalName]
-// so that you can succinctly check the runtime type as well.
-func extractLocalNameFromStartElement(
-{I}current xml.StartElement,
-) (local string, err error) {{
-{I}err = checkStartElement(current)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}local = current.Name.Local
-{I}return
-}}"""
-    )
-
-
-def _generate_parse_as_start_element_and_extract_local_name() -> Stripped:
-    return Stripped(
-        f"""\
-// Expect a valid start element (as defined in [checkStartElement]) and extract its
-// local name.
-//
-// Valid means that we check that the start element lives in [Namespace] and contains
-// no attributes.
-//
-// If you know the runtime type of `current` token, call
-// [parseLocalNameFromStartElement] instead to save a cast.
-func parseAsStartElementAndExtractLocalName(
-{I}current xml.Token,
-) (local string, err error) {{
-{I}if _, isEOF := current.(eof); isEOF {{
-{II}err = newDeserializationError(
-{III}"Expected a start element, but reached the end-of-file",
-{II})
-{II}return
-{I}}}
-
-{I}et, ok := current.(xml.StartElement)
-{I}if !ok {{
-{II}switch v := current.(type) {{
-{II}case xml.EndElement:
-{III}err = newDeserializationError(
-{IIII}fmt.Sprintf(
-{IIIII}"Expected a start element, but got an end element %s in namespace %s",
-{IIIII}v.Name.Local, v.Name.Space,
-{IIII}),
-{III})
-{II}case xml.CharData:
-{III}err = newDeserializationError(
-{IIII}fmt.Sprintf(
-{IIIII}"Expected a start element, but got text %s",
-{IIIII}string(v),
-{IIII}),
-{III})
-{II}default:
-{III}err = newDeserializationError(
-{IIII}fmt.Sprintf(
-{IIIII}"Expected a start element, but got %T: %v",
-{IIIII}current, current,
-{IIII}),
-{III})
-{II}}}
-{II}return
-{I}}}
-
-{I}local, err = extractLocalNameFromStartElement(et)
-{I}return
-}}"""
-    )
-
-
-def _generate_check_end_element() -> Stripped:
-    return Stripped(
-        f"""\
-// Check that the `current` token is an end element, living in [Namespace], and
-// having the `local` name.
-func checkEndElement(current xml.Token, local string) (err error) {{
-{I}if _, isEOF := current.(eof); isEOF {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected an end element %s, but reached the end-of-file",
-{IIII}local,
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}et, ok := current.(xml.EndElement)
-{I}if !ok {{
-{II}switch v := current.(type) {{
-{II}case xml.StartElement:
-{III}err = newDeserializationError(
-{IIII}fmt.Sprintf(
-{IIIII}"Expected an end element %s, but got a start element %s in namespace %s",
-{IIIII}local, v.Name.Local, v.Name.Space,
-{IIII}),
-{III})
-{II}case xml.CharData:
-{III}err = newDeserializationError(
-{IIII}fmt.Sprintf(
-{IIIII}"Expected an end element %s, but got text %s",
-{IIIII}local, string(v),
-{IIII}),
-{III})
-{II}default:
-{III}err = newDeserializationError(
-{IIII}fmt.Sprintf(
-{IIIII}"Expected an end element %s, but got %T: %v",
-{IIIII}local, current, current,
-{IIII}),
-{III})
-{II}}}
-{II}return
-{I}}}
-
-{I}if et.Name.Space != Namespace {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected an end element %s in the namespace %s, "+
-{IIIII}"but got an end element in the namespace %s",
-{IIII}local, Namespace, et.Name.Space,
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}if et.Name.Local != local {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected an end element %s, but got an end element %s",
-{IIII}local, et.Name.Local,
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}return
-}}"""
-    )
-
-
 def _generate_error_constructors() -> List[Stripped]:
     """Generate the constructors of the recurring de-serialization errors."""
     return [
@@ -1044,7 +328,7 @@ def _generate_error_constructors() -> List[Stripped]:
             f"""\
 // Report that the required property with the given `name` has not been observed.
 func missingProperty(name string) error {{
-{I}return newDeserializationError(
+{I}return xmlcommon.NewDeserializationError(
 {II}fmt.Sprintf(
 {III}"The required property '%s' is missing",
 {III}name,
@@ -1057,7 +341,7 @@ func missingProperty(name string) error {{
 // Report that the property with the given `local` name has been observed more
 // than once.
 func duplicatePropertyError(local string) error {{
-{I}return newDeserializationError(
+{I}return xmlcommon.NewDeserializationError(
 {II}fmt.Sprintf(
 {III}"Property %s occurred more than once",
 {III}local,
@@ -1070,7 +354,7 @@ func duplicatePropertyError(local string) error {{
 // Report that we got a start element with the `local` name, but expected a start
 // element with the `expectedLocal` name.
 func unexpectedStartElement(local string, expectedLocal string) error {{
-{I}return newDeserializationError(
+{I}return xmlcommon.NewDeserializationError(
 {II}fmt.Sprintf(
 {III}"Expected a start element with local name %s, "+
 {IIII}"but got a start element with local name %s",
@@ -1084,7 +368,7 @@ func unexpectedStartElement(local string, expectedLocal string) error {{
 // Report that the start element with the `local` name does not discriminate any of
 // the alternatives of `expectedType`.
 func unexpectedDiscriminator(local string, expectedType string) error {{
-{I}return newDeserializationError(
+{I}return xmlcommon.NewDeserializationError(
 {II}fmt.Sprintf(
 {III}"Unexpected start element %s as discriminator for %s",
 {III}local, expectedType,
@@ -1097,7 +381,7 @@ func unexpectedDiscriminator(local string, expectedType string) error {{
 // Report that we got an item delimited by a start element with the `local` name,
 // but expected the delimiter with the `expectedLocal` name.
 func unexpectedItemElement(local string, expectedLocal string) error {{
-{I}return newDeserializationError(
+{I}return xmlcommon.NewDeserializationError(
 {II}fmt.Sprintf(
 {III}"Expected start element %s as an item delimiter, "+
 {IIII}"but got %s",
@@ -1107,67 +391,6 @@ func unexpectedItemElement(local string, expectedLocal string) error {{
 }}"""
         ),
     ]
-
-
-def _generate_read_element_dispatched() -> Stripped:
-    """Generate the function to read a single value wrapped in an XML element."""
-    return Stripped(
-        f"""\
-// Read a value wrapped in a single XML element, dispatching on the local name of
-// that element.
-//
-// The element is read in full: the resulting `next` token points to the first token
-// just after the end element.
-//
-// This is the *only* place which frames an XML element around a value. Both
-// [readListOf] and the `readTuple*` functions delegate the framing here, so that
-// a scalar item and an instance item differ only in the given `readByLocal`, and
-// never in the container which reads them.
-//
-// `T` is left unconstrained (instead of `aastypes.IClass`) since this
-// function never invokes any `aastypes.IClass` method on `T` -- this lets it
-// be reused for a scalar and for a named union as well, the latter being
-// deliberately not an `aastypes.IClass` itself.
-func readElementDispatched[T any](
-{I}decoder *xml.Decoder,
-{I}current xml.Token,
-{I}readByLocal func(
-{II}aDecoder *xml.Decoder,
-{II}aCurrent xml.Token,
-{II}aLocal string,
-{I}) (value T, aNext xml.Token, anErr error),
-) (value T, next xml.Token, err error) {{
-{I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}var local string
-{I}local, err = parseAsStartElementAndExtractLocalName(current)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}// Move the current to the content of the XML element
-{I}current, err = readNext(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}value, current, err = readByLocal(decoder, current, local)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}err = checkEndElement(current, local)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}next, err = readNext(decoder, current)
-{I}return
-}}"""
-    )
 
 
 def _generate_read_list_of() -> Stripped:
@@ -1181,7 +404,7 @@ def _generate_read_list_of() -> Stripped:
 //
 // That last non-start element is returned as `next` element.
 //
-// An item is read with [readElementDispatched], so `readItem` decides on its own
+// An item is read with [xmlcommon.ReadElementDispatched], so `readItem` decides on its own
 // which local names it accepts. A list of instances and a list of scalars therefore
 // share this one function: an instance is discriminated by its own element name,
 // while a scalar is expected in an element named `v`.
@@ -1201,7 +424,7 @@ func readListOf[T any](
 ) (values []T, next xml.Token, err error) {{
 {I}i := 0
 {I}for {{
-{II}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+{II}current, err = xmlcommon.SkipEmptyTextWhitespaceAndComments(decoder, current)
 {II}if err != nil {{
 {III}return
 {II}}}
@@ -1212,7 +435,7 @@ func readListOf[T any](
 
 {II}var value T
 {II}var valueErr error
-{II}value, current, valueErr = readElementDispatched(
+{II}value, current, valueErr = xmlcommon.ReadElementDispatched(
 {III}decoder, current, readItem,
 {II})
 {II}if valueErr != nil {{
@@ -1250,7 +473,7 @@ def _generate_read_optional() -> Stripped:
 // The arguments are the *results* of a read, not the reader itself. Go passes
 // a multi-valued call on as a complete argument list, so this composes with any read,
 // no matter how many arguments that read takes on its own --
-// `readOptional(readTextAs_long(decoder, current))` just as much as
+// `readOptional(xmlcommon.ReadTextAs_long(decoder, current))` just as much as
 // `readOptional(readTuple2(decoder, current, readAtV1_X, readAtV2_Y))`, which no
 // reader-taking signature could express, since the item readers of a tuple vary in
 // number and in type.
@@ -1286,12 +509,12 @@ func nextProperty(
 {I}current xml.Token,
 {I}interfaceName string,
 ) (local string, next xml.Token, ok bool, err error) {{
-{I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+{I}current, err = xmlcommon.SkipEmptyTextWhitespaceAndComments(decoder, current)
 {I}if err != nil {{
 {II}return
 {I}}}
 
-{I}if _, isEOF := current.(eof); isEOF {{
+{I}if _, isEOF := current.(xmlcommon.Eof); isEOF {{
 {II}next = current
 {II}return
 {I}}}
@@ -1299,7 +522,7 @@ func nextProperty(
 {I}startElement, isStartElement := current.(xml.StartElement)
 {I}if !isStartElement {{
 {II}if charData, isCharData := current.(xml.CharData); isCharData {{
-{III}err = newDeserializationError(
+{III}err = xmlcommon.NewDeserializationError(
 {IIII}fmt.Sprintf(
 {IIIII}"Expected a sequence of XML elements representing properties "+
 {IIIIII}"of %s, but got text: %s",
@@ -1313,13 +536,13 @@ func nextProperty(
 {II}return
 {I}}}
 
-{I}local, err = extractLocalNameFromStartElement(startElement)
+{I}local, err = xmlcommon.ExtractLocalNameFromStartElement(startElement)
 {I}if err != nil {{
 {II}return
 {I}}}
 
 {I}// Move the current to the content of the XML element
-{I}next, err = readNext(decoder, current)
+{I}next, err = xmlcommon.ReadNext(decoder, current)
 {I}if err != nil {{
 {II}return
 {I}}}
@@ -1356,17 +579,17 @@ func concludeProperty(
 {II}return
 {I}}}
 
-{I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+{I}current, err = xmlcommon.SkipEmptyTextWhitespaceAndComments(decoder, current)
 {I}if err != nil {{
 {II}return
 {I}}}
 
-{I}err = checkEndElement(current, local)
+{I}err = xmlcommon.CheckEndElement(current, local)
 {I}if err != nil {{
 {II}return
 {I}}}
 
-{I}next, err = readNext(decoder, current)
+{I}next, err = xmlcommon.ReadNext(decoder, current)
 {I}return
 }}"""
     )
@@ -1395,7 +618,7 @@ def _generate_read_tuple_helper(arity: int) -> Stripped:
             Stripped(
                 f"""\
 var item{i + 1} {type_params[i]}
-item{i + 1}, current, err = readElementDispatched(
+item{i + 1}, current, err = xmlcommon.ReadElementDispatched(
 {I}decoder, current, readItem{i + 1},
 )
 if err != nil {{
@@ -1420,7 +643,7 @@ if err != nil {{
 // Read a tuple of {arity} item(s) with `readItem1`, `readItem2`, *etc.* on
 // the correspondingly positioned item, or return an error.
 //
-// Each item is framed by [readElementDispatched], so an item reader accepts or
+// Each item is framed by [xmlcommon.ReadElementDispatched], so an item reader accepts or
 // rejects the positional element name (`v1`, `v2`, *etc.*) on its own for a scalar
 // item, and discriminates on the class element name for an instance item.
 func {function_name}[{type_params_joined}](
@@ -1468,7 +691,7 @@ func {function_name}(
 {I}err error,
 ) {{
 {I}var text string
-{I}text, next, err = readText(decoder, current)
+{I}text, next, err = xmlcommon.ReadText(decoder, current)
 {I}if err != nil {{
 {II}return
 {I}}}
@@ -1476,7 +699,7 @@ func {function_name}(
 {I}var ok bool
 {I}value, ok = aasstringification.{from_string_name}(text)
 {I}if !ok {{
-{II}err = newDeserializationError(
+{II}err = xmlcommon.NewDeserializationError(
 {III}fmt.Sprintf(
 {IIII}"Unexpected literal of {enum_name}: %v",
 {IIII}text,
@@ -1491,11 +714,11 @@ func {function_name}(
 
 
 _READ_FUNCTION_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: "readTextAs_bool",
-    intermediate.PrimitiveType.INT: "readTextAs_long",
-    intermediate.PrimitiveType.FLOAT: "readTextAs_double",
-    intermediate.PrimitiveType.STR: "readText",
-    intermediate.PrimitiveType.BYTEARRAY: "readTextAs_bytes",
+    intermediate.PrimitiveType.BOOL: "xmlcommon.ReadTextAs_bool",
+    intermediate.PrimitiveType.INT: "xmlcommon.ReadTextAs_long",
+    intermediate.PrimitiveType.FLOAT: "xmlcommon.ReadTextAs_double",
+    intermediate.PrimitiveType.STR: "xmlcommon.ReadText",
+    intermediate.PrimitiveType.BYTEARRAY: "xmlcommon.ReadTextAs_bytes",
 }
 assert all(
     literal in _READ_FUNCTION_BY_PRIMITIVE_TYPE
@@ -1517,6 +740,129 @@ def _read_text_function(type_anno: intermediate.AtomicTypeAnnotation) -> Strippe
     )
 
     return Stripped(_enum_text_reader_name(type_anno.our_type))
+
+
+def _generate_json_value_readers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the readers which hand a JSON-able value over to ``xmlrpc``.
+
+    These three give the readers of the ``xmlrpc`` package the names which
+    this module's own registry of the readers expects.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+// Read the content of an element holding a JSON-able value.
+//
+// The content is a single discriminator element -- `<boolean>`, `<double>`,
+// `<string>`, `<array>` or `<struct>` -- which says what the value is.
+//
+// The `current` token is expected to point to the content of the enclosing
+// element, and the resulting `next` token points to its end element.
+func readJsonValue(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+) (value aastypes.JsonValue, next xml.Token, err error) {{
+{I}return xmlrpc.ReadValueContent(decoder, current)
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the content of an element holding a JSON-able array.
+//
+// The content is a single `<data>` element holding a `<value>` per item.
+func readJsonArray(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+) (value aastypes.JsonArray, next xml.Token, err error) {{
+{I}return xmlrpc.ReadArrayContent(decoder, current)
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Read the content of an element holding a JSON-able object.
+//
+// The content is a `<member>` per key, each holding a `<name>` and
+// a `<value>`.
+func readJsonObject(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+) (value aastypes.JsonObject, next xml.Token, err error) {{
+{I}return xmlrpc.ReadObjectContent(decoder, current)
+}}"""
+        ),
+    ]
+
+
+def _generate_json_value_writers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the writers of an optional property holding a JSON-able value.
+
+    The writing itself is the ``xmlrpc`` package's, and needs no namespace --
+    every element it writes inherits the default namespace which the enclosing
+    element has declared. Only the two ``writeOptional*`` functions belong
+    here, as it is a *property* of one of our classes which is optional, and
+    not a JSON-able value of its own.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+// Write the optional `that` as an XML element with the `local` name, or write
+// nothing at all if it is not set.
+//
+// Do not flush.
+//
+// A JSON-able value is an `any`, and a JSON-able object is a map. Neither can
+// go through [writeOptionalInstance], which compares against the zero value:
+// that comparison panics at runtime as soon as the `any` holds a slice or
+// a map. Both are nil on their own, though, so a plain comparison against nil
+// answers here. A JSON-able array is a slice and goes through
+// [writeOptionalSlice] like any other.
+func writeOptionalJsonValue(
+{I}encoder *xml.Encoder,
+{I}local string,
+{I}that aastypes.JsonValue,
+{I}writeContent func(anEncoder *xml.Encoder, aValue aastypes.JsonValue) (anErr error),
+) (err error) {{
+{I}if that == nil {{
+{II}return
+{I}}}
+
+{I}return xmlcommon.WriteElement(encoder, local, that, writeContent)
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Write the optional `that` as an XML element with the `local` name, or write
+// nothing at all if it is not set.
+//
+// Do not flush.
+//
+// See the note on [writeOptionalJsonValue] on why a map needs its own function.
+func writeOptionalJsonObject(
+{I}encoder *xml.Encoder,
+{I}local string,
+{I}that aastypes.JsonObject,
+{I}writeContent func(anEncoder *xml.Encoder, aValue aastypes.JsonObject) (anErr error),
+) (err error) {{
+{I}if that == nil {{
+{II}return
+{I}}}
+
+{I}return xmlcommon.WriteElement(encoder, local, that, writeContent)
+}}"""
+        ),
+    ]
 
 
 def _item_reader_name(
@@ -1543,6 +889,26 @@ def _item_reader_name(
         )
 
     return Stripped(_scalar_item_reader_name(type_anno, element_name))
+
+
+def _scalar_content_reader(type_anno: intermediate.AtomicTypeAnnotation) -> Stripped:
+    """
+    Determine the reader of the content of an element holding ``type_anno``.
+
+    A primitive, a constrained primitive and an enumeration are read from
+    the element's text; a JSON-able value is read over the XML-RPC subset -- see
+    :py:func:`_generate_json_value_readers`.
+    """
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("readJsonValue")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("readJsonArray")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("readJsonObject")
+
+    return _read_text_function(type_anno)
 
 
 def _generate_read_scalar_item(scalar_item: _ScalarItem) -> Stripped:
@@ -1576,7 +942,7 @@ func {function_name}(
 {II}return
 {I}}}
 
-{I}return {_read_text_function(scalar_item.type_anno)}(decoder, current)
+{I}return {_scalar_content_reader(scalar_item.type_anno)}(decoder, current)
 }}"""
     )
 
@@ -1652,7 +1018,7 @@ def _generate_snippet_to_switch_on_property_deserialization(
 
                     case_body = Stripped(
                         f"""\
-{prop_var}, current, valueErr = readElementDispatched(
+{prop_var}, current, valueErr = xmlcommon.ReadElementDispatched(
 {I}decoder, current, {read_dispatched},
 )"""
                     )
@@ -1734,6 +1100,32 @@ readTuple{arity}(
             else:
                 case_body = Stripped(f"{prop_var}, current, valueErr = {read_tuple}")
 
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            json_reader: str
+            if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+                json_reader = "readJsonValue"
+            elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+                json_reader = "readJsonArray"
+            else:
+                json_reader = "readJsonObject"
+
+            # NOTE (mristin):
+            # All three JSON-able types are nilable in Go, so an optional one is
+            # never a pointer and goes through no ``readOptional``.
+            case_body = Stripped(
+                f"""\
+{prop_var}, current, valueErr = {json_reader}(
+{I}decoder, current,
+)"""
+            )
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno)
@@ -1771,7 +1163,7 @@ case {xml_prop_literal}:
         Stripped(
             f"""\
 default:
-{I}valueErr = newDeserializationError(
+{I}valueErr = xmlcommon.NewDeserializationError(
 {II}"Unexpected property",
 {I})"""
         )
@@ -1961,7 +1353,7 @@ def _generate_read_dispatched(
     knowing anything about it.
 
     The element framing is deliberately *not* part of the generated function. It lives
-    in ``readElementDispatched`` alone (see
+    in ``xmlcommon.ReadElementDispatched`` alone (see
     :py:func:`_generate_read_element_dispatched`), which every container delegates to.
     """
     if isinstance(our_type, intermediate.NamedUnion):
@@ -2098,7 +1490,7 @@ case {xml_class_name_literal}:
         Stripped(
             f"""\
 default:
-{I}err = newDeserializationError(
+{I}err = xmlcommon.NewDeserializationError(
 {II}fmt.Sprintf(
 {III}"Unexpected XML element name %s as class discriminator",
 {III}local,
@@ -2142,12 +1534,12 @@ func Unmarshal(
 {I}decoder *xml.Decoder,
 ) (instance aastypes.IClass, err error) {{
 {I}var current xml.Token
-{I}current, err = readNext(decoder, nil)
+{I}current, err = xmlcommon.ReadNext(decoder, nil)
 {I}if err != nil {{
 {II}return
 {I}}}
 
-{I}instance, _, err = readElementDispatched(
+{I}instance, _, err = xmlcommon.ReadElementDispatched(
 {II}decoder, current, readClassDispatched,
 {I})
 {I}return
@@ -2158,271 +1550,6 @@ func Unmarshal(
 # endregion
 
 # region Serialization
-
-
-def _generate_serialization_error() -> List[Stripped]:
-    return [
-        Stripped(
-            f"""\
-// Represent an error during the serialization.
-//
-// Implements `error`.
-type SerializationError struct {{
-{I}Path    *aasreporting.Path
-{I}Message string
-}}"""
-        ),
-        Stripped(
-            f"""\
-func newSerializationError(message string) *SerializationError {{
-{I}return &SerializationError{{
-{II}Path:    &aasreporting.Path{{}},
-{II}Message: message,
-{I}}}
-}}"""
-        ),
-        Stripped(
-            f"""\
-func (se *SerializationError) Error() string {{
-{I}return fmt.Sprintf(
-{II}"%s: %s",
-{II}se.PathString(),
-{II}se.Message,
-{I})
-}}"""
-        ),
-        Stripped(
-            f"""\
-// Render the path as a string.
-func (se *SerializationError) PathString() string {{
-{I}return aasreporting.ToGolangPath(se.Path)
-}}"""
-        ),
-    ]
-
-
-def _generate_write_start_element() -> Stripped:
-    return Stripped(
-        f"""\
-// Write the start element with the given `local` name to the encoder.
-//
-// Do not flush.
-//
-// If the `withNamespace` is set, set the [xml.Name.Space] property in the element
-// accordingly.
-func writeStartElement(
-{I}encoder *xml.Encoder,
-{I}local string,
-{I}withNamespace bool,
-) (err error) {{
-{I}startElement := xml.StartElement{{Name: xml.Name{{Local: local}}}}
-{I}if withNamespace {{
-{II}startElement.Name.Space = Namespace
-{I}}}
-
-{I}err = encoder.EncodeToken(startElement)
-{I}return
-}}"""
-    )
-
-
-def _generate_write_end_element() -> Stripped:
-    return Stripped(
-        f"""\
-// Write the end element with the given `local` name to the encoder.
-//
-// Do not flush.
-//
-// If the `withNamespace` is set, set the [xml.Name.Space] property in the element
-// accordingly.
-func writeEndElement(
-{I}encoder *xml.Encoder,
-{I}local string,
-{I}withNamespace bool,
-) (err error) {{
-{I}endElement := xml.EndElement{{Name: xml.Name{{Local: local}}}}
-{I}if withNamespace {{
-{II}endElement.Name.Space = Namespace
-{I}}}
-
-{I}err = encoder.EncodeToken(endElement)
-{I}return
-}}"""
-    )
-
-
-def _generate_write_text() -> Stripped:
-    return Stripped(
-        f"""\
-// Write the `text` to the encoder.
-//
-// Do not flush.
-//
-// If `text` is empty, do nothing.
-func writeText(
-{I}encoder *xml.Encoder,
-{I}text string,
-) (err error) {{
-{I}if len(text) > 0 {{
-{II}err = encoder.EncodeToken(
-{III}xml.CharData([]byte(text)),
-{II})
-{I}}}
-{I}return
-}}"""
-    )
-
-
-def _generate_write_as_text_bool() -> Stripped:
-    return Stripped(
-        f"""\
-// Write the `value` as a `xs:boolean` in a text element.
-//
-// Do not flush.
-func writeAsText_bool(
-{I}encoder *xml.Encoder,
-{I}value bool,
-) (err error) {{
-{I}text := "true"
-{I}if !value {{
-{II}text = "false"
-{I}}}
-{I}err = writeText(encoder, text)
-{I}return
-}}"""
-    )
-
-
-def _generate_write_as_text_long() -> Stripped:
-    return Stripped(
-        f"""\
-// Write the `value` as a `xs:long` in a text element.
-//
-// Do not flush.
-func writeAsText_long(
-{I}encoder *xml.Encoder,
-{I}value int64,
-) (err error) {{
-{I}text := strconv.FormatInt(value, 10)
-{I}err = writeText(encoder, text)
-{I}return
-}}"""
-    )
-
-
-def _generate_write_as_text_double() -> Stripped:
-    return Stripped(
-        f"""\
-// Write the `value` as a `xs:double` in a text element.
-//
-// Do not flush.
-func writeAsText_double(
-{I}encoder *xml.Encoder,
-{I}value float64,
-) (err error) {{
-{I}var text string
-
-{I}// See: https://www.w3.org/TR/xmlschema-2/#double
-{I}// for the exact literals.
-{I}if math.IsInf(value, 0) {{
-{II}if value < 0 {{
-{III}text = "-INF"
-{II}}} else {{
-{III}text = "INF"
-{II}}}
-{I}}} else if math.IsNaN(value) {{
-{II}text = "NaN"
-{I}}} else {{
-{II}text = strconv.FormatFloat(value, 'g', -1, 64)
-{I}}}
-
-{I}err = writeText(encoder, text)
-{I}return
-}}"""
-    )
-
-
-def _generate_write_as_text_string() -> Stripped:
-    return Stripped(
-        f"""\
-// Write the `value` as a `xs:string` in a text element.
-//
-// Do not flush.
-func writeAsText_string(
-{I}encoder *xml.Encoder,
-{I}value string,
-) (err error) {{
-{I}err = writeText(encoder, value)
-{I}return
-}}"""
-    )
-
-
-def _generate_write_as_text_bytes() -> Stripped:
-    return Stripped(
-        f"""\
-// Write the `value` as a base64-encoded bytes in a text element.
-//
-// Do not flush.
-func writeAsText_bytes(
-{I}encoder *xml.Encoder,
-{I}value []byte,
-) (err error) {{
-{I}text := b64.StdEncoding.EncodeToString(
-{II}value,
-{I})
-
-{I}err = writeText(encoder, text)
-{I}return
-}}"""
-    )
-
-
-def _generate_write_element() -> Stripped:
-    """
-    Generate the single function which frames an XML element around a value.
-
-    Everything else in the serialization only decides *what* is written --
-    the framing itself lives here, so that a property, a list item and
-    a tuple item differ solely in the given content writer. An optional
-    property goes through the ``writeOptional*`` family instead, which
-    calls this function only if the value is set.
-    """
-    return Stripped(
-        f"""\
-// Write `that` as an XML element with the `local` name, its content written by
-// `writeContent`.
-//
-// Do not flush.
-//
-// This is the one place which frames an XML element around a *value*: a property,
-// a list item and a tuple item all go through it, and differ only in the given
-// `writeContent`. A list frames its own element in [writeList], and an instance
-// the element naming its model type in [writeClassElement], as neither of the two
-// can be reduced to a content writer without allocating a closure.
-//
-// The XML namespace is expected to have been defined outside of the resulting XML
-// element.
-func writeElement[T any](
-{I}encoder *xml.Encoder,
-{I}local string,
-{I}that T,
-{I}writeContent func(anEncoder *xml.Encoder, aValue T) (anErr error),
-) (err error) {{
-{I}err = writeStartElement(encoder, local, false)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}err = writeContent(encoder, that)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}err = writeEndElement(encoder, local, false)
-{I}return
-}}"""
-    )
 
 
 def _generate_write_optional_pointer() -> Stripped:
@@ -2471,7 +1598,7 @@ func writeOptionalPointer[T any](
 {II}return
 {I}}}
 
-{I}return writeElement(encoder, local, *that, writeContent)
+{I}return xmlcommon.WriteElement(encoder, local, *that, writeContent)
 }}"""
     )
 
@@ -2506,7 +1633,7 @@ func writeOptionalInstance[T any](
 {II}return
 {I}}}
 
-{I}return writeElement(encoder, local, that, writeContent)
+{I}return xmlcommon.WriteElement(encoder, local, that, writeContent)
 }}"""
     )
 
@@ -2535,7 +1662,7 @@ func writeOptionalSlice[T any](
 {II}return
 {I}}}
 
-{I}return writeElement(encoder, local, that, writeContent)
+{I}return xmlcommon.WriteElement(encoder, local, that, writeContent)
 }}"""
     )
 
@@ -2748,9 +1875,9 @@ def _generate_write_class_element() -> Stripped:
 //
 // If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
 //
-// Unlike [writeElement], which frames a *property*, this function frames an instance
-// in the element which discriminates its model type, and is therefore the one place
-// where the XML namespace can be set.
+// Unlike [xmlcommon.WriteElement], which frames a *property*, this function frames
+// an instance in the element which discriminates its model type, and is therefore
+// the one place where the XML namespace can be set.
 func writeClassElement[T any](
 {I}encoder *xml.Encoder,
 {I}local string,
@@ -2758,7 +1885,7 @@ func writeClassElement[T any](
 {I}that T,
 {I}writeTAsSequence func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {{
-{I}err = writeStartElement(encoder, local, withNamespace)
+{I}err = xmlcommon.WriteStartElement(encoder, local, withNamespace)
 {I}if err != nil {{
 {II}return
 {I}}}
@@ -2768,7 +1895,7 @@ func writeClassElement[T any](
 {II}return
 {I}}}
 
-{I}err = writeEndElement(encoder, local, withNamespace)
+{I}err = xmlcommon.WriteEndElement(encoder, local, withNamespace)
 {I}return
 }}"""
     )
@@ -2798,7 +1925,7 @@ func {function_name}(
 {II}value,
 {I})
 {I}if !ok {{
-{II}err = newSerializationError(
+{II}err = xmlcommon.NewSerializationError(
 {III}fmt.Sprintf(
 {IIII}"Unexpected literal of {enum_name}: %v",
 {IIII}value,
@@ -2807,18 +1934,18 @@ func {function_name}(
 {II}return
 {I}}}
 
-{I}err = writeText(encoder, text)
+{I}err = xmlcommon.WriteText(encoder, text)
 {I}return
 }}"""
     )
 
 
 _WRITE_FUNCTION_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: "writeAsText_bool",
-    intermediate.PrimitiveType.INT: "writeAsText_long",
-    intermediate.PrimitiveType.FLOAT: "writeAsText_double",
-    intermediate.PrimitiveType.STR: "writeAsText_string",
-    intermediate.PrimitiveType.BYTEARRAY: "writeAsText_bytes",
+    intermediate.PrimitiveType.BOOL: "xmlcommon.WriteAsText_bool",
+    intermediate.PrimitiveType.INT: "xmlcommon.WriteAsText_long",
+    intermediate.PrimitiveType.FLOAT: "xmlcommon.WriteAsText_double",
+    intermediate.PrimitiveType.STR: "xmlcommon.WriteAsText_string",
+    intermediate.PrimitiveType.BYTEARRAY: "xmlcommon.WriteAsText_bytes",
 }
 assert all(
     literal in _WRITE_FUNCTION_BY_PRIMITIVE_TYPE
@@ -2842,6 +1969,67 @@ def _write_text_function(type_anno: intermediate.AtomicTypeAnnotation) -> Stripp
     return Stripped(_enum_text_writer_name(type_anno.our_type))
 
 
+def _content_writer_expr(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
+    """
+    Determine the writer of the content of an XML element holding ``type_anno``.
+
+    Mind the difference to :py:func:`_item_writer_expr`: an instance embedded in
+    the element of its property writes only its sequence of properties, while
+    an item of a list or of a tuple writes its own element on top of it.
+    """
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return Stripped(_WRITE_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type])
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple)
+        return _list_content_writer_name(type_anno.items)
+
+    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        return _tuple_content_writer_name(type_anno)
+
+    if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        return Stripped("xmlrpc.WriteValueContent")
+
+    if isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("xmlrpc.WriteArrayContent")
+
+    if isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("xmlrpc.WriteObjectContent")
+
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Unexpected type annotation for a content writer: {type_anno}"
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        return _write_text_function(type_anno)
+
+    golang_type = golang_common.generate_type(
+        type_annotation=type_anno, types_package=Identifier("aastypes")
+    )
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return Stripped(f"writeUnion[{golang_type}]")
+
+    assert isinstance(
+        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+    ), f"Unexpected our type for a content writer: {our_type}"
+
+    if _requires_dispatch(type_anno):
+        return Stripped(f"writeInstance[{golang_type}]")
+
+    # NOTE (mristin):
+    # A concrete class without any concrete descendant is embedded directly in
+    # the element of its property, so its sequence of properties *is* the content.
+    return Stripped(
+        golang_naming.private_function_name(
+            Identifier(f"write_{our_type.name}_as_sequence")
+        )
+    )
+
+
 def _generate_write_scalar_item(scalar_item: _ScalarItem) -> Stripped:
     """Generate the function to write a scalar item in a fixed element name."""
     function_name = _scalar_item_writer_name(
@@ -2859,7 +2047,7 @@ def _generate_write_scalar_item(scalar_item: _ScalarItem) -> Stripped:
             "encoder",
             element_name_literal,
             "value",
-            _write_text_function(scalar_item.type_anno),
+            _content_writer_expr(scalar_item.type_anno),
         ],
         indention=2,
     )
@@ -2873,7 +2061,7 @@ func {function_name}(
 {I}encoder *xml.Encoder,
 {I}value {value_type},
 ) error {{
-{I}return writeElement(
+{I}return xmlcommon.WriteElement(
 {II}{indent_but_first_line(arguments_joined, II)}
 {I})
 }}"""
@@ -2984,58 +2172,6 @@ func {_tuple_content_writer_name(type_anno)}(
     )
 
 
-def _content_writer_expr(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
-    """
-    Determine the writer of the content of an XML element holding ``type_anno``.
-
-    Mind the difference to :py:func:`_item_writer_expr`: an instance embedded in
-    the element of its property writes only its sequence of properties, while
-    an item of a list or of a tuple writes its own element on top of it.
-    """
-    primitive_type = intermediate.try_primitive_type(type_anno)
-    if primitive_type is not None:
-        return Stripped(_WRITE_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type])
-
-    if isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple)
-        return _list_content_writer_name(type_anno.items)
-
-    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        return _tuple_content_writer_name(type_anno)
-
-    assert isinstance(
-        type_anno, intermediate.OurTypeAnnotation
-    ), f"Unexpected type annotation for a content writer: {type_anno}"
-
-    our_type = type_anno.our_type
-
-    if isinstance(our_type, intermediate.Enumeration):
-        return _write_text_function(type_anno)
-
-    golang_type = golang_common.generate_type(
-        type_annotation=type_anno, types_package=Identifier("aastypes")
-    )
-
-    if isinstance(our_type, intermediate.NamedUnion):
-        return Stripped(f"writeUnion[{golang_type}]")
-
-    assert isinstance(
-        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-    ), f"Unexpected our type for a content writer: {our_type}"
-
-    if _requires_dispatch(type_anno):
-        return Stripped(f"writeInstance[{golang_type}]")
-
-    # NOTE (mristin):
-    # A concrete class without any concrete descendant is embedded directly in
-    # the element of its property, so its sequence of properties *is* the content.
-    return Stripped(
-        golang_naming.private_function_name(
-            Identifier(f"write_{our_type.name}_as_sequence")
-        )
-    )
-
-
 def _wrap_in_finish_property(getter_name: Identifier, write_expr: Stripped) -> Stripped:
     """
     Conclude the ``write_expr`` of the property with the given ``getter_name``.
@@ -3086,7 +2222,7 @@ def _generate_snippet_to_serialize_property(
     optional = isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
 
     if not optional:
-        function_name = "writeElement"
+        function_name = "xmlcommon.WriteElement"
     elif golang_pointering.is_pointer_type(prop.type_annotation):
         function_name = "writeOptionalPointer"
     elif isinstance(
@@ -3095,6 +2231,14 @@ def _generate_snippet_to_serialize_property(
         intermediate.PrimitiveType.BYTEARRAY
     ):
         function_name = "writeOptionalSlice"
+    elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        function_name = "writeOptionalJsonValue"
+    elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        # NOTE (mristin):
+        # A JSON-able array is a slice like any other.
+        function_name = "writeOptionalSlice"
+    elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        function_name = "writeOptionalJsonObject"
     else:
         assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
             type_anno.our_type,
@@ -3239,7 +2383,7 @@ case aastypes.{model_type_literal}:
         Stripped(
             f"""\
 default:
-{I}err = newSerializationError(
+{I}err = xmlcommon.NewSerializationError(
 {II}fmt.Sprintf(
 {III}"Unexpected model type: %v",
 {III}that.ModelType(),
@@ -3304,6 +2448,12 @@ func Marshal(
 
 # endregion
 
+#: Stand in for the import block, which is filled in at the very end: it
+#: depends on what the generated code actually names, and an unused import does
+#: not compile in Go.
+_IMPORT_PLACEHOLDER = Stripped("")
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -3319,17 +2469,19 @@ def generate(
     """Generate code for XML de/serialization."""
     aascommon_url_literal = golang_common.string_literal(f"{repo_url}/common")
 
-    aastypes_url_literal = golang_common.string_literal(f"{repo_url}/types")
-
     aasreporting_url_literal = golang_common.string_literal(f"{repo_url}/reporting")
 
     aasstringification_url_literal = golang_common.string_literal(
         f"{repo_url}/stringification"
     )
 
-    namespace_literal = golang_common.string_literal(
-        symbol_table.meta_model.xml_namespace
+    aastypes_url_literal = golang_common.string_literal(f"{repo_url}/types")
+
+    xmlcommon_url_literal = golang_common.string_literal(
+        f"{repo_url}/internal/xmlcommon"
     )
+
+    xmlrpc_url_literal = golang_common.string_literal(f"{repo_url}/xmlrpc")
 
     blocks = [
         Stripped(
@@ -3342,56 +2494,25 @@ def generate(
 package xmlization"""
         ),
         golang_common.WARNING,
+        _IMPORT_PLACEHOLDER,
         Stripped(
-            f"""\
-import (
-{I}b64 "encoding/base64"
-{I}"encoding/xml"
-{I}"errors"
-{I}"fmt"
-{I}"io"
-{I}"math"
-{I}"regexp"
-{I}"strconv"
-{I}"strings"
-{I}"unicode"
-{I}aascommon {aascommon_url_literal}
-{I}aasreporting {aasreporting_url_literal}
-{I}aasstringification {aasstringification_url_literal}
-{I}aastypes {aastypes_url_literal}
-)"""
+            """\
+// Namespace is the XML namespace in which all the elements live.
+const Namespace = xmlcommon.Namespace"""
         ),
         Stripped("// region De-serialization"),
+        Stripped(
+            """\
+// Represent an error during the de-serialization.
+//
+// Implements `error`.
+type DeserializationError = xmlcommon.DeserializationError"""
+        ),
     ]
-
-    blocks.extend(_generate_deserialization_error_and_its_methods())
 
     blocks.extend(
         [
-            Stripped(
-                """\
-// This is class for a sentinel token to signal the end-of-file.
-type eof struct{}"""
-            ),
-            _generate_is_whitespace(),
-            _generate_read_next(),
-            _generate_skip_empty_text_whitespace_and_comments(),
-            _generate_read_text(),
-            _generate_read_text_as_bool(),
-            _generate_read_text_as_long(),
-            *_generate_is_valid_xs_double(),
-            _generate_read_text_as_double(),
-            _generate_read_text_as_bytes(),
-            Stripped(
-                f"""\
-const Namespace = {namespace_literal}"""
-            ),
-            _generate_check_start_element(),
-            _generate_extract_local_name_from_start_element(),
-            _generate_parse_as_start_element_and_extract_local_name(),
-            _generate_check_end_element(),
             *_generate_error_constructors(),
-            _generate_read_element_dispatched(),
             _generate_read_list_of(),
             _generate_read_optional(),
             _generate_next_property(),
@@ -3400,6 +2521,8 @@ const Namespace = {namespace_literal}"""
     )
 
     requirements = _collect_requirements(symbol_table)
+
+    blocks.extend(_generate_json_value_readers(symbol_table=symbol_table))
 
     for scalar_item in requirements.scalar_items:
         blocks.append(_generate_read_scalar_item(scalar_item=scalar_item))
@@ -3439,19 +2562,18 @@ const Namespace = {namespace_literal}"""
 
     blocks.append(Stripped("// region Serialization"))
 
-    blocks.extend(_generate_serialization_error())
+    blocks.append(
+        Stripped(
+            """\
+// Represent an error during the serialization.
+//
+// Implements `error`.
+type SerializationError = xmlcommon.SerializationError"""
+        )
+    )
 
     blocks.extend(
         [
-            _generate_write_start_element(),
-            _generate_write_end_element(),
-            _generate_write_text(),
-            _generate_write_as_text_bool(),
-            _generate_write_as_text_long(),
-            _generate_write_as_text_double(),
-            _generate_write_as_text_string(),
-            _generate_write_as_text_bytes(),
-            _generate_write_element(),
             _generate_write_optional_pointer(),
             _generate_write_optional_instance(),
             _generate_write_optional_slice(),
@@ -3465,6 +2587,8 @@ const Namespace = {namespace_literal}"""
     if len(symbol_table.named_unions) > 0:
         blocks.append(_generate_named_union_constraint())
         blocks.append(_generate_write_union())
+
+    blocks.extend(_generate_json_value_writers(symbol_table=symbol_table))
 
     for scalar_item in requirements.scalar_items:
         blocks.append(_generate_write_scalar_item(scalar_item=scalar_item))
@@ -3522,6 +2646,27 @@ const Namespace = {namespace_literal}"""
         return None, errors
 
     blocks.append(golang_common.WARNING)
+
+    import_index = blocks.index(_IMPORT_PLACEHOLDER)
+
+    import_lines = []  # type: List[str]
+    for module, literal in (
+        ("xml", f'{I}"encoding/xml"'),
+        ("fmt", f'{I}"fmt"'),
+        ("aascommon", f"{I}aascommon {aascommon_url_literal}"),
+        ("aasreporting", f"{I}aasreporting {aasreporting_url_literal}"),
+        (
+            "aasstringification",
+            f"{I}aasstringification {aasstringification_url_literal}",
+        ),
+        ("aastypes", f"{I}aastypes {aastypes_url_literal}"),
+        ("xmlcommon", f"{I}xmlcommon {xmlcommon_url_literal}"),
+        ("xmlrpc", f"{I}xmlrpc {xmlrpc_url_literal}"),
+    ):
+        if golang_common.names_package(blocks, module):
+            import_lines.append(literal)
+
+    blocks[import_index] = Stripped("import (\n" + "\n".join(import_lines) + "\n)")
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

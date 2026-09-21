@@ -23,86 +23,18 @@ import dummy.types.enums.*;
 import dummy.types.impl.*;
 import dummy.types.model.*;
 import dummy.visitation.*;
+import dummy.xmlcommon.XmlCommon;
 
 /**
  * Provide de/serialization of meta-model classes to/from XML.
  */
 public class Xmlization {
   /**
-   * Represent a critical error during the deserialization.
-   */
-  @SuppressWarnings("serial")
-  public static class DeserializeException extends RuntimeException {
-    private final String path;
-    private final String reason;
-
-    public DeserializeException(String path, String reason) {
-      super(reason + " at: " + ("".equals(path) ? "the beginning" : path));
-      this.path = path;
-      this.reason = reason;
-    }
-
-    public Optional<String> getPath() {
-      return Optional.ofNullable(path);
-    }
-
-    public Optional<String> getReason() {
-      return Optional.ofNullable(reason);
-    }
-  }
-
-  /**
-   * Represent a critical error during the serialization.
-   */
-  @SuppressWarnings("serial")
-  public static class SerializeException extends RuntimeException {
-    private final String path;
-    private final String reason;
-
-    public SerializeException(String path, String reason) {
-      super(reason + " at: " + ("".equals(path) ? "the beginning" : path));
-      this.path = path;
-      this.reason = reason;
-    }
-
-    public Optional<String> getPath() {
-      return Optional.ofNullable(path);
-    }
-
-    public Optional<String> getReason() {
-      return Optional.ofNullable(reason);
-    }
-  }
-
-  /**
-   * Signal a failure of the serialization, carrying the path to the culprit.
-   *
-   * <p>The path is built as the stack unwinds -- every container prepends
-   * the one segment it knows, the property its name and the list the index
-   * of the item -- which is why this can not be a
-   * {@link SerializeException} already: that one renders its message in
-   * its constructor, so its path has to be complete by then.
-   * {@link Serialize#to} renders and converts.
-   */
-  @SuppressWarnings("serial")
-  private static class _SerializeFailure extends RuntimeException {
-    private final Reporting.Error error;
-
-    _SerializeFailure(Reporting.Error error) {
-      super(error.getCause());
-      this.error = error;
-    }
-
-    Reporting.Error getError() {
-      return error;
-    }
-  }
-
-  /**
    * The XML namespace of the meta-model
    */
   public static final String AAS_NAME_SPACE =
-    "https://dummy.com";
+    XmlCommon.NAMESPACE;
+
 
   /**
    * Implement the deserialization of meta-model classes from XML.
@@ -120,128 +52,10 @@ public class Xmlization {
    */
   private static class _DeserializeImplementation
   {
-    private static XMLEvent currentEvent(XMLEventReader reader) {
-      try {
-        return reader.peek();
-      } catch (XMLStreamException xmlStreamException) {
-        throw new Xmlization.DeserializeException("",
-          "Failed in method peek because of: " +
-          xmlStreamException.getMessage());
-      }
-    }
-
-    private static String getEventTypeAsString(XMLEvent event) {
-      switch (event.getEventType()) {
-        case XMLStreamConstants.START_ELEMENT:
-          return "Start-Element";
-        case XMLStreamConstants.END_ELEMENT:
-          return "End-Element";
-        case XMLStreamConstants.PROCESSING_INSTRUCTION:
-          return "Processing-Instruction";
-        case XMLStreamConstants.CHARACTERS:
-          return "Characters";
-        case XMLStreamConstants.COMMENT:
-          return "Comment";
-        case XMLStreamConstants.SPACE:
-          return "Space";
-        case XMLStreamConstants.START_DOCUMENT:
-          return "Start-Document";
-        case XMLStreamConstants.END_DOCUMENT:
-          return "End-Document";
-        case XMLStreamConstants.ENTITY_REFERENCE:
-          return "Entity-Reference";
-        case XMLStreamConstants.ATTRIBUTE:
-          return "Attribute";
-        case XMLStreamConstants.NOTATION_DECLARATION:
-          return "Notation-Declaration";
-        default:
-          return "Unknown-Type";
-      }
-    }
-
-    private static boolean isEmptyElement(XMLEventReader reader) {
-      // Skip the element node and go to the content
-      try {
-        reader.nextEvent();
-      } catch (XMLStreamException xmlStreamException) {
-        throw new Xmlization.DeserializeException("",
-          "Failed in method isEmptyElement because of: " +
-          xmlStreamException.getMessage());
-      }
-      return currentEvent(reader).isEndElement();
-    }
-
-    private static void skipWhitespaceAndComments(XMLEventReader reader) {
-      while (whiteSpaceOrComment(reader)) {
-        reader.next();
-      }
-    }
-
-    private static boolean whiteSpaceOrComment(XMLEventReader reader) {
-      final XMLEvent currentEvent = currentEvent(reader);
-      final boolean isComment = (currentEvent != null &&
-        currentEvent.getEventType() == XMLStreamConstants.COMMENT);
-      final boolean isWhiteSpace = (currentEvent != null &&
-        currentEvent.getEventType() == XMLStreamConstants.CHARACTERS &&
-        currentEvent.asCharacters().isWhiteSpace());
-      return isComment || isWhiteSpace;
-    }
-
     private static void skipStartDocument(XMLEventReader reader){
-      if (currentEvent(reader).isStartDocument()){
+      if (XmlCommon.currentEvent(reader).isStartDocument()){
         reader.next();
       }
-    }
-
-    private static boolean invalidNameSpace(XMLEvent event) {
-      if (event.isStartElement()) {
-        return !AAS_NAME_SPACE.equals(event.asStartElement().getName().getNamespaceURI());
-      } else {
-        return !AAS_NAME_SPACE.equals(event.asEndElement().getName().getNamespaceURI());
-      }
-    }
-
-    /**
-     * Check the namespace and extract the element's name.
-     */
-    private static Reporting.Result<String> tryElementName(XMLEventReader reader) {
-      final XMLEvent currentEvent = currentEvent(reader);
-      final boolean precondition = currentEvent.isStartElement() || currentEvent.isEndElement();
-      if (!precondition) {
-        throw new IllegalStateException("Expected to be at a start or an end element "
-            + "but got: " + getEventTypeAsString(currentEvent));
-      }
-
-      if (invalidNameSpace(currentEvent)) {
-        String namespace = currentEvent.isStartElement()
-            ? currentEvent.asStartElement().getName().getNamespaceURI()
-            : currentEvent.asEndElement().getName().getNamespaceURI();
-        final Reporting.Error error = new Reporting.Error(
-            "Expected an element within a namespace " +
-            AAS_NAME_SPACE + ", " + "but got: " + namespace);
-        return Reporting.Result.failure(error);
-      }
-      return Reporting.Result.success(currentEvent.isStartElement()
-          ? currentEvent.asStartElement().getName().getLocalPart()
-          : currentEvent.asEndElement().getName().getLocalPart());
-    }
-
-    /**
-     * Read the content of an element which has already been opened.
-     *
-     * <p>{@code isEmpty} tells whether that element was self-closing.
-     */
-    @FunctionalInterface
-    private interface ContentReader<T> {
-      Reporting.Result<? extends T> read(XMLEventReader reader, boolean isEmpty);
-    }
-
-    /**
-     * Read a whole element, opening and closing it.
-     */
-    @FunctionalInterface
-    private interface ElementReader<T> {
-      Reporting.Result<? extends T> read(XMLEventReader reader);
     }
 
     /**
@@ -250,183 +64,6 @@ public class Xmlization {
     @FunctionalInterface
     private interface ContentConverter<T> {
       T convert(XMLEventReader reader) throws XMLStreamException;
-    }
-
-    /**
-     * Look up the name of the element which {@code reader} is positioned at.
-     *
-     * <p>This is the single primitive answering "we are at an element, and this is
-     * its name": {@link #readNamedElement} checks that name against the one its
-     * container supplied, a dispatcher switches on it, and a property loop uses it
-     * to select the property. Nothing is consumed, which is what lets a dispatcher
-     * hand the whole element on to the reader it selected.
-     */
-    private static Reporting.Result<String> peekElementName(XMLEventReader reader) {
-      skipWhitespaceAndComments(reader);
-
-      final XMLEvent currentEvent = currentEvent(reader);
-      if (currentEvent.isEndDocument()) {
-        return Reporting.Result.failure(new Reporting.Error(
-          "Expected an XML element, but reached the end-of-file"));
-      }
-
-      if (!currentEvent.isStartElement()) {
-        return Reporting.Result.failure(new Reporting.Error(
-          "Expected an XML element, but got the node of type " +
-          getEventTypeAsString(currentEvent) + " with the value " + currentEvent));
-      }
-
-      return tryElementName(reader);
-    }
-
-    /**
-     * Consume the end tag concluding the element called {@code elementName}.
-     */
-    private static Reporting.Result<XMLEvent> consumeEndElement(
-      XMLEventReader reader, String elementName) {
-      skipWhitespaceAndComments(reader);
-
-      final XMLEvent currentEvent = currentEvent(reader);
-      if (currentEvent.isEndDocument()) {
-        return Reporting.Result.failure(new Reporting.Error(
-          "Expected an XML end element to conclude the element " + elementName +
-          ", but got the end-of-file"));
-      }
-
-      if (!currentEvent.isEndElement()) {
-        return Reporting.Result.failure(new Reporting.Error(
-          "Expected an XML end element to conclude the element " + elementName +
-          ", but got the node of type " + getEventTypeAsString(currentEvent) +
-          " with the value " + currentEvent));
-      }
-
-      final Reporting.Result<String> tryEndElementName = tryElementName(reader);
-      if (tryEndElementName.isError()) {
-        return tryEndElementName.castTo(XMLEvent.class);
-      }
-
-      if (!elementName.equals(tryEndElementName.getResult())) {
-        return Reporting.Result.failure(new Reporting.Error(
-          "Expected an XML end element to conclude the element " + elementName +
-          ", but got the end element with the name " + tryEndElementName.getResult()));
-      }
-
-      try {
-        return Reporting.Result.success(reader.nextEvent());
-      } catch (XMLStreamException xmlStreamException) {
-        throw new Xmlization.DeserializeException("",
-          "Failed in method consumeEndElement because of: " +
-          xmlStreamException.getMessage());
-      }
-    }
-
-    /**
-     * Read a whole element which is expected to be called {@code name}, and read
-     * its content with {@code readContent}.
-     *
-     * <p>The name is data, not a type: an instance reads the XML name of its own
-     * class, a list item reads {@code "v"} and a tuple item reads {@code "v1"},
-     * {@code "v2"}, ... by position. One framer therefore serves them all.
-     */
-    private static <T> Reporting.Result<? extends T> readNamedElement(
-      XMLEventReader reader, String name, ContentReader<T> readContent) {
-      final Reporting.Result<String> tryElementName = peekElementName(reader);
-      if (tryElementName.isError()) {
-        return Reporting.Result.failure(tryElementName.getError());
-      }
-
-      if (!name.equals(tryElementName.getResult())) {
-        return Reporting.Result.failure(new Reporting.Error(
-          "Expected an XML element " + name + ", but got an XML element " +
-          tryElementName.getResult()));
-      }
-
-      final boolean isEmpty = isEmptyElement(reader);
-
-      final Reporting.Result<? extends T> result = readContent.read(reader, isEmpty);
-      if (result.isError()) {
-        return result;
-      }
-
-      final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, name);
-      if (endResult.isError()) {
-        return Reporting.Result.failure(endResult.getError());
-      }
-
-      return result;
-    }
-
-    /**
-     * Read a self-describing element as the content of the property element which
-     * {@code reader} is already positioned inside.
-     *
-     * <p>This looks like a needless layer over {@code read...FromElement}: the
-     * reader sits at the very same position in both cases, just before a start
-     * element, whether that element is the only child of a property element or
-     * the next item of a list. The layer exists for the error path alone.
-     *
-     * <p>A property wraps its instance in an element of its own, so the failing
-     * node is one step deeper than the property and the discriminator's name has
-     * to be prepended: {@code value/property/idShort}. A list item is not
-     * wrapped -- the item element *is* the indexed child -- so prepending the name
-     * there would give {@code annotations/*[0]/property/idShort}, which walks one
-     * level past the element {@code *[0]} already selects and resolves to
-     * nothing.
-     *
-     * <p>The two callers therefore need different segments, which is why the name
-     * can not be prepended inside {@code read...FromElement}. Unifying them would
-     * take a segment carrying a name *and* a position
-     * ({@code annotations/property[1]}), and that is a change to
-     * {@link Reporting}, which the verification and the JSON de-serialization
-     * share.
-     */
-    private static <T> Reporting.Result<? extends T> readNestedElement(
-      XMLEventReader reader, boolean isEmpty, ElementReader<T> readInner) {
-      if (isEmpty) {
-        return Reporting.Result.failure(new Reporting.Error(
-          "Expected an XML element representing an instance, " +
-          "but encountered a self-closing element"));
-      }
-
-      final Reporting.Result<String> tryElementName = peekElementName(reader);
-      if (tryElementName.isError()) {
-        return Reporting.Result.failure(tryElementName.getError());
-      }
-
-      final Reporting.Result<? extends T> result = readInner.read(reader);
-      if (result.isError()) {
-        result.getError()
-          .prependSegment(
-            new Reporting.NameSegment(
-              tryElementName.getResult()));
-      }
-
-      return result;
-    }
-
-    /**
-     * Match a run of the four characters which XML calls whitespace.
-     */
-    private static final Pattern WHITESPACE_RUN = Pattern.compile("[ \t\n\r]+");
-
-    /**
-     * Normalize {@code text} the way {@code whiteSpace="collapse"} prescribes.
-     *
-     * <p>Every atomic XSD type except a string, and every type derived from one
-     * by restriction, fixes {@code whiteSpace} to {@code collapse}, and
-     * a schema author can not change it. A tab, a line feed and a carriage
-     * return each become a space, a run of spaces becomes one space, and
-     * the leading and trailing spaces go. Only the result of that is a lexical
-     * representation to be matched.
-     *
-     * <p>Mind that this strips only the whitespace <i>around</i> the value:
-     * a space within it survives as a single space, so {@code 2  3} becomes
-     * {@code 2 3}, which is still no number.
-     *
-     * <p>See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
-     */
-    private static String collapseWhitespace(String text) {
-      return WHITESPACE_RUN.matcher(text).replaceAll(" ").trim();
     }
 
     private static Long readContentAsLong(XMLEventReader reader) throws XMLStreamException {
@@ -439,20 +76,7 @@ public class Xmlization {
         reader.nextEvent();
       }
 
-      return Long.valueOf(collapseWhitespace(content.toString()));
-    }
-
-    private static String readContentAsString(XMLEventReader reader) throws XMLStreamException {
-      final StringBuilder content = new StringBuilder();
-
-      while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
-        if (reader.peek().isCharacters()) {
-          content.append(reader.peek().asCharacters().getData());
-        }
-        reader.nextEvent();
-      }
-
-      return content.toString();
+      return Long.valueOf(XmlCommon.collapseWhitespace(content.toString()));
     }
 
     /**
@@ -472,7 +96,7 @@ public class Xmlization {
           ", but encountered a self-closing element"));
       }
 
-      if (currentEvent(reader).isEndDocument()) {
+      if (XmlCommon.currentEvent(reader).isEndDocument()) {
         return Reporting.Result.failure(new Reporting.Error(
           "Expected an XML content representing " + typeName +
           ", but reached the end-of-file"));
@@ -513,8 +137,8 @@ public class Xmlization {
      * property.
      */
     private static boolean atEndOfSequence(XMLEventReader reader) {
-      skipWhitespaceAndComments(reader);
-      return currentEvent(reader).isEndElement();
+      XmlCommon.skipWhitespaceAndComments(reader);
+      return XmlCommon.currentEvent(reader).isEndElement();
     }
 
     /**
@@ -552,7 +176,7 @@ public class Xmlization {
       return readText(
         reader,
         isEmpty,
-        _DeserializeImplementation::readContentAsString,
+        XmlCommon::readContentAsString,
         "String",
         "");
     }
@@ -574,7 +198,7 @@ public class Xmlization {
       // NOTE (mristin):
       // We only peek the name, so that the whole element can be handed on to
       // the reader which we select below.
-      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
       if (tryElementName.isError()) {
         return Reporting.Result.failure(tryElementName.getError());
       }
@@ -607,13 +231,13 @@ public class Xmlization {
 
       if (!isEmptySequence) {
         while (!atEndOfSequence(reader)) {
-          final Reporting.Result<String> tryElementName = peekElementName(reader);
+          final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
           if (tryElementName.isError()) {
             return Reporting.Result.failure(tryElementName.getError());
           }
 
           final String elementName = tryElementName.getResult();
-          final boolean isEmptyProperty = isEmptyElement(reader);
+          final boolean isEmptyProperty = XmlCommon.isEmptyElement(reader);
 
           Reporting.Error valueError = null;
 
@@ -659,7 +283,7 @@ public class Xmlization {
             return Reporting.Result.failure(valueError);
           }
 
-          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          final Reporting.Result<XMLEvent> endResult = XmlCommon.consumeEndElement(reader, elementName);
           if (endResult.isError()) {
             return Reporting.Result.failure(endResult.getError());
           }
@@ -687,7 +311,7 @@ public class Xmlization {
       // NOTE (mristin):
       // We only peek the name, so that the whole element can be handed on to
       // the reader which we select below.
-      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
       if (tryElementName.isError()) {
         return Reporting.Result.failure(tryElementName.getError());
       }
@@ -710,7 +334,7 @@ public class Xmlization {
      */
     private static Reporting.Result<? extends Branch> readBranchFromElement(
       XMLEventReader reader) {
-      return readNamedElement(
+      return XmlCommon.readNamedElement(
         reader,
         "branch",
         _DeserializeImplementation::readBranchFromSequence);
@@ -732,13 +356,13 @@ public class Xmlization {
 
       if (!isEmptySequence) {
         while (!atEndOfSequence(reader)) {
-          final Reporting.Result<String> tryElementName = peekElementName(reader);
+          final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
           if (tryElementName.isError()) {
             return Reporting.Result.failure(tryElementName.getError());
           }
 
           final String elementName = tryElementName.getResult();
-          final boolean isEmptyProperty = isEmptyElement(reader);
+          final boolean isEmptyProperty = XmlCommon.isEmptyElement(reader);
 
           Reporting.Error valueError = null;
 
@@ -799,7 +423,7 @@ public class Xmlization {
             return Reporting.Result.failure(valueError);
           }
 
-          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          final Reporting.Result<XMLEvent> endResult = XmlCommon.consumeEndElement(reader, elementName);
           if (endResult.isError()) {
             return Reporting.Result.failure(endResult.getError());
           }
@@ -832,7 +456,7 @@ public class Xmlization {
       // NOTE (mristin):
       // We only peek the name, so that the whole element can be handed on to
       // the reader which we select below.
-      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
       if (tryElementName.isError()) {
         return Reporting.Result.failure(tryElementName.getError());
       }
@@ -853,7 +477,7 @@ public class Xmlization {
      */
     private static Reporting.Result<? extends Leaf> readLeafFromElement(
       XMLEventReader reader) {
-      return readNamedElement(
+      return XmlCommon.readNamedElement(
         reader,
         "leaf",
         _DeserializeImplementation::readLeafFromSequence);
@@ -876,13 +500,13 @@ public class Xmlization {
 
       if (!isEmptySequence) {
         while (!atEndOfSequence(reader)) {
-          final Reporting.Result<String> tryElementName = peekElementName(reader);
+          final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
           if (tryElementName.isError()) {
             return Reporting.Result.failure(tryElementName.getError());
           }
 
           final String elementName = tryElementName.getResult();
-          final boolean isEmptyProperty = isEmptyElement(reader);
+          final boolean isEmptyProperty = XmlCommon.isEmptyElement(reader);
 
           Reporting.Error valueError = null;
 
@@ -958,7 +582,7 @@ public class Xmlization {
             return Reporting.Result.failure(valueError);
           }
 
-          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          final Reporting.Result<XMLEvent> endResult = XmlCommon.consumeEndElement(reader, elementName);
           if (endResult.isError()) {
             return Reporting.Result.failure(endResult.getError());
           }
@@ -993,7 +617,7 @@ public class Xmlization {
      */
     private static Reporting.Result<? extends Blossom> readBlossomFromElement(
       XMLEventReader reader) {
-      return readNamedElement(
+      return XmlCommon.readNamedElement(
         reader,
         "blossom",
         _DeserializeImplementation::readBlossomFromSequence);
@@ -1014,13 +638,13 @@ public class Xmlization {
 
       if (!isEmptySequence) {
         while (!atEndOfSequence(reader)) {
-          final Reporting.Result<String> tryElementName = peekElementName(reader);
+          final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
           if (tryElementName.isError()) {
             return Reporting.Result.failure(tryElementName.getError());
           }
 
           final String elementName = tryElementName.getResult();
-          final boolean isEmptyProperty = isEmptyElement(reader);
+          final boolean isEmptyProperty = XmlCommon.isEmptyElement(reader);
 
           Reporting.Error valueError = null;
 
@@ -1032,7 +656,7 @@ public class Xmlization {
               }
 
               final Reporting.Result<? extends INode> value =
-                readNestedElement(
+                XmlCommon.readNestedElement(
                   reader,
                   isEmptyProperty,
                   _DeserializeImplementation::readINodeFromElement);
@@ -1050,7 +674,7 @@ public class Xmlization {
               }
 
               final Reporting.Result<? extends IBranch> value =
-                readNestedElement(
+                XmlCommon.readNestedElement(
                   reader,
                   isEmptyProperty,
                   _DeserializeImplementation::readIBranchFromElement);
@@ -1072,7 +696,7 @@ public class Xmlization {
             return Reporting.Result.failure(valueError);
           }
 
-          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          final Reporting.Result<XMLEvent> endResult = XmlCommon.consumeEndElement(reader, elementName);
           if (endResult.isError()) {
             return Reporting.Result.failure(endResult.getError());
           }
@@ -1097,7 +721,7 @@ public class Xmlization {
      */
     private static Reporting.Result<? extends Something> readSomethingFromElement(
       XMLEventReader reader) {
-      return readNamedElement(
+      return XmlCommon.readNamedElement(
         reader,
         "something",
         _DeserializeImplementation::readSomethingFromSequence);
@@ -1118,13 +742,13 @@ public class Xmlization {
 
       if (!isEmptySequence) {
         while (!atEndOfSequence(reader)) {
-          final Reporting.Result<String> tryElementName = peekElementName(reader);
+          final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
           if (tryElementName.isError()) {
             return Reporting.Result.failure(tryElementName.getError());
           }
 
           final String elementName = tryElementName.getResult();
-          final boolean isEmptyProperty = isEmptyElement(reader);
+          final boolean isEmptyProperty = XmlCommon.isEmptyElement(reader);
 
           Reporting.Error valueError = null;
 
@@ -1136,7 +760,7 @@ public class Xmlization {
               }
 
               final Reporting.Result<? extends INode> value =
-                readNestedElement(
+                XmlCommon.readNestedElement(
                   reader,
                   isEmptyProperty,
                   _DeserializeImplementation::readINodeFromElement);
@@ -1173,7 +797,7 @@ public class Xmlization {
             return Reporting.Result.failure(valueError);
           }
 
-          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          final Reporting.Result<XMLEvent> endResult = XmlCommon.consumeEndElement(reader, elementName);
           if (endResult.isError()) {
             return Reporting.Result.failure(endResult.getError());
           }
@@ -1198,7 +822,7 @@ public class Xmlization {
      */
     private static Reporting.Result<? extends Container> readContainerFromElement(
       XMLEventReader reader) {
-      return readNamedElement(
+      return XmlCommon.readNamedElement(
         reader,
         "container",
         _DeserializeImplementation::readContainerFromSequence);
@@ -1238,7 +862,7 @@ public class Xmlization {
       XMLEventReader reader) {
 
       _DeserializeImplementation.skipStartDocument(reader);
-      _DeserializeImplementation.skipWhitespaceAndComments(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends INode> result =
         _DeserializeImplementation.readINodeFromElement(
@@ -1246,7 +870,7 @@ public class Xmlization {
 
       return result.onError(error -> {
         error.prependSegment(new Reporting.NameSegment("inode"));
-        throw new DeserializeException(
+        throw new XmlCommon.DeserializeException(
           Reporting.generateRelativeXPath(error.getPathSegments()),
           error.getCause());
       });
@@ -1261,7 +885,7 @@ public class Xmlization {
       XMLEventReader reader) {
 
       _DeserializeImplementation.skipStartDocument(reader);
-      _DeserializeImplementation.skipWhitespaceAndComments(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IBranch> result =
         _DeserializeImplementation.readIBranchFromElement(
@@ -1269,7 +893,7 @@ public class Xmlization {
 
       return result.onError(error -> {
         error.prependSegment(new Reporting.NameSegment("ibranch"));
-        throw new DeserializeException(
+        throw new XmlCommon.DeserializeException(
           Reporting.generateRelativeXPath(error.getPathSegments()),
           error.getCause());
       });
@@ -1284,7 +908,7 @@ public class Xmlization {
       XMLEventReader reader) {
 
       _DeserializeImplementation.skipStartDocument(reader);
-      _DeserializeImplementation.skipWhitespaceAndComments(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Branch> result =
         _DeserializeImplementation.readBranchFromElement(
@@ -1292,7 +916,7 @@ public class Xmlization {
 
       return result.onError(error -> {
         error.prependSegment(new Reporting.NameSegment("branch"));
-        throw new DeserializeException(
+        throw new XmlCommon.DeserializeException(
           Reporting.generateRelativeXPath(error.getPathSegments()),
           error.getCause());
       });
@@ -1307,7 +931,7 @@ public class Xmlization {
       XMLEventReader reader) {
 
       _DeserializeImplementation.skipStartDocument(reader);
-      _DeserializeImplementation.skipWhitespaceAndComments(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends ILeaf> result =
         _DeserializeImplementation.readILeafFromElement(
@@ -1315,7 +939,7 @@ public class Xmlization {
 
       return result.onError(error -> {
         error.prependSegment(new Reporting.NameSegment("ileaf"));
-        throw new DeserializeException(
+        throw new XmlCommon.DeserializeException(
           Reporting.generateRelativeXPath(error.getPathSegments()),
           error.getCause());
       });
@@ -1330,7 +954,7 @@ public class Xmlization {
       XMLEventReader reader) {
 
       _DeserializeImplementation.skipStartDocument(reader);
-      _DeserializeImplementation.skipWhitespaceAndComments(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Leaf> result =
         _DeserializeImplementation.readLeafFromElement(
@@ -1338,7 +962,7 @@ public class Xmlization {
 
       return result.onError(error -> {
         error.prependSegment(new Reporting.NameSegment("leaf"));
-        throw new DeserializeException(
+        throw new XmlCommon.DeserializeException(
           Reporting.generateRelativeXPath(error.getPathSegments()),
           error.getCause());
       });
@@ -1353,7 +977,7 @@ public class Xmlization {
       XMLEventReader reader) {
 
       _DeserializeImplementation.skipStartDocument(reader);
-      _DeserializeImplementation.skipWhitespaceAndComments(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Blossom> result =
         _DeserializeImplementation.readBlossomFromElement(
@@ -1361,7 +985,7 @@ public class Xmlization {
 
       return result.onError(error -> {
         error.prependSegment(new Reporting.NameSegment("blossom"));
-        throw new DeserializeException(
+        throw new XmlCommon.DeserializeException(
           Reporting.generateRelativeXPath(error.getPathSegments()),
           error.getCause());
       });
@@ -1376,7 +1000,7 @@ public class Xmlization {
       XMLEventReader reader) {
 
       _DeserializeImplementation.skipStartDocument(reader);
-      _DeserializeImplementation.skipWhitespaceAndComments(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Something> result =
         _DeserializeImplementation.readSomethingFromElement(
@@ -1384,7 +1008,7 @@ public class Xmlization {
 
       return result.onError(error -> {
         error.prependSegment(new Reporting.NameSegment("something"));
-        throw new DeserializeException(
+        throw new XmlCommon.DeserializeException(
           Reporting.generateRelativeXPath(error.getPathSegments()),
           error.getCause());
       });
@@ -1399,7 +1023,7 @@ public class Xmlization {
       XMLEventReader reader) {
 
       _DeserializeImplementation.skipStartDocument(reader);
-      _DeserializeImplementation.skipWhitespaceAndComments(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Container> result =
         _DeserializeImplementation.readContainerFromElement(
@@ -1407,7 +1031,7 @@ public class Xmlization {
 
       return result.onError(error -> {
         error.prependSegment(new Reporting.NameSegment("container"));
-        throw new DeserializeException(
+        throw new XmlCommon.DeserializeException(
           Reporting.generateRelativeXPath(error.getPathSegments()),
           error.getCause());
       });
@@ -1451,75 +1075,6 @@ public class Xmlization {
       new _VisitorWithWriter(false);
 
     /**
-     * Write {@code that} where {@code writer} already is.
-     *
-     * <p>Every value is written through this one shape, so that the writing
-     * composes: {@link #writeElement} frames it in a start and an end tag, and
-     * a class's own {@code write...AsSequence} already is one.
-     *
-     * <p>There is deliberately no second shape for a whole element, as there is
-     * on the reading side. An element differs from a content only in what it
-     * writes, never in its shape; the reading needs the distinction because
-     * a content reader has to be told whether its element was self-closing, and
-     * a writer has nothing to be told.
-     *
-     * <p>Use sites take a {@code ContentWriter<? super T>} -- Java's spelling
-     * of the contravariance -- so that the single writer of an {@link IClass}
-     * serves wherever the writer of a more specific interface is expected.
-     */
-    @FunctionalInterface
-    private interface ContentWriter<T> {
-      void write(T that, XMLStreamWriter writer) throws XMLStreamException;
-    }
-
-    /**
-     * Write {@code that} as an XML element named {@code name}, its content
-     * written by {@code writeContent}.
-     *
-     * <p>An element is nothing but a start and an end tag around a content, so
-     * there is no writer per property kind: only the content writer differs,
-     * and the type of the value alone decides which one it is.
-     *
-     * <p>{@code withNamespace} declares the XML namespace on the element,
-     * which only the outermost element does.
-     */
-    private static <T> void writeElement(
-      String name,
-      T that,
-      XMLStreamWriter writer,
-      boolean withNamespace,
-      ContentWriter<? super T> writeContent) {
-      try {
-        writer.writeStartElement(name);
-        if (withNamespace) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-        }
-        writeContent.write(that, writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new _SerializeFailure(
-          new Reporting.Error(exception.getMessage()));
-      }
-    }
-
-    /**
-     * Write {@code that} as an XML element named {@code name} nested in
-     * another element, so that the XML namespace is not re-declared.
-     *
-     * <p>This is what an item of a list or of a tuple is written with. It
-     * contributes no segment to the error path: its container has already
-     * contributed the item's index, and the index selects this very element
-     * (see {@link #writeListOf} in the generated writers).
-     */
-    private static <T> void writeElement(
-      String name,
-      T that,
-      XMLStreamWriter writer,
-      ContentWriter<? super T> writeContent) {
-      writeElement(name, that, writer, false, writeContent);
-    }
-
-    /**
      * Write {@code that} as the XML element of a property called
      * {@code name}.
      *
@@ -1536,10 +1091,10 @@ public class Xmlization {
       String getterName,
       T that,
       XMLStreamWriter writer,
-      ContentWriter<? super T> writeContent) {
+      XmlCommon.ContentWriter<? super T> writeContent) {
       try {
-        writeElement(name, that, writer, false, writeContent);
-      } catch (_SerializeFailure failure) {
+        XmlCommon.writeElement(name, that, writer, writeContent);
+      } catch (XmlCommon.SerializeFailure failure) {
         failure.getError().prependSegment(
           new Reporting.NameSegment(getterName));
         throw failure;
@@ -1565,19 +1120,6 @@ public class Xmlization {
       NESTED.visit(that, writer);
     }
 
-    /**
-     * Write {@code that.toString()} as XML content.
-     *
-     * <p>This is the {@link ContentWriter} of every {@code boolean}/
-     * {@code long}/{@code double}/{@code String}-typed value, be it
-     * a property, a list item or a tuple item.
-     */
-    private static <T> void writeStringifiedContent(
-      T that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(that.toString());
-    }
-
     private static void writeBranchAsSequence(
       IBranch that,
       XMLStreamWriter writer) {
@@ -1586,21 +1128,21 @@ public class Xmlization {
         "getIdentifier()",
         that.getIdentifier(),
         writer,
-        _VisitorWithWriter::writeStringifiedContent);
+        XmlCommon::writeStringifiedContent);
 
       writeProperty(
         "description",
         "getDescription()",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeStringifiedContent);
+        XmlCommon::writeStringifiedContent);
     }
 
     @Override
     public void visitBranch(
       IBranch that,
       XMLStreamWriter writer) {
-      writeElement(
+      XmlCommon.writeElement(
         "branch",
         that,
         writer,
@@ -1616,28 +1158,28 @@ public class Xmlization {
         "getIdentifier()",
         that.getIdentifier(),
         writer,
-        _VisitorWithWriter::writeStringifiedContent);
+        XmlCommon::writeStringifiedContent);
 
       writeProperty(
         "description",
         "getDescription()",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeStringifiedContent);
+        XmlCommon::writeStringifiedContent);
 
       writeProperty(
         "value",
         "getValue()",
         that.getValue(),
         writer,
-        _VisitorWithWriter::writeStringifiedContent);
+        XmlCommon::writeStringifiedContent);
     }
 
     @Override
     public void visitLeaf(
       ILeaf that,
       XMLStreamWriter writer) {
-      writeElement(
+      XmlCommon.writeElement(
         "leaf",
         that,
         writer,
@@ -1653,35 +1195,35 @@ public class Xmlization {
         "getIdentifier()",
         that.getIdentifier(),
         writer,
-        _VisitorWithWriter::writeStringifiedContent);
+        XmlCommon::writeStringifiedContent);
 
       writeProperty(
         "description",
         "getDescription()",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeStringifiedContent);
+        XmlCommon::writeStringifiedContent);
 
       writeProperty(
         "value",
         "getValue()",
         that.getValue(),
         writer,
-        _VisitorWithWriter::writeStringifiedContent);
+        XmlCommon::writeStringifiedContent);
 
       writeProperty(
         "details",
         "getDetails()",
         that.getDetails(),
         writer,
-        _VisitorWithWriter::writeStringifiedContent);
+        XmlCommon::writeStringifiedContent);
     }
 
     @Override
     public void visitBlossom(
       IBlossom that,
       XMLStreamWriter writer) {
-      writeElement(
+      XmlCommon.writeElement(
         "blossom",
         that,
         writer,
@@ -1711,7 +1253,7 @@ public class Xmlization {
     public void visitSomething(
       ISomething that,
       XMLStreamWriter writer) {
-      writeElement(
+      XmlCommon.writeElement(
         "something",
         that,
         writer,
@@ -1741,7 +1283,7 @@ public class Xmlization {
     public void visitContainer(
       IContainer that,
       XMLStreamWriter writer) {
-      writeElement(
+      XmlCommon.writeElement(
         "container",
         that,
         writer,
@@ -1775,34 +1317,32 @@ public class Xmlization {
      * <p>{@code writer} is flushed exactly once, here at the end. Nothing is
      * flushed in-between, which is what lets {@link XMLStreamWriter} buffer,
      * and the single flush at the end is what lets a failure of the underlying
-     * stream be reported as a {@link SerializeException} from this method --
+     * stream be reported as a {@link XmlCommon.SerializeException} from this method --
      * were it left to the caller, the failure would surface at their own flush,
      * after the serialization has long returned.
      *
-     * <p>The path of a {@link SerializeException} is rendered as a Java
-     * expression on the instance the caller handed over, and not as the XPath
-     * which the de-serialization reports: this error answers a call the caller
-     * made on that instance, and not on a document which has not been written
-     * yet -- {@code getSubmodelElements().get(0).getValue()}. Two things it
-     * deliberately does not name: the outermost element, since this method
+     * <p>The path of a {@link XmlCommon.SerializeException} is rendered as
+     * a Java access path, and not as the relative XPath the de-serialization
+     * reports: the caller invoked this on an <em>instance</em>, and not on
+     * a document, which has not been written yet. It names the getters and
+     * the indices leading to the culprit, so that
+     * {@code getSubmodelElements().get(0).getValue()} can be pasted as it
+     * stands. The outermost element is deliberately not named, as this method
      * takes any {@link IClass} and the name would say nothing the caller does
-     * not already know; and the discriminator element of a polymorphic
-     * property, which the de-serialization does prepend. The de-serialization
-     * is pointing into a document it is reading, where that element is a real
-     * extra level; here it is not.
+     * not already know.
      */
     public static void to(
       IClass that,
-      XMLStreamWriter writer) throws SerializeException {
+      XMLStreamWriter writer) throws XmlCommon.SerializeException {
       try {
         _VisitorWithWriter.ROOT.visit(
           that, writer);
         writer.flush();
       } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      } catch (_SerializeFailure failure) {
+        throw new XmlCommon.SerializeException("", exception.getMessage());
+      } catch (XmlCommon.SerializeFailure failure) {
         final Reporting.Error error = failure.getError();
-        throw new SerializeException(
+        throw new XmlCommon.SerializeException(
           Reporting.generateJavaPath(error.getPathSegments()),
           error.getCause());
       }

@@ -25,6 +25,8 @@ from aas_core_codegen.golang.common import (
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
+    INDENT5 as IIIII,
+    INDENT6 as IIIIII,
 )
 
 
@@ -1020,6 +1022,16 @@ def _determine_parse_function_for_atomic_value(
         else:
             # noinspection PyTypeChecker
             assert_never(our_type)
+
+    elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        function_name = "jsonValueFromJsonable"
+
+    elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        function_name = "jsonArrayFromJsonable"
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        function_name = "jsonObjectFromJsonable"
+
     else:
         # noinspection PyTypeChecker
         assert_never(type_annotation)
@@ -1074,10 +1086,7 @@ def _generate_deserialization_switch_statement(
         function: str
         arguments: List[str]
 
-        if isinstance(
-            type_anno,
-            (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-        ):
+        if isinstance(type_anno, intermediate.AtomicTypeAnnotationAsTuple):
             function = _determine_parse_function_for_atomic_value(type_anno)
             arguments = ["v"]
 
@@ -1602,6 +1611,23 @@ func directToJsonable[T any](item T) (interface{{}}, error) {{
     )
 
 
+def _generate_json_able_as_jsonable_interface() -> Stripped:
+    """Generate the wrapper so a JSON-able item is a bare function reference."""
+    return Stripped(
+        f"""\
+// Serialize the JSON-able `item` as a JSON-able value.
+//
+// ``jsonValueToJsonable`` takes an ``aastypes.JsonValue``, so a *function*
+// which takes an ``aastypes.JsonArray`` or an ``aastypes.JsonObject`` is
+// a different type altogether, even though either value is assignable to
+// an ``aastypes.JsonValue``. This wrapper gives the one signature which
+// ``serializeArray``/``serializeTupleN`` expect for every shape.
+func jsonAbleToJsonable[T any](item T) (interface{{}}, error) {{
+{I}return jsonValueToJsonable(item)
+}}"""
+    )
+
+
 def _generate_class_as_jsonable_interface() -> Stripped:
     """Generate the wrapper so a class item is a bare function reference."""
     return Stripped(
@@ -1680,6 +1706,245 @@ func unionAsJsonableInterface[T namedUnion](that T) (interface{{}}, error) {{
     )
 
 
+def _generate_json_able_helpers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the de/serialization of the JSON-able values, if the model uses them.
+
+    A JSON-able value needs no conversion at all -- it already *is* what
+    ``encoding/json`` gives and takes. It does need to be checked, since its
+    type is an ``any`` and rules out nothing, and rebuilt, so that the instance
+    and the document it came from do not share a map or a slice.
+    """
+    if not intermediate.uses_json_types(symbol_table):
+        return []
+
+    return [
+        Stripped(
+            f"""\
+// Parse `jsonable` as a JSON-able value.
+//
+// A JSON-able value is, recursively, exactly as JSON itself is defined:
+// a bool, a float64, a string, an array of JSON-able values or an object of
+// JSON-able values with string keys. A nil is rejected at any depth, as
+// the JSON null has no representation as a JSON-able value, and so are
+// an infinity and a not-a-number, which JSON can not represent at all.
+//
+// The result is a new structure, and never `jsonable` itself, so that
+// the parsed instance does not alias the document it came from.
+//
+// The path of an error is relative to `jsonable`, and the caller is expected
+// to prepend the way to it.
+func jsonValueFromJsonable(
+{I}jsonable interface{{}},
+) (result aastypes.JsonValue, err error) {{
+{I}if jsonable == nil {{
+{II}err = newDeserializationError(
+{III}"Expected a JSON-able value, but got a nil",
+{II})
+{II}return
+{I}}}
+
+{I}switch casted := jsonable.(type) {{
+{II}case bool:
+{III}result = casted
+{III}return
+
+{II}case string:
+{III}result = casted
+{III}return
+
+{II}case float64:
+{III}// NOTE (mristin):
+{III}// JSON knows neither an infinity nor a not-a-number. encoding/json
+{III}// never gives us one, but `jsonable` may well have been put together
+{III}// programmatically.
+{III}if math.IsInf(casted, 0) || math.IsNaN(casted) {{
+{IIII}err = newDeserializationError(
+{IIIII}fmt.Sprintf(
+{IIIIII}"Expected a JSON-able value, but got the number %v, "+
+{IIIIII}"which is neither finite nor representable in JSON",
+{IIIIII}casted,
+{IIIII}),
+{IIII})
+{IIII}return
+{III}}}
+{III}result = casted
+{III}return
+
+{II}case []interface{{}}:
+{III}items := make(aastypes.JsonArray, 0, len(casted))
+{III}for i, item := range casted {{
+{IIII}var parsed aastypes.JsonValue
+{IIII}parsed, err = jsonValueFromJsonable(item)
+{IIII}if err != nil {{
+{IIIII}mustDeserializationError(err).prependIndex(i)
+{IIIII}return
+{IIII}}}
+{IIII}items = append(items, parsed)
+{III}}}
+{III}result = items
+{III}return
+
+{II}case map[string]interface{{}}:
+{III}members := make(aastypes.JsonObject, len(casted))
+{III}for key, value := range casted {{
+{IIII}var parsed aastypes.JsonValue
+{IIII}parsed, err = jsonValueFromJsonable(value)
+{IIII}if err != nil {{
+{IIIII}mustDeserializationError(err).prependKey(key)
+{IIIII}return
+{IIII}}}
+{IIII}members[key] = parsed
+{III}}}
+{III}result = members
+{III}return
+
+{II}default:
+{III}err = newDeserializationError(
+{IIII}fmt.Sprintf(
+{IIIII}"Expected a JSON-able value (a bool, a float64, a string, "+
+{IIIII}"an array or an object), but got: %T",
+{IIIII}jsonable,
+{IIII}),
+{III})
+{III}return
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Parse `jsonable` as a JSON-able array.
+func jsonArrayFromJsonable(
+{I}jsonable interface{{}},
+) (result aastypes.JsonArray, err error) {{
+{I}if _, ok := jsonable.([]interface{{}}); !ok {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf("Expected a JSON-able array, but got: %T", jsonable),
+{II})
+{II}return
+{I}}}
+
+{I}var value aastypes.JsonValue
+{I}value, err = jsonValueFromJsonable(jsonable)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}result = value.(aastypes.JsonArray)
+{I}return
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Parse `jsonable` as a JSON-able object.
+func jsonObjectFromJsonable(
+{I}jsonable interface{{}},
+) (result aastypes.JsonObject, err error) {{
+{I}if _, ok := jsonable.(map[string]interface{{}}); !ok {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf("Expected a JSON-able object, but got: %T", jsonable),
+{II})
+{II}return
+{I}}}
+
+{I}var value aastypes.JsonValue
+{I}value, err = jsonValueFromJsonable(jsonable)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}result = value.(aastypes.JsonObject)
+{I}return
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Serialize `value` as a JSON-able structure.
+//
+// A JSON-able value is almost JSON-able as it comes, but not quite: its type
+// is an `any`, which rules out neither a nil nor a non-finite number, neither
+// of which JSON can represent. Each is refused here, at any depth.
+//
+// The result is a new structure, and never `value` itself, so that
+// the serialized document does not alias the instance it came from.
+func jsonValueToJsonable(
+{I}value aastypes.JsonValue,
+) (result interface{{}}, err error) {{
+{I}if value == nil {{
+{II}err = newSerializationError(
+{III}"Expected a JSON-able value, but got a nil",
+{II})
+{II}return
+{I}}}
+
+{I}switch casted := value.(type) {{
+{II}case bool:
+{III}result = casted
+{III}return
+
+{II}case string:
+{III}result = casted
+{III}return
+
+{II}case float64:
+{III}if math.IsInf(casted, 0) || math.IsNaN(casted) {{
+{IIII}err = newSerializationError(
+{IIIII}fmt.Sprintf(
+{IIIIII}"Expected a JSON-able value, but got the number %v, which "+
+{IIIIII}"is neither finite nor representable in JSON",
+{IIIIII}casted,
+{IIIII}),
+{IIII})
+{IIII}return
+{III}}}
+{III}result = casted
+{III}return
+
+{II}case aastypes.JsonArray:
+{III}items := make([]interface{{}}, 0, len(casted))
+{III}for i, item := range casted {{
+{IIII}var serialized interface{{}}
+{IIII}serialized, err = jsonValueToJsonable(item)
+{IIII}if err != nil {{
+{IIIII}mustSerializationError(err).prependIndex(i)
+{IIIII}return
+{IIII}}}
+{IIII}items = append(items, serialized)
+{III}}}
+{III}result = items
+{III}return
+
+{II}case aastypes.JsonObject:
+{III}members := make(map[string]interface{{}}, len(casted))
+{III}for key, item := range casted {{
+{IIII}var serialized interface{{}}
+{IIII}serialized, err = jsonValueToJsonable(item)
+{IIII}if err != nil {{
+{IIIII}mustSerializationError(err).prependKey(key)
+{IIIII}return
+{IIII}}}
+{IIII}members[key] = serialized
+{III}}}
+{III}result = members
+{III}return
+
+{II}default:
+{III}err = newSerializationError(
+{IIII}fmt.Sprintf(
+{IIIII}"Expected a JSON-able value (a bool, a float64, a string, "+
+{IIIII}"a JsonArray or a JsonObject), but got: %T",
+{IIIII}value,
+{IIII}),
+{III})
+{III}return
+{I}}}
+}}"""
+        ),
+    ]
+
+
 def _item_serializer_function(
     type_annotation: intermediate.AtomicTypeAnnotation,
 ) -> Stripped:
@@ -1734,6 +1999,22 @@ def _item_serializer_function(
             )
             return Stripped(f"directToJsonable[{item_type}]")
 
+    # NOTE (mristin):
+    # A JSON-able item is checked and copied by ``jsonValueToJsonable``, which
+    # already has the expected signature, so it needs no wrapper.
+    if isinstance(
+        type_annotation,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        item_type = golang_common.generate_type(
+            type_annotation=type_annotation, types_package=Identifier("aastypes")
+        )
+        return Stripped(f"jsonAbleToJsonable[{item_type}]")
+
     assert isinstance(type_annotation, intermediate.OurTypeAnnotation)
     our_type = type_annotation.our_type
 
@@ -1774,6 +2055,7 @@ class _ItemSerializerWrappers:
         self.instance = False
         self.enumerations = []  # type: List[intermediate.Enumeration]
         self.union = False
+        self.json_able = False
 
 
 def _determine_item_serializer_wrappers(
@@ -1811,6 +2093,17 @@ def _determine_item_serializer_wrappers(
                 # have the expected signature.
                 result.direct = True
 
+            continue
+
+        if isinstance(
+            item_type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            result.json_able = True
             continue
 
         assert isinstance(item_type_anno, intermediate.OurTypeAnnotation)
@@ -1933,6 +2226,9 @@ TypeAnnotationExceptList = Union[
     intermediate.PrimitiveTypeAnnotation,
     intermediate.OurTypeAnnotation,
     intermediate.OptionalTypeAnnotation,
+    intermediate.JsonValueTypeAnnotation,
+    intermediate.JsonArrayTypeAnnotation,
+    intermediate.JsonObjectTypeAnnotation,
 ]
 
 assert_union_without_excluded(
@@ -1947,7 +2243,8 @@ assert_union_without_excluded(
 
 
 def _determine_serialization_of_atomic_value(
-    access_expression: str, type_annotation: TypeAnnotationExceptList
+    access_expression: str,
+    type_annotation: TypeAnnotationExceptList,
 ) -> Tuple[Optional[Stripped], Stripped]:
     """
     Determine how to serialize the ``access_expression``.
@@ -1961,15 +2258,26 @@ def _determine_serialization_of_atomic_value(
     needs neither a call nor an error check.
     """
     type_anno = intermediate.beneath_optional(type_annotation)
-    assert isinstance(
-        type_anno,
-        (
-            intermediate.PrimitiveTypeAnnotation,
-            intermediate.OurTypeAnnotation,
-        ),
-    )
+    assert isinstance(type_anno, intermediate.AtomicTypeAnnotationAsTuple)
 
     optional = isinstance(type_annotation, intermediate.OptionalTypeAnnotation)
+
+    # NOTE (mristin):
+    # A JSON-able value is almost JSON-able as it comes, but not quite -- its
+    # type rules out neither a non-finite number nor a nil at any depth -- so
+    # it is checked and copied. All three shapes go through the one function:
+    # an array and an object are only JSON-able values whose top-level shape is
+    # already known. All three are nilable, so an optional one is never
+    # a pointer and needs no dereferencing.
+    if isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        return Stripped("jsonValueToJsonable"), Stripped(access_expression)
 
     # NOTE (mristin):
     # The following types are handled as primitive values in Golang, so we have
@@ -2126,6 +2434,9 @@ def _generate_cls_to_map(cls: intermediate.ConcreteClass) -> Stripped:
                     intermediate.PrimitiveTypeAnnotation,
                     intermediate.OurTypeAnnotation,
                     intermediate.OptionalTypeAnnotation,
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
                 ),
             ), (
                 f"Since {type_anno} is neither a list nor a tuple, "
@@ -2395,6 +2706,19 @@ func (de *DeserializationError) prependIndex(
         ),
         Stripped(
             f"""\
+// Prepend the `key` segment to the path, and return the error back
+// for chaining.
+func (de *DeserializationError) prependKey(
+{I}key string,
+) *DeserializationError {{
+{I}de.Path.PrependKey(
+{II}&aasreporting.KeySegment{{Key: key}},
+{I})
+{I}return de
+}}"""
+        ),
+        Stripped(
+            f"""\
 // Cast `err` to a de-serialization error, or panic.
 //
 // Every error which originates in this package is
@@ -2541,6 +2865,19 @@ func (se *SerializationError) prependIndex(
             ),
             Stripped(
                 f"""\
+// Prepend the `key` segment to the path, and return the error back
+// for chaining.
+func (se *SerializationError) prependKey(
+{I}key string,
+) *SerializationError {{
+{I}se.Path.PrependKey(
+{II}&aasreporting.KeySegment{{Key: key}},
+{I})
+{I}return se
+}}"""
+            ),
+            Stripped(
+                f"""\
 // Cast `err` to a serialization error, or panic.
 //
 // Every error which originates in this package is a [SerializationError],
@@ -2581,6 +2918,15 @@ func mustSerializationError(err error) *SerializationError {{
 
     if item_serializer_wrappers.union:
         blocks.append(_generate_union_as_jsonable_interface())
+
+    if item_serializer_wrappers.json_able:
+        blocks.append(_generate_json_able_as_jsonable_interface())
+
+    # NOTE (mristin):
+    # The JSON-able helpers come here, and not next to the parsers above, as
+    # one of them serializes and needs ``SerializationError``, which is
+    # declared in this region.
+    blocks.extend(_generate_json_able_helpers(symbol_table=symbol_table))
 
     for arity in intermediate.tuple_arities(symbol_table):
         blocks.append(_generate_serialize_tuple_helper(arity))

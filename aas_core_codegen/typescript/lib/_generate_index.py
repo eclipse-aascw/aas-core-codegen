@@ -5,7 +5,7 @@ from typing import Tuple, Optional, List
 
 from icontract import ensure
 
-from aas_core_codegen import specific_implementations
+from aas_core_codegen import intermediate, specific_implementations
 from aas_core_codegen.common import (
     Stripped,
     Error,
@@ -24,6 +24,7 @@ from aas_core_codegen.typescript import (
 )
 # fmt: on
 def generate(
+    symbol_table: intermediate.SymbolTable,
     spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code of the index file which import all the other modules."""
@@ -48,15 +49,25 @@ def generate(
 
     comment = Stripped(typescript_description.documentation_comment(text))
 
+    # NOTE (mristin):
+    # ``xmlrpc`` is only generated when the meta-model uses a JSON-able type, so
+    # it is the only module which this index mentions conditionally.
+    xml_rpc_export = (
+        '\nexport * as xmlrpc from "./xmlrpc";'
+        if intermediate.uses_json_types(symbol_table)
+        else ""
+    )
+
     blocks = [
         comment,
         typescript_common.WARNING,
         Stripped(
-            """\
+            f"""\
 export * as common from "./common";
 export * as constants from "./constants";
 export * as jsonization from "./jsonization";
-export * as xmlization from "./xmlization";
+export * as xmlcommon from "./xmlcommon";
+export * as xmlization from "./xmlization";{xml_rpc_export}
 export * as stringification from "./stringification";
 export * as types from "./types";
 export * as verification from "./verification";"""

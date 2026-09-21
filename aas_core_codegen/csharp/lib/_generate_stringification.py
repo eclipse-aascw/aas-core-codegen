@@ -178,7 +178,7 @@ def generate(
     """
     Generate code for string de/serialization of enumerations.
 
-    The ``namespace`` defines the AAS C# namespace.
+    The ``namespace`` defines the base C# namespace of the generated code.
     """
     using_directives = []  # type: List[Stripped]
     using_directives.extend(

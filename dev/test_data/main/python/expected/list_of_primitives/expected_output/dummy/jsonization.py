@@ -16,7 +16,6 @@ import collections.abc
 import math
 import sys
 from typing import (
-    cast,
     Any,
     Callable,
     Dict,
@@ -39,6 +38,39 @@ else:
 import dummy.common as aas_common
 import dummy.stringification as aas_stringification
 import dummy.types as aas_types
+
+
+# NOTE (mristin):
+# The SDK defines three of these path vocabularies: this one, the one in
+# :py:mod:`dummy.jsonization`, and the one in
+# :py:mod:`dummy.xmlcommon`.
+# They look alike, and it is tempting to merge them, but they are not
+# interchangeable.
+#
+# Each of them points into a different thing, and every segment carries
+# a back-pointer to the container it stepped through, so the type of that
+# back-pointer differs from one to the next:
+#
+# * This one points into the instances which you built, so a property
+#   segment holds a class of the meta-model.
+# * The jsonization's points into the JSON-able structure being read or
+#   written, so a property segment holds the JSON-able mapping instead:
+#   while a document is being parsed, the instance which the property would
+#   belong to does not exist yet.
+# * The xmlcommon's points into the XML document, where there are no
+#   properties at all, only elements, so it names an element instead.
+#
+# The three also render differently: a path into the instances is a Python
+# access expression, a path into a JSON-able structure starts at the root of
+# the document and carries no leading dot, and a path into an XML document
+# is a relative XPath.
+#
+# Merging them would mean either dropping the back-pointers, which have been
+# part of the public API of this SDK since before these modules were split
+# apart, or defining a single path over the union of all the segment kinds --
+# in which case every consumer would have to handle segments which can never
+# occur in its world. Three small vocabularies which each say exactly what
+# they can say cost less than one large one which lies about its range.
 
 
 class PropertySegment:
@@ -79,7 +111,33 @@ class IndexSegment:
         self.index = index
 
 
-Segment = Union[PropertySegment, IndexSegment]
+class KeySegment:
+    """
+    Represent a member access on a path to the erroneous value.
+
+    Unlike a :py:class:`PropertySegment`, which names a property of one of our
+    classes, a key names a member of an open JSON-able object. It is known only
+    at run time, and can be any string at all, so it is always rendered
+    as a subscript.
+    """
+
+    #: Mapping that contains the value at :py:attr:`~key`
+    mapping: Final[Mapping[str, Any]]
+
+    #: Key of the value
+    key: Final[str]
+
+    def __init__(
+            self,
+            mapping: Mapping[str, Any],
+            key: str
+    ) -> None:
+        """Initialize with the given values."""
+        self.mapping = mapping
+        self.key = key
+
+
+Segment = Union[PropertySegment, IndexSegment, KeySegment]
 
 
 class Path:
@@ -110,6 +168,8 @@ class Path:
             parts.append(f"{first.name}")
         elif isinstance(first, IndexSegment):
             parts.append(f"[{first.index}]")
+        elif isinstance(first, KeySegment):
+            parts.append(f"[{first.key!r}]")
         else:
             aas_common.assert_never(first)
 
@@ -118,6 +178,8 @@ class Path:
                 parts.append(f".{segment.name}")
             elif isinstance(segment, IndexSegment):
                 parts.append(f"[{segment.index}]")
+            elif isinstance(segment, KeySegment):
+                parts.append(f"[{segment.key!r}]")
             else:
                 aas_common.assert_never(segment)
 
@@ -326,64 +388,6 @@ def _bytes_from_jsonable(
     )
 
 
-def _try_to_cast_to_array_like(
-    jsonable: Jsonable
-) -> Optional[Iterable[Any]]:
-    """
-    Try to cast the ``jsonable`` to something like a JSON array.
-
-    In particular, we explicitly check that the ``jsonable`` is not a mapping, as we
-    do not want to mistake dictionaries (*i.e.* de-serialized JSON objects) for lists.
-
-    >>> assert _try_to_cast_to_array_like(True) is None
-
-    >>> assert _try_to_cast_to_array_like(0) is None
-
-    >>> assert _try_to_cast_to_array_like(2.2) is None
-
-    >>> assert _try_to_cast_to_array_like("hello") is None
-
-    >>> assert _try_to_cast_to_array_like(b"hello") is None
-
-    >>> _try_to_cast_to_array_like([1, 2])
-    [1, 2]
-
-    >>> assert _try_to_cast_to_array_like({"a": 3}) is None
-
-    >>> assert _try_to_cast_to_array_like(collections.OrderedDict()) is None
-
-    >>> _try_to_cast_to_array_like(range(1, 2))
-    range(1, 2)
-
-    >>> _try_to_cast_to_array_like((1, 2))
-    (1, 2)
-
-    >>> assert _try_to_cast_to_array_like({1, 2, 3}) is None
-    """
-    # NOTE (mristin):
-    # A ``list`` is what :py:mod:`json` gives us, and the general checks below cost
-    # about ten times as much -- measured on CPython 3.10, ~550 ns against ~60 ns --
-    # so we shortcut it here.
-    if isinstance(jsonable, list):
-        return jsonable
-
-    if (
-        not isinstance(jsonable, (str, bytearray, bytes))
-        and hasattr(jsonable, "__iter__")
-        and not hasattr(jsonable, "keys")
-        # NOTE (mristin):
-        # There is no easy way to check for sets as opposed to sequence except
-        # for checking for direct inheritance. A sequence also inherits from
-        # a collection, so both sequences and sets provide ``__contains__`` method.
-        #
-        # See: https://docs.python.org/3/library/collections.abc.html
-        and not isinstance(jsonable, collections.abc.Set)
-    ):
-        return cast(Iterable[Any], jsonable)
-
-    return None
-
-
 def _list_from_jsonable(
     jsonable: Jsonable,
     parse_item: _Parser[_ValueT]
@@ -397,7 +401,7 @@ def _list_from_jsonable(
     :return: parsed list
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    array_like = _try_to_cast_to_array_like(jsonable)
+    array_like = aas_common.try_to_cast_to_array_like(jsonable)
     if array_like is None:
         raise DeserializationException(
             f"Expected something array-like, but got: {type(jsonable)}"
@@ -619,6 +623,16 @@ class SerializationException(Exception):
         """Insert the access to the item at :paramref:`index` before the path."""
         self._segments.insert(0, f'[{index}]')
 
+    def _prepend_key(self, key: str) -> None:
+        """
+        Insert the access to the member :paramref:`key` before the path.
+
+        Unlike a property of one of our classes, a member of an open JSON-able
+        object is known only at run time and can be any string at all, so it is
+        always rendered as a subscript.
+        """
+        self._segments.insert(0, f'[{key!r}]')
+
     def __str__(self) -> str:
         if len(self._segments) == 0:
             return self.cause
@@ -695,12 +709,18 @@ def _list_of__bytes_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        _bytes_to_base64_str(
-        item
-    )
-        for item in that
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _bytes_to_base64_str(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
 
 
 def _list_of__float_to_jsonable(
@@ -756,9 +776,13 @@ def _something_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['someBools'] = list(
-        that.some_bools
-    )
+    try:
+        jsonable['someBools'] = list(
+            that.some_bools
+        )
+    except SerializationException as exception:
+        exception._prepend_property('some_bools')
+        raise
     try:
         jsonable['someInts'] = _list_of__int_to_jsonable(
             that.some_ints
@@ -773,12 +797,20 @@ def _something_to_jsonable(
     except SerializationException as exception:
         exception._prepend_property('some_floats')
         raise
-    jsonable['someStrings'] = list(
-        that.some_strings
-    )
-    jsonable['someBytes'] = _list_of__bytes_to_jsonable(
-        that.some_bytes
-    )
+    try:
+        jsonable['someStrings'] = list(
+            that.some_strings
+        )
+    except SerializationException as exception:
+        exception._prepend_property('some_strings')
+        raise
+    try:
+        jsonable['someBytes'] = _list_of__bytes_to_jsonable(
+            that.some_bytes
+        )
+    except SerializationException as exception:
+        exception._prepend_property('some_bytes')
+        raise
     return jsonable
 
 

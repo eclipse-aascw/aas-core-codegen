@@ -552,6 +552,19 @@ for {loop_var} in self.{prop_name}:
                     # noinspection PyTypeChecker
                     assert_never(type_anno.items.our_type)
 
+            elif isinstance(
+                type_anno.items,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # A JSON-able value is plain data, never a reference to one of
+                # our own classes, so there is nothing to descend into.
+                continue
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno.items)
@@ -584,6 +597,19 @@ for {loop_var} in self.{prop_name}:
 
             if len(prop_blocks) == 0:
                 continue
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # A JSON-able value is plain data, never a reference to one of our
+            # own classes, so there is nothing to descend into.
+            continue
 
         else:
             # noinspection PyTypeChecker
@@ -1637,6 +1663,58 @@ def _generate_docstring_for_meta_model(
     return python_description.docstring(text), None
 
 
+def _generate_json_aliases(uses_json_types: bool) -> List[Stripped]:
+    """
+    Generate the aliases of the JSON-able types, if the model uses them.
+
+    They live here, next to the classes whose properties are annotated with
+    them, and not in the jsonization: a property's type belongs to the types
+    module, and the jsonization already imports it.
+    """
+    if not uses_json_types:
+        return []
+
+    return [
+        Stripped(
+            f"""\
+# NOTE (mristin):
+# A JSON-able value is, recursively, exactly as JSON itself is defined:
+# a boolean, a number, a string, an array of JSON-able values or an object
+# of JSON-able values with string keys -- never a ``None``, and never
+# an infinity or a not-a-number, neither of which JSON can represent.
+#
+# JSON knows a single numeric type. Python tells an ``int`` from a ``float``,
+# and a caller will naturally write either, so both are admitted here -- but
+# an ``int`` only so long as a ``float`` can hold it exactly. The
+# de-serialization converts every number it reads to a ``float``, and both
+# the verification and the serialization refuse an ``int`` which that
+# conversion would round.
+#
+# Recursive type aliases are not yet available in mypy
+# (see https://github.com/python/mypy/issues/731), so the item and the value
+# types have to be spelled ``Any`` instead of ``JsonValue``.
+JsonValue = Union[
+{I}bool,
+{I}int,
+{I}float,
+{I}str,
+{I}Sequence[Any],
+{I}Mapping[str, Any]
+]"""
+        ),
+        Stripped(
+            """\
+#: Represent a JSON-able value which is known to be an array
+JsonArray = Sequence[Any]"""
+        ),
+        Stripped(
+            """\
+#: Represent a JSON-able value which is known to be an object
+JsonObject = Mapping[str, Any]"""
+        ),
+    ]
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -1687,6 +1765,19 @@ def generate(
     if len(symbol_table.named_unions) > 0:
         typing_imports.append(Identifier("Union"))
 
+    uses_json_types = intermediate.uses_json_types(symbol_table)
+    if uses_json_types:
+        typing_imports.extend(
+            [
+                Identifier("Any"),
+                Identifier("Mapping"),
+                Identifier("Sequence"),
+            ]
+        )
+
+        if len(symbol_table.named_unions) == 0:
+            typing_imports.append(Identifier("Union"))
+
     typing_imports_joined = ",\n".join(f"{I}{name}" for name in typing_imports)
 
     blocks.extend(
@@ -1705,6 +1796,7 @@ from typing import (
 T = TypeVar("T")
 ContextT = TypeVar("ContextT")"""
             ),
+            *_generate_json_aliases(uses_json_types=uses_json_types),
             Stripped(
                 f"""\
 class Class(abc.ABC):

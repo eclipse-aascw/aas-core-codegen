@@ -18,6 +18,37 @@ export type JsonValue = string | number | boolean | JsonObject | JsonArray;
 export type JsonArray = Iterable<JsonValue>;
 export type JsonObject = { [prop: string]: JsonValue };
 
+// NOTE (mristin):
+// The SDK defines three of these path vocabularies: this one, the one in
+// the `jsonization` module, and the one in the `xmlcommon` module. They look
+// alike, and it is tempting to merge them, but they are not interchangeable.
+//
+// Each of them points into a different thing:
+//
+// * This one points into the instances which you built, so a property segment
+//   holds a class of the meta-model.
+// * The jsonization's points into the JSON-able structure being read or
+//   written, so a property segment holds the JSON-able object instead: while
+//   a document is being parsed, the instance which the property would belong
+//   to does not exist yet.
+// * The xmlcommon's points into the XML document, where there are no
+//   properties at all, only elements, so it names an element instead. It is
+//   also the only one whose segments carry no back-pointer, as the reading is
+//   a single pass over a token stream and the element is gone by the time
+//   the error comes back out.
+//
+// The three also render differently: a path into the instances is
+// a TypeScript access expression, a path into a JSON-able structure starts at
+// the root of the document and carries no leading dot, and a path into an XML
+// document is a relative XPath.
+//
+// Merging them would mean either dropping the back-pointers, which have been
+// part of the public API of this SDK since before these modules were split
+// apart, or defining a single path over the union of all the segment kinds --
+// in which case every consumer would have to handle segments which can never
+// occur in its world. Three small vocabularies which each say exactly what
+// they can say cost less than one large one which lies about its range.
+
 /**
  * Represent a property on a path to the erroneous value.
  */
@@ -62,7 +93,35 @@ export class IndexSegment {
   }
 }
 
-export type Segment = PropertySegment | IndexSegment;
+/**
+ * Represent a member of an open JSON-able object on a path to the erroneous
+ * value.
+ *
+ * @remarks
+ *
+ * Unlike a {@link PropertySegment}, which names a property of one of our
+ * classes, a key names a member of an open JSON-able object. It is known only
+ * at run time, and can be any string at all, so it is always rendered as
+ * a subscript.
+ */
+export class KeySegment {
+  /**
+   * Object that contains the value at {@link key}
+   */
+  readonly object: JsonObject;
+
+  /**
+   * Key of the value
+   */
+  readonly key: string;
+
+  constructor(object: JsonObject, key: string) {
+    this.object = object;
+    this.key = key;
+  }
+}
+
+export type Segment = PropertySegment | IndexSegment | KeySegment;
 
 /**
  * Represent the relative path to the erroneous value.
@@ -99,6 +158,8 @@ export class Path {
       parts.push(segment.name);
     } else if (segment instanceof IndexSegment) {
       parts.push(`[${segment.index}]`);
+    } else if (segment instanceof KeySegment) {
+      parts.push(`[${JSON.stringify(segment.key)}]`);
     } else {
       throw new Error(`Unexpected segment: ${segment}`);
     }
@@ -109,6 +170,8 @@ export class Path {
         parts.push(`.${segment.name}`);
       } else if (segment instanceof IndexSegment) {
         parts.push(`[${segment.index}]`);
+      } else if (segment instanceof KeySegment) {
+        parts.push(`[${JSON.stringify(segment.key)}]`);
       } else {
         throw new Error(`Unexpected segment: ${segment}`);
       }
@@ -8762,6 +8825,19 @@ export class SerializationError extends Error {
   prependIndex(index: number): void {
     this._segments.unshift(`[${index}]`);
   }
+
+  /**
+   * Insert the access to the member `key` before the {@link path}.
+   *
+   * @remarks
+   *
+   * Unlike a property of one of our classes, a member of an open JSON-able
+   * object is known only at run time and can be any string at all, so it is
+   * always rendered as a subscript.
+   */
+  prependKey(key: string): void {
+    this._segments.unshift(`[${JSON.stringify(key)}]`);
+  }
 }
 
 /**
@@ -8995,7 +9071,7 @@ function serializeExtension(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.semanticId !== null) {
@@ -9010,6 +9086,7 @@ function serializeExtension(
         serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
+    prop = "name";
     jsonable["name"] =
       that.name;
 
@@ -9020,6 +9097,7 @@ function serializeExtension(
     }
 
     if (that.value !== null) {
+      prop = "value";
       jsonable["value"] =
         that.value;
     }
@@ -9050,7 +9128,7 @@ function serializeAdministrativeInformation(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.embeddedDataSpecifications !== null) {
@@ -9060,11 +9138,13 @@ function serializeAdministrativeInformation(
     }
 
     if (that.version !== null) {
+      prop = "version";
       jsonable["version"] =
         that.version;
     }
 
     if (that.revision !== null) {
+      prop = "revision";
       jsonable["revision"] =
         that.revision;
     }
@@ -9076,6 +9156,7 @@ function serializeAdministrativeInformation(
     }
 
     if (that.templateId !== null) {
+      prop = "templateId";
       jsonable["templateId"] =
         that.templateId;
     }
@@ -9100,7 +9181,7 @@ function serializeQualifier(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.semanticId !== null) {
@@ -9121,6 +9202,7 @@ function serializeQualifier(
         serialize_QualifierKind(that.kind);
     }
 
+    prop = "type";
     jsonable["type"] =
       that.type;
 
@@ -9129,6 +9211,7 @@ function serializeQualifier(
       serialize_DataTypeDefXsd(that.valueType);
 
     if (that.value !== null) {
+      prop = "value";
       jsonable["value"] =
         that.value;
     }
@@ -9159,7 +9242,7 @@ function serializeAssetAdministrationShell(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -9169,21 +9252,25 @@ function serializeAssetAdministrationShell(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -9194,6 +9281,7 @@ function serializeAssetAdministrationShell(
         serializeAdministrativeInformation(that.administration);
     }
 
+    prop = "id";
     jsonable["id"] =
       that.id;
 
@@ -9241,7 +9329,7 @@ function serializeAssetInformation(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     prop = "assetKind";
@@ -9249,6 +9337,7 @@ function serializeAssetInformation(
       serialize_AssetKind(that.assetKind);
 
     if (that.globalAssetId !== null) {
+      prop = "globalAssetId";
       jsonable["globalAssetId"] =
         that.globalAssetId;
     }
@@ -9260,11 +9349,13 @@ function serializeAssetInformation(
     }
 
     if (that.assetType !== null) {
+      prop = "assetType";
       jsonable["assetType"] =
         that.assetType;
     }
 
     if (that.defaultThumbnail !== null) {
+      prop = "defaultThumbnail";
       jsonable["defaultThumbnail"] =
         serializeResource(that.defaultThumbnail);
     }
@@ -9289,12 +9380,23 @@ function serializeResource(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["path"] =
-    that.path;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "path";
+    jsonable["path"] =
+      that.path;
 
-  if (that.contentType !== null) {
-    jsonable["contentType"] =
-      that.contentType;
+    if (that.contentType !== null) {
+      prop = "contentType";
+      jsonable["contentType"] =
+        that.contentType;
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
   return jsonable;
@@ -9311,7 +9413,7 @@ function serializeSpecificAssetId(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.semanticId !== null) {
@@ -9326,9 +9428,11 @@ function serializeSpecificAssetId(
         serialize_ListOf_Reference(that.supplementalSemanticIds);
     }
 
+    prop = "name";
     jsonable["name"] =
       that.name;
 
+    prop = "value";
     jsonable["value"] =
       that.value;
 
@@ -9358,7 +9462,7 @@ function serializeSubmodel(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -9368,21 +9472,25 @@ function serializeSubmodel(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -9393,6 +9501,7 @@ function serializeSubmodel(
         serializeAdministrativeInformation(that.administration);
     }
 
+    prop = "id";
     jsonable["id"] =
       that.id;
 
@@ -9454,7 +9563,7 @@ function serializeRelationshipElement(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -9464,21 +9573,25 @@ function serializeRelationshipElement(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -9537,7 +9650,7 @@ function serializeSubmodelElementList(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -9547,21 +9660,25 @@ function serializeSubmodelElementList(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -9591,6 +9708,7 @@ function serializeSubmodelElementList(
     }
 
     if (that.orderRelevant !== null) {
+      prop = "orderRelevant";
       jsonable["orderRelevant"] =
         that.orderRelevant;
     }
@@ -9639,7 +9757,7 @@ function serializeSubmodelElementCollection(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -9649,21 +9767,25 @@ function serializeSubmodelElementCollection(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -9720,7 +9842,7 @@ function serializeProperty(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -9730,21 +9852,25 @@ function serializeProperty(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -9778,6 +9904,7 @@ function serializeProperty(
       serialize_DataTypeDefXsd(that.valueType);
 
     if (that.value !== null) {
+      prop = "value";
       jsonable["value"] =
         that.value;
     }
@@ -9810,7 +9937,7 @@ function serializeMultiLanguageProperty(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -9820,21 +9947,25 @@ function serializeMultiLanguageProperty(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -9864,6 +9995,7 @@ function serializeMultiLanguageProperty(
     }
 
     if (that.value !== null) {
+      prop = "value";
       jsonable["value"] =
         serialize_ListOf_LangStringTextType(that.value);
     }
@@ -9896,7 +10028,7 @@ function serializeRange(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -9906,21 +10038,25 @@ function serializeRange(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -9954,11 +10090,13 @@ function serializeRange(
       serialize_DataTypeDefXsd(that.valueType);
 
     if (that.min !== null) {
+      prop = "min";
       jsonable["min"] =
         that.min;
     }
 
     if (that.max !== null) {
+      prop = "max";
       jsonable["max"] =
         that.max;
     }
@@ -9985,7 +10123,7 @@ function serializeReferenceElement(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -9995,21 +10133,25 @@ function serializeReferenceElement(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -10066,7 +10208,7 @@ function serializeBlob(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -10076,21 +10218,25 @@ function serializeBlob(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -10120,10 +10266,12 @@ function serializeBlob(
     }
 
     if (that.value !== null) {
+      prop = "value";
       jsonable["value"] =
         AasCommon.base64Encode(that.value);
     }
 
+    prop = "contentType";
     jsonable["contentType"] =
       that.contentType;
   } catch (error) {
@@ -10149,7 +10297,7 @@ function serializeFile(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -10159,21 +10307,25 @@ function serializeFile(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -10203,10 +10355,12 @@ function serializeFile(
     }
 
     if (that.value !== null) {
+      prop = "value";
       jsonable["value"] =
         that.value;
     }
 
+    prop = "contentType";
     jsonable["contentType"] =
       that.contentType;
   } catch (error) {
@@ -10232,7 +10386,7 @@ function serializeAnnotatedRelationshipElement(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -10242,21 +10396,25 @@ function serializeAnnotatedRelationshipElement(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -10321,7 +10479,7 @@ function serializeEntity(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -10331,21 +10489,25 @@ function serializeEntity(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -10385,6 +10547,7 @@ function serializeEntity(
       serialize_EntityType(that.entityType);
 
     if (that.globalAssetId !== null) {
+      prop = "globalAssetId";
       jsonable["globalAssetId"] =
         that.globalAssetId;
     }
@@ -10417,7 +10580,7 @@ function serializeEventPayload(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     prop = "source";
@@ -10441,6 +10604,7 @@ function serializeEventPayload(
     }
 
     if (that.topic !== null) {
+      prop = "topic";
       jsonable["topic"] =
         that.topic;
     }
@@ -10451,10 +10615,12 @@ function serializeEventPayload(
         serializeReference(that.subjectId);
     }
 
+    prop = "timeStamp";
     jsonable["timeStamp"] =
       that.timeStamp;
 
     if (that.payload !== null) {
+      prop = "payload";
       jsonable["payload"] =
         AasCommon.base64Encode(that.payload);
     }
@@ -10479,7 +10645,7 @@ function serializeBasicEventElement(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -10489,21 +10655,25 @@ function serializeBasicEventElement(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -10545,6 +10715,7 @@ function serializeBasicEventElement(
       serialize_StateOfEvent(that.state);
 
     if (that.messageTopic !== null) {
+      prop = "messageTopic";
       jsonable["messageTopic"] =
         that.messageTopic;
     }
@@ -10556,16 +10727,19 @@ function serializeBasicEventElement(
     }
 
     if (that.lastUpdate !== null) {
+      prop = "lastUpdate";
       jsonable["lastUpdate"] =
         that.lastUpdate;
     }
 
     if (that.minInterval !== null) {
+      prop = "minInterval";
       jsonable["minInterval"] =
         that.minInterval;
     }
 
     if (that.maxInterval !== null) {
+      prop = "maxInterval";
       jsonable["maxInterval"] =
         that.maxInterval;
     }
@@ -10592,7 +10766,7 @@ function serializeOperation(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -10602,21 +10776,25 @@ function serializeOperation(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -10685,7 +10863,7 @@ function serializeOperationVariable(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     prop = "value";
@@ -10712,7 +10890,7 @@ function serializeCapability(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -10722,21 +10900,25 @@ function serializeCapability(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -10787,7 +10969,7 @@ function serializeConceptDescription(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.extensions !== null) {
@@ -10797,21 +10979,25 @@ function serializeConceptDescription(
     }
 
     if (that.category !== null) {
+      prop = "category";
       jsonable["category"] =
         that.category;
     }
 
     if (that.idShort !== null) {
+      prop = "idShort";
       jsonable["idShort"] =
         that.idShort;
     }
 
     if (that.displayName !== null) {
+      prop = "displayName";
       jsonable["displayName"] =
         serialize_ListOf_LangStringNameType(that.displayName);
     }
 
     if (that.description !== null) {
+      prop = "description";
       jsonable["description"] =
         serialize_ListOf_LangStringTextType(that.description);
     }
@@ -10822,6 +11008,7 @@ function serializeConceptDescription(
         serializeAdministrativeInformation(that.administration);
     }
 
+    prop = "id";
     jsonable["id"] =
       that.id;
 
@@ -10859,7 +11046,7 @@ function serializeReference(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     prop = "type";
@@ -10896,13 +11083,14 @@ function serializeKey(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     prop = "type";
     jsonable["type"] =
       serialize_KeyTypes(that.type);
 
+    prop = "value";
     jsonable["value"] =
       that.value;
   } catch (error) {
@@ -10926,11 +11114,22 @@ function serializeLangStringNameType(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["language"] =
-    that.language;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "language";
+    jsonable["language"] =
+      that.language;
 
-  jsonable["text"] =
-    that.text;
+    prop = "text";
+    jsonable["text"] =
+      that.text;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -10946,11 +11145,22 @@ function serializeLangStringTextType(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["language"] =
-    that.language;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "language";
+    jsonable["language"] =
+      that.language;
 
-  jsonable["text"] =
-    that.text;
+    prop = "text";
+    jsonable["text"] =
+      that.text;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -10966,7 +11176,7 @@ function serializeEnvironment(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     if (that.assetAdministrationShells !== null) {
@@ -11007,7 +11217,7 @@ function serializeEmbeddedDataSpecification(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     prop = "dataSpecification";
@@ -11038,17 +11248,30 @@ function serializeLevelType(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["min"] =
-    that.min;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "min";
+    jsonable["min"] =
+      that.min;
 
-  jsonable["nom"] =
-    that.nom;
+    prop = "nom";
+    jsonable["nom"] =
+      that.nom;
 
-  jsonable["typ"] =
-    that.typ;
+    prop = "typ";
+    jsonable["typ"] =
+      that.typ;
 
-  jsonable["max"] =
-    that.max;
+    prop = "max";
+    jsonable["max"] =
+      that.max;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -11064,9 +11287,10 @@ function serializeValueReferencePair(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
+    prop = "value";
     jsonable["value"] =
       that.value;
 
@@ -11094,7 +11318,7 @@ function serializeValueList(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     prop = "valueReferencePairs";
@@ -11121,11 +11345,22 @@ function serializeLangStringPreferredNameTypeIec61360(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["language"] =
-    that.language;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "language";
+    jsonable["language"] =
+      that.language;
 
-  jsonable["text"] =
-    that.text;
+    prop = "text";
+    jsonable["text"] =
+      that.text;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -11141,11 +11376,22 @@ function serializeLangStringShortNameTypeIec61360(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["language"] =
-    that.language;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "language";
+    jsonable["language"] =
+      that.language;
 
-  jsonable["text"] =
-    that.text;
+    prop = "text";
+    jsonable["text"] =
+      that.text;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -11161,11 +11407,22 @@ function serializeLangStringDefinitionTypeIec61360(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["language"] =
-    that.language;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "language";
+    jsonable["language"] =
+      that.language;
 
-  jsonable["text"] =
-    that.text;
+    prop = "text";
+    jsonable["text"] =
+      that.text;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -11181,18 +11438,21 @@ function serializeDataSpecificationIec61360(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
+    prop = "preferredName";
     jsonable["preferredName"] =
       serialize_ListOf_LangStringPreferredNameTypeIec61360(that.preferredName);
 
     if (that.shortName !== null) {
+      prop = "shortName";
       jsonable["shortName"] =
         serialize_ListOf_LangStringShortNameTypeIec61360(that.shortName);
     }
 
     if (that.unit !== null) {
+      prop = "unit";
       jsonable["unit"] =
         that.unit;
     }
@@ -11204,11 +11464,13 @@ function serializeDataSpecificationIec61360(
     }
 
     if (that.sourceOfDefinition !== null) {
+      prop = "sourceOfDefinition";
       jsonable["sourceOfDefinition"] =
         that.sourceOfDefinition;
     }
 
     if (that.symbol !== null) {
+      prop = "symbol";
       jsonable["symbol"] =
         that.symbol;
     }
@@ -11220,11 +11482,13 @@ function serializeDataSpecificationIec61360(
     }
 
     if (that.definition !== null) {
+      prop = "definition";
       jsonable["definition"] =
         serialize_ListOf_LangStringDefinitionTypeIec61360(that.definition);
     }
 
     if (that.valueFormat !== null) {
+      prop = "valueFormat";
       jsonable["valueFormat"] =
         that.valueFormat;
     }
@@ -11236,11 +11500,13 @@ function serializeDataSpecificationIec61360(
     }
 
     if (that.value !== null) {
+      prop = "value";
       jsonable["value"] =
         that.value;
     }
 
     if (that.levelType !== null) {
+      prop = "levelType";
       jsonable["levelType"] =
         serializeLevelType(that.levelType);
     }
@@ -11338,8 +11604,16 @@ function serialize_ListOf_LangStringNameType(
   that: ReadonlyArray<AasTypes.LangStringNameType>
 ): Array<JsonObject> {
   const result = new Array<JsonObject>(that.length);
-  for (let i = 0; i < that.length; i++) {
-    result[i] = serializeLangStringNameType(that[i]);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeLangStringNameType(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
   }
   return result;
 }
@@ -11354,8 +11628,16 @@ function serialize_ListOf_LangStringTextType(
   that: ReadonlyArray<AasTypes.LangStringTextType>
 ): Array<JsonObject> {
   const result = new Array<JsonObject>(that.length);
-  for (let i = 0; i < that.length; i++) {
-    result[i] = serializeLangStringTextType(that[i]);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeLangStringTextType(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
   }
   return result;
 }
@@ -11610,8 +11892,16 @@ function serialize_ListOf_LangStringPreferredNameTypeIec61360(
   that: ReadonlyArray<AasTypes.LangStringPreferredNameTypeIec61360>
 ): Array<JsonObject> {
   const result = new Array<JsonObject>(that.length);
-  for (let i = 0; i < that.length; i++) {
-    result[i] = serializeLangStringPreferredNameTypeIec61360(that[i]);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeLangStringPreferredNameTypeIec61360(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
   }
   return result;
 }
@@ -11626,8 +11916,16 @@ function serialize_ListOf_LangStringShortNameTypeIec61360(
   that: ReadonlyArray<AasTypes.LangStringShortNameTypeIec61360>
 ): Array<JsonObject> {
   const result = new Array<JsonObject>(that.length);
-  for (let i = 0; i < that.length; i++) {
-    result[i] = serializeLangStringShortNameTypeIec61360(that[i]);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeLangStringShortNameTypeIec61360(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
   }
   return result;
 }
@@ -11642,8 +11940,16 @@ function serialize_ListOf_LangStringDefinitionTypeIec61360(
   that: ReadonlyArray<AasTypes.LangStringDefinitionTypeIec61360>
 ): Array<JsonObject> {
   const result = new Array<JsonObject>(that.length);
-  for (let i = 0; i < that.length; i++) {
-    result[i] = serializeLangStringDefinitionTypeIec61360(that[i]);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeLangStringDefinitionTypeIec61360(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
   }
   return result;
 }

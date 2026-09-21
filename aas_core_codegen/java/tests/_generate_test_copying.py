@@ -249,6 +249,33 @@ Arrays.equals(
                 )
             else:
                 expr = tuple_expr
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # Jackson's own ``equals`` compares a node by value, all the way
+            # down, so a JSON-able value needs nothing of its own here.
+            if optional:
+                expr = Stripped(
+                    f"""\
+(that.{getter_name}().isPresent()
+{I}? casted.{getter_name}().isPresent()
+{II}&& that.{getter_name}().get().equals(
+{III}casted.{getter_name}().get())
+{I}: ! casted.{getter_name}().isPresent())"""
+                )
+            else:
+                expr = Stripped(
+                    f"""\
+that.{getter_name}().equals(
+{I}casted.{getter_name}())"""
+                )
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno)

@@ -1,0 +1,14 @@
+{
+  "value": true,
+  "values": [
+    1.5,
+    "two",
+    false
+  ],
+  "mapping": {
+    "a": 1.5
+  },
+  "mappingWithConstrainedKey": {
+    "nonEmptyKey": "some value"
+  }
+}

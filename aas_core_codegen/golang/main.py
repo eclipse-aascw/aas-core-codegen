@@ -147,6 +147,15 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             ),
         ),
         (
+            base_rel_path / "internal/xmlcommon/xmlcommon.go",
+            lambda: (
+                golang_lib.generate_xml_common(
+                    symbol_table=context.symbol_table, repo_url=repo_url
+                ),
+                None,
+            ),
+        ),
+        (
             base_rel_path / "xmlization/xmlization.go",
             lambda: golang_lib.generate_xmlization(
                 symbol_table=context.symbol_table,
@@ -305,6 +314,19 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             ),
         ),
     ]
+
+    # NOTE (mristin):
+    # The ``xmlrpc`` package is only needed when the meta-model actually uses
+    # a JSON-able type (``JSONValue``, ``JSONArray`` or ``JSONObject[K]``) --
+    # unlike the other packages above, which are always generated regardless of
+    # the model.
+    if intermediate.uses_json_types(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                base_rel_path / "xmlrpc/xmlrpc.go",
+                lambda: (golang_lib.generate_xml_rpc(repo_url=repo_url), None),
+            ),
+        ]
 
     for rel_path, generator_func in rel_paths_generators:
         assert not rel_path.is_absolute()

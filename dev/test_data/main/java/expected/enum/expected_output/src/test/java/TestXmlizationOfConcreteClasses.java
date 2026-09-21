@@ -7,6 +7,7 @@ package dummy.tests;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import dummy.reporting.Reporting;
@@ -139,10 +140,14 @@ public class TestXmlizationOfConcreteClasses {
   // check output for aas-name-space
   for (XMLEvent event : outputMap.keySet()) {
     if (event.isStartElement()) {
-      assertEquals(Xmlization.AAS_NAME_SPACE, event.asStartElement().getName().getNamespaceURI());
+      assertTrue(
+        Xmlization.AAS_NAME_SPACE.equals(event.asStartElement().getName().getNamespaceURI()),
+        "Unexpected namespace of " + event.asStartElement().getName());
     }
     if (event.isEndElement()) {
-      assertEquals(Xmlization.AAS_NAME_SPACE, event.asEndElement().getName().getNamespaceURI());
+      assertTrue(
+        Xmlization.AAS_NAME_SPACE.equals(event.asEndElement().getName().getNamespaceURI()),
+        "Unexpected namespace of " + event.asEndElement().getName());
     }
   }
 

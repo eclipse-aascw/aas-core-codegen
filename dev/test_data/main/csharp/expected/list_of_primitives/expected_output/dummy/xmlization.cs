@@ -5,8 +5,6 @@
 
 using Aas = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
-using Globalization = System.Globalization;
-using RegularExpressions = System.Text.RegularExpressions;
 using Xml = System.Xml;
 
 using System.Collections.Generic;  // can't alias
@@ -20,8 +18,7 @@ namespace dummy
     {
         /// The XML namespace of the meta-model
         [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-        public static readonly string NS = (
-            "https://dummy.com");
+        public static readonly string NS = XmlCommon.NS;
 
         /// <summary>
         /// Implement the deserialization of meta-model classes from XML.
@@ -40,20 +37,6 @@ namespace dummy
         /// </remarks>
         internal static class DeserializeImplementation
         {
-            internal static void SkipNoneWhitespaceAndComments(
-                Xml.XmlReader reader)
-            {
-                while (
-                    !reader.EOF
-                    && (
-                        reader.NodeType == Xml.XmlNodeType.None
-                        || reader.NodeType == Xml.XmlNodeType.Whitespace
-                        || reader.NodeType == Xml.XmlNodeType.Comment))
-                {
-                    reader.Read();
-                }
-            }
-
             /// <summary>
             /// Read the whole content of an element into memory.
             /// </summary>
@@ -66,78 +49,16 @@ namespace dummy
                 // lenient in ways XSD is not -- it reads "SGk" although it is three
                 // characters long -- and it gives us nothing to check before it has
                 // already decoded.
-                string text = WhitespaceRunRegex.Replace(reader.ReadContentAsString(), "");
+                string text = XmlCommon.WhitespaceRunRegex.Replace(
+                    reader.ReadContentAsString(), "");
 
-                if (!MatchesXsBase64Binary(text))
+                if (!XmlCommon.MatchesXsBase64Binary(text))
                 {
                     throw new System.FormatException(
                         $"Expected a text as base64-encoded bytes, but got: {text}");
                 }
 
                 return System.Convert.FromBase64String(text);
-            }
-
-            /// <summary>
-            /// Check the namespace and extract the element's name.
-            /// </summary>
-            private static string TryElementName(
-                Xml.XmlReader reader,
-                out Reporting.Error? error
-                )
-            {
-                // Pre-condition
-                if (reader.NodeType != Xml.XmlNodeType.Element
-                    && reader.NodeType != Xml.XmlNodeType.EndElement)
-                {
-                    throw new System.InvalidOperationException(
-                        "Expected to be at a start or an end element " +
-                        $"in {nameof(TryElementName)}, " +
-                        $"but got: {reader.NodeType}");
-                }
-
-                error = null;
-                if (reader.NamespaceURI != NS)
-                {
-                    error = new Reporting.Error(
-                        $"Expected an element within a namespace {NS}, " +
-                        $"but got: {reader.NamespaceURI}");
-                        return "";
-                }
-
-                return reader.LocalName;
-            }
-
-            /// <summary>
-            /// Look ahead the name of the element at the current position of
-            /// <paramref name="reader" />, without consuming anything.
-            /// </summary>
-            private static string PeekElementName(
-                Xml.XmlReader reader,
-                out Reporting.Error? error
-                )
-            {
-                error = null;
-
-                SkipNoneWhitespaceAndComments(reader);
-
-                if (reader.EOF)
-                {
-                    error = new Reporting.Error(
-                        "Expected an XML element, but reached the end-of-file");
-                    return "";
-                }
-
-                if (reader.NodeType != Xml.XmlNodeType.Element)
-                {
-                    error = new Reporting.Error(
-                        "Expected an XML element, " +
-                        $"but got a node of type {reader.NodeType} " +
-                        $"with value {reader.Value}");
-                    return "";
-                }
-
-                return TryElementName(
-                    reader, out error);
             }
 
             /// <summary>
@@ -299,7 +220,7 @@ namespace dummy
             /// </summary>
             private static double ReadContentAsDouble(Xml.XmlReader reader)
             {
-                return ParseXsDouble(
+                return XmlCommon.ParseXsDouble(
                     reader.ReadContentAsString());
             }
 
@@ -323,216 +244,6 @@ namespace dummy
             }
 
             /// <summary>
-            /// Match a run of the four characters which XML calls whitespace.
-            /// </summary>
-            private static readonly RegularExpressions.Regex WhitespaceRunRegex = (
-                new RegularExpressions.Regex(
-                    @"[ \t\n\r]+",
-                    RegularExpressions.RegexOptions.Compiled));
-
-            /// <summary>
-            /// Tell whether <paramref name="text" /> is a lexical form of
-            /// <c>xs:base64Binary</c>.
-            /// </summary>
-            /// <remarks>
-            /// The whitespace is expected to be gone already. What is left has to match
-            /// <c>(B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=')
-            /// | (B64 B04 '=='))?</c> -- a length which is a multiple of four,
-            /// the alphabet and nothing else, an equals sign only at the very end, and,
-            /// easily missed, a constrained character <i>before</i> the padding, as
-            /// the bits which the padding drops have to be zero.
-            ///
-            /// The decoders do not agree on any of this, so every target does the same
-            /// check of its own and refuses the same texts.
-            ///
-            /// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
-            /// </remarks>
-            private static bool MatchesXsBase64Binary(string text)
-            {
-                if (text.Length % 4 != 0)
-                {
-                    return false;
-                }
-
-                if (text.Length == 0)
-                {
-                    return true;
-                }
-
-                int pads = 0;
-                if (text[text.Length - 1] == '=')
-                {
-                    pads = 1;
-                    if (text[text.Length - 2] == '=')
-                    {
-                        pads = 2;
-                    }
-                }
-
-                for (int i = 0; i < text.Length - pads; i++)
-                {
-                    char character = text[i];
-                    bool inAlphabet =
-                        (character >= 'A' && character <= 'Z')
-                            || (character >= 'a' && character <= 'z')
-                            || (character >= '0' && character <= '9')
-                            || character == '+'
-                            || character == '/';
-                    if (!inAlphabet)
-                    {
-                        return false;
-                    }
-                }
-
-                // NOTE (mristin):
-                // Only these sixteen characters leave the two dropped bits at zero, and
-                // only these four leave the four dropped bits at zero.
-                if (pads == 1)
-                {
-                    return "AEIMQUYcgkosw048".IndexOf(text[text.Length - 2]) >= 0;
-                }
-
-                if (pads == 2)
-                {
-                    return "AQgw".IndexOf(text[text.Length - 3]) >= 0;
-                }
-
-                return true;
-            }
-
-            /// <summary>
-            /// Match the lexical space of <c>xs:double</c>, save for the three named
-            /// literals, which <see cref="ParseXsDouble" /> takes care of.
-            /// </summary>
-            /// <remarks>
-            /// The pattern ends in <c>\z</c>, and not in <c>$</c>: <c>$</c> matches not
-            /// only at the end of the text but also just before a trailing newline, so
-            /// <c>"1.0\n"</c> would pass.
-            ///
-            /// See: https://www.w3.org/TR/xmlschema-2/#double
-            /// </remarks>
-            private static readonly RegularExpressions.Regex XsDoubleRegex = (
-                new RegularExpressions.Regex(
-                    @"^(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)([Ee](\+|-)?[0-9]+)?\z",
-                    RegularExpressions.RegexOptions.Compiled));
-
-            /// <summary>
-            /// Parse <paramref name="text" /> as a <c>xs:double</c>.
-            /// </summary>
-            /// <remarks>
-            /// <c>XmlReader.ReadContentAsDouble</c> can not be used directly. It reads
-            /// the three named literals correctly, but it also takes <c>Infinity</c>,
-            /// <c>-Infinity</c>, <c>nan</c> and <c>NAN</c>, none of which
-            /// <c>xs:double</c> admits -- it spells them <c>INF</c>, <c>-INF</c> and
-            /// <c>NaN</c>, and it is case-sensitive.
-            /// </remarks>
-            /// <exception cref="System.FormatException">
-            /// Thrown when <paramref name="text" /> is not a <c>xs:double</c>
-            /// </exception>
-            private static double ParseXsDouble(string rawText)
-            {
-                // NOTE (mristin):
-                // Every atomic XSD type except a string fixes whiteSpace to collapse,
-                // and a schema author can not change it, so the text is normalized
-                // before it is matched: a tab, a line feed and a carriage return each
-                // become a space, a run of spaces becomes one space, and the leading
-                // and trailing spaces go. Mind that this strips only the whitespace
-                // *around* the value: a space within it survives as a single space, so
-                // "2  3" becomes "2 3", which is still no number.
-                //
-                // The other readers of this class need no such thing -- XmlConvert,
-                // which XmlReader.ReadContentAs* goes through, already collapses.
-                //
-                // See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
-                string text = WhitespaceRunRegex.Replace(rawText, " ").Trim(' ');
-
-                switch (text)
-                {
-                    // NOTE (mristin):
-                    // "+INF" is read although it is written as "INF": XSD 1.1 admits it,
-                    // its production being (\+|-)?INF, and being liberal in what we
-                    // accept costs nothing here.
-                    case "INF":
-                    case "+INF":
-                        return System.Double.PositiveInfinity;
-                    case "-INF":
-                        return System.Double.NegativeInfinity;
-                    case "NaN":
-                        return System.Double.NaN;
-                    default:
-                        break;
-                }
-
-                if (!XsDoubleRegex.IsMatch(text))
-                {
-                    throw new System.FormatException(
-                        $"Expected a value as xs:double, but got: {text}");
-                }
-
-                return System.Double.Parse(
-                    text,
-                    Globalization.NumberStyles.Float,
-                    Globalization.CultureInfo.InvariantCulture);
-            }
-
-            /// <summary>
-            /// Consume the end tag matching <paramref name="elementName" />, unless
-            /// <paramref name="isEmptyElement" /> tells that the element was
-            /// self-closing and thus has no end tag at all.
-            /// </summary>
-            private static void ConsumeEndElement(
-                Xml.XmlReader reader,
-                string elementName,
-                bool isEmptyElement,
-                out Reporting.Error? error
-                )
-            {
-                error = null;
-
-                if (isEmptyElement)
-                {
-                    return;
-                }
-
-                SkipNoneWhitespaceAndComments(reader);
-
-                if (reader.EOF)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a closing element </{elementName}>, " +
-                        "but reached the end-of-file");
-                    return;
-                }
-
-                if (reader.NodeType != Xml.XmlNodeType.EndElement)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a closing element </{elementName}>, " +
-                        $"but got a node of type {reader.NodeType} " +
-                        $"with value {reader.Value}");
-                    return;
-                }
-
-                string endElementName = TryElementName(
-                    reader, out error);
-                if (error != null)
-                {
-                    return;
-                }
-
-                if (endElementName != elementName)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a closing element </{elementName}>, " +
-                        $"but got a closing element </{endElementName}>");
-                    return;
-                }
-
-                // Consume the end tag.
-                reader.Read();
-            }
-
-            /// <summary>
             /// Bind <paramref name="elementName" /> to <paramref name="readContent" />,
             /// so that the result reads the whole element, tags included.
             /// </summary>
@@ -547,25 +258,12 @@ namespace dummy
                     out Reporting.Error? error
                 ) =>
                 {
-                    string observedName = PeekElementName(
-                        reader, out error);
+                    bool isEmptyElement = XmlCommon.ReadStartElement(
+                        reader, elementName, out error);
                     if (error != null)
                     {
                         return default!;
                     }
-
-                    if (observedName != elementName)
-                    {
-                        error = new Reporting.Error(
-                            $"Expected a <{elementName}> element, " +
-                            $"but got a <{observedName}> element");
-                        return default!;
-                    }
-
-                    bool isEmptyElement = reader.IsEmptyElement;
-
-                    // Consume the start tag and go to the content.
-                    reader.Read();
 
                     T value = readContent(reader, isEmptyElement, out error);
                     if (error != null)
@@ -573,7 +271,7 @@ namespace dummy
                         return default!;
                     }
 
-                    ConsumeEndElement(
+                    XmlCommon.ConsumeEndElement(
                         reader, elementName, isEmptyElement, out error);
                     if (error != null)
                     {
@@ -607,7 +305,7 @@ namespace dummy
                 elementName = "";
                 isEmptyProperty = false;
 
-                SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (reader.NodeType == Xml.XmlNodeType.EndElement || reader.EOF)
                 {
@@ -623,7 +321,7 @@ namespace dummy
                     return false;
                 }
 
-                elementName = TryElementName(
+                elementName = XmlCommon.TryElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -666,7 +364,7 @@ namespace dummy
                 error = null;
                 var result = new List<T>();
 
-                SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 int index = 0;
                 while (reader.NodeType == Xml.XmlNodeType.Element)
@@ -683,7 +381,7 @@ namespace dummy
                     result.Add(item);
 
                     index++;
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                 }
 
                 return result;
@@ -789,7 +487,7 @@ namespace dummy
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -871,7 +569,7 @@ namespace dummy
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -963,41 +661,6 @@ namespace dummy
         }
 
         /// <summary>
-        /// Represent a critical error during the serialization.
-        /// </summary>
-        public class SerializationException : System.Exception
-        {
-            public readonly string Path;
-            public readonly string Cause;
-            public SerializationException(string path, string cause)
-                : base($"{cause} at: {path}")
-            {
-                Path = path;
-                Cause = cause;
-            }
-        }
-
-        /// <summary>
-        /// Signal a failure of the serialization, carrying the path to the culprit.
-        /// </summary>
-        /// <remarks>
-        /// The path is built as the stack unwinds -- every container prepends the one
-        /// segment it knows, the property its name and the list the index of the item
-        /// -- which is why this can not be a <see cref="SerializationException" />
-        /// already: that one renders its message in its constructor, so its path has
-        /// to be complete by then. <see cref="Serialize.To" /> renders and converts.
-        /// </remarks>
-        internal class SerializationFailure : System.Exception
-        {
-            public readonly Reporting.Error Error;
-            public SerializationFailure(Reporting.Error error)
-                : base(error.Cause)
-            {
-                Error = error;
-            }
-        }
-
-        /// <summary>
         /// Deserialize instances of meta-model classes from XML.
         /// </summary>
         /// <example>
@@ -1009,15 +672,10 @@ namespace dummy
         /// </code>
         /// </example>
         ///
-        /// <example>
-        /// If the elements live in a namespace, you have to supply it. For example:
-        /// <code>
-        /// var reader = new System.Xml.XmlReader(/* some arguments */);
-        /// Aas.Something anInstance = Deserialize.SomethingFrom(
-        ///     reader,
-        ///     "http://www.example.com/5/12");
-        /// </code>
-        /// </example>
+        /// <remarks>
+        /// The elements are expected to live in <see cref="NS" />, the one XML
+        /// namespace of the meta-model, so there is nothing to supply.
+        /// </remarks>
         public static class Deserialize
         {
             /// <summary>
@@ -1031,7 +689,7 @@ namespace dummy
             public static Aas.Something SomethingFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {

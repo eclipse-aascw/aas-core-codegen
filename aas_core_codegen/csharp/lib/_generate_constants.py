@@ -279,7 +279,7 @@ def generate(
     """
     Generate code to define the constants of the meta-model.
 
-    The ``namespace`` defines the AAS C# namespace.
+    The ``namespace`` defines the base C# namespace of the generated code.
     """
     constants_blocks = []  # type: List[Stripped]
 

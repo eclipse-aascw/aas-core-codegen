@@ -115,7 +115,7 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
     ] = [
         (
             module_rel_path / "common.py",
-            lambda: (python_lib.generate_common(), None),
+            lambda: (python_lib.generate_common(context.symbol_table), None),
         ),
         (
             module_rel_path / "constants.py",
@@ -129,6 +129,15 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             lambda: python_lib.generate_jsonization(
                 symbol_table=context.symbol_table,
                 qualified_module_name=qualified_module_name,
+            ),
+        ),
+        (
+            module_rel_path / "reporting.py",
+            lambda: (
+                python_lib.generate_reporting(
+                    qualified_module_name=qualified_module_name
+                ),
+                None,
             ),
         ),
         (
@@ -152,6 +161,16 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
                 symbol_table=verified_ir_table,
                 qualified_module_name=qualified_module_name,
                 spec_impls=context.spec_impls,
+            ),
+        ),
+        (
+            module_rel_path / "xmlcommon.py",
+            lambda: (
+                python_lib.generate_xml_common(
+                    symbol_table=context.symbol_table,
+                    qualified_module_name=qualified_module_name,
+                ),
+                None,
             ),
         ),
         (
@@ -288,6 +307,52 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             ),
         ),
     ]
+
+    # NOTE (mristin):
+    # ``jsonvalueverification.py``, ``xmlrpc.py`` and the unit tests which
+    # exercise the two in isolation are only needed when the meta-model actually
+    # uses a JSON-able type (``JSONValue``, ``JSONArray`` or ``JSONObject[K]``)
+    # -- unlike the other modules above, which are always generated regardless
+    # of the model.
+    if intermediate.uses_json_types(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                module_rel_path / "jsonvalueverification.py",
+                lambda: (
+                    python_lib.generate_json_value_verification(
+                        qualified_module_name=qualified_module_name
+                    ),
+                    None,
+                ),
+            ),
+            (
+                module_rel_path / "xmlrpc.py",
+                lambda: (
+                    python_lib.generate_xml_rpc(
+                        qualified_module_name=qualified_module_name
+                    ),
+                    None,
+                ),
+            ),
+            (
+                tests_rel_path / "test_json_value_verification.py",
+                lambda: (
+                    python_tests.generate_test_json_value_verification(
+                        qualified_module_name=qualified_module_name
+                    ),
+                    None,
+                ),
+            ),
+            (
+                tests_rel_path / "test_xml_rpc.py",
+                lambda: (
+                    python_tests.generate_test_xml_rpc(
+                        qualified_module_name=qualified_module_name
+                    ),
+                    None,
+                ),
+            ),
+        ]
 
     for rel_path, generator_func in rel_paths_generators:
         assert not rel_path.is_absolute()

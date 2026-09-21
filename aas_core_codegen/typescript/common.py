@@ -67,6 +67,20 @@ def atomic_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> Identif
     if primitive_type is not None:
         return MONIKER_BY_PRIMITIVE_TYPE[primitive_type]
 
+    # NOTE (mristin):
+    # A JSON-able type is no type of the meta-model, so it needs a moniker of
+    # its own, for the same reason as a primitive above. The initial is
+    # *lower-case* so that it can never be confused for one of our types, which
+    # all go through ``capitalized_camel_case``.
+    if isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        return Identifier("jsonValue")
+
+    if isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        return Identifier("jsonArray")
+
+    if isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        return Identifier("jsonObject")
+
     assert isinstance(
         type_annotation, intermediate.OurTypeAnnotation
     ), f"Expected an atomic type annotation, but got: {type_annotation}"
@@ -395,6 +409,29 @@ def generate_type(
 
         return Stripped(f"[{', '.join(item_types)}]")
 
+    elif isinstance(
+        type_annotation,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # The three JSON-able aliases are declared in the types module, next to
+        # the classes whose properties are annotated with them.
+        json_name: Identifier
+        if isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+            json_name = Identifier("JsonValue")
+        elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+            json_name = Identifier("JsonArray")
+        else:
+            json_name = Identifier("JsonObject")
+
+        return Stripped(
+            json_name if types_module is None else f"{types_module}.{json_name}"
+        )
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value = generate_type(
             type_annotation=type_annotation.value, types_module=types_module
@@ -467,6 +504,45 @@ CONSTANTS_MODULE = Identifier("constants")
 
 #: Name of the module where all the verification logic resides
 VERIFICATION_MODULE = Identifier("verification")
+
+
+#: Note explaining why the SDK carries three error-path vocabularies
+#:
+#: The very same note goes into every one of the three modules which define one,
+#: so that a reader who lands on any of them learns about the other two.
+NOTE_ON_THE_THREE_ERROR_PATHS = Stripped(
+    """\
+// NOTE (mristin):
+// The SDK defines three of these path vocabularies: this one, the one in
+// the `jsonization` module, and the one in the `xmlcommon` module. They look
+// alike, and it is tempting to merge them, but they are not interchangeable.
+//
+// Each of them points into a different thing:
+//
+// * This one points into the instances which you built, so a property segment
+//   holds a class of the meta-model.
+// * The jsonization's points into the JSON-able structure being read or
+//   written, so a property segment holds the JSON-able object instead: while
+//   a document is being parsed, the instance which the property would belong
+//   to does not exist yet.
+// * The xmlcommon's points into the XML document, where there are no
+//   properties at all, only elements, so it names an element instead. It is
+//   also the only one whose segments carry no back-pointer, as the reading is
+//   a single pass over a token stream and the element is gone by the time
+//   the error comes back out.
+//
+// The three also render differently: a path into the instances is
+// a TypeScript access expression, a path into a JSON-able structure starts at
+// the root of the document and carries no leading dot, and a path into an XML
+// document is a relative XPath.
+//
+// Merging them would mean either dropping the back-pointers, which have been
+// part of the public API of this SDK since before these modules were split
+// apart, or defining a single path over the union of all the segment kinds --
+// in which case every consumer would have to handle segments which can never
+// occur in its world. Three small vocabularies which each say exactly what
+// they can say cost less than one large one which lies about its range."""
+)
 
 
 def environment_variable_prefix(package_identifier: Stripped) -> Stripped:

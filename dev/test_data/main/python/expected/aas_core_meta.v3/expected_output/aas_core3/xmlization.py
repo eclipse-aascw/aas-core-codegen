@@ -94,24 +94,28 @@ from typing import (
     TextIO,
     Tuple,
     TypeVar,
-    Union,
     TYPE_CHECKING
 )
 import xml.etree.ElementTree
 
 if sys.version_info >= (3, 8):
-    from typing import (
-        Final,
-        Protocol
-    )
+    from typing import Final
 else:
-    from typing_extensions import (
-        Final,
-        Protocol
-    )
+    from typing_extensions import Final
 
 import aas_core3.stringification as aas_stringification
 import aas_core3.types as aas_types
+import aas_core3.xmlcommon as aas_xmlcommon
+from aas_core3.xmlcommon import (
+    XS_WHITESPACE_RE,
+    collapse_whitespace,
+    parse_element_tag,
+    raise_if_has_tail_or_attrib,
+    read_end_element,
+    read_next_start_element,
+    read_str_from_element_text,
+    read_text_from_element
+)
 
 # See: https://stackoverflow.com/questions/55076778/why-isnt-this-function-type-annotated-correctly-error-missing-type-parameters
 if TYPE_CHECKING:
@@ -121,156 +125,23 @@ else:
 
 
 #: XML namespace in which all the elements are expected to reside
-NAMESPACE = 'https://admin-shell.io/aas/3/0'
+NAMESPACE = aas_xmlcommon.NAMESPACE
 
 
 # region De-serialization
 
 
-#: XML namespace as a prefix specially tailored for
-#: :py:mod:`xml.etree.ElementTree`
-_NAMESPACE_IN_CURLY_BRACKETS = f'{{{NAMESPACE}}}'
+Element = aas_xmlcommon.Element
+HasIterparse = aas_xmlcommon.HasIterparse
 
+ElementSegment = aas_xmlcommon.ElementSegment
+IndexSegment = aas_xmlcommon.IndexSegment
+KeySegment = aas_xmlcommon.KeySegment
+Segment = aas_xmlcommon.Segment
+Path = aas_xmlcommon.Path
 
-class Element(Protocol):
-    """Behave like :py:meth:`xml.etree.ElementTree.Element`."""
-
-    @property
-    def attrib(self) -> Optional[Mapping[str, str]]:
-        """Attributes of the element"""
-        raise NotImplementedError()
-
-    @property
-    def text(self) -> Optional[str]:
-        """Text content of the element"""
-        raise NotImplementedError()
-
-    @property
-    def tail(self) -> Optional[str]:
-        """Tail text of the element"""
-        raise NotImplementedError()
-
-    @property
-    def tag(self) -> str:
-        """Tag of the element; with a namespace provided as a ``{...}`` prefix"""
-        raise NotImplementedError()
-
-    def clear(self) -> None:
-        """Behave like :py:meth:`xml.etree.ElementTree.Element.clear`."""
-        raise NotImplementedError()
-
-
-class HasIterparse(Protocol):
-    """Parse an XML document incrementally."""
-
-    # NOTE (mristin):
-    # ``self`` is not used in this context, but is necessary for Mypy,
-    # see: https://github.com/python/mypy/issues/5018 and
-    # https://github.com/python/mypy/commit/3efbc5c5e910296a60ed5b9e0e7eb11dd912c3ed#diff-e165eb7aed9dca0a5ebd93985c8cd263a6462d36ac185f9461348dc5a1396d76R9937
-
-    def iterparse(
-            self,
-            source: TextIO,
-            events: Optional[Sequence[str]] = None
-    ) -> Iterator[Tuple[str, Element]]:
-        """Behave like :py:func:`xml.etree.ElementTree.iterparse`."""
-
-
-class ElementSegment:
-    """Represent an element on a path to the erroneous value."""
-    #: Erroneous element
-    element: Final[Element]
-
-    def __init__(
-            self,
-            element: Element
-    ) -> None:
-        """Initialize with the given values."""
-        self.element = element
-
-    def __str__(self) -> str:
-        """
-        Render the segment as a tag without the namespace.
-
-        We deliberately omit the namespace in the tag names. If you want to actually
-        query with the resulting XPath, you have to insert the namespaces manually.
-        We did not know how to include the namespace in a meaningful way, as XPath
-        assumes namespace prefixes to be defined *outside* of the document. At least
-        the path thus rendered is informative, and you should be able to descend it
-        manually.
-        """
-        _, has_namespace, tag_wo_ns = self.element.tag.rpartition('}')
-        if not has_namespace:
-            return self.element.tag
-        else:
-            return tag_wo_ns
-
-
-class IndexSegment:
-    """Represent an element in a sequence on a path to the erroneous value."""
-    #: Erroneous element
-    element: Final[Element]
-
-    #: Index of the element in the sequence
-    index: Final[int]
-
-    def __init__(
-            self,
-            element: Element,
-            index: int
-    ) -> None:
-        """Initialize with the given values."""
-        self.element = element
-        self.index = index
-
-    def __str__(self) -> str:
-        """Render the segment as an element wildcard with the index."""
-        return f'*[{self.index}]'
-
-
-Segment = Union[ElementSegment, IndexSegment]
-
-
-class Path:
-    """Represent the relative path to the erroneous element."""
-
-    def __init__(self) -> None:
-        """Initialize as an empty path."""
-        self._segments = []  # type: List[Segment]
-
-    @property
-    def segments(self) -> Sequence[Segment]:
-        """Get the segments of the path."""
-        return self._segments
-
-    def _prepend(self, segment: Segment) -> None:
-        """Insert the :paramref:`segment` in front of other segments."""
-        self._segments.insert(0, segment)
-
-    def __str__(self) -> str:
-        """Render the path as a relative XPath.
-
-        We omit the leading ``/`` so that you can easily prefix it as you need.
-        """
-        return "/".join(str(segment) for segment in self._segments)
-
-
-class DeserializationException(Exception):
-    """Signal that the XML de-serialization could not be performed."""
-
-    #: Human-readable explanation of the exception's cause
-    cause: Final[str]
-
-    #: Relative path to the erroneous value
-    path: Final[Path]
-
-    def __init__(
-            self,
-            cause: str
-    ) -> None:
-        """Initialize with the given :paramref:`cause` and an empty path."""
-        self.cause = cause
-        self.path = Path()
+DeserializationException = aas_xmlcommon.DeserializationException
+SerializationException = aas_xmlcommon.SerializationException
 
 
 def _with_elements_cleared_after_yield(
@@ -9449,92 +9320,6 @@ _ContentReader = Callable[
 ]
 
 
-def _parse_element_tag(element: Element) -> str:
-    """
-    Extract the tag name without the namespace prefix from :paramref:`element`.
-
-    :param element: whose tag without namespace we want to extract
-    :return: tag name without the namespace prefix
-    :raise: :py:class:`DeserializationException` if unexpected :paramref:`element`
-    """
-    if not element.tag.startswith(_NAMESPACE_IN_CURLY_BRACKETS):
-        namespace, got_namespace, tag_wo_ns = (
-            element.tag.rpartition('}')
-        )
-        if got_namespace:
-            if namespace.startswith('{'):
-                namespace = namespace[1:]
-
-            raise DeserializationException(
-                f"Expected the element in the namespace {NAMESPACE!r}, "
-                f"but got the element {tag_wo_ns!r} in the namespace {namespace!r}"
-            )
-        else:
-            raise DeserializationException(
-                f"Expected the element in the namespace {NAMESPACE!r}, "
-                f"but got the element {tag_wo_ns!r} without the namespace prefix"
-            )
-
-    return element.tag[len(_NAMESPACE_IN_CURLY_BRACKETS):]
-
-
-def _raise_if_has_tail_or_attrib(
-        element: Element
-) -> None:
-    """
-    Check that :paramref:`element` has no trailing text and no attributes.
-
-    :param element: to be verified
-    :raise:
-        :py:class:`.DeserializationException` if trailing text or attributes;
-        conforming to the convention about handling error paths,
-        the exception path is left empty.
-    """
-    if element.tail is not None and len(element.tail.strip()) != 0:
-        raise DeserializationException(
-            f"Expected no trailing text, but got: {element.tail!r}"
-        )
-
-    if element.attrib is not None and len(element.attrib) > 0:
-        raise DeserializationException(
-            f"Expected no attributes, but got: {element.attrib}"
-        )
-
-
-def _read_end_element(
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-) -> Element:
-    """
-    Read the end element corresponding to the start :paramref:`element`
-    from :paramref:`iterator`.
-
-    :param element: corresponding start element
-    :param iterator:
-        Input stream of ``(event, element)`` coming from
-        :py:func:`xml.etree.ElementTree.iterparse` with the argument
-        ``events=["start", "end"]``
-    :raise: :py:class:`DeserializationException` if unexpected input
-    """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            f"Expected the end element for {element.tag}, "
-            f"but got the end-of-input"
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != "end" or next_element.tag != element.tag:
-        raise DeserializationException(
-            f"Expected the end element for {element.tag!r}, "
-            f"but got the event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(next_element)
-
-    return next_element
-
-
 def _read_named_element(
     element: Element,
     iterator: Iterator[Tuple[str, Element]],
@@ -9559,7 +9344,7 @@ def _read_named_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed value
     """
-    tag_wo_ns = _parse_element_tag(element)
+    tag_wo_ns = parse_element_tag(element)
     if tag_wo_ns != expected_tag:
         raise DeserializationException(
             f"Expected an element with the tag {expected_tag!r}, "
@@ -9618,7 +9403,7 @@ def _read_nested_element(
         exception.path._prepend(ElementSegment(nested_element))
         raise
 
-    _read_end_element(element, iterator)
+    read_end_element(element, iterator)
 
     return result
 
@@ -9646,7 +9431,7 @@ def _read_dispatched(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
+    tag_wo_ns = parse_element_tag(element)
 
     read_as_sequence = dispatch.get(tag_wo_ns, None)
     if read_as_sequence is None:
@@ -9690,7 +9475,7 @@ def _read_properties(
             f"and whitespace text, but got text: {element.text!r}"
         )
 
-    _raise_if_has_tail_or_attrib(element)
+    raise_if_has_tail_or_attrib(element)
 
     values = dict()  # type: Dict[str, Any]
 
@@ -9719,7 +9504,7 @@ def _read_properties(
             )
 
         try:
-            tag_wo_ns = _parse_element_tag(prop_element)
+            tag_wo_ns = parse_element_tag(prop_element)
 
             # NOTE (mristin):
             # A tag already in ``values`` can only have got there by being read,
@@ -9827,50 +9612,13 @@ def _read_instance_from_iterparse(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            f"Expected the start element for {expected_what}, "
-            f"but got the end-of-input"
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for {expected_what}, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
+    next_element = read_next_start_element(iterator, expected_what)
 
     try:
         return read_as_element(next_element, iterator)
     except DeserializationException as exception:
         exception.path._prepend(ElementSegment(next_element))
         raise exception
-
-
-_XS_WHITESPACE_RE = re.compile(r"[ \t\n\r]+")
-
-
-def _collapse_whitespace(text: str) -> str:
-    """
-    Normalize :paramref:`text` the way ``whiteSpace="collapse"`` prescribes.
-
-    Every atomic XSD type except a string, and every type derived from one
-    by restriction, fixes ``whiteSpace`` to ``collapse``, and a schema author
-    can not change it. A tab, a line feed and a carriage return each become
-    a space, a run of spaces becomes one space, and the leading and trailing
-    spaces go. Only then is the result a lexical representation to be matched.
-
-    Mind that this strips only the whitespace *around* the value: a space
-    within it survives as a single space, so ``2  3`` becomes ``2 3``, which
-    is still no number.
-
-    See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
-
-    :param text: to be normalized
-    :return: normalized text
-    """
-    return _XS_WHITESPACE_RE.sub(" ", text).strip(" ")
 
 
 def _remove_whitespace(text: str) -> str:
@@ -9883,7 +9631,7 @@ def _remove_whitespace(text: str) -> str:
     :param text: to be stripped of its whitespace
     :return: text without any whitespace
     """
-    return _XS_WHITESPACE_RE.sub("", text)
+    return XS_WHITESPACE_RE.sub("", text)
 
 
 _XS_BASE64_CHARACTERS = frozenset(
@@ -9951,44 +9699,6 @@ def _matches_xs_base64_binary(text: str) -> bool:
     return True
 
 
-def _read_text_from_element(
-    element: Element,
-    iterator: Iterator[Tuple[str, Element]]
-) -> str:
-    """
-    Extract the text from the :paramref:`element`, and read
-    the end element from :paramref:`iterator`.
-
-    The :paramref:`element` is expected to contain text. Otherwise,
-    it is considered as unexpected input.
-
-    :param element: start element enclosing the text
-    :param iterator:
-        Input stream of ``(event, element)`` coming from
-        :py:func:`xml.etree.ElementTree.iterparse` with the argument
-        ``events=["start", "end"]``
-    :raise: :py:class:`DeserializationException` if unexpected input
-    """
-    _raise_if_has_tail_or_attrib(element)
-
-    text = element.text
-
-    end_element = _read_end_element(
-        element,
-        iterator,
-    )
-
-    if text is None:
-        if end_element.text is None:
-            raise DeserializationException(
-                "Expected an element with text, but got an element with no text."
-            )
-
-        text = end_element.text
-
-    return text
-
-
 _XS_BOOLEAN_LITERAL_SET = {
     "1",
     "true",
@@ -10013,8 +9723,8 @@ def _read_bool_from_element_text(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed value
     """
-    text = _collapse_whitespace(
-        _read_text_from_element(
+    text = collapse_whitespace(
+        read_text_from_element(
             element,
             iterator
         )
@@ -10027,49 +9737,6 @@ def _read_bool_from_element_text(
         )
 
     return text in ('1', 'true')
-
-
-def _read_str_from_element_text(
-    element: Element,
-    iterator: Iterator[Tuple[str, Element]]
-) -> str:
-    """
-    Parse the text of :paramref:`element` as a string, and
-    read the corresponding end element from :paramref:`iterator`.
-
-    If there is no text, empty string is returned.
-
-    :param element: start element
-    :param iterator:
-        Input stream of ``(event, element)`` coming from
-        :py:func:`xml.etree.ElementTree.iterparse` with the argument
-        ``events=["start", "end"]``
-    :raise: :py:class:`DeserializationException` if unexpected input
-    :return: parsed value
-    """
-    # NOTE (mristin):
-    # We do not use ``_read_text_from_element`` as that function expects
-    # the ``element`` to contain *some* text. In contrast, this function
-    # can also deal with empty text, in which case it returns an empty string.
-
-    text = element.text
-
-    end_element = _read_end_element(
-        element,
-        iterator
-    )
-
-    if text is None:
-        text = end_element.text
-
-    _raise_if_has_tail_or_attrib(element)
-    result = (
-        text
-        if text is not None
-        else ""
-    )
-
-    return result
 
 
 def _read_bytes_from_element_text(
@@ -10089,14 +9756,14 @@ def _read_bytes_from_element_text(
     :return: parsed value
     """
     # NOTE (mristin):
-    # We do not use ``_read_text_from_element`` as that function expects
+    # We do not use ``read_text_from_element`` as that function expects
     # the ``element`` to contain *some* text. An empty ``xs:base64Binary``
     # is a lexical form of its own, and stands for zero bytes -- its whole
     # production is optional -- so it is read here just like an empty
     # ``xs:string`` is.
     raw_text = element.text
 
-    end_element = _read_end_element(
+    end_element = read_end_element(
         element,
         iterator
     )
@@ -10104,7 +9771,7 @@ def _read_bytes_from_element_text(
     if raw_text is None:
         raw_text = end_element.text
 
-    _raise_if_has_tail_or_attrib(element)
+    raise_if_has_tail_or_attrib(element)
 
     text = _remove_whitespace(
         raw_text
@@ -10150,7 +9817,7 @@ def _read_enum_from_element_text(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed literal
     """
-    text = _read_text_from_element(
+    text = read_text_from_element(
         element,
         iterator
     )
@@ -14477,9 +14144,9 @@ _READERS_FOR_EXTENSION: Mapping[
 ] = {
     'semanticId': _read_reference_as_sequence,
     'supplementalSemanticIds': _read_list_of__reference,
-    'name': _read_str_from_element_text,
+    'name': read_str_from_element_text,
     'valueType': _read_data_type_def_xsd_from_element_text,
-    'value': _read_str_from_element_text,
+    'value': read_str_from_element_text,
     'refersTo': _read_list_of__reference,
 }
 
@@ -14491,10 +14158,10 @@ _READERS_FOR_ADMINISTRATIVE_INFORMATION: Mapping[
     _ContentReader[Any]
 ] = {
     'embeddedDataSpecifications': _read_list_of__embedded_data_specification,
-    'version': _read_str_from_element_text,
-    'revision': _read_str_from_element_text,
+    'version': read_str_from_element_text,
+    'revision': read_str_from_element_text,
     'creator': _read_reference_as_sequence,
-    'templateId': _read_str_from_element_text,
+    'templateId': read_str_from_element_text,
 }
 
 
@@ -14507,9 +14174,9 @@ _READERS_FOR_QUALIFIER: Mapping[
     'semanticId': _read_reference_as_sequence,
     'supplementalSemanticIds': _read_list_of__reference,
     'kind': _read_qualifier_kind_from_element_text,
-    'type': _read_str_from_element_text,
+    'type': read_str_from_element_text,
     'valueType': _read_data_type_def_xsd_from_element_text,
-    'value': _read_str_from_element_text,
+    'value': read_str_from_element_text,
     'valueId': _read_reference_as_sequence,
 }
 
@@ -14521,12 +14188,12 @@ _READERS_FOR_ASSET_ADMINISTRATION_SHELL: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'administration': _read_administrative_information_as_sequence,
-    'id': _read_str_from_element_text,
+    'id': read_str_from_element_text,
     'embeddedDataSpecifications': _read_list_of__embedded_data_specification,
     'derivedFrom': _read_reference_as_sequence,
     'assetInformation': _read_asset_information_as_sequence,
@@ -14541,9 +14208,9 @@ _READERS_FOR_ASSET_INFORMATION: Mapping[
     _ContentReader[Any]
 ] = {
     'assetKind': _read_asset_kind_from_element_text,
-    'globalAssetId': _read_str_from_element_text,
+    'globalAssetId': read_str_from_element_text,
     'specificAssetIds': _read_list_of__specific_asset_id,
-    'assetType': _read_str_from_element_text,
+    'assetType': read_str_from_element_text,
     'defaultThumbnail': _read_resource_as_sequence,
 }
 
@@ -14554,8 +14221,8 @@ _READERS_FOR_RESOURCE: Mapping[
     str,
     _ContentReader[Any]
 ] = {
-    'path': _read_str_from_element_text,
-    'contentType': _read_str_from_element_text,
+    'path': read_str_from_element_text,
+    'contentType': read_str_from_element_text,
 }
 
 
@@ -14567,8 +14234,8 @@ _READERS_FOR_SPECIFIC_ASSET_ID: Mapping[
 ] = {
     'semanticId': _read_reference_as_sequence,
     'supplementalSemanticIds': _read_list_of__reference,
-    'name': _read_str_from_element_text,
-    'value': _read_str_from_element_text,
+    'name': read_str_from_element_text,
+    'value': read_str_from_element_text,
     'externalSubjectId': _read_reference_as_sequence,
 }
 
@@ -14580,12 +14247,12 @@ _READERS_FOR_SUBMODEL: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'administration': _read_administrative_information_as_sequence,
-    'id': _read_str_from_element_text,
+    'id': read_str_from_element_text,
     'kind': _read_modelling_kind_from_element_text,
     'semanticId': _read_reference_as_sequence,
     'supplementalSemanticIds': _read_list_of__reference,
@@ -14602,8 +14269,8 @@ _READERS_FOR_RELATIONSHIP_ELEMENT: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14622,8 +14289,8 @@ _READERS_FOR_SUBMODEL_ELEMENT_LIST: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14645,8 +14312,8 @@ _READERS_FOR_SUBMODEL_ELEMENT_COLLECTION: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14664,8 +14331,8 @@ _READERS_FOR_PROPERTY: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14673,7 +14340,7 @@ _READERS_FOR_PROPERTY: Mapping[
     'qualifiers': _read_list_of__qualifier,
     'embeddedDataSpecifications': _read_list_of__embedded_data_specification,
     'valueType': _read_data_type_def_xsd_from_element_text,
-    'value': _read_str_from_element_text,
+    'value': read_str_from_element_text,
     'valueId': _read_reference_as_sequence,
 }
 
@@ -14685,8 +14352,8 @@ _READERS_FOR_MULTI_LANGUAGE_PROPERTY: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14705,8 +14372,8 @@ _READERS_FOR_RANGE: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14714,8 +14381,8 @@ _READERS_FOR_RANGE: Mapping[
     'qualifiers': _read_list_of__qualifier,
     'embeddedDataSpecifications': _read_list_of__embedded_data_specification,
     'valueType': _read_data_type_def_xsd_from_element_text,
-    'min': _read_str_from_element_text,
-    'max': _read_str_from_element_text,
+    'min': read_str_from_element_text,
+    'max': read_str_from_element_text,
 }
 
 
@@ -14726,8 +14393,8 @@ _READERS_FOR_REFERENCE_ELEMENT: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14745,8 +14412,8 @@ _READERS_FOR_BLOB: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14754,7 +14421,7 @@ _READERS_FOR_BLOB: Mapping[
     'qualifiers': _read_list_of__qualifier,
     'embeddedDataSpecifications': _read_list_of__embedded_data_specification,
     'value': _read_bytes_from_element_text,
-    'contentType': _read_str_from_element_text,
+    'contentType': read_str_from_element_text,
 }
 
 
@@ -14765,16 +14432,16 @@ _READERS_FOR_FILE: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
     'supplementalSemanticIds': _read_list_of__reference,
     'qualifiers': _read_list_of__qualifier,
     'embeddedDataSpecifications': _read_list_of__embedded_data_specification,
-    'value': _read_str_from_element_text,
-    'contentType': _read_str_from_element_text,
+    'value': read_str_from_element_text,
+    'contentType': read_str_from_element_text,
 }
 
 
@@ -14785,8 +14452,8 @@ _READERS_FOR_ANNOTATED_RELATIONSHIP_ELEMENT: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14806,8 +14473,8 @@ _READERS_FOR_ENTITY: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14816,7 +14483,7 @@ _READERS_FOR_ENTITY: Mapping[
     'embeddedDataSpecifications': _read_list_of__embedded_data_specification,
     'statements': _read_list_of__submodel_element,
     'entityType': _read_entity_type_from_element_text,
-    'globalAssetId': _read_str_from_element_text,
+    'globalAssetId': read_str_from_element_text,
     'specificAssetIds': _read_list_of__specific_asset_id,
 }
 
@@ -14831,9 +14498,9 @@ _READERS_FOR_EVENT_PAYLOAD: Mapping[
     'sourceSemanticId': _read_reference_as_sequence,
     'observableReference': _read_reference_as_sequence,
     'observableSemanticId': _read_reference_as_sequence,
-    'topic': _read_str_from_element_text,
+    'topic': read_str_from_element_text,
     'subjectId': _read_reference_as_sequence,
-    'timeStamp': _read_str_from_element_text,
+    'timeStamp': read_str_from_element_text,
     'payload': _read_bytes_from_element_text,
 }
 
@@ -14845,8 +14512,8 @@ _READERS_FOR_BASIC_EVENT_ELEMENT: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14856,11 +14523,11 @@ _READERS_FOR_BASIC_EVENT_ELEMENT: Mapping[
     'observed': _read_reference_as_sequence,
     'direction': _read_direction_from_element_text,
     'state': _read_state_of_event_from_element_text,
-    'messageTopic': _read_str_from_element_text,
+    'messageTopic': read_str_from_element_text,
     'messageBroker': _read_reference_as_sequence,
-    'lastUpdate': _read_str_from_element_text,
-    'minInterval': _read_str_from_element_text,
-    'maxInterval': _read_str_from_element_text,
+    'lastUpdate': read_str_from_element_text,
+    'minInterval': read_str_from_element_text,
+    'maxInterval': read_str_from_element_text,
 }
 
 
@@ -14871,8 +14538,8 @@ _READERS_FOR_OPERATION: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14902,8 +14569,8 @@ _READERS_FOR_CAPABILITY: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'semanticId': _read_reference_as_sequence,
@@ -14920,12 +14587,12 @@ _READERS_FOR_CONCEPT_DESCRIPTION: Mapping[
     _ContentReader[Any]
 ] = {
     'extensions': _read_list_of__extension,
-    'category': _read_str_from_element_text,
-    'idShort': _read_str_from_element_text,
+    'category': read_str_from_element_text,
+    'idShort': read_str_from_element_text,
     'displayName': _read_list_of__lang_string_name_type,
     'description': _read_list_of__lang_string_text_type,
     'administration': _read_administrative_information_as_sequence,
-    'id': _read_str_from_element_text,
+    'id': read_str_from_element_text,
     'embeddedDataSpecifications': _read_list_of__embedded_data_specification,
     'isCaseOf': _read_list_of__reference,
 }
@@ -14950,7 +14617,7 @@ _READERS_FOR_KEY: Mapping[
     _ContentReader[Any]
 ] = {
     'type': _read_key_types_from_element_text,
-    'value': _read_str_from_element_text,
+    'value': read_str_from_element_text,
 }
 
 
@@ -14960,8 +14627,8 @@ _READERS_FOR_LANG_STRING_NAME_TYPE: Mapping[
     str,
     _ContentReader[Any]
 ] = {
-    'language': _read_str_from_element_text,
-    'text': _read_str_from_element_text,
+    'language': read_str_from_element_text,
+    'text': read_str_from_element_text,
 }
 
 
@@ -14971,8 +14638,8 @@ _READERS_FOR_LANG_STRING_TEXT_TYPE: Mapping[
     str,
     _ContentReader[Any]
 ] = {
-    'language': _read_str_from_element_text,
-    'text': _read_str_from_element_text,
+    'language': read_str_from_element_text,
+    'text': read_str_from_element_text,
 }
 
 
@@ -15018,7 +14685,7 @@ _READERS_FOR_VALUE_REFERENCE_PAIR: Mapping[
     str,
     _ContentReader[Any]
 ] = {
-    'value': _read_str_from_element_text,
+    'value': read_str_from_element_text,
     'valueId': _read_reference_as_sequence,
 }
 
@@ -15039,8 +14706,8 @@ _READERS_FOR_LANG_STRING_PREFERRED_NAME_TYPE_IEC_61360: Mapping[
     str,
     _ContentReader[Any]
 ] = {
-    'language': _read_str_from_element_text,
-    'text': _read_str_from_element_text,
+    'language': read_str_from_element_text,
+    'text': read_str_from_element_text,
 }
 
 
@@ -15050,8 +14717,8 @@ _READERS_FOR_LANG_STRING_SHORT_NAME_TYPE_IEC_61360: Mapping[
     str,
     _ContentReader[Any]
 ] = {
-    'language': _read_str_from_element_text,
-    'text': _read_str_from_element_text,
+    'language': read_str_from_element_text,
+    'text': read_str_from_element_text,
 }
 
 
@@ -15061,8 +14728,8 @@ _READERS_FOR_LANG_STRING_DEFINITION_TYPE_IEC_61360: Mapping[
     str,
     _ContentReader[Any]
 ] = {
-    'language': _read_str_from_element_text,
-    'text': _read_str_from_element_text,
+    'language': read_str_from_element_text,
+    'text': read_str_from_element_text,
 }
 
 
@@ -15074,15 +14741,15 @@ _READERS_FOR_DATA_SPECIFICATION_IEC_61360: Mapping[
 ] = {
     'preferredName': _read_list_of__lang_string_preferred_name_type_iec_61360,
     'shortName': _read_list_of__lang_string_short_name_type_iec_61360,
-    'unit': _read_str_from_element_text,
+    'unit': read_str_from_element_text,
     'unitId': _read_reference_as_sequence,
-    'sourceOfDefinition': _read_str_from_element_text,
-    'symbol': _read_str_from_element_text,
+    'sourceOfDefinition': read_str_from_element_text,
+    'symbol': read_str_from_element_text,
     'dataType': _read_data_type_iec_61360_from_element_text,
     'definition': _read_list_of__lang_string_definition_type_iec_61360,
-    'valueFormat': _read_str_from_element_text,
+    'valueFormat': read_str_from_element_text,
     'valueList': _read_value_list_as_sequence,
-    'value': _read_str_from_element_text,
+    'value': read_str_from_element_text,
     'levelType': _read_level_type_as_sequence,
 }
 
@@ -15091,52 +14758,6 @@ _READERS_FOR_DATA_SPECIFICATION_IEC_61360: Mapping[
 
 
 # region Serialization
-
-
-class SerializationException(Exception):
-    """Signal that the XML serialization could not be performed."""
-
-    #: Human-readable explanation of the exception's cause
-    cause: Final[str]
-
-    def __init__(
-            self,
-            cause: str
-    ) -> None:
-        """Initialize with the given :paramref:`cause` and an empty path."""
-        self.cause = cause
-        self._segments = []  # type: List[str]
-
-    @property
-    def path(self) -> str:
-        """
-        Render the path to the erroneous value as a Python access expression.
-
-        The path points into the instance which you handed over for
-        the serialization, and *not* into an XML document -- at the point of
-        the failure, there is no document yet. For example, ``.submodels[0].id``
-        tells you that the serialization broke on ``that.submodels[0].id``.
-
-        Mind that the elements which the XML representation adds on top of
-        the instance contribute no segment, as they correspond to no attribute
-        access. This concerns the element enclosing the instance itself, and
-        the element which designates the model type of the value of a property.
-        """
-        return ''.join(self._segments)
-
-    def _prepend_property(self, name: str) -> None:
-        """Insert the access to the property :paramref:`name` before the path."""
-        self._segments.insert(0, f'.{name}')
-
-    def _prepend_index(self, index: int) -> None:
-        """Insert the access to the item at :paramref:`index` before the path."""
-        self._segments.insert(0, f'[{index}]')
-
-    def __str__(self) -> str:
-        if len(self._segments) == 0:
-            return self.cause
-
-        return f'{self.path}: {self.cause}'
 
 
 def _attribute_to_property(
@@ -15241,9 +14862,9 @@ def _write_bool_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
-        serializer.stream.write('true' if value else 'false')
-        serializer._write_end_element(name)
+        serializer.writer.write_start_element(name)
+        serializer.writer.stream.write('true' if value else 'false')
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15267,7 +14888,7 @@ def _write_str_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
 
         # NOTE (mristin):
         # We ran ``timeit`` on manual code which escaped XML special characters with
@@ -15277,11 +14898,11 @@ def _write_str_as_element(
         #
         # The escaping is written out here, and not put in a function of its own,
         # since a string is the commonest value in a meta-model and a call is not free.
-        serializer.stream.write(
+        serializer.writer.stream.write(
             value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         )
 
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15305,7 +14926,7 @@ def _write_bytes_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
 
         # NOTE (mristin):
         # We need to decode the result of the base64-encoding to ASCII since we are
@@ -15318,8 +14939,8 @@ def _write_bytes_as_element(
         # write the ``encoded`` content to the stream as XML text.
         #
         # See: https://datatracker.ietf.org/doc/html/rfc4648#section-4
-        serializer.stream.write(encoded)
-        serializer._write_end_element(name)
+        serializer.writer.stream.write(encoded)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15382,9 +15003,9 @@ def _write_nested_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         serializer.visit(value)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15412,9 +15033,9 @@ def _write_list_of_instances(
     """
     try:
         if len(items) == 0:
-            serializer._write_empty_element(name)
+            serializer.writer.write_empty_element(name)
         else:
-            serializer._write_start_element(name)
+            serializer.writer.write_start_element(name)
 
             for index, item in enumerate(items):
                 try:
@@ -15422,7 +15043,7 @@ def _write_list_of_instances(
                 except Exception as exception:
                     _attribute_to_item(exception, index)
 
-            serializer._write_end_element(name)
+            serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15445,7 +15066,7 @@ def _write_extension_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.semantic_id is not None:
             _write_reference_as_element(
                 'semanticId', 'semantic_id', that.semantic_id, serializer
@@ -15468,7 +15089,7 @@ def _write_extension_as_element(
             _write_list_of_instances(
                 'refersTo', 'refers_to', that.refers_to, serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15503,10 +15124,10 @@ def _write_administrative_information_as_element(
                 and that.creator is None
                 and that.template_id is None
         ):
-            serializer._write_empty_element(name)
+            serializer.writer.write_empty_element(name)
             return
 
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.embedded_data_specifications is not None:
             _write_list_of_instances(
                 'embeddedDataSpecifications',
@@ -15524,7 +15145,7 @@ def _write_administrative_information_as_element(
             _write_str_as_element(
                 'templateId', 'template_id', that.template_id, serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15547,7 +15168,7 @@ def _write_qualifier_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.semantic_id is not None:
             _write_reference_as_element(
                 'semanticId', 'semantic_id', that.semantic_id, serializer
@@ -15569,7 +15190,7 @@ def _write_qualifier_as_element(
             _write_reference_as_element(
                 'valueId', 'value_id', that.value_id, serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15592,7 +15213,7 @@ def _write_asset_administration_shell_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -15632,7 +15253,7 @@ def _write_asset_administration_shell_as_element(
             _write_list_of_instances(
                 'submodels', 'submodels', that.submodels, serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15655,7 +15276,7 @@ def _write_asset_information_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_enum_as_element('assetKind', 'asset_kind', that.asset_kind, serializer)
         if that.global_asset_id is not None:
             _write_str_as_element(
@@ -15679,7 +15300,7 @@ def _write_asset_information_as_element(
                 that.default_thumbnail,
                 serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15702,13 +15323,13 @@ def _write_resource_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_str_as_element('path', 'path', that.path, serializer)
         if that.content_type is not None:
             _write_str_as_element(
                 'contentType', 'content_type', that.content_type, serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15731,7 +15352,7 @@ def _write_specific_asset_id_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.semantic_id is not None:
             _write_reference_as_element(
                 'semanticId', 'semantic_id', that.semantic_id, serializer
@@ -15752,7 +15373,7 @@ def _write_specific_asset_id_as_element(
                 that.external_subject_id,
                 serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15775,7 +15396,7 @@ def _write_submodel_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -15828,7 +15449,7 @@ def _write_submodel_as_element(
                 that.submodel_elements,
                 serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15851,7 +15472,7 @@ def _write_relationship_element_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -15892,7 +15513,7 @@ def _write_relationship_element_as_element(
             )
         _write_reference_as_element('first', 'first', that.first, serializer)
         _write_reference_as_element('second', 'second', that.second, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -15915,7 +15536,7 @@ def _write_submodel_element_list_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -15980,7 +15601,7 @@ def _write_submodel_element_list_as_element(
             )
         if that.value is not None:
             _write_list_of_instances('value', 'value', that.value, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16020,10 +15641,10 @@ def _write_submodel_element_collection_as_element(
                 and that.embedded_data_specifications is None
                 and that.value is None
         ):
-            serializer._write_empty_element(name)
+            serializer.writer.write_empty_element(name)
             return
 
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16064,7 +15685,7 @@ def _write_submodel_element_collection_as_element(
             )
         if that.value is not None:
             _write_list_of_instances('value', 'value', that.value, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16087,7 +15708,7 @@ def _write_property_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16133,7 +15754,7 @@ def _write_property_as_element(
             _write_reference_as_element(
                 'valueId', 'value_id', that.value_id, serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16174,10 +15795,10 @@ def _write_multi_language_property_as_element(
                 and that.value is None
                 and that.value_id is None
         ):
-            serializer._write_empty_element(name)
+            serializer.writer.write_empty_element(name)
             return
 
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16222,7 +15843,7 @@ def _write_multi_language_property_as_element(
             _write_reference_as_element(
                 'valueId', 'value_id', that.value_id, serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16245,7 +15866,7 @@ def _write_range_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16289,7 +15910,7 @@ def _write_range_as_element(
             _write_str_as_element('min', 'min', that.min, serializer)
         if that.max is not None:
             _write_str_as_element('max', 'max', that.max, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16329,10 +15950,10 @@ def _write_reference_element_as_element(
                 and that.embedded_data_specifications is None
                 and that.value is None
         ):
-            serializer._write_empty_element(name)
+            serializer.writer.write_empty_element(name)
             return
 
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16373,7 +15994,7 @@ def _write_reference_element_as_element(
             )
         if that.value is not None:
             _write_reference_as_element('value', 'value', that.value, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16396,7 +16017,7 @@ def _write_blob_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16440,7 +16061,7 @@ def _write_blob_as_element(
         _write_str_as_element(
             'contentType', 'content_type', that.content_type, serializer
         )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16463,7 +16084,7 @@ def _write_file_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16507,7 +16128,7 @@ def _write_file_as_element(
         _write_str_as_element(
             'contentType', 'content_type', that.content_type, serializer
         )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16530,7 +16151,7 @@ def _write_annotated_relationship_element_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16575,7 +16196,7 @@ def _write_annotated_relationship_element_as_element(
             _write_list_of_instances(
                 'annotations', 'annotations', that.annotations, serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16598,7 +16219,7 @@ def _write_entity_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16655,7 +16276,7 @@ def _write_entity_as_element(
                 that.specific_asset_ids,
                 serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16678,7 +16299,7 @@ def _write_event_payload_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_reference_as_element('source', 'source', that.source, serializer)
         if that.source_semantic_id is not None:
             _write_reference_as_element(
@@ -16709,7 +16330,7 @@ def _write_event_payload_as_element(
         _write_str_as_element('timeStamp', 'time_stamp', that.time_stamp, serializer)
         if that.payload is not None:
             _write_bytes_as_element('payload', 'payload', that.payload, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16732,7 +16353,7 @@ def _write_basic_event_element_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16794,7 +16415,7 @@ def _write_basic_event_element_as_element(
             _write_str_as_element(
                 'maxInterval', 'max_interval', that.max_interval, serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16836,10 +16457,10 @@ def _write_operation_as_element(
                 and that.output_variables is None
                 and that.inoutput_variables is None
         ):
-            serializer._write_empty_element(name)
+            serializer.writer.write_empty_element(name)
             return
 
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16893,7 +16514,7 @@ def _write_operation_as_element(
                 that.inoutput_variables,
                 serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16916,9 +16537,9 @@ def _write_operation_variable_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_nested_element('value', 'value', that.value, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -16957,10 +16578,10 @@ def _write_capability_as_element(
                 and that.qualifiers is None
                 and that.embedded_data_specifications is None
         ):
-            serializer._write_empty_element(name)
+            serializer.writer.write_empty_element(name)
             return
 
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -16999,7 +16620,7 @@ def _write_capability_as_element(
                 that.embedded_data_specifications,
                 serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17022,7 +16643,7 @@ def _write_concept_description_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.extensions is not None:
             _write_list_of_instances(
                 'extensions', 'extensions', that.extensions, serializer
@@ -17055,7 +16676,7 @@ def _write_concept_description_as_element(
             _write_list_of_instances(
                 'isCaseOf', 'is_case_of', that.is_case_of, serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17078,7 +16699,7 @@ def _write_reference_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_enum_as_element('type', 'type', that.type, serializer)
         if that.referred_semantic_id is not None:
             _write_reference_as_element(
@@ -17088,7 +16709,7 @@ def _write_reference_as_element(
                 serializer
             )
         _write_list_of_instances('keys', 'keys', that.keys, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17111,10 +16732,10 @@ def _write_key_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_enum_as_element('type', 'type', that.type, serializer)
         _write_str_as_element('value', 'value', that.value, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17137,10 +16758,10 @@ def _write_lang_string_name_type_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_str_as_element('language', 'language', that.language, serializer)
         _write_str_as_element('text', 'text', that.text, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17163,10 +16784,10 @@ def _write_lang_string_text_type_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_str_as_element('language', 'language', that.language, serializer)
         _write_str_as_element('text', 'text', that.text, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17199,10 +16820,10 @@ def _write_environment_as_element(
                 and that.submodels is None
                 and that.concept_descriptions is None
         ):
-            serializer._write_empty_element(name)
+            serializer.writer.write_empty_element(name)
             return
 
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         if that.asset_administration_shells is not None:
             _write_list_of_instances(
                 'assetAdministrationShells',
@@ -17221,7 +16842,7 @@ def _write_environment_as_element(
                 that.concept_descriptions,
                 serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17244,7 +16865,7 @@ def _write_embedded_data_specification_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_reference_as_element(
             'dataSpecification',
             'data_specification',
@@ -17257,7 +16878,7 @@ def _write_embedded_data_specification_as_element(
             that.data_specification_content,
             serializer
         )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17280,12 +16901,12 @@ def _write_level_type_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_bool_as_element('min', 'min', that.min, serializer)
         _write_bool_as_element('nom', 'nom', that.nom, serializer)
         _write_bool_as_element('typ', 'typ', that.typ, serializer)
         _write_bool_as_element('max', 'max', that.max, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17308,10 +16929,10 @@ def _write_value_reference_pair_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_str_as_element('value', 'value', that.value, serializer)
         _write_reference_as_element('valueId', 'value_id', that.value_id, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17334,14 +16955,14 @@ def _write_value_list_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_list_of_instances(
             'valueReferencePairs',
             'value_reference_pairs',
             that.value_reference_pairs,
             serializer
         )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17364,10 +16985,10 @@ def _write_lang_string_preferred_name_type_iec_61360_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_str_as_element('language', 'language', that.language, serializer)
         _write_str_as_element('text', 'text', that.text, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17390,10 +17011,10 @@ def _write_lang_string_short_name_type_iec_61360_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_str_as_element('language', 'language', that.language, serializer)
         _write_str_as_element('text', 'text', that.text, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17416,10 +17037,10 @@ def _write_lang_string_definition_type_iec_61360_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_str_as_element('language', 'language', that.language, serializer)
         _write_str_as_element('text', 'text', that.text, serializer)
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
@@ -17442,7 +17063,7 @@ def _write_data_specification_iec_61360_as_element(
     :raise: :py:class:`SerializationException` if the value could not be written
     """
     try:
-        serializer._write_start_element(name)
+        serializer.writer.write_start_element(name)
         _write_list_of_instances(
             'preferredName', 'preferred_name', that.preferred_name, serializer
         )
@@ -17483,136 +17104,16 @@ def _write_data_specification_iec_61360_as_element(
             _write_level_type_as_element(
                 'levelType', 'level_type', that.level_type, serializer
             )
-        serializer._write_end_element(name)
+        serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
 
 
 class _Serializer(aas_types.AbstractVisitor):
-    """Encode instances as XML and write them to :py:attr:`~stream`."""
+    """Encode instances as XML and write them to :py:attr:`~writer`."""
 
-    #: Stream to be written to when we visit the instances
-    stream: Final[TextIO]
-
-    #: Method pointer to be invoked for writing the start element with or without
-    #: specifying a namespace (depending on the state of the serializer)
-    _write_start_element: Callable[
-        [str],
-        None
-    ]
-
-    #: Method pointer to be invoked for writing an empty element with or without
-    #: specifying a namespace (depending on the state of the serializer)
-    _write_empty_element: Callable[
-        [str],
-        None
-    ]
-
-    # NOTE (mristin):
-    # The serialization procedure is quite rigid. We leverage the specifics of
-    # the serialization procedure to optimize the code a bit.
-    #
-    # Namely, we model the writing of the XML elements as a state machine.
-    # The namespace is only specified for the very first element. All the subsequent
-    # elements will *not* have the namespace specified. We implement that behavior by
-    # using pointers to methods, as Python treats the methods as first-class citizens.
-    #
-    # The ``_write_start_element`` will point to
-    # ``_write_first_start_element_with_namespace`` on the *first* invocation.
-    # Afterwards, it will be redirected to ``_write_start_element_without_namespace``.
-    #
-    # Analogously for ``_write_empty_element``.
-    #
-    # Please see the implementation for the details, but this should give you at least
-    # a rough overview.
-
-    def _write_first_start_element_with_namespace(
-            self,
-            name: str
-    ) -> None:
-        """
-        Write the start element with the tag name :paramref:`name` and specify
-        its namespace.
-
-        The :py:attr:`~_write_start_element` is set to
-        :py:meth:`~_write_start_element_without_namespace` after the first invocation
-        of this method.
-
-        :param name: of the element tag. Expected to contain no XML special characters.
-        """
-        self.stream.write(f'<{name} xmlns="{NAMESPACE}">')
-
-        # NOTE (mristin):
-        # Any subsequence call to `_write_start_element` or `_write_empty_element`
-        # should not specify the namespace of the element as we specified now already
-        # specified it.
-        self._write_start_element = self._write_start_element_without_namespace
-        self._write_empty_element = self._write_empty_element_without_namespace
-
-    def _write_start_element_without_namespace(
-            self,
-            name: str
-    ) -> None:
-        """
-        Write the start element with the tag name :paramref:`name`.
-
-        The first element, written *before* this one, is expected to have been
-        already written with the namespace specified.
-
-        :param name: of the element tag. Expected to contain no XML special characters.
-        """
-        self.stream.write(f'<{name}>')
-
-    def _write_end_element(
-            self,
-            name: str
-    ) -> None:
-        """
-        Write the end element with the tag name :paramref:`name`.
-
-        :param name: of the element tag. Expected to contain no XML special characters.
-        """
-        self.stream.write(f'</{name}>')
-
-    def _write_first_empty_element_with_namespace(
-            self,
-            name: str
-    ) -> None:
-        """
-        Write the first (and only) empty element with the tag name :paramref:`name`.
-
-        No elements are expected to be written to the stream afterwards. The element
-        includes the namespace specification.
-
-        :param name: of the element tag. Expected to contain no XML special characters.
-        """
-        self.stream.write(f'<{name} xmlns="{NAMESPACE}"/>')
-        self._write_empty_element = self._rase_if_write_element_called_again
-        self._write_start_element = self._rase_if_write_element_called_again
-
-    def _rase_if_write_element_called_again(
-            self,
-            name: str
-    ) -> None:
-        raise AssertionError(
-            f"We expected to call ``_write_first_empty_element_with_namespace`` "
-            f"only once. This is an unexpected second call for writing "
-            f"an (empty or non-empty) element with the tag name: {name!r}"
-        )
-
-    def _write_empty_element_without_namespace(
-            self,
-            name: str
-    ) -> None:
-        """
-        Write the empty element with the tag name :paramref:`name`.
-
-        The call to this method is expected to occur *after* the enclosing element with
-        a specified namespace has been written.
-
-        :param name: of the element tag. Expected to contain no XML special characters.
-        """
-        self.stream.write(f'<{name}/>')
+    #: Frame the XML elements of the document which we are writing
+    writer: Final[aas_xmlcommon.Writer]
 
     def __init__(
         self,
@@ -17626,13 +17127,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param stream: where to write to
         """
-        self.stream = stream
-        self._write_start_element = (
-            self._write_first_start_element_with_namespace
-        )
-        self._write_empty_element = (
-            self._write_first_empty_element_with_namespace
-        )
+        self.writer = aas_xmlcommon.Writer(stream)
 
     def visit_extension(
         self,

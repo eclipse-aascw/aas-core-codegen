@@ -5,8 +5,6 @@
 
 using Aas = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
-using Globalization = System.Globalization;
-using RegularExpressions = System.Text.RegularExpressions;
 using Xml = System.Xml;
 
 using System.Collections.Generic;  // can't alias
@@ -20,8 +18,7 @@ namespace dummy
     {
         /// The XML namespace of the meta-model
         [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-        public static readonly string NS = (
-            "https://dummy.com");
+        public static readonly string NS = XmlCommon.NS;
 
         /// <summary>
         /// Implement the deserialization of meta-model classes from XML.
@@ -40,83 +37,6 @@ namespace dummy
         /// </remarks>
         internal static class DeserializeImplementation
         {
-            internal static void SkipNoneWhitespaceAndComments(
-                Xml.XmlReader reader)
-            {
-                while (
-                    !reader.EOF
-                    && (
-                        reader.NodeType == Xml.XmlNodeType.None
-                        || reader.NodeType == Xml.XmlNodeType.Whitespace
-                        || reader.NodeType == Xml.XmlNodeType.Comment))
-                {
-                    reader.Read();
-                }
-            }
-
-            /// <summary>
-            /// Check the namespace and extract the element's name.
-            /// </summary>
-            private static string TryElementName(
-                Xml.XmlReader reader,
-                out Reporting.Error? error
-                )
-            {
-                // Pre-condition
-                if (reader.NodeType != Xml.XmlNodeType.Element
-                    && reader.NodeType != Xml.XmlNodeType.EndElement)
-                {
-                    throw new System.InvalidOperationException(
-                        "Expected to be at a start or an end element " +
-                        $"in {nameof(TryElementName)}, " +
-                        $"but got: {reader.NodeType}");
-                }
-
-                error = null;
-                if (reader.NamespaceURI != NS)
-                {
-                    error = new Reporting.Error(
-                        $"Expected an element within a namespace {NS}, " +
-                        $"but got: {reader.NamespaceURI}");
-                        return "";
-                }
-
-                return reader.LocalName;
-            }
-
-            /// <summary>
-            /// Look ahead the name of the element at the current position of
-            /// <paramref name="reader" />, without consuming anything.
-            /// </summary>
-            private static string PeekElementName(
-                Xml.XmlReader reader,
-                out Reporting.Error? error
-                )
-            {
-                error = null;
-
-                SkipNoneWhitespaceAndComments(reader);
-
-                if (reader.EOF)
-                {
-                    error = new Reporting.Error(
-                        "Expected an XML element, but reached the end-of-file");
-                    return "";
-                }
-
-                if (reader.NodeType != Xml.XmlNodeType.Element)
-                {
-                    error = new Reporting.Error(
-                        "Expected an XML element, " +
-                        $"but got a node of type {reader.NodeType} " +
-                        $"with value {reader.Value}");
-                    return "";
-                }
-
-                return TryElementName(
-                    reader, out error);
-            }
-
             /// <summary>
             /// Read a single element, tags included, positioned at its start tag.
             /// </summary>
@@ -271,63 +191,6 @@ namespace dummy
             }
 
             /// <summary>
-            /// Consume the end tag matching <paramref name="elementName" />, unless
-            /// <paramref name="isEmptyElement" /> tells that the element was
-            /// self-closing and thus has no end tag at all.
-            /// </summary>
-            private static void ConsumeEndElement(
-                Xml.XmlReader reader,
-                string elementName,
-                bool isEmptyElement,
-                out Reporting.Error? error
-                )
-            {
-                error = null;
-
-                if (isEmptyElement)
-                {
-                    return;
-                }
-
-                SkipNoneWhitespaceAndComments(reader);
-
-                if (reader.EOF)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a closing element </{elementName}>, " +
-                        "but reached the end-of-file");
-                    return;
-                }
-
-                if (reader.NodeType != Xml.XmlNodeType.EndElement)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a closing element </{elementName}>, " +
-                        $"but got a node of type {reader.NodeType} " +
-                        $"with value {reader.Value}");
-                    return;
-                }
-
-                string endElementName = TryElementName(
-                    reader, out error);
-                if (error != null)
-                {
-                    return;
-                }
-
-                if (endElementName != elementName)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a closing element </{elementName}>, " +
-                        $"but got a closing element </{endElementName}>");
-                    return;
-                }
-
-                // Consume the end tag.
-                reader.Read();
-            }
-
-            /// <summary>
             /// Bind <paramref name="elementName" /> to <paramref name="readContent" />,
             /// so that the result reads the whole element, tags included.
             /// </summary>
@@ -342,25 +205,12 @@ namespace dummy
                     out Reporting.Error? error
                 ) =>
                 {
-                    string observedName = PeekElementName(
-                        reader, out error);
+                    bool isEmptyElement = XmlCommon.ReadStartElement(
+                        reader, elementName, out error);
                     if (error != null)
                     {
                         return default!;
                     }
-
-                    if (observedName != elementName)
-                    {
-                        error = new Reporting.Error(
-                            $"Expected a <{elementName}> element, " +
-                            $"but got a <{observedName}> element");
-                        return default!;
-                    }
-
-                    bool isEmptyElement = reader.IsEmptyElement;
-
-                    // Consume the start tag and go to the content.
-                    reader.Read();
 
                     T value = readContent(reader, isEmptyElement, out error);
                     if (error != null)
@@ -368,7 +218,7 @@ namespace dummy
                         return default!;
                     }
 
-                    ConsumeEndElement(
+                    XmlCommon.ConsumeEndElement(
                         reader, elementName, isEmptyElement, out error);
                     if (error != null)
                     {
@@ -402,7 +252,7 @@ namespace dummy
                 elementName = "";
                 isEmptyProperty = false;
 
-                SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (reader.NodeType == Xml.XmlNodeType.EndElement || reader.EOF)
                 {
@@ -418,7 +268,7 @@ namespace dummy
                     return false;
                 }
 
-                elementName = TryElementName(
+                elementName = XmlCommon.TryElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -517,7 +367,7 @@ namespace dummy
                         return default!;
                     }
 
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                     T0 item0 = readItem0(reader, out error);
                     if (error != null)
@@ -527,7 +377,7 @@ namespace dummy
                                 0));
                         return default!;
                     }
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                     T1 item1 = readItem1(reader, out error);
                     if (error != null)
@@ -577,7 +427,7 @@ namespace dummy
                         return default!;
                     }
 
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                     T0 item0 = readItem0(reader, out error);
                     if (error != null)
@@ -587,7 +437,7 @@ namespace dummy
                                 0));
                         return default!;
                     }
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                     T1 item1 = readItem1(reader, out error);
                     if (error != null)
@@ -597,7 +447,7 @@ namespace dummy
                                 1));
                         return default!;
                     }
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                     T2 item2 = readItem2(reader, out error);
                     if (error != null)
@@ -607,7 +457,7 @@ namespace dummy
                                 2));
                         return default!;
                     }
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                     T3 item3 = readItem3(reader, out error);
                     if (error != null)
@@ -617,7 +467,7 @@ namespace dummy
                                 3));
                         return default!;
                     }
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                     T4 item4 = readItem4(reader, out error);
                     if (error != null)
@@ -627,7 +477,7 @@ namespace dummy
                                 4));
                         return default!;
                     }
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                     T5 item5 = readItem5(reader, out error);
                     if (error != null)
@@ -724,7 +574,7 @@ namespace dummy
                 Xml.XmlReader reader,
                 out Reporting.Error? error)
             {
-                string elementName = PeekElementName(
+                string elementName = XmlCommon.PeekElementName(
                     reader, out error);
                 if (error != null)
                 {
@@ -765,7 +615,7 @@ namespace dummy
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -811,7 +661,7 @@ namespace dummy
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -861,7 +711,7 @@ namespace dummy
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -907,7 +757,7 @@ namespace dummy
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -960,7 +810,7 @@ namespace dummy
 
                 if (!isEmptySequence)
                 {
-                    SkipNoneWhitespaceAndComments(reader);
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
                     if (reader.EOF)
                     {
                         error = new Reporting.Error(
@@ -1033,7 +883,7 @@ namespace dummy
                             return default!;
                         }
 
-                        ConsumeEndElement(
+                        XmlCommon.ConsumeEndElement(
                             reader, elementName, isEmptyProperty, out error);
                         if (error != null)
                         {
@@ -1104,41 +954,6 @@ namespace dummy
         }
 
         /// <summary>
-        /// Represent a critical error during the serialization.
-        /// </summary>
-        public class SerializationException : System.Exception
-        {
-            public readonly string Path;
-            public readonly string Cause;
-            public SerializationException(string path, string cause)
-                : base($"{cause} at: {path}")
-            {
-                Path = path;
-                Cause = cause;
-            }
-        }
-
-        /// <summary>
-        /// Signal a failure of the serialization, carrying the path to the culprit.
-        /// </summary>
-        /// <remarks>
-        /// The path is built as the stack unwinds -- every container prepends the one
-        /// segment it knows, the property its name and the list the index of the item
-        /// -- which is why this can not be a <see cref="SerializationException" />
-        /// already: that one renders its message in its constructor, so its path has
-        /// to be complete by then. <see cref="Serialize.To" /> renders and converts.
-        /// </remarks>
-        internal class SerializationFailure : System.Exception
-        {
-            public readonly Reporting.Error Error;
-            public SerializationFailure(Reporting.Error error)
-                : base(error.Cause)
-            {
-                Error = error;
-            }
-        }
-
-        /// <summary>
         /// Deserialize instances of meta-model classes from XML.
         /// </summary>
         /// <example>
@@ -1150,15 +965,10 @@ namespace dummy
         /// </code>
         /// </example>
         ///
-        /// <example>
-        /// If the elements live in a namespace, you have to supply it. For example:
-        /// <code>
-        /// var reader = new System.Xml.XmlReader(/* some arguments */);
-        /// Aas.IAbstractItem anInstance = Deserialize.IAbstractItemFrom(
-        ///     reader,
-        ///     "http://www.example.com/5/12");
-        /// </code>
-        /// </example>
+        /// <remarks>
+        /// The elements are expected to live in <see cref="NS" />, the one XML
+        /// namespace of the meta-model, so there is nothing to supply.
+        /// </remarks>
         public static class Deserialize
         {
             /// <summary>
@@ -1172,7 +982,7 @@ namespace dummy
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Aas.IAbstractItem IAbstractItemFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -1206,7 +1016,7 @@ namespace dummy
             public static Aas.SomeItem SomeItemFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -1240,7 +1050,7 @@ namespace dummy
             public static Aas.AnotherItem AnotherItemFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {
@@ -1274,7 +1084,7 @@ namespace dummy
             public static Aas.Something SomethingFrom(
                 Xml.XmlReader reader)
             {
-                DeserializeImplementation.SkipNoneWhitespaceAndComments(reader);
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
 
                 if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
                 {

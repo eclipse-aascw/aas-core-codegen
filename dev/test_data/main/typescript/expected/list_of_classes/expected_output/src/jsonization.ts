@@ -18,6 +18,37 @@ export type JsonValue = string | number | boolean | JsonObject | JsonArray;
 export type JsonArray = Iterable<JsonValue>;
 export type JsonObject = { [prop: string]: JsonValue };
 
+// NOTE (mristin):
+// The SDK defines three of these path vocabularies: this one, the one in
+// the `jsonization` module, and the one in the `xmlcommon` module. They look
+// alike, and it is tempting to merge them, but they are not interchangeable.
+//
+// Each of them points into a different thing:
+//
+// * This one points into the instances which you built, so a property segment
+//   holds a class of the meta-model.
+// * The jsonization's points into the JSON-able structure being read or
+//   written, so a property segment holds the JSON-able object instead: while
+//   a document is being parsed, the instance which the property would belong
+//   to does not exist yet.
+// * The xmlcommon's points into the XML document, where there are no
+//   properties at all, only elements, so it names an element instead. It is
+//   also the only one whose segments carry no back-pointer, as the reading is
+//   a single pass over a token stream and the element is gone by the time
+//   the error comes back out.
+//
+// The three also render differently: a path into the instances is
+// a TypeScript access expression, a path into a JSON-able structure starts at
+// the root of the document and carries no leading dot, and a path into an XML
+// document is a relative XPath.
+//
+// Merging them would mean either dropping the back-pointers, which have been
+// part of the public API of this SDK since before these modules were split
+// apart, or defining a single path over the union of all the segment kinds --
+// in which case every consumer would have to handle segments which can never
+// occur in its world. Three small vocabularies which each say exactly what
+// they can say cost less than one large one which lies about its range.
+
 /**
  * Represent a property on a path to the erroneous value.
  */
@@ -62,7 +93,35 @@ export class IndexSegment {
   }
 }
 
-export type Segment = PropertySegment | IndexSegment;
+/**
+ * Represent a member of an open JSON-able object on a path to the erroneous
+ * value.
+ *
+ * @remarks
+ *
+ * Unlike a {@link PropertySegment}, which names a property of one of our
+ * classes, a key names a member of an open JSON-able object. It is known only
+ * at run time, and can be any string at all, so it is always rendered as
+ * a subscript.
+ */
+export class KeySegment {
+  /**
+   * Object that contains the value at {@link key}
+   */
+  readonly object: JsonObject;
+
+  /**
+   * Key of the value
+   */
+  readonly key: string;
+
+  constructor(object: JsonObject, key: string) {
+    this.object = object;
+    this.key = key;
+  }
+}
+
+export type Segment = PropertySegment | IndexSegment | KeySegment;
 
 /**
  * Represent the relative path to the erroneous value.
@@ -99,6 +158,8 @@ export class Path {
       parts.push(segment.name);
     } else if (segment instanceof IndexSegment) {
       parts.push(`[${segment.index}]`);
+    } else if (segment instanceof KeySegment) {
+      parts.push(`[${JSON.stringify(segment.key)}]`);
     } else {
       throw new Error(`Unexpected segment: ${segment}`);
     }
@@ -109,6 +170,8 @@ export class Path {
         parts.push(`.${segment.name}`);
       } else if (segment instanceof IndexSegment) {
         parts.push(`[${segment.index}]`);
+      } else if (segment instanceof KeySegment) {
+        parts.push(`[${JSON.stringify(segment.key)}]`);
       } else {
         throw new Error(`Unexpected segment: ${segment}`);
       }
@@ -1001,6 +1064,19 @@ export class SerializationError extends Error {
   prependIndex(index: number): void {
     this._segments.unshift(`[${index}]`);
   }
+
+  /**
+   * Insert the access to the member `key` before the {@link path}.
+   *
+   * @remarks
+   *
+   * Unlike a property of one of our classes, a member of an open JSON-able
+   * object is known only at run time and can be any string at all, so it is
+   * always rendered as a subscript.
+   */
+  prependKey(key: string): void {
+    this._segments.unshift(`[${JSON.stringify(key)}]`);
+  }
 }
 
 /**
@@ -1036,8 +1112,18 @@ function serializeSomeItem(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["name"] =
-    that.name;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "name";
+    jsonable["name"] =
+      that.name;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   jsonable["modelType"] = "SomeItem";
 
@@ -1055,7 +1141,7 @@ function serializeAnotherItem(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     prop = "serialNumber";
@@ -1084,8 +1170,18 @@ function serializeSimple(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["name"] =
-    that.name;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "name";
+    jsonable["name"] =
+      that.name;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -1101,13 +1197,14 @@ function serializeSomething(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  // Only a property which can be refused records its name.
+  // The property being serialized, for the path of a failure.
   let prop = "";
   try {
     prop = "someItems";
     jsonable["someItems"] =
       serialize_ListOf_IAbstractItem(that.someItems);
 
+    prop = "someSimples";
     jsonable["someSimples"] =
       serialize_ListOf_Simple(that.someSimples);
   } catch (error) {
@@ -1154,8 +1251,16 @@ function serialize_ListOf_Simple(
   that: ReadonlyArray<AasTypes.Simple>
 ): Array<JsonObject> {
   const result = new Array<JsonObject>(that.length);
-  for (let i = 0; i < that.length; i++) {
-    result[i] = serializeSimple(that[i]);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeSimple(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
   }
   return result;
 }

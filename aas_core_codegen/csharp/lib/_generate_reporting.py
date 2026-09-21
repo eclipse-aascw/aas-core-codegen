@@ -33,7 +33,7 @@ def generate(namespace: csharp_common.NamespaceIdentifier) -> str:
     """
     Generate code for reporting errors.
 
-    The ``namespace`` defines the AAS C# namespace.
+    The ``namespace`` defines the base C# namespace of the generated code.
     """
     blocks = [
         Stripped(
@@ -70,6 +70,46 @@ public class IndexSegment : Segment
         ),
         Stripped(
             f"""\
+/// <summary>
+/// Capture a member of an open JSON-able object on a path to
+/// the erroneous value.
+/// </summary>
+/// <remarks>
+/// Unlike a <see cref="NameSegment" />, which names a property of one of
+/// our classes, a key is known only at run time, and can be any string
+/// at all.
+/// </remarks>
+public class KeySegment : Segment
+{{
+{I}public readonly string Key;
+{I}public KeySegment(string key)
+{I}{{
+{II}Key = key;
+{I}}}
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Escape the characters which a JSON string may not hold as they are.
+/// </summary>
+private static string EscapeForJsonString(
+{I}string text)
+{{
+{I}return (
+{II}text
+{III}.Replace("\\\\", "\\\\\\\\")
+{III}.Replace("\\"", "\\\\\\"")
+{III}.Replace("\\b", "\\\\b")
+{III}.Replace("\\f", "\\\\f")
+{III}.Replace("\\n", "\\\\n")
+{III}.Replace("\\r", "\\\\r")
+{III}.Replace("\\t", "\\\\t")
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
 private static readonly System.Text.RegularExpressions.Regex VariableNameRe = (
 {I}new System.Text.RegularExpressions.Regex(
 {II}@"^[a-zA-Z_][a-zA-Z_0-9]*$"));"""
@@ -100,19 +140,18 @@ public static string GenerateJsonPath(
 {IIII}}}
 {IIII}else
 {IIII}{{
-{IIIII}string escaped = nameSegment.Name
-{IIIIII}.Replace("\\\\", "\\\\\\\\")
-{IIIIII}.Replace("\\"", "\\\\\\"")
-{IIIIII}.Replace("\\b", "\\\\b")
-{IIIIII}.Replace("\\f", "\\\\f")
-{IIIIII}.Replace("\\n", "\\\\n")
-{IIIIII}.Replace("\\r", "\\\\r")
-{IIIIII}.Replace("\\t", "\\\\t");
-{IIIII}part = $"[\\"{{escaped}}\\"]";
+{IIIII}part = (
+{IIIIII}$"[\\"{{EscapeForJsonString(nameSegment.Name)}}\\"]");
 {IIII}}}
 {IIII}break;
 {III}case IndexSegment indexSegment:
 {IIII}part = $"[{{indexSegment.Index}}]";
+{IIII}break;
+{III}case KeySegment keySegment:
+{IIII}// A key is no name of a property of one of our classes, so it is
+{IIII}// always bracketed, whatever it looks like.
+{IIII}part = (
+{IIIII}$"[\\"{{EscapeForJsonString(keySegment.Key)}}\\"]");
 {IIII}break;
 {III}default:
 {IIII}throw new System.InvalidOperationException(
@@ -134,6 +173,11 @@ public static string GenerateJsonPath(
 /// C#, not the JSON property names. This is the path to report where in
 /// an *instance* something went wrong -- on the serialization, say, where
 /// the caller holds the instance and not a document.
+///
+/// A key and an index segment need no spelling of their own: a JSON-able
+/// value is a <see cref="System.Text.Json.Nodes.JsonNode" />, which indexes
+/// by both, so the path reads as a C# expression on the instance, *e.g.*,
+/// <c>.SomeProperty["some key"][2]</c>.
 /// </remarks>
 public static string GenerateCSharpPath(
 {I}ICollection<Segment> segments)
@@ -193,6 +237,13 @@ public static string GenerateRelativeXPath(
 {IIII}break;
 {III}case IndexSegment indexSegment:
 {IIII}part = $"*[{{indexSegment.Index}}]";
+{IIII}break;
+{III}case KeySegment keySegment:
+{IIII}// A JSON-able object is written as an XML-RPC <struct>, which
+{IIII}// holds the key of a member in a <name> child element, and not in
+{IIII}// an attribute, so the XPath has to match on that child element.
+{IIII}part = (
+{IIIII}$"member[name=\\"{{EscapeForXPath(keySegment.Key)}}\\"]");
 {IIII}break;
 {III}default:
 {IIII}throw new System.InvalidOperationException(

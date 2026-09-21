@@ -59,6 +59,26 @@ public static class IndexSegment extends Segment{{
 }}"""
         ),
         Stripped(
+            f"""\
+/**
+ * Capture a member of an open JSON-able object on a path to
+ * the erroneous value.
+ *
+ * <p>Unlike a {{@link NameSegment}}, which names a property of one of our
+ * classes, a key is known only at run time, and can be any string at all.
+ */
+public static class KeySegment extends Segment {{
+{I}private final String key;
+{I}public KeySegment(String key) {{
+{II}this.key = Objects.requireNonNull(key,
+{III}"Argument \\"key\\" must be non-null.");
+{I}}}
+{I}public String getKey(){{
+{II}return key;
+{I}}}
+}}"""
+        ),
+        Stripped(
             """\
 private static final Pattern variableNameRe = Pattern.compile("^[a-zA-Z_][a-zA-Z_0-9]*$");"""
         ),
@@ -90,6 +110,11 @@ public static String generateJsonPath(Collection<Segment> segments) {{
 {II}}} else if (segment instanceof IndexSegment) {{
 {III}IndexSegment indexSegment = (IndexSegment) segment;
 {III}part = "[" + indexSegment.getIndex() + "]";
+{II}}} else if (segment instanceof KeySegment) {{
+{III}// A key is no name of a property of one of our classes, so it is
+{III}// always bracketed, whatever it looks like.
+{III}KeySegment keySegment = (KeySegment) segment;
+{III}part = "[\\"" + escapeForJsonString(keySegment.getKey()) + "\\"]";
 {II}}} else {{
 {III}throw new RuntimeException(
 {IIII}"Unexpected segment type: " + segment.getClass().getSimpleName()
@@ -156,6 +181,13 @@ public static String generateRelativeXPath(Collection<Segment> segments) {{
 {III}final IndexSegment indexSegment = ((IndexSegment) segment);
 {III}final int index = indexSegment.getIndex();
 {III}part = "*[" + index + "]";
+{II}}} else if (segment instanceof KeySegment) {{
+{III}// A JSON-able object is written as an XML-RPC <struct>, which holds
+{III}// the key of a member in a <name> child element, and not in
+{III}// an attribute, so the XPath has to match on that child element.
+{III}final KeySegment keySegment = ((KeySegment) segment);
+{III}part = "member[name=\\"" +
+{IIII}escapeForXPath(keySegment.getKey()) + "\\"]";
 {II}}} else {{
 {III}throw new IllegalArgumentException("Unexpected segment type: " +
 {IIII}segment.getClass().getSimpleName());
@@ -177,8 +209,11 @@ public static String generateRelativeXPath(Collection<Segment> segments) {{
  * been written yet.
  *
  * <p>Unlike the JSON path and the XPath, this one is a Java expression on
- * that instance which the caller can paste, <em>e.g.</em>,
- * {{@code getSubmodelElements().get(0).getValue()}}.
+ * that instance which the caller can paste, as a list and a JSON-able value
+ * happen to agree on {{@code get}}: an item of a list, an item of
+ * a JSON-able array and a member of a JSON-able object are all reached with
+ * it, <em>e.g.</em>,
+ * {{@code getSubmodelElements().get(0).getValue().get("some key")}}.
  */
 public static String generateJavaPath(Collection<Segment> segments) {{
 {I}final List<String> parts = new ArrayList<>(segments.size());
@@ -195,6 +230,9 @@ public static String generateJavaPath(Collection<Segment> segments) {{
 {II}}} else if (segment instanceof IndexSegment) {{
 {III}final IndexSegment indexSegment = ((IndexSegment) segment);
 {III}part = ".get(" + indexSegment.getIndex() + ")";
+{II}}} else if (segment instanceof KeySegment) {{
+{III}final KeySegment keySegment = ((KeySegment) segment);
+{III}part = ".get(\\"" + escapeForJsonString(keySegment.getKey()) + "\\")";
 {II}}} else {{
 {III}throw new IllegalArgumentException("Unexpected segment type: " +
 {IIII}segment.getClass().getSimpleName());

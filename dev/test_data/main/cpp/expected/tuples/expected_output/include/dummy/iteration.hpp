@@ -88,6 +88,29 @@ struct IndexSegment : public ISegment {
 };  // struct IndexSegment
 
 /**
+ * \brief Represent an access to a key of a JSON-able object on a path.
+ *
+ * Unlike \ref PropertySegment, which points to one of the properties of
+ * the meta-model, this segment points to a key of a JSON-able object, which
+ * can be an arbitrary string known only at runtime.
+ */
+struct KeySegment : public ISegment {
+  /**
+   * Key of the JSON-able object
+   */
+  std::wstring key;
+
+  explicit KeySegment(
+    std::wstring a_key
+  );
+
+  std::wstring ToWstring() const override;
+  std::unique_ptr<ISegment> Clone() const override;
+
+  ~KeySegment() override = default;
+};  // struct KeySegment
+
+/**
  * \brief Represent a path to some value.
  *
  * This is a path akin to C++ expressions. It is not to be confused with different

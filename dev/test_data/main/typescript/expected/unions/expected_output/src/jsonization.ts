@@ -18,6 +18,37 @@ export type JsonValue = string | number | boolean | JsonObject | JsonArray;
 export type JsonArray = Iterable<JsonValue>;
 export type JsonObject = { [prop: string]: JsonValue };
 
+// NOTE (mristin):
+// The SDK defines three of these path vocabularies: this one, the one in
+// the `jsonization` module, and the one in the `xmlcommon` module. They look
+// alike, and it is tempting to merge them, but they are not interchangeable.
+//
+// Each of them points into a different thing:
+//
+// * This one points into the instances which you built, so a property segment
+//   holds a class of the meta-model.
+// * The jsonization's points into the JSON-able structure being read or
+//   written, so a property segment holds the JSON-able object instead: while
+//   a document is being parsed, the instance which the property would belong
+//   to does not exist yet.
+// * The xmlcommon's points into the XML document, where there are no
+//   properties at all, only elements, so it names an element instead. It is
+//   also the only one whose segments carry no back-pointer, as the reading is
+//   a single pass over a token stream and the element is gone by the time
+//   the error comes back out.
+//
+// The three also render differently: a path into the instances is
+// a TypeScript access expression, a path into a JSON-able structure starts at
+// the root of the document and carries no leading dot, and a path into an XML
+// document is a relative XPath.
+//
+// Merging them would mean either dropping the back-pointers, which have been
+// part of the public API of this SDK since before these modules were split
+// apart, or defining a single path over the union of all the segment kinds --
+// in which case every consumer would have to handle segments which can never
+// occur in its world. Three small vocabularies which each say exactly what
+// they can say cost less than one large one which lies about its range.
+
 /**
  * Represent a property on a path to the erroneous value.
  */
@@ -62,7 +93,35 @@ export class IndexSegment {
   }
 }
 
-export type Segment = PropertySegment | IndexSegment;
+/**
+ * Represent a member of an open JSON-able object on a path to the erroneous
+ * value.
+ *
+ * @remarks
+ *
+ * Unlike a {@link PropertySegment}, which names a property of one of our
+ * classes, a key names a member of an open JSON-able object. It is known only
+ * at run time, and can be any string at all, so it is always rendered as
+ * a subscript.
+ */
+export class KeySegment {
+  /**
+   * Object that contains the value at {@link key}
+   */
+  readonly object: JsonObject;
+
+  /**
+   * Key of the value
+   */
+  readonly key: string;
+
+  constructor(object: JsonObject, key: string) {
+    this.object = object;
+    this.key = key;
+  }
+}
+
+export type Segment = PropertySegment | IndexSegment | KeySegment;
 
 /**
  * Represent the relative path to the erroneous value.
@@ -99,6 +158,8 @@ export class Path {
       parts.push(segment.name);
     } else if (segment instanceof IndexSegment) {
       parts.push(`[${segment.index}]`);
+    } else if (segment instanceof KeySegment) {
+      parts.push(`[${JSON.stringify(segment.key)}]`);
     } else {
       throw new Error(`Unexpected segment: ${segment}`);
     }
@@ -109,6 +170,8 @@ export class Path {
         parts.push(`.${segment.name}`);
       } else if (segment instanceof IndexSegment) {
         parts.push(`[${segment.index}]`);
+      } else if (segment instanceof KeySegment) {
+        parts.push(`[${JSON.stringify(segment.key)}]`);
       } else {
         throw new Error(`Unexpected segment: ${segment}`);
       }
@@ -2093,6 +2156,19 @@ export class SerializationError extends Error {
   prependIndex(index: number): void {
     this._segments.unshift(`[${index}]`);
   }
+
+  /**
+   * Insert the access to the member `key` before the {@link path}.
+   *
+   * @remarks
+   *
+   * Unlike a property of one of our classes, a member of an open JSON-able
+   * object is known only at run time and can be any string at all, so it is
+   * always rendered as a subscript.
+   */
+  prependKey(key: string): void {
+    this._segments.unshift(`[${JSON.stringify(key)}]`);
+  }
 }
 
 /**
@@ -2106,8 +2182,18 @@ function serializeStructuralFirst(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["uniqueToFirst"] =
-    that.uniqueToFirst;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "uniqueToFirst";
+    jsonable["uniqueToFirst"] =
+      that.uniqueToFirst;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -2123,8 +2209,18 @@ function serializeStructuralSecond(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["uniqueToSecond"] =
-    that.uniqueToSecond;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "uniqueToSecond";
+    jsonable["uniqueToSecond"] =
+      that.uniqueToSecond;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -2140,8 +2236,18 @@ function serializeMixedAbstractDescendantOne(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["uniqueToAbstractDescendantOne"] =
-    that.uniqueToAbstractDescendantOne;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "uniqueToAbstractDescendantOne";
+    jsonable["uniqueToAbstractDescendantOne"] =
+      that.uniqueToAbstractDescendantOne;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -2157,8 +2263,18 @@ function serializeMixedAbstractDescendantTwo(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["uniqueToAbstractDescendantTwo"] =
-    that.uniqueToAbstractDescendantTwo;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "uniqueToAbstractDescendantTwo";
+    jsonable["uniqueToAbstractDescendantTwo"] =
+      that.uniqueToAbstractDescendantTwo;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -2174,8 +2290,18 @@ function serializeMixedConcreteWithDescendants(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["someBaseProperty"] =
-    that.someBaseProperty;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "someBaseProperty";
+    jsonable["someBaseProperty"] =
+      that.someBaseProperty;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   jsonable["modelType"] = "MixedConcreteWithDescendants";
 
@@ -2193,11 +2319,22 @@ function serializeMixedConcreteWithDescendantsChild(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["someBaseProperty"] =
-    that.someBaseProperty;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "someBaseProperty";
+    jsonable["someBaseProperty"] =
+      that.someBaseProperty;
 
-  jsonable["someChildProperty"] =
-    that.someChildProperty;
+    prop = "someChildProperty";
+    jsonable["someChildProperty"] =
+      that.someChildProperty;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   jsonable["modelType"] = "MixedConcreteWithDescendantsChild";
 
@@ -2215,8 +2352,18 @@ function serializeMixedConcreteLeaf(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["uniqueToConcreteLeaf"] =
-    that.uniqueToConcreteLeaf;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "uniqueToConcreteLeaf";
+    jsonable["uniqueToConcreteLeaf"] =
+      that.uniqueToConcreteLeaf;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   return jsonable;
 }
@@ -2232,8 +2379,18 @@ function serializeModelTypedFirst(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["someProperty"] =
-    that.someProperty;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "someProperty";
+    jsonable["someProperty"] =
+      that.someProperty;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   jsonable["modelType"] = "ModelTypedFirst";
 
@@ -2251,8 +2408,18 @@ function serializeModelTypedSecond(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["someProperty"] =
-    that.someProperty;
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "someProperty";
+    jsonable["someProperty"] =
+      that.someProperty;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
 
   jsonable["modelType"] = "ModelTypedSecond";
 
@@ -2270,40 +2437,59 @@ function serializeSomething(
 ): JsonObject {
   const jsonable: JsonObject = {};
 
-  jsonable["structuralProperty"] =
-    serializeClass(that.structuralProperty);
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    prop = "structuralProperty";
+    jsonable["structuralProperty"] =
+      serializeClass(that.structuralProperty);
 
-  jsonable["mixedProperty"] =
-    serializeClass(that.mixedProperty);
+    prop = "mixedProperty";
+    jsonable["mixedProperty"] =
+      serializeClass(that.mixedProperty);
 
-  jsonable["modelTypedProperty"] =
-    serializeClass(that.modelTypedProperty);
+    prop = "modelTypedProperty";
+    jsonable["modelTypedProperty"] =
+      serializeClass(that.modelTypedProperty);
 
-  jsonable["listStructuralProperty"] =
-    serialize_ListOf_StructuralUnion(that.listStructuralProperty);
+    prop = "listStructuralProperty";
+    jsonable["listStructuralProperty"] =
+      serialize_ListOf_StructuralUnion(that.listStructuralProperty);
 
-  jsonable["listMixedProperty"] =
-    serialize_ListOf_MixedUnion(that.listMixedProperty);
+    prop = "listMixedProperty";
+    jsonable["listMixedProperty"] =
+      serialize_ListOf_MixedUnion(that.listMixedProperty);
 
-  jsonable["listModelTypedProperty"] =
-    serialize_ListOf_ModelTypedUnion(that.listModelTypedProperty);
+    prop = "listModelTypedProperty";
+    jsonable["listModelTypedProperty"] =
+      serialize_ListOf_ModelTypedUnion(that.listModelTypedProperty);
 
-  jsonable["tupleProperty"] =
-    serialize_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(that.tupleProperty);
+    prop = "tupleProperty";
+    jsonable["tupleProperty"] =
+      serialize_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(that.tupleProperty);
 
-  if (that.optionalStructuralProperty !== null) {
-    jsonable["optionalStructuralProperty"] =
-      serializeClass(that.optionalStructuralProperty);
-  }
+    if (that.optionalStructuralProperty !== null) {
+      prop = "optionalStructuralProperty";
+      jsonable["optionalStructuralProperty"] =
+        serializeClass(that.optionalStructuralProperty);
+    }
 
-  if (that.optionalMixedProperty !== null) {
-    jsonable["optionalMixedProperty"] =
-      serializeClass(that.optionalMixedProperty);
-  }
+    if (that.optionalMixedProperty !== null) {
+      prop = "optionalMixedProperty";
+      jsonable["optionalMixedProperty"] =
+        serializeClass(that.optionalMixedProperty);
+    }
 
-  if (that.optionalModelTypedProperty !== null) {
-    jsonable["optionalModelTypedProperty"] =
-      serializeClass(that.optionalModelTypedProperty);
+    if (that.optionalModelTypedProperty !== null) {
+      prop = "optionalModelTypedProperty";
+      jsonable["optionalModelTypedProperty"] =
+        serializeClass(that.optionalModelTypedProperty);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
   return jsonable;
@@ -2319,8 +2505,16 @@ function serialize_ListOf_StructuralUnion(
   that: ReadonlyArray<AasTypes.StructuralUnion>
 ): Array<JsonObject> {
   const result = new Array<JsonObject>(that.length);
-  for (let i = 0; i < that.length; i++) {
-    result[i] = serializeClass(that[i]);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeClass(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
   }
   return result;
 }
@@ -2335,8 +2529,16 @@ function serialize_ListOf_MixedUnion(
   that: ReadonlyArray<AasTypes.MixedUnion>
 ): Array<JsonObject> {
   const result = new Array<JsonObject>(that.length);
-  for (let i = 0; i < that.length; i++) {
-    result[i] = serializeClass(that[i]);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeClass(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
   }
   return result;
 }
@@ -2351,8 +2553,16 @@ function serialize_ListOf_ModelTypedUnion(
   that: ReadonlyArray<AasTypes.ModelTypedUnion>
 ): Array<JsonObject> {
   const result = new Array<JsonObject>(that.length);
-  for (let i = 0; i < that.length; i++) {
-    result[i] = serializeClass(that[i]);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeClass(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
   }
   return result;
 }
@@ -2367,9 +2577,30 @@ function serialize_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
   that: readonly [AasTypes.StructuralUnion, AasTypes.MixedUnion, AasTypes.ModelTypedUnion]
 ): Array<JsonValue> {
   const result = new Array<JsonValue>(3);
-  result[0] = serializeClass(that[0]);
-  result[1] = serializeClass(that[1]);
-  result[2] = serializeClass(that[2]);
+  try {
+    result[0] = serializeClass(that[0]);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(0);
+    }
+    throw error;
+  }
+  try {
+    result[1] = serializeClass(that[1]);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(1);
+    }
+    throw error;
+  }
+  try {
+    result[2] = serializeClass(that[2]);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(2);
+    }
+    throw error;
+  }
   return result;
 }
 
