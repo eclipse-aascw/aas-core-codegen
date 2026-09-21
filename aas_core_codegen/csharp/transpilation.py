@@ -204,6 +204,36 @@ class Transpiler(
         if not isinstance(node.collection, no_parentheses_types):
             collection = Stripped(f"({collection})")
 
+        collection_type = intermediate_type_inference.beneath_optional(
+            self.type_map[node.collection]
+        )
+
+        if isinstance(
+            collection_type,
+            (
+                intermediate_type_inference.JsonArrayTypeAnnotation,
+                intermediate_type_inference.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # The indexer of a ``Nodes.JsonObject`` and of a ``Nodes.JsonArray``
+            # gives a nullable node, as the key or the position might be
+            # missing, and so does the type inference. Once the meta-model
+            # guarded the index with a membership or a length check, the type
+            # inference strips the optionality, and we have to tell that to
+            # the C# compiler, which tracks the nullability neither through
+            # an indexer nor through such a guard.
+            #
+            # If the meta-model did not guard the index, we deliberately do
+            # *not* forgive the nullability, so that the C# compiler reports
+            # the un-guarded index just as it reports an un-guarded optional
+            # property.
+            if not isinstance(
+                self.type_map[node],
+                intermediate_type_inference.OptionalTypeAnnotation,
+            ):
+                return Stripped(f"{collection}[{index}]!"), None
+
         return Stripped(f"{collection}[{index}]"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -555,6 +585,20 @@ class Transpiler(
 
                 elif isinstance(
                     arg_type, intermediate_type_inference.ListTypeAnnotation
+                ):
+                    return Stripped(f"{collection}.Count"), None
+
+                # NOTE (mristin):
+                # A JSON-able array is a ``Nodes.JsonArray`` and a JSON-able
+                # object a ``Nodes.JsonObject``, and both count their items
+                # the same way. A JSON-able *value* has no length at all --
+                # the type inference refuses it before we get here.
+                elif isinstance(
+                    arg_type,
+                    (
+                        intermediate_type_inference.JsonArrayTypeAnnotation,
+                        intermediate_type_inference.JsonObjectTypeAnnotation,
+                    ),
                 ):
                     return Stripped(f"{collection}.Count"), None
 

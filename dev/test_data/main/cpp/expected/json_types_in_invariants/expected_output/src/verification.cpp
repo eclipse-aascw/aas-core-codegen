@@ -105,6 +105,12 @@ bool SpecifiesTheType(
   );
 }
 
+bool IsAcceptable(
+  const nlohmann::json& value
+) {
+  return true;
+}
+
 // endregion Verification functions
 
 /**
@@ -304,8 +310,9 @@ void OfSomething::Execute() {
         index_ = -1;
 
         if (
-          SpecifiesTheType(
-            instance_->mapping()
+          !(instance_->values().size() >= 1)
+          || IsAcceptable(
+            instance_->values().back()
           )
         ) {
           state_ = 1;
@@ -313,8 +320,7 @@ void OfSomething::Execute() {
         }
 
         error_ = common::make_unique<Error>(
-          L"The mapping must specify the type, checked in "
-          L"a verification function"
+          L"The last value must be acceptable"
         );
         // No path is prepended as the error refers to the instance itself.
         ++index_;
@@ -325,11 +331,9 @@ void OfSomething::Execute() {
 
       case 1: {
         if (
-          !(instance_->optional_mapping().has_value())
-          || (*(instance_->optional_mapping())).contains(
-            common::WstringToUtf8(
-              L"type"
-            )
+          !(instance_->values().size() > 0)
+          || IsAcceptable(
+            instance_->values().at(0)
           )
         ) {
           state_ = 2;
@@ -337,7 +341,7 @@ void OfSomething::Execute() {
         }
 
         error_ = common::make_unique<Error>(
-          L"The optional mapping must specify the type"
+          L"The first value must be acceptable"
         );
         // No path is prepended as the error refers to the instance itself.
         ++index_;
@@ -347,19 +351,13 @@ void OfSomething::Execute() {
       }
 
       case 2: {
-        if (
-          instance_->mapping().contains(
-            common::WstringToUtf8(
-              L"type"
-            )
-          )
-        ) {
+        if (instance_->values().size() > 0) {
           state_ = 3;
           continue;
         }
 
         error_ = common::make_unique<Error>(
-          L"The mapping must specify the type"
+          L"There must be at least one value"
         );
         // No path is prepended as the error refers to the instance itself.
         ++index_;
@@ -369,6 +367,117 @@ void OfSomething::Execute() {
       }
 
       case 3: {
+        if (instance_->mapping().size() > 1) {
+          state_ = 4;
+          continue;
+        }
+
+        error_ = common::make_unique<Error>(
+          L"The mapping must specify something besides the type"
+        );
+        // No path is prepended as the error refers to the instance itself.
+        ++index_;
+
+        state_ = 4;
+        return;
+      }
+
+      case 4: {
+        if (
+          !instance_->mapping().contains(
+            common::WstringToUtf8(
+              L"type"
+            )
+          )
+          || IsAcceptable(
+            instance_->mapping().at(
+              common::WstringToUtf8(
+                L"type"
+              )
+            )
+          )
+        ) {
+          state_ = 5;
+          continue;
+        }
+
+        error_ = common::make_unique<Error>(
+          L"The type of the mapping must be acceptable"
+        );
+        // No path is prepended as the error refers to the instance itself.
+        ++index_;
+
+        state_ = 5;
+        return;
+      }
+
+      case 5: {
+        if (
+          SpecifiesTheType(
+            instance_->mapping()
+          )
+        ) {
+          state_ = 6;
+          continue;
+        }
+
+        error_ = common::make_unique<Error>(
+          L"The mapping must specify the type, checked in "
+          L"a verification function"
+        );
+        // No path is prepended as the error refers to the instance itself.
+        ++index_;
+
+        state_ = 6;
+        return;
+      }
+
+      case 6: {
+        if (
+          !(instance_->optional_mapping().has_value())
+          || (*(instance_->optional_mapping())).contains(
+            common::WstringToUtf8(
+              L"type"
+            )
+          )
+        ) {
+          state_ = 7;
+          continue;
+        }
+
+        error_ = common::make_unique<Error>(
+          L"The optional mapping must specify the type"
+        );
+        // No path is prepended as the error refers to the instance itself.
+        ++index_;
+
+        state_ = 7;
+        return;
+      }
+
+      case 7: {
+        if (
+          instance_->mapping().contains(
+            common::WstringToUtf8(
+              L"type"
+            )
+          )
+        ) {
+          state_ = 8;
+          continue;
+        }
+
+        error_ = common::make_unique<Error>(
+          L"The mapping must specify the type"
+        );
+        // No path is prepended as the error refers to the instance itself.
+        ++index_;
+
+        state_ = 8;
+        return;
+      }
+
+      case 8: {
         json_value_verificator_ = (
           common::make_unique<JsonValueVerificator>(
             instance_->mapping(),
@@ -378,9 +487,9 @@ void OfSomething::Execute() {
         json_value_verificator_->Start();
       }
 
-      case 4: {
+      case 9: {
         if (!(!json_value_verificator_->Done())) {
-          state_ = 6;
+          state_ = 11;
           continue;
         }
 
@@ -401,22 +510,68 @@ void OfSomething::Execute() {
 
         ++index_;
 
-        state_ = 5;
+        state_ = 10;
         return;
       }
 
-      case 5: {
+      case 10: {
         json_value_verificator_->Next();
 
-        state_ = 4;
+        state_ = 9;
         continue;
       }
 
-      case 6: {
+      case 11: {
+        json_value_verificator_ = nullptr;
+
+        json_value_verificator_ = (
+          common::make_unique<JsonValueVerificator>(
+            instance_->values(),
+            JsonValueShape::kArray
+          )
+        );
+        json_value_verificator_->Start();
+      }
+
+      case 12: {
+        if (!(!json_value_verificator_->Done())) {
+          state_ = 14;
+          continue;
+        }
+
+        // We intentionally take over the ownership of the errors' data members,
+        // as we know the implementation in all the detail, and want to avoid a costly
+        // copy.
+        error_ = common::make_unique<Error>(
+          std::move(
+            json_value_verificator_->GetMutable()
+          )
+        );
+
+        error_->path.segments.emplace_front(
+          common::make_unique<iteration::PropertySegment>(
+            iteration::Property::kValues
+          )
+        );
+
+        ++index_;
+
+        state_ = 13;
+        return;
+      }
+
+      case 13: {
+        json_value_verificator_->Next();
+
+        state_ = 12;
+        continue;
+      }
+
+      case 14: {
         json_value_verificator_ = nullptr;
 
         if (!(instance_->optional_mapping().has_value())) {
-          state_ = 10;
+          state_ = 18;
           continue;
         }
 
@@ -429,9 +584,9 @@ void OfSomething::Execute() {
         json_value_verificator_->Start();
       }
 
-      case 7: {
+      case 15: {
         if (!(!json_value_verificator_->Done())) {
-          state_ = 9;
+          state_ = 17;
           continue;
         }
 
@@ -452,28 +607,28 @@ void OfSomething::Execute() {
 
         ++index_;
 
-        state_ = 8;
+        state_ = 16;
         return;
       }
 
-      case 8: {
+      case 16: {
         json_value_verificator_->Next();
 
-        state_ = 7;
+        state_ = 15;
         continue;
       }
 
-      case 9: {
+      case 17: {
         json_value_verificator_ = nullptr;
       }
 
-      case 10: {
+      case 18: {
         done_ = true;
         error_ = nullptr;
         index_ = -1;
 
         // We invalidate the state since we reached the end of the routine.
-        state_ = 11;
+        state_ = 19;
         return;
       }
 

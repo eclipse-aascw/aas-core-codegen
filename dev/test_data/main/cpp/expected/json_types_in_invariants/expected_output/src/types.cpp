@@ -10,9 +10,12 @@ namespace types {
 
 Something::Something(
   nlohmann::json mapping,
+  nlohmann::json values,
   common::optional<nlohmann::json> optional_mapping
 ) {
   mapping_ = std::move(mapping);
+
+  values_ = std::move(values);
 
   optional_mapping_ = std::move(optional_mapping);
 }
@@ -33,6 +36,20 @@ void Something::set_mapping(
   nlohmann::json value
 ) {
   mapping_ = value;
+}
+
+const nlohmann::json& Something::values() const {
+  return values_;
+}
+
+nlohmann::json& Something::mutable_values() {
+  return values_;
+}
+
+void Something::set_values(
+  nlohmann::json value
+) {
+  values_ = value;
 }
 
 const common::optional<nlohmann::json>& Something::optional_mapping() const {

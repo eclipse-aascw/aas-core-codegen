@@ -70,6 +70,20 @@ def specifies_the_type(
     return 'type' in mapping
 
 
+def is_acceptable(
+    value: aas_types.JsonValue
+) -> bool:
+    """
+    Check that the :paramref:`value` is acceptable.
+
+    A JSON-able value is opaque to the meta-model, so there is nothing to be
+    checked about it here. This function exists so that an indexing into
+    a JSON-able object or array has somewhere to be handed over to.
+    """
+    # pylint: disable=all
+    return True
+
+
 class _Transformer(
         aas_types.AbstractTransformer[
             Iterator[Error]
@@ -80,6 +94,40 @@ class _Transformer(
             self,
             that: aas_types.Something
     ) -> Iterator[Error]:
+        if not (
+            not (len(that.values) >= 1)
+            or is_acceptable(that.values[-1])
+        ):
+            yield Error(
+                'The last value must be acceptable'
+            )
+
+        if not (
+            not (len(that.values) > 0)
+            or is_acceptable(that.values[0])
+        ):
+            yield Error(
+                'The first value must be acceptable'
+            )
+
+        if not (len(that.values) > 0):
+            yield Error(
+                'There must be at least one value'
+            )
+
+        if not (len(that.mapping) > 1):
+            yield Error(
+                'The mapping must specify something besides the type'
+            )
+
+        if not (
+            not ('type' in that.mapping)
+            or is_acceptable(that.mapping['type'])
+        ):
+            yield Error(
+                'The type of the mapping must be acceptable'
+            )
+
         if not specifies_the_type(that.mapping):
             yield Error(
                 'The mapping must specify the type, checked in ' +
@@ -106,6 +154,17 @@ class _Transformer(
                 PropertySegment(
                     that,
                     'mapping'
+                )
+            )
+            yield error
+
+        for error in aas_json_value_verification.verify_json_array(
+                that.values
+        ):
+            error.path._prepend(
+                PropertySegment(
+                    that,
+                    'values'
                 )
             )
             yield error

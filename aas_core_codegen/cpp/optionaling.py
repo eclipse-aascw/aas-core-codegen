@@ -151,6 +151,21 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
             self.is_optional_map[node] = False
             return None
 
+        if isinstance(
+            collection_type_anno,
+            (
+                intermediate_type_inference.JsonArrayTypeAnnotation,
+                intermediate_type_inference.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # An item of a JSON-able array, and a value of a JSON-able object,
+            # is itself a JSON-able value. A JSON-able value is never optional
+            # -- JSON knows a ``null``, but a ``JSONValue`` deliberately does
+            # not.
+            self.is_optional_map[node] = False
+            return None
+
         if not isinstance(
             collection_type_anno, intermediate_type_inference.ListTypeAnnotation
         ):

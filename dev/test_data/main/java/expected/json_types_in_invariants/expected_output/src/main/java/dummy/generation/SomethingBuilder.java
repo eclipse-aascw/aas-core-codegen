@@ -17,12 +17,19 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 public class SomethingBuilder {
   private ObjectNode mapping;
 
+  private ArrayNode values;
+
   private ObjectNode optionalMapping;
 
-  public SomethingBuilder(ObjectNode mapping) {
+  public SomethingBuilder(
+    ObjectNode mapping,
+    ArrayNode values) {
     this.mapping = Objects.requireNonNull(
       mapping,
       "Argument \"mapping\" must be non-null.");
+    this.values = Objects.requireNonNull(
+      values,
+      "Argument \"values\" must be non-null.");
   }
 
   public SomethingBuilder setOptionalMapping(ObjectNode optionalMapping) {
@@ -33,6 +40,7 @@ public class SomethingBuilder {
   public Something build() {
     return new Something(
       this.mapping,
+      this.values,
       this.optionalMapping);
   }
 }

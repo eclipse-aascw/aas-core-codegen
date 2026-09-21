@@ -271,6 +271,9 @@ namespace dummy
             private static readonly ContentReader<Nodes.JsonObject> Read_jsonObject = (
                 ReadJsonObjectContent);
 
+            private static readonly ContentReader<Nodes.JsonArray> Read_jsonArray = (
+                ReadJsonArrayContent);
+
             /// <summary>
             /// Deserialize an instance of class Something from a sequence of XML elements.
             /// </summary>
@@ -287,6 +290,7 @@ namespace dummy
                 error = null;
 
                 Nodes.JsonObject? theMapping = null;
+                Nodes.JsonArray? theValues = null;
                 Nodes.JsonObject? theOptionalMapping = null;
 
                 if (!isEmptySequence)
@@ -315,6 +319,15 @@ namespace dummy
                                     break;
                                 }
                                 theMapping = Read_jsonObject(
+                                    reader, isEmptyProperty, out error);
+                                break;
+                            case "values":
+                                if (theValues != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
+                                theValues = Read_jsonArray(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "optionalMapping":
@@ -371,8 +384,19 @@ namespace dummy
                     return default!;
                 }
 
+                if (theValues == null)
+                {
+                    error = new Reporting.Error(
+                        "The required property Values has not been given " +
+                        "in the XML representation of an instance of class Something");
+                    return default!;
+                }
+
                 return new Aas.Something(
                     theMapping
+                         ?? throw new System.InvalidOperationException(
+                            "Unexpected null, had to be handled before"),
+                    theValues
                          ?? throw new System.InvalidOperationException(
                             "Unexpected null, had to be handled before"),
                     theOptionalMapping);
@@ -561,12 +585,18 @@ namespace dummy
             private static readonly ContentWriter<Nodes.JsonObject> Write_jsonObject = (
                 XmlRpc.SerializeStructBodyTo);
 
+            private static readonly ContentWriter<Nodes.JsonArray> Write_jsonArray = (
+                XmlRpc.SerializeArrayBodyTo);
+
             private static void SomethingToSequence(
                 Aas.ISomething that,
                 Xml.XmlWriter writer)
             {
                 WriteProperty(
                     "mapping", "Mapping", that.Mapping, writer, Write_jsonObject);
+
+                WriteProperty(
+                    "values", "Values", that.Values, writer, Write_jsonArray);
 
                 if (that.OptionalMapping != null)
                 {

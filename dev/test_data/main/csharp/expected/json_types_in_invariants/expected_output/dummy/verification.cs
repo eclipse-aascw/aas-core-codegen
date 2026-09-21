@@ -43,6 +43,21 @@ namespace dummy
         }  // public static bool SpecifiesTheType
 
         /// <summary>
+        /// Check that the <paramref name="value" /> is acceptable.
+        /// </summary>
+        /// <remarks>
+        /// A JSON-able value is opaque to the meta-model, so there is nothing to be
+        /// checked about it here. This function exists so that an indexing into
+        /// a JSON-able object or array has somewhere to be handed over to.
+        /// </remarks>
+        public static bool IsAcceptable(
+            Nodes.JsonNode value
+        )
+        {
+            return true;
+        }  // public static bool IsAcceptable
+
+        /// <summary>
         /// Hash allowed enum values for efficient validation of enums.
         /// </summary>
         internal static class EnumValueSet
@@ -62,6 +77,47 @@ namespace dummy
                 Aas.ISomething that
             )
             {
+                if (!(
+                    !(that.Values.Count >= 1)
+                    || Verification.IsAcceptable(that.Values[^1]!)))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "The last value must be acceptable");
+                }
+
+                if (!(
+                    !(that.Values.Count > 0)
+                    || Verification.IsAcceptable(that.Values[0]!)))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "The first value must be acceptable");
+                }
+
+                if (!(that.Values.Count > 0))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "There must be at least one value");
+                }
+
+                if (!(that.Mapping.Count > 1))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "The mapping must specify something besides the type");
+                }
+
+                if (!(
+                    !that.Mapping.ContainsKey("type")
+                    || Verification.IsAcceptable(that.Mapping["type"]!)))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "The type of the mapping must be acceptable");
+                }
+
                 if (!Verification.SpecifiesTheType(that.Mapping))
                 {
                     yield return new Reporting.Error(
@@ -93,6 +149,16 @@ namespace dummy
                     error.PrependSegment(
                         new Reporting.NameSegment(
                             "mapping"));
+                    yield return error;
+                }
+
+                foreach (
+                    var error in JsonValueVerification.Verify(
+                        that.Values, JsonValueVerification.ExpectedShape.Array))
+                {
+                    error.PrependSegment(
+                        new Reporting.NameSegment(
+                            "values"));
                     yield return error;
                 }
 

@@ -219,6 +219,15 @@ bool SpecifiesTheType(
   const nlohmann::json& mapping
 );
 
+/// \brief Check that the \p value is acceptable.
+///
+/// A JSON-able value is opaque to the meta-model, so there is nothing to be
+/// checked about it here. This function exists so that an indexing into
+/// a JSON-able object or array has somewhere to be handed over to.
+bool IsAcceptable(
+  const nlohmann::json& value
+);
+
 // endregion Verification functions
 
 }  // namespace verification

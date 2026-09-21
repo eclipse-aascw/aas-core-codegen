@@ -304,10 +304,14 @@ __xml_namespace__ = "https://dummy.com"
 
     def test_len_and_index_on_json_array(self) -> None:
         source = """\
+@verification
+def is_acceptable(value: JSONValue) -> bool:
+    return True
+
 @invariant(
     lambda self:
-    len(self.values) >= 1 and len(self.values[0]) >= 0,
-    "There must be at least one value."
+    len(self.values) >= 1 and is_acceptable(self.values[0]),
+    "There must be at least one value, and it must be acceptable."
 )
 class Something:
     values: JSONArray
@@ -324,12 +328,16 @@ __xml_namespace__ = "https://dummy.com"
 
     def test_len_index_and_in_on_json_object(self) -> None:
         source = """\
+@verification
+def is_acceptable(value: JSONValue) -> bool:
+    return True
+
 @invariant(
     lambda self:
     len(self.value) >= 1
     and ("modelType" in self.value)
-    and len(self.value["modelType"]) >= 0,
-    "The value must contain at least one key."
+    and is_acceptable(self.value["modelType"]),
+    "The value must specify an acceptable model type."
 )
 class Something:
     value: JSONObject[str]
@@ -343,6 +351,34 @@ __xml_namespace__ = "https://dummy.com"
 """
 
         Test_with_smoke.execute(source=source)
+
+    def test_len_on_json_value_fails(self) -> None:
+        source = """\
+@invariant(
+    lambda self:
+    len(self.value) >= 1,
+    "Dummy invariant description"
+)
+class Something:
+    value: JSONValue
+
+    def __init__(self, value: JSONValue) -> None:
+        self.value = value
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "JSONValue represents an arbitrary, open JSON-able value "
+                "whose shape can not be determined statically, so we treat "
+                "it analogous to Unknown -- computing its length is not "
+                "supported. Only a JSONArray and a JSONObject have a length "
+                "which we can compute."
+            ),
+        )
 
     def test_index_on_json_value_fails(self) -> None:
         source = """\

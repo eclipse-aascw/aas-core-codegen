@@ -67,6 +67,12 @@ type ISomething interface {
 		value JsonObject,
 	);
 
+	Values() JsonArray;
+
+	SetValues(
+		value JsonArray,
+	);
+
 	OptionalMapping() JsonObject;
 
 	SetOptionalMapping(
@@ -89,6 +95,7 @@ func IsSomething(
 // Implements ISomething.
 type Something struct {
 	mapping JsonObject
+	values JsonArray
 	optionalMapping JsonObject
 }
 
@@ -101,6 +108,17 @@ func (s *Something) SetMapping(
 	value JsonObject,
 ) {
 	s.mapping = value
+}
+
+func (s *Something) Values(
+) JsonArray {
+	return s.values
+}
+
+func (s *Something) SetValues(
+	value JsonArray,
+) {
+	s.values = value
 }
 
 func (s *Something) OptionalMapping(
@@ -153,9 +171,11 @@ func (s *Something) Descend(
 // the given properties.
 func NewSomething(
 	mapping JsonObject,
+	values JsonArray,
 ) *Something {
 	return &Something{
 		mapping: mapping,
+		values: values,
 		optionalMapping: nil,
 	}
 }

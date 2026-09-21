@@ -79,6 +79,20 @@ class EnhancedSomething
     instance_->set_mapping(value);
   }
 
+  const nlohmann::json& values() const override {
+    return instance_->values();
+  }
+
+  nlohmann::json& mutable_values() override {
+    return instance_->mutable_values();
+  }
+
+  void set_values(
+    nlohmann::json value
+  ) override {
+    instance_->set_values(value);
+  }
+
   const common::optional<nlohmann::json>& optional_mapping() const override {
     return instance_->optional_mapping();
   }

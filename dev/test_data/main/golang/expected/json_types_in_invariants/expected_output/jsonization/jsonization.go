@@ -421,15 +421,21 @@ func somethingFromMapWithoutDispatch(
 	err error,
 ) {
 	var theMapping aastypes.JsonObject
+	var theValues aastypes.JsonArray
 	var theOptionalMapping aastypes.JsonObject
 
 	foundMapping := false
+	foundValues := false
 
 	for k, v := range m {
 		switch k {
 		case "mapping":
 			theMapping, err = jsonObjectFromJsonable(v)
 			foundMapping = true
+
+		case "values":
+			theValues, err = jsonArrayFromJsonable(v)
+			foundValues = true
 
 		case "optionalMapping":
 			theOptionalMapping, err = jsonObjectFromJsonable(v)
@@ -457,8 +463,16 @@ func somethingFromMapWithoutDispatch(
 		return
 	}
 
+	if !foundValues {
+		err = newDeserializationError(
+			"The required property 'values' is missing",
+		)
+		return
+	}
+
 	result = aastypes.NewSomething(
 		theMapping,
+		theValues,
 	)
 	result.SetOptionalMapping(
 		theOptionalMapping,
@@ -876,6 +890,12 @@ func somethingToMap(
 	result["mapping"], err = jsonValueToJsonable(that.Mapping())
 	if err != nil {
 		mustSerializationError(err).prependName("Mapping()")
+		return
+	}
+
+	result["values"], err = jsonValueToJsonable(that.Values())
+	if err != nil {
+		mustSerializationError(err).prependName("Values()")
 		return
 	}
 

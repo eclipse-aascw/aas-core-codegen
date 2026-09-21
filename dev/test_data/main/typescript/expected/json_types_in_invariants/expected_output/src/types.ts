@@ -124,6 +124,8 @@ export class Something extends Class {
 
   mapping: JsonObject;
 
+  values: JsonArray;
+
   optionalMapping: JsonObject | null;
 
   /**
@@ -200,10 +202,12 @@ export class Something extends Class {
 
   constructor(
     mapping: JsonObject,
+    values: JsonArray,
     optionalMapping: JsonObject | null = null
   ) {
     super();
     this.mapping = mapping;
+    this.values = values;
     this.optionalMapping = optionalMapping;
   }
 }

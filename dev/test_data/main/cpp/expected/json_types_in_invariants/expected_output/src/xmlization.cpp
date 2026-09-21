@@ -1093,7 +1093,8 @@ namespace properties {
 
 enum class OfSomething : std::uint32_t {
   kMapping = 0,
-  kOptionalMapping = 1
+  kValues = 1,
+  kOptionalMapping = 2
 };  // enum class OfSomething
 
 const std::unordered_map<
@@ -1103,6 +1104,10 @@ const std::unordered_map<
   {
     "mapping",
     OfSomething::kMapping
+  },
+  {
+    "values",
+    OfSomething::kValues
   },
   {
     "optionalMapping",
@@ -1147,6 +1152,8 @@ std::pair<
   // region Initialization
 
   common::optional<nlohmann::json> the_mapping;
+
+  common::optional<nlohmann::json> the_values;
 
   common::optional<nlohmann::json> the_optional_mapping;
 
@@ -1237,6 +1244,18 @@ std::pair<
           the_mapping,
           error
         ) = DeserializeJsonObjectFromXmlRpc(reader);
+        break;
+      }
+      case properties::OfSomething::kValues: {
+        if (the_values.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
+        std::tie(
+          the_values,
+          error
+        ) = DeserializeJsonArrayFromXmlRpc(reader);
         break;
       }
       case properties::OfSomething::kOptionalMapping: {
@@ -1343,6 +1362,14 @@ std::pair<
     );
   }
 
+  if (!the_values.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
+    >(
+      L"The required property values is missing"
+    );
+  }
+
   // endregion Check required properties
 
   return std::make_pair(
@@ -1354,6 +1381,7 @@ std::pair<
       // upcast.
       new types::Something(
         std::move(*the_mapping),
+        std::move(*the_values),
         std::move(the_optional_mapping)
       )
     ),
@@ -1722,6 +1750,17 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
     writer,
     iteration::Property::kMapping,
     SerializeJsonObjectToXmlRpc
+  );
+  if (error.has_value()) {
+    return error;
+  }
+
+  error = SerializePropertyAsElement(
+    "values",
+    that.values(),
+    writer,
+    iteration::Property::kValues,
+    SerializeJsonArrayToXmlRpc
   );
   if (error.has_value()) {
     return error;

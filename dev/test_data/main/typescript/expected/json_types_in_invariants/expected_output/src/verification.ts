@@ -200,6 +200,22 @@ export function specifiesTheType(
 }
 
 /**
+ * Check that the `value` is acceptable.
+ *
+ * @remarks
+ *
+ * A JSON-able value is opaque to the meta-model, so there is nothing to be
+ * checked about it here. This function exists so that an indexing into
+ * a JSON-able object or array has somewhere to be handed over to.
+ */
+export function isAcceptable(
+  value: AasTypes.JsonValue
+): boolean {
+  return (
+    true);
+}
+
+/**
  * Verify that `value` is a JSON-able value, at any depth.
  *
  * @remarks
@@ -325,6 +341,45 @@ class Verifier
     that: AasTypes.Something,
     context: boolean
   ): IterableIterator<VerificationError> {
+    if (!(
+      !(that.values.length >= 1)
+      || isAcceptable(AasCommon.at(that.values, -1))
+    )) {
+      yield new VerificationError(
+        "The last value must be acceptable"
+      )
+    }
+
+    if (!(
+      !(that.values.length > 0)
+      || isAcceptable(AasCommon.at(that.values, 0))
+    )) {
+      yield new VerificationError(
+        "The first value must be acceptable"
+      )
+    }
+
+    if (!(that.values.length > 0)) {
+      yield new VerificationError(
+        "There must be at least one value"
+      )
+    }
+
+    if (!(Object.keys(that.mapping).length > 1)) {
+      yield new VerificationError(
+        "The mapping must specify something besides the type"
+      )
+    }
+
+    if (!(
+      !(Object.prototype.hasOwnProperty.call(that.mapping, "type"))
+      || isAcceptable(that.mapping["type"])
+    )) {
+      yield new VerificationError(
+        "The type of the mapping must be acceptable"
+      )
+    }
+
     if (!specifiesTheType(that.mapping)) {
       yield new VerificationError(
         "The mapping must specify the type, checked in " +
@@ -355,6 +410,16 @@ class Verifier
           new PropertySegment(
             that,
             "mapping"
+          )
+        );
+        yield error;
+      }
+
+      for (const error of verifyJsonArray(that.values)) {
+        error.path.prepend(
+          new PropertySegment(
+            that,
+            "values"
           )
         );
         yield error;

@@ -52,7 +52,10 @@ namespace dummy
                 Aas.ISomething that
             )
             {
-                return new Aas.Something(that.Mapping, that.OptionalMapping);
+                return new Aas.Something(
+                    that.Mapping,
+                    that.Values,
+                    that.OptionalMapping);
             }
         }  // internal class ShallowCopier
 
@@ -68,6 +71,12 @@ namespace dummy
                             that.Mapping)
                         ?? throw new System.InvalidOperationException(
                             "Expected SerializeToNode to copy the non-null property Mapping, "
+                                + "but it returned null")),
+                    (Nodes.JsonArray)(
+                        System.Text.Json.JsonSerializer.SerializeToNode(
+                            that.Values)
+                        ?? throw new System.InvalidOperationException(
+                            "Expected SerializeToNode to copy the non-null property Values, "
                                 + "but it returned null")),
                     (that.OptionalMapping != null)
                         ? (Nodes.JsonObject)(

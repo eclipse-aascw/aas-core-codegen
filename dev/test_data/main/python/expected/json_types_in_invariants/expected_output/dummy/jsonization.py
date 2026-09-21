@@ -362,6 +362,26 @@ def _json_value_from_jsonable(
     )
 
 
+def _json_array_from_jsonable(
+    jsonable: Jsonable
+) -> aas_types.JsonArray:
+    """
+    Parse :paramref:`jsonable` as a JSON-able array.
+
+    :param jsonable: JSON-able structure to be parsed
+    :return: parsed JSON-able array
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    if aas_common.try_to_cast_to_array_like(jsonable) is None:
+        raise DeserializationException(
+            f"Expected a JSON-able array, but got: {type(jsonable)}"
+        )
+
+    result = _json_value_from_jsonable(jsonable)
+    assert isinstance(result, list)
+    return result
+
+
 def _json_object_from_jsonable(
     jsonable: Jsonable
 ) -> aas_types.JsonObject:
@@ -396,6 +416,7 @@ def something_from_jsonable(
     mapping = _as_mapping(jsonable)
 
     the_mapping: Optional[aas_types.JsonObject] = None
+    the_values: Optional[aas_types.JsonArray] = None
     the_optional_mapping: Optional[aas_types.JsonObject] = None
 
     try:
@@ -405,6 +426,8 @@ def something_from_jsonable(
                 pass
             elif key == 'mapping':
                 the_mapping = _json_object_from_jsonable(jsonable_value)
+            elif key == 'values':
+                the_values = _json_array_from_jsonable(jsonable_value)
             elif key == 'optionalMapping':
                 the_optional_mapping = _json_object_from_jsonable(jsonable_value)
             else:
@@ -422,8 +445,14 @@ def something_from_jsonable(
             "The required property 'mapping' is missing"
         )
 
+    if the_values is None:
+        raise DeserializationException(
+            "The required property 'values' is missing"
+        )
+
     return aas_types.Something(
         the_mapping,
+        the_values,
         the_optional_mapping
     )
 
@@ -583,6 +612,13 @@ def _something_to_jsonable(
         )
     except SerializationException as exception:
         exception._prepend_property('mapping')
+        raise
+    try:
+        jsonable['values'] = _json_value_to_jsonable(
+            that.values
+        )
+    except SerializationException as exception:
+        exception._prepend_property('values')
         raise
     if that.optional_mapping is not None:
         try:

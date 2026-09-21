@@ -551,6 +551,29 @@ class Transpiler(
             return None, error
         assert index is not None
 
+        if isinstance(
+            intermediate_type_inference.beneath_optional(collection_type),
+            intermediate_type_inference.JsonObjectTypeAnnotation,
+        ):
+            # NOTE (mristin):
+            # The keys of a ``nlohmann::json`` object are UTF-8 encoded, while
+            # a string in the transpiled code is a wide string, so the key has
+            # to be converted. Unlike a list, an object knows no negative
+            # index, so there is nothing to resolve from its back.
+            wstring_to_utf8 = cpp_naming.function_name(Identifier("wstring_to_utf8"))
+
+            return (
+                Stripped(
+                    f"""\
+{collection}.at(
+{I}common::{wstring_to_utf8}(
+{II}{indent_but_first_line(index, II)}
+{I})
+)"""
+                ),
+                None,
+            )
+
         index_as_int = None  # type: Optional[int]
         try:
             index_as_int = int(index)

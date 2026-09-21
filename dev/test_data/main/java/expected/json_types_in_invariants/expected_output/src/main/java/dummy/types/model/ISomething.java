@@ -21,6 +21,10 @@ public interface ISomething extends IClass {
 
   void setMapping(ObjectNode mapping);
 
+  ArrayNode getValues();
+
+  void setValues(ArrayNode values);
+
   Optional<ObjectNode> getOptionalMapping();
 
   void setOptionalMapping(ObjectNode optionalMapping);

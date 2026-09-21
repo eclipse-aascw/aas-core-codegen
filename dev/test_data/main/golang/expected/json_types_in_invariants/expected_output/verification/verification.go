@@ -57,6 +57,17 @@ func SpecifiesTheType(
 		)
 }
 
+// Check that the value is acceptable.
+//
+// A JSON-able value is opaque to the meta-model, so there is nothing to be
+// checked about it here. This function exists so that an indexing into
+// a JSON-able object or array has somewhere to be handed over to.
+func IsAcceptable(
+	value aastypes.JsonValue,
+) bool {
+	return true
+}
+
 // Verify that `value` is a JSON-able value, at any depth.
 //
 // The path of an error is relative to `value`, and the caller is expected to
@@ -203,6 +214,65 @@ func VerifySomething(
 ) (abort bool) {
 	abort = false
 
+	if !(
+		!(len(that.Values()) >= 1) ||
+		IsAcceptable(that.Values()[len(that.Values()) - 1])) {
+		abort = onError(
+			newVerificationError(
+				"The last value must be acceptable",),
+		)
+		if abort {
+			return
+		}
+	}
+
+	if !(
+		!(len(that.Values()) > 0) ||
+		IsAcceptable(that.Values()[0])) {
+		abort = onError(
+			newVerificationError(
+				"The first value must be acceptable",),
+		)
+		if abort {
+			return
+		}
+	}
+
+	if !(len(that.Values()) > 0) {
+		abort = onError(
+			newVerificationError(
+				"There must be at least one value",),
+		)
+		if abort {
+			return
+		}
+	}
+
+	if !(len(that.Mapping()) > 1) {
+		abort = onError(
+			newVerificationError(
+				"The mapping must specify something besides the type",),
+		)
+		if abort {
+			return
+		}
+	}
+
+	if !(
+		!aascommon.MapContains(
+			that.Mapping(),
+			"type",
+		) ||
+		IsAcceptable(that.Mapping()["type"])) {
+		abort = onError(
+			newVerificationError(
+				"The type of the mapping must be acceptable",),
+		)
+		if abort {
+			return
+		}
+	}
+
 	if !SpecifiesTheType(that.Mapping()) {
 		abort = onError(
 			newVerificationError(
@@ -250,6 +320,21 @@ func VerifySomething(
 			err.Path.PrependName(
 				&aasreporting.NameSegment{
 					Name: "Mapping",
+				},
+			)
+			return onError(err)
+		},
+	)
+	if abort {
+		return
+	}
+
+	abort = verifyJsonArray(
+		that.Values(),
+		func(err *VerificationError) bool {
+			err.Path.PrependName(
+				&aasreporting.NameSegment{
+					Name: "Values",
 				},
 			)
 			return onError(err)

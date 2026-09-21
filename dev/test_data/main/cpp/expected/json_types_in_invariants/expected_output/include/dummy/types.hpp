@@ -68,6 +68,14 @@ class ISomething
     nlohmann::json value
   ) = 0;
 
+  virtual const nlohmann::json& values() const = 0;
+
+  virtual nlohmann::json& mutable_values() = 0;
+
+  virtual void set_values(
+    nlohmann::json value
+  ) = 0;
+
   virtual const common::optional<nlohmann::json>& optional_mapping() const = 0;
 
   virtual common::optional<nlohmann::json>& mutable_optional_mapping() = 0;
@@ -86,8 +94,9 @@ class ISomething
 class Something
     : public ISomething {
  public:
-  explicit Something(
+  Something(
     nlohmann::json mapping,
+    nlohmann::json values,
     common::optional<nlohmann::json> optional_mapping = common::nullopt
   );
 
@@ -100,6 +109,18 @@ class Something
   nlohmann::json& mutable_mapping() override;
 
   void set_mapping(
+    nlohmann::json value
+  ) override;
+
+  // endregion
+
+  // region Get and set values_
+
+  const nlohmann::json& values() const override;
+
+  nlohmann::json& mutable_values() override;
+
+  void set_values(
     nlohmann::json value
   ) override;
 
@@ -121,6 +142,8 @@ class Something
 
  private:
   nlohmann::json mapping_;
+
+  nlohmann::json values_;
 
   common::optional<nlohmann::json> optional_mapping_;
 };
