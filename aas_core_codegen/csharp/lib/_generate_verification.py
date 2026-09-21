@@ -1372,11 +1372,20 @@ def generate(
         csharp_common.generate_using_aas_directive_if_necessary(namespace)
     )
 
+    # NOTE (mristin):
+    # A verification function can take a JSON-able value, and an invariant can
+    # name one, so the alias is needed here just as it is in the types.
+    json_using_directive = (
+        "\nusing Nodes = System.Text.Json.Nodes;"
+        if intermediate.uses_json_types(symbol_table)
+        else ""
+    )
+
     using_directives.append(
         Stripped(
-            """\
+            f"""\
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
-using Regex = System.Text.RegularExpressions.Regex;
+using Regex = System.Text.RegularExpressions.Regex;{json_using_directive}
 
 using System.Collections.Generic;  // can't alias
 using System.Linq;  // can't alias"""

@@ -6,6 +6,7 @@
 using Aas = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
 using Regex = System.Text.RegularExpressions.Regex;
+using Nodes = System.Text.Json.Nodes;
 
 using System.Collections.Generic;  // can't alias
 using System.Linq;  // can't alias
@@ -32,6 +33,16 @@ namespace dummy
     public static class Verification
     {
         /// <summary>
+        /// Check that the <paramref name="mapping" /> specifies the type.
+        /// </summary>
+        public static bool SpecifiesTheType(
+            Nodes.JsonObject mapping
+        )
+        {
+            return mapping.ContainsKey("type");
+        }  // public static bool SpecifiesTheType
+
+        /// <summary>
         /// Hash allowed enum values for efficient validation of enums.
         /// </summary>
         internal static class EnumValueSet
@@ -51,6 +62,14 @@ namespace dummy
                 Aas.ISomething that
             )
             {
+                if (!Verification.SpecifiesTheType(that.Mapping))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "The mapping must specify the type, checked in " +
+                        "a verification function");
+                }
+
                 if (!(
                     !(that.OptionalMapping != null)
                     || that.OptionalMapping.ContainsKey("type")))

@@ -190,6 +190,16 @@ export class VerificationError {
 }
 
 /**
+ * Check that the `mapping` specifies the type.
+ */
+export function specifiesTheType(
+  mapping: AasTypes.JsonObject
+): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(mapping, "type"));
+}
+
+/**
  * Verify that `value` is a JSON-able value, at any depth.
  *
  * @remarks
@@ -315,6 +325,13 @@ class Verifier
     that: AasTypes.Something,
     context: boolean
   ): IterableIterator<VerificationError> {
+    if (!specifiesTheType(that.mapping)) {
+      yield new VerificationError(
+        "The mapping must specify the type, checked in " +
+        "a verification function"
+      )
+    }
+
     if (!(
       !(that.optionalMapping !== null)
       || (Object.prototype.hasOwnProperty.call(that.optionalMapping, "type"))

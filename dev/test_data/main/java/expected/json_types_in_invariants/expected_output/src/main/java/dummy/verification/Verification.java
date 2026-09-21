@@ -35,6 +35,14 @@ import java.util.List;
 
 public class Verification {
   /**
+   * Check that the {@code mapping} specifies the type.
+   */
+  public static Boolean specifiesTheType(
+    ObjectNode mapping) {
+    return mapping.has("type");
+  }
+
+  /**
    * Hash allowed enum values for efficient validation of enums.
    */
   private static class _EnumValueSet {
@@ -158,6 +166,14 @@ public class Verification {
     public Stream<Reporting.Error> transformSomething(
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
+
+      if (!specifiesTheType(that.getMapping())) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "The mapping must specify the type, checked in " +
+            "a verification function")));
+      }
 
       if (!(
         !(that.getOptionalMapping().isPresent())

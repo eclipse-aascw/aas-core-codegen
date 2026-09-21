@@ -62,6 +62,14 @@ Path = aas_reporting.Path
 Error = aas_reporting.Error
 
 
+def specifies_the_type(
+    mapping: aas_types.JsonObject
+) -> bool:
+    """Check that the :paramref:`mapping` specifies the type."""
+    # pylint: disable=all
+    return 'type' in mapping
+
+
 class _Transformer(
         aas_types.AbstractTransformer[
             Iterator[Error]
@@ -72,6 +80,12 @@ class _Transformer(
             self,
             that: aas_types.Something
     ) -> Iterator[Error]:
+        if not specifies_the_type(that.mapping):
+            yield Error(
+                'The mapping must specify the type, checked in ' +
+                'a verification function'
+            )
+
         if not (
             not (that.optional_mapping is not None)
             or ('type' in that.optional_mapping)
