@@ -39,11 +39,15 @@ def _generate_serialization_failure_tests(
         )
         getter_name = java_naming.getter_name(numeric_place.prop.name)
 
-        json_name = numeric_place.prop.json_name
+        # NOTE (mristin):
+        # A serialization error is reported on the *instance*, which the caller
+        # holds, and not on a document which has not been written yet, so
+        # the path is a Java access path and not a JSON pointer.
+        getter_path = f"{getter_name}()"
 
         if numeric_place.index is None:
             mutation = Stripped(f"instance.{setter_name}(value);")
-            expected_path = f"{json_name}"
+            expected_path = getter_path
         elif numeric_place.in_list:
             # NOTE (mristin):
             # The value goes to the position indicated by the numeric place so
@@ -56,7 +60,7 @@ def _generate_serialization_failure_tests(
             mutation = Stripped(
                 f"instance.{setter_name}(Arrays.asList({items_joined}));"
             )
-            expected_path = f"{json_name}[{numeric_place.index}]"
+            expected_path = f"{getter_path}.get({numeric_place.index})"
         else:
             type_anno = numeric_place.prop.type_annotation
             assert isinstance(type_anno, intermediate.TupleTypeAnnotation), (
@@ -80,7 +84,11 @@ instance.{setter_name}(
 {I}new {tuple_type}(
 {II}{indent_but_first_line(items_joined, II)}));"""
             )
-            expected_path = f"{json_name}[{numeric_place.index}]"
+
+            # NOTE (mristin):
+            # A tuple item is reported as an index, just as a list item is, so
+            # the two paths coincide.
+            expected_path = f"{getter_path}.get({numeric_place.index})"
 
         cls_name_java = java_naming.class_name(numeric_place.cls.name)
         cls_name_json = naming.json_model_type(numeric_place.cls.name)

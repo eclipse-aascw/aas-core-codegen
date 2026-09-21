@@ -322,6 +322,20 @@ AasCommon.at(
             return Stripped(f"{container}.includes({member})"), None
         elif isinstance(container_type, intermediate_type_inference.SetTypeAnnotation):
             return Stripped(f"{container}.has({member})"), None
+        elif isinstance(
+            container_type, intermediate_type_inference.JsonObjectTypeAnnotation
+        ):
+            # NOTE (mristin):
+            # A JSON-able object is a plain object, so the membership is
+            # a question about its own keys. The prototype is consulted through
+            # ``Object.prototype`` so that an object with a key ``hasOwnProperty``
+            # of its own does not shadow the check.
+            return (
+                Stripped(
+                    f"Object.prototype.hasOwnProperty.call({container}, {member})"
+                ),
+                None,
+            )
         elif (
             isinstance(
                 container_type, intermediate_type_inference.PrimitiveTypeAnnotation

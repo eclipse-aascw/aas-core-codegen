@@ -508,11 +508,11 @@ public class TestJsonizationOfConcreteClasses {
         Jsonization.Serialize.toJsonObject(instance);
         fail(
           "Expected the serialization to fail at "
-            + "serialNumber"
+            + "getSerialNumber()"
             + ", but it succeeded");
       } catch (Jsonization.SerializeException exception) {
         assertEquals(
-          "serialNumber",
+          "getSerialNumber()",
           exception.getPath().orElse(null));
       }
     }
