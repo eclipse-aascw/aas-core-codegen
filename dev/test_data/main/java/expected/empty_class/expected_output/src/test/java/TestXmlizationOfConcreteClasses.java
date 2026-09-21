@@ -14,6 +14,7 @@ import dummy.reporting.Reporting;
 import dummy.types.impl.*;
 import dummy.types.model.IClass;
 import dummy.verification.Verification;
+import dummy.xmlcommon.XmlCommon;
 import dummy.xmlization.Xmlization;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -178,7 +179,7 @@ public class TestXmlizationOfConcreteClasses {
   }
 
   private static void assertEqualsExpectedOrRerecordDeserializationException(
-    Xmlization.DeserializeException exception,
+    XmlCommon.DeserializeException exception,
     Path path) throws IOException {
     if (exception == null) {
       fail("Expected a Xmlization exception when de-serializing " + path + ", but got none.");
@@ -252,11 +253,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeSomething(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 

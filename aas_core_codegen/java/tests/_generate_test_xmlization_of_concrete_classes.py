@@ -369,7 +369,7 @@ expectedMap.forEach(
         Stripped(
             f"""\
 private static void assertEqualsExpectedOrRerecordDeserializationException(
-{I}Xmlization.DeserializeException exception,
+{I}XmlCommon.DeserializeException exception,
 {I}Path path) throws IOException {{
 {I}if (exception == null) {{
 {II}fail("Expected a Xmlization exception when de-serializing " + path + ", but got none.");
@@ -457,11 +457,11 @@ public void test{cls_name_java}DeserializationFail() throws IOException, XMLStre
 {III}final XMLEventReader xmlReader =
 {IIII}xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-{III}Xmlization.DeserializeException exception = null;
+{III}XmlCommon.DeserializeException exception = null;
 
 {III}try {{
 {IIII}Xmlization.Deserialize.deserialize{cls_name_java}(xmlReader);
-{III}}} catch (Xmlization.DeserializeException observedException) {{
+{III}}} catch (XmlCommon.DeserializeException observedException) {{
 {IIII}exception = observedException;
 {III}}}
 
@@ -571,11 +571,11 @@ public void testDuplicatePropertyFails() throws IOException, XMLStreamException 
 {I}final XMLEventReader xmlReader =
 {II}xmlInputFactory.createXMLEventReader(new StringReader(brokenText));
 
-{I}Xmlization.DeserializeException exception = null;
+{I}XmlCommon.DeserializeException exception = null;
 
 {I}try {{
 {II}Xmlization.Deserialize.deserialize{duplicate_cls_name_java}(xmlReader);
-{I}}} catch (Xmlization.DeserializeException observedException) {{
+{I}}} catch (XmlCommon.DeserializeException observedException) {{
 {II}exception = observedException;
 {I}}}
 
@@ -610,6 +610,7 @@ import {package}.reporting.Reporting;
 import {package}.types.impl.*;
 import {package}.types.model.IClass;
 import {package}.verification.Verification;
+import {package}.xmlcommon.XmlCommon;
 import {package}.xmlization.Xmlization;
 import java.io.FileNotFoundException;
 import java.io.IOException;

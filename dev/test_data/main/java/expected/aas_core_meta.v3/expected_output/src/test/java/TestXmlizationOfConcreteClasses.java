@@ -14,6 +14,7 @@ import aas_core.aas3_0.reporting.Reporting;
 import aas_core.aas3_0.types.impl.*;
 import aas_core.aas3_0.types.model.IClass;
 import aas_core.aas3_0.verification.Verification;
+import aas_core.aas3_0.xmlcommon.XmlCommon;
 import aas_core.aas3_0.xmlization.Xmlization;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -178,7 +179,7 @@ public class TestXmlizationOfConcreteClasses {
   }
 
   private static void assertEqualsExpectedOrRerecordDeserializationException(
-    Xmlization.DeserializeException exception,
+    XmlCommon.DeserializeException exception,
     Path path) throws IOException {
     if (exception == null) {
       fail("Expected a Xmlization exception when de-serializing " + path + ", but got none.");
@@ -252,11 +253,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeExtension(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -345,11 +346,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeAdministrativeInformation(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -438,11 +439,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeQualifier(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -531,11 +532,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeAssetAdministrationShell(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -624,11 +625,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeAssetInformation(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -717,11 +718,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeResource(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -810,11 +811,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeSpecificAssetId(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -903,11 +904,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeSubmodel(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -996,11 +997,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeRelationshipElement(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -1089,11 +1090,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeSubmodelElementList(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -1182,11 +1183,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeSubmodelElementCollection(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -1275,11 +1276,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeProperty(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -1368,11 +1369,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeMultiLanguageProperty(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -1461,11 +1462,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeRange(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -1554,11 +1555,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeReferenceElement(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -1647,11 +1648,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeBlob(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -1740,11 +1741,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeFile(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -1833,11 +1834,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeAnnotatedRelationshipElement(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -1926,11 +1927,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeEntity(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -2019,11 +2020,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeEventPayload(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -2112,11 +2113,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeBasicEventElement(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -2205,11 +2206,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeOperation(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -2298,11 +2299,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeOperationVariable(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -2391,11 +2392,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeCapability(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -2484,11 +2485,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeConceptDescription(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -2577,11 +2578,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeReference(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -2670,11 +2671,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeKey(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -2763,11 +2764,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeLangStringNameType(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -2856,11 +2857,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeLangStringTextType(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -2949,11 +2950,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeEnvironment(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -3042,11 +3043,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeEmbeddedDataSpecification(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -3135,11 +3136,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeLevelType(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -3228,11 +3229,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeValueReferencePair(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -3321,11 +3322,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeValueList(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -3414,11 +3415,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeLangStringPreferredNameTypeIec61360(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -3507,11 +3508,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeLangStringShortNameTypeIec61360(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -3600,11 +3601,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeLangStringDefinitionTypeIec61360(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -3693,11 +3694,11 @@ public class TestXmlizationOfConcreteClasses {
         final XMLEventReader xmlReader =
           xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
 
-        Xmlization.DeserializeException exception = null;
+        XmlCommon.DeserializeException exception = null;
 
         try {
           Xmlization.Deserialize.deserializeDataSpecificationIec61360(xmlReader);
-        } catch (Xmlization.DeserializeException observedException) {
+        } catch (XmlCommon.DeserializeException observedException) {
           exception = observedException;
         }
 
@@ -3783,11 +3784,11 @@ public class TestXmlizationOfConcreteClasses {
     final XMLEventReader xmlReader =
       xmlInputFactory.createXMLEventReader(new StringReader(brokenText));
 
-    Xmlization.DeserializeException exception = null;
+    XmlCommon.DeserializeException exception = null;
 
     try {
       Xmlization.Deserialize.deserializeExtension(xmlReader);
-    } catch (Xmlization.DeserializeException observedException) {
+    } catch (XmlCommon.DeserializeException observedException) {
       exception = observedException;
     }
 
