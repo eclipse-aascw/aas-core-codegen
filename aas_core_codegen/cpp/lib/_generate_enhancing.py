@@ -818,11 +818,30 @@ if (that->{getter_name}().has_value()) {{
             type_anno.items, intermediate.OurTypeAnnotation
         ) and isinstance(type_anno.items.our_type, intermediate.NamedUnion)
 
-        assert is_list_of_classes or is_list_of_named_unions, (
-            f"NOTE (mristin): We expect only lists of classes or named unions "
-            f"at the moment, but you specified {type_anno}. "
-            f"Please contact the developers if you need this feature."
-        )
+        if not (is_list_of_classes or is_list_of_named_unions):
+            if isinstance(
+                type_anno.items,
+                (
+                    intermediate.OptionalTypeAnnotation,
+                    intermediate.ListTypeAnnotation,
+                    intermediate.TupleTypeAnnotation,
+                ),
+            ):
+                raise NotImplementedError(
+                    f"NOTE (mristin): We do not currently support "
+                    f"the generation of enhancing code for optional lists of "
+                    f"optionals, of lists or of tuples, but you specified "
+                    f"{prop.type_annotation}. Please contact the developers if "
+                    f"you need this feature."
+                )
+
+            # NOTE (mristin):
+            # Only an instance is wrapped, so a list which holds none -- of
+            # primitives, of constrained primitives, of enumeration literals or
+            # of JSON-able values -- has nothing to recurse into. This mirrors
+            # :py:func:`_generate_wrap_snippet_for_required_property`, which has
+            # spelled the very same taxonomy out from the beginning.
+            return Stripped("")
 
         getter_name = cpp_naming.getter_name(prop.name)
         value_type = cpp_common.generate_type(
