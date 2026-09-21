@@ -41,6 +41,7 @@ namespace dummy.Tests
 
                 return (
                     that.Mapping.ToJsonString() == casted.Mapping.ToJsonString()
+                    && that.Values.ToJsonString() == casted.Values.ToJsonString()
                     && ((that.OptionalMapping != null && casted.OptionalMapping != null)
                         ? that.OptionalMapping.ToJsonString() == casted.OptionalMapping.ToJsonString()
                         : that.OptionalMapping == null && casted.OptionalMapping == null));
@@ -55,6 +56,7 @@ namespace dummy.Tests
         {
             return (
                 that.Mapping == other.Mapping
+                && that.Values == other.Values
                 && that.OptionalMapping == other.OptionalMapping);
         }
 

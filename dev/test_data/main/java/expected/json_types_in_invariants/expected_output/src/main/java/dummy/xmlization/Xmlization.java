@@ -199,6 +199,7 @@ public class Xmlization {
       XMLEventReader reader,
       boolean isEmptySequence) {
       ObjectNode theMapping = null;
+      ArrayNode theValues = null;
       ObjectNode theOptionalMapping = null;
 
       if (!isEmptySequence) {
@@ -226,6 +227,21 @@ public class Xmlization {
                 valueError = value.getError();
               } else {
                 theMapping = value.getResult();
+              }
+              break;
+            }
+            case "values": {
+              if (theValues != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
+              final Reporting.Result<ArrayNode> value =
+                readTextAs_jsonArray(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValues = value.getResult();
               }
               break;
             }
@@ -266,8 +282,13 @@ public class Xmlization {
         return missingRequiredProperty("mapping", "Something");
       }
 
+      if (theValues == null) {
+        return missingRequiredProperty("values", "Something");
+      }
+
       return Reporting.Result.success(new Something(
         theMapping,
+        theValues,
         theOptionalMapping));
     }
 
@@ -444,6 +465,13 @@ public class Xmlization {
         that.getMapping(),
         writer,
         _VisitorWithWriter::writeJsonObjectContent);
+
+      writeProperty(
+        "values",
+        "getValues()",
+        that.getValues(),
+        writer,
+        _VisitorWithWriter::writeJsonArrayContent);
 
       writeOptionalProperty(
         "optionalMapping",

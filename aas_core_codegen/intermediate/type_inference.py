@@ -796,14 +796,30 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
         self.representation_map[node] = result
         return result
 
+    @staticmethod
+    def index_representation(
+        collection: parse_tree.Node, collection_repr: str, index_repr: str
+    ) -> str:
+        """
+        Render the canonical representation of ``collection[index]``.
+
+        This is a static method so that the callers which know the parts of an index,
+        but have no index node at hand, can render exactly the same representation.
+        """
+        if _Canonicalizer._needs_no_brackets(collection):
+            return f"{collection_repr}[{index_repr}]"
+
+        return f"({collection_repr})[{index_repr}]"
+
     def transform_index(self, node: parse_tree.Index) -> str:
         collection_repr = self.transform(node.collection)
         index_repr = self.transform(node.index)
 
-        if _Canonicalizer._needs_no_brackets(node.collection):
-            result = f"{collection_repr}[{index_repr}]"
-        else:
-            result = f"({collection_repr})[{index_repr}]"
+        result = _Canonicalizer.index_representation(
+            collection=node.collection,
+            collection_repr=collection_repr,
+            index_repr=index_repr,
+        )
 
         self.representation_map[node] = result
         return result
@@ -1071,6 +1087,26 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
         return result
 
 
+#: Map a comparator to the comparator which says the same about the flipped operands
+_FLIPPED_COMPARATOR = {
+    parse_tree.Comparator.LT: parse_tree.Comparator.GT,
+    parse_tree.Comparator.LE: parse_tree.Comparator.GE,
+    parse_tree.Comparator.GT: parse_tree.Comparator.LT,
+    parse_tree.Comparator.GE: parse_tree.Comparator.LE,
+    parse_tree.Comparator.EQ: parse_tree.Comparator.EQ,
+    parse_tree.Comparator.NE: parse_tree.Comparator.NE,
+}  # type: Mapping[parse_tree.Comparator, parse_tree.Comparator]
+
+
+def _is_int_literal(node: parse_tree.Node) -> bool:
+    """Check whether the ``node`` is a literal integer."""
+    return (
+        isinstance(node, parse_tree.Constant)
+        and isinstance(node.value, int)
+        and not isinstance(node.value, bool)
+    )
+
+
 class _CountingMap:
     """Provide a map to track multiple counters."""
 
@@ -1172,6 +1208,12 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # non-null assumptions with the expressions.
         self._non_null = _CountingMap()
 
+        # NOTE (mristin):
+        # We analogously keep track of how long the JSON-able arrays are known to be,
+        # as asserted by the guards such as ``len(self.values) > 0``. The lengths are
+        # stacked, so that we can pop them as the iteration leaves the guarded scope.
+        self._min_lengths = dict()  # type: MutableMapping[str, List[int]]
+
         self.type_map = dict()
         self.errors = []
 
@@ -1195,6 +1237,158 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             return type_annotation.value
 
         return type_annotation
+
+    def _index_within_asserted_length(self, node: parse_tree.Index) -> bool:
+        """
+        Check whether a guard asserted the position of the ``node`` to be there.
+
+        We keep track of the asserted lengths over the iteration
+        in :attr:`._min_lengths`, see :py:meth:`._assume_guard`.
+        """
+        if not _is_int_literal(node.index):
+            return False
+
+        assert isinstance(node.index, parse_tree.Constant)
+        assert isinstance(node.index.value, int)
+
+        lengths = self._min_lengths.get(self._representation_map[node.collection], None)
+        if lengths is None or len(lengths) == 0:
+            return False
+
+        min_length = max(lengths)
+
+        # NOTE (mristin):
+        # A negative index is resolved from the back of the array, so both ends
+        # of the range are bounded by the asserted length.
+        return -min_length <= node.index.value < min_length
+
+    def _is_length_call(self, node: parse_tree.Node) -> bool:
+        """Check whether the ``node`` is a call to the built-in ``len``."""
+        if not (isinstance(node, parse_tree.FunctionCall) and len(node.args) == 1):
+            return False
+
+        func_type = self.type_map.get(node.name, None)
+
+        return (
+            isinstance(func_type, BuiltinFunctionTypeAnnotation)
+            and func_type.func.name == "len"
+        )
+
+    def _asserted_min_length(self, node: parse_tree.Node) -> Optional[Tuple[str, int]]:
+        """
+        Determine which JSON-able array the ``node`` asserts to be how long.
+
+        We understand the length checks such as ``len(self.values) > 0`` and
+        ``1 <= len(self.values)``, and return the canonical representation of
+        the array together with the asserted length.
+        """
+        if not isinstance(node, parse_tree.Comparison):
+            return None
+
+        length_call = None  # type: Optional[parse_tree.FunctionCall]
+        literal = None  # type: Optional[int]
+        op = node.op
+
+        if self._is_length_call(node.left) and _is_int_literal(node.right):
+            assert isinstance(node.left, parse_tree.FunctionCall)
+            assert isinstance(node.right, parse_tree.Constant)
+            assert isinstance(node.right.value, int)
+
+            length_call, literal = node.left, node.right.value
+        elif _is_int_literal(node.left) and self._is_length_call(node.right):
+            assert isinstance(node.left, parse_tree.Constant)
+            assert isinstance(node.left.value, int)
+            assert isinstance(node.right, parse_tree.FunctionCall)
+
+            length_call, literal = node.right, node.left.value
+
+            # NOTE (mristin):
+            # ``1 < len(self.values)`` says the same as ``len(self.values) > 1``.
+            op = _FLIPPED_COMPARATOR[op]
+        else:
+            return None
+
+        assert length_call is not None
+        assert literal is not None
+
+        if op is parse_tree.Comparator.GT:
+            min_length = literal + 1
+        elif op is parse_tree.Comparator.GE:
+            min_length = literal
+        else:
+            return None
+
+        if min_length <= 0:
+            return None
+
+        collection = length_call.args[0]
+        if not isinstance(
+            beneath_optional(self.type_map[collection]), JsonArrayTypeAnnotation
+        ):
+            return None
+
+        return self._representation_map[collection], min_length
+
+    def _assume_guard(
+        self, node: parse_tree.Node, exit_stack: contextlib.ExitStack
+    ) -> None:
+        """
+        Assume that the ``node`` holds, and note down what it tells us about the rest.
+
+        The assumption is undone as the ``exit_stack`` unwinds, so that it holds only
+        for the expressions which the guard actually guards.
+
+        Mind that the ``node`` must have been already transformed, as we need its type
+        and its canonical representation.
+        """
+        if isinstance(node, parse_tree.IsNotNone):
+            canonical_repr = self._representation_map[node.value]
+            self._non_null.increment(canonical_repr)
+
+            # fmt: off
+            exit_stack.callback(
+                lambda a_canonical_repr=canonical_repr:  # type: ignore
+                self._non_null.decrement(a_canonical_repr)
+            )
+            # fmt: on
+            return
+
+        # NOTE (mristin):
+        # ``key in obj`` tells us that ``obj[key]`` is there. A JSON-able object is
+        # the only container whose membership is a question about the index.
+        if isinstance(node, parse_tree.IsIn) and isinstance(
+            beneath_optional(self.type_map[node.container]), JsonObjectTypeAnnotation
+        ):
+            canonical_repr = _Canonicalizer.index_representation(
+                collection=node.container,
+                collection_repr=self._representation_map[node.container],
+                index_repr=self._representation_map[node.member],
+            )
+            self._non_null.increment(canonical_repr)
+
+            # fmt: off
+            exit_stack.callback(
+                lambda a_canonical_repr=canonical_repr:  # type: ignore
+                self._non_null.decrement(a_canonical_repr)
+            )
+            # fmt: on
+            return
+
+        # NOTE (mristin):
+        # ``len(arr) > 0`` tells us that ``arr[0]`` and ``arr[-1]`` are there, and
+        # so on for the longer arrays.
+        asserted = self._asserted_min_length(node)
+        if asserted is not None:
+            collection_repr, min_length = asserted
+
+            lengths = self._min_lengths.setdefault(collection_repr, [])
+            lengths.append(min_length)
+
+            # fmt: off
+            exit_stack.callback(
+                lambda a_lengths=lengths: a_lengths.pop()  # type: ignore
+            )
+            # fmt: on
 
     @ensure(lambda self, result: not (result is None) or len(self.errors) > 0)
     def transform(self, node: parse_tree.Node) -> Optional["TypeAnnotationUnion"]:
@@ -1389,7 +1583,15 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                 )
                 return None
 
-            result = JsonValueTypeAnnotation()
+            # NOTE (mristin):
+            # The position might lie outside the array, so the item is optional
+            # unless a guard, such as ``len(self.values) > 0``, asserted the array
+            # to be long enough.
+            if self._index_within_asserted_length(node):
+                result = JsonValueTypeAnnotation()
+            else:
+                result = OptionalTypeAnnotation(JsonValueTypeAnnotation())
+
             self.type_map[node] = result
             return result
 
@@ -1404,7 +1606,12 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                 )
                 return None
 
-            result = JsonValueTypeAnnotation()
+            # NOTE (mristin):
+            # The key might be missing in the object, so the value is optional
+            # unless a guard, such as ``"type" in self.mapping``, asserted the key
+            # to be there.
+            result = OptionalTypeAnnotation(JsonValueTypeAnnotation())
+            result = self._strip_optional_if_non_null(node=node, type_annotation=result)
             self.type_map[node] = result
             return result
 
@@ -1584,32 +1791,11 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # start to surface, we should re-think our approach here.
 
         with contextlib.ExitStack() as exit_stack:
-            if isinstance(node.antecedent, parse_tree.IsNotNone):
-                canonical_repr = self._representation_map[node.antecedent.value]
-                self._non_null.increment(canonical_repr)
-
-                exit_stack.callback(
-                    lambda a_canonical_repr=canonical_repr: self._non_null.decrement(  # type: ignore
-                        a_canonical_repr
-                    )
-                )
-
-            elif isinstance(node.antecedent, parse_tree.And):
+            if isinstance(node.antecedent, parse_tree.And):
                 for value in node.antecedent.values:
-                    if isinstance(value, parse_tree.IsNotNone):
-                        canonical_repr = self._representation_map[value.value]
-                        self._non_null.increment(canonical_repr)
-
-                        # fmt: off
-                        exit_stack.callback(
-                            lambda a_canonical_repr=canonical_repr:  # type: ignore
-                            self._non_null.decrement(a_canonical_repr)
-                        )
-                        # fmt: on
+                    self._assume_guard(value, exit_stack)
             else:
-                # NOTE (mristin):
-                # We do not know how to infer any non-nullness in this case.
-                pass
+                self._assume_guard(node.antecedent, exit_stack)
 
             success = (self.transform(node.consequent) is not None) and success
 
@@ -1734,13 +1920,44 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # errors in the meta-model at this point. However, we prioritize other features
         # and leave this check unimplemented for now.
 
+        arg_types = []  # type: List[Optional[TypeAnnotationUnion]]
         for arg in node.args:
             arg_type = self.transform(arg)
             if arg_type is None:
                 failed = True
 
+            arg_types.append(arg_type)
+
         if failed:
             return None
+
+        # NOTE (mristin):
+        # The length of a JSON-able value is not a question we can answer: its
+        # shape is known only at run time, and a boolean and a number have no
+        # length at all. This mirrors :py:meth:`_Inferrer.transform_index`,
+        # which refuses to index into a JSON-able value for the very same
+        # reason. A JSON-able array and a JSON-able object, in contrast, are
+        # known to be a sequence and a mapping, respectively.
+        if (
+            isinstance(func_type, BuiltinFunctionTypeAnnotation)
+            and func_type.func.name == "len"
+            and len(arg_types) == 1
+        ):
+            arg_type = arg_types[0]
+            assert arg_type is not None
+
+            if isinstance(beneath_optional(arg_type), JsonValueTypeAnnotation):
+                self.errors.append(
+                    Error(
+                        node.args[0].original_node,
+                        "JSONValue represents an arbitrary, open JSON-able value "
+                        "whose shape can not be determined statically, so we treat "
+                        "it analogous to Unknown -- computing its length is not "
+                        "supported. Only a JSONArray and a JSONObject have "
+                        "a length which we can compute.",
+                    )
+                )
+                return None
 
         assert result is not None
 
@@ -1767,6 +1984,37 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         self.type_map[node] = result
         return result
 
+    def _nullness_check_over_json_index_is_refused(
+        self, value: parse_tree.Node, check: str
+    ) -> bool:
+        """
+        Record an error if the ``check`` is applied to an index into a JSON-able value.
+
+        The ``value`` must have been already transformed, as we need the type of
+        its collection.
+        """
+        if not isinstance(value, parse_tree.Index):
+            return False
+
+        if not isinstance(
+            beneath_optional(self.type_map[value.collection]),
+            (JsonArrayTypeAnnotation, JsonObjectTypeAnnotation),
+        ):
+            return False
+
+        self.errors.append(
+            Error(
+                value.original_node,
+                f"A JSON-able value is never null, so {check} over an index into "
+                f"a JSON-able object or array really asks whether the key or "
+                f"the position is there. Please ask that directly, as "
+                f"``<key> in <object>`` and as ``len(<array>) > <position>``, "
+                f"which strips the optionality of the index in the guarded "
+                f"expression.",
+            )
+        )
+        return True
+
     def transform_is_none(
         self, node: parse_tree.IsNone
     ) -> Optional["TypeAnnotationUnion"]:
@@ -1775,6 +2023,9 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # NOTE (mristin):
         # Something went wrong if we could not infer the type of the ``value``.
         if value_type is None:
+            return None
+
+        if self._nullness_check_over_json_index_is_refused(node.value, "``is None``"):
             return None
 
         if not isinstance(value_type, OptionalTypeAnnotation):
@@ -1800,6 +2051,11 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # NOTE (mristin):
         # Something went wrong if we could not infer the type of the ``value``.
         if value_type is None:
+            return None
+
+        if self._nullness_check_over_json_index_is_refused(
+            node.value, "``is not None``"
+        ):
             return None
 
         if not isinstance(value_type, OptionalTypeAnnotation):
@@ -1893,16 +2149,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                     )
                     success = False
 
-                if isinstance(value_node, parse_tree.IsNotNone):
-                    canonical_repr = self._representation_map[value_node.value]
-                    self._non_null.increment(canonical_repr)
-
-                    # fmt: off
-                    exit_stack.callback(
-                        lambda a_canonical_repr=canonical_repr:  # type: ignore
-                        self._non_null.decrement(a_canonical_repr)
-                    )
-                    # fmt: on
+                self._assume_guard(value_node, exit_stack)
 
         if not success:
             return None

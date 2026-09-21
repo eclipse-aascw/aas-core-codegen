@@ -130,6 +130,8 @@ class Something(Class):
 
     mapping: JsonObject
 
+    values: JsonArray
+
     optional_mapping: Optional[JsonObject]
 
     def descend_once(self) -> Iterator[Class]:
@@ -193,10 +195,12 @@ class Something(Class):
     def __init__(
             self,
             mapping: JsonObject,
+            values: JsonArray,
             optional_mapping: Optional[JsonObject] = None
     ) -> None:
         """Initialize with the given values."""
         self.mapping = mapping
+        self.values = values
         self.optional_mapping = optional_mapping
 
 

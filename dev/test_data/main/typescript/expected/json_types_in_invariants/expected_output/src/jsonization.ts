@@ -524,6 +524,7 @@ function parsePropertiesOfSomething(
   DeserializationError
 > {
   let theMapping: AasTypes.JsonObject | null = null;
+  let theValues: AasTypes.JsonArray | null = null;
   let theOptionalMapping: AasTypes.JsonObject | null = null;
 
   for (const key in jsonObject) {
@@ -537,6 +538,15 @@ function parsePropertiesOfSomething(
         );
         propertyError = parsed.error;
         theMapping = parsed.value;
+        break;
+      }
+
+      case "values": {
+        const parsed = jsonArrayFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theValues = parsed.value;
         break;
       }
 
@@ -580,12 +590,21 @@ function parsePropertiesOfSomething(
     );
   }
 
+  if (theValues === null) {
+    return newDeserializationError<
+      AasTypes.Something
+    >(
+      "The required property 'values' is missing"
+    );
+  }
+
   return new AasCommon.Either<
     AasTypes.Something,
     DeserializationError
   >(
     new AasTypes.Something(
       theMapping,
+      theValues,
       theOptionalMapping
     ),
     null
@@ -914,6 +933,10 @@ function serializeSomething(
     prop = "mapping";
     jsonable["mapping"] =
       jsonValueToJsonable(that.mapping);
+
+    prop = "values";
+    jsonable["values"] =
+      jsonValueToJsonable(that.values);
 
     if (that.optionalMapping !== null) {
       prop = "optionalMapping";

@@ -60,6 +60,7 @@ public class Copying
         ) {
             return new Something(
                 that.getMapping(),
+                that.getValues(),
                 that.getOptionalMapping().orElse(null));
         }
     }
@@ -72,6 +73,7 @@ public class Copying
         ) {
             return new Something(
                 that.getMapping().deepCopy(),
+                that.getValues().deepCopy(),
                 that.getOptionalMapping().isPresent()
                     ? that.getOptionalMapping().get().deepCopy()
                     : null

@@ -433,6 +433,7 @@ namespace dummy
                 }
 
                 Nodes.JsonObject? theMapping = null;
+                Nodes.JsonArray? theValues = null;
                 Nodes.JsonObject? theOptionalMapping = null;
 
                 foreach (var keyValue in obj)
@@ -441,6 +442,10 @@ namespace dummy
                     {
                         case "mapping":
                             theMapping = JsonObjectFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "values":
+                            theValues = JsonArrayFrom(
                                 keyValue.Value, out error);
                             break;
                         case "optionalMapping":
@@ -469,8 +474,18 @@ namespace dummy
                     return default!;
                 }
 
+                if (theValues == null)
+                {
+                    error = new Reporting.Error(
+                        "Required property \"values\" is missing");
+                    return default!;
+                }
+
                 return new Aas.Something(
                     theMapping
+                         ?? throw new System.InvalidOperationException(
+                            "Unexpected null, had to be handled before"),
+                    theValues
                          ?? throw new System.InvalidOperationException(
                             "Unexpected null, had to be handled before"),
                     theOptionalMapping);
@@ -807,6 +822,9 @@ namespace dummy
             private static readonly Serializer<Nodes.JsonObject> Serialize_JsonObject =
                 Transformer.SerializeJsonObject;
 
+            private static readonly Serializer<Nodes.JsonArray> Serialize_JsonArray =
+                Transformer.SerializeJsonArray;
+
             /// <summary>
             /// Set the property <paramref name="jsonName" /> of
             /// <paramref name="result" /> to <paramref name="that" />, serialized by
@@ -845,6 +863,8 @@ namespace dummy
                 var result = new Nodes.JsonObject();
 
                 SetProperty(result, "mapping", "Mapping", that.Mapping, Serialize_JsonObject);
+
+                SetProperty(result, "values", "Values", that.Values, Serialize_JsonArray);
 
                 if (that.OptionalMapping != null)
                 {

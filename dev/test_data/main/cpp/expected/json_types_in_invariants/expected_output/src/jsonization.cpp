@@ -684,6 +684,7 @@ std::pair<
 
 std::set<std::string> kPropertiesInSomething = {
   "mapping",
+  "values",
   "optionalMapping"
 };
 
@@ -751,6 +752,18 @@ std::pair<
     );
   }
 
+  if (!json.contains("values")) {
+    return std::make_pair<
+      common::optional<std::shared_ptr<types::ISomething> >,
+      common::optional<DeserializationError>
+    >(
+      common::nullopt,
+      common::make_optional<DeserializationError>(
+        L"The required property values is missing"
+      )
+    );
+  }
+
   // endregion Check required properties
 
   // region Initialization
@@ -758,6 +771,8 @@ std::pair<
   common::optional<DeserializationError> error;
 
   common::optional<nlohmann::json> the_mapping;
+
+  common::optional<nlohmann::json> the_values;
 
   common::optional<nlohmann::json> the_optional_mapping;
 
@@ -789,6 +804,33 @@ std::pair<
   }
 
   // endregion De-serialize mapping
+
+  // region De-serialize values
+
+  std::tie(
+    the_values,
+    error
+  ) = DeserializeJsonArray(
+    json["values"]
+  );
+
+  if (error.has_value()) {
+    error->path.segments.emplace_front(
+      common::make_unique<PropertySegment>(
+        L"values"
+      )
+    );
+
+    return std::make_pair<
+      common::optional<std::shared_ptr<types::ISomething> >,
+      common::optional<DeserializationError>
+    >(
+      common::nullopt,
+      std::move(error)
+    );
+  }
+
+  // endregion De-serialize values
 
   // region De-serialize optionalMapping
 
@@ -828,6 +870,7 @@ std::pair<
       // upcast.
       new types::Something(
         std::move(*the_mapping),
+        std::move(*the_values),
         std::move(the_optional_mapping)
       )
     ),
@@ -1320,6 +1363,33 @@ std::pair<
 
   result["mapping"] = std::move(
     json_mapping.value()
+  );
+
+  common::optional<nlohmann::json> json_values;
+  std::tie(
+    json_values,
+    error
+  ) = SerializeJsonArray(
+    that.values()
+  );
+  if (error.has_value()) {
+    error->path.segments.emplace_front(
+      common::make_unique<iteration::PropertySegment>(
+        iteration::Property::kValues
+      )
+    );
+
+    return std::make_pair<
+      common::optional<nlohmann::json>,
+      common::optional<SerializationError>
+    >(
+      common::nullopt,
+      std::move(error)
+    );
+  }
+
+  result["values"] = std::move(
+    json_values.value()
   );
 
   const common::optional<nlohmann::json>& maybe_optional_mapping(

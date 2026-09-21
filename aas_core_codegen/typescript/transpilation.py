@@ -204,6 +204,16 @@ class Transpiler(
         if not isinstance(node.collection, no_parentheses_types):
             collection = Stripped(f"({collection})")
 
+        if isinstance(
+            intermediate_type_inference.beneath_optional(collection_type),
+            intermediate_type_inference.JsonObjectTypeAnnotation,
+        ):
+            # NOTE (mristin):
+            # A JSON-able object is a plain object, indexed by its keys, while
+            # ``AasCommon.at`` indexes an array by a position, and resolves
+            # a negative index from its back.
+            return Stripped(f"{collection}[{index}]"), None
+
         # NOTE (mristin):
         # Poor man's re-flow
         result = Stripped(f"AasCommon.at({collection}, {index})")
@@ -516,6 +526,22 @@ AasCommon.at(
 
         elif isinstance(collection_type, intermediate_type_inference.SetTypeAnnotation):
             return Stripped(f"{collection}.size"), None
+
+        elif isinstance(
+            collection_type, intermediate_type_inference.JsonArrayTypeAnnotation
+        ):
+            # NOTE (mristin):
+            # A JSON-able array is a plain array.
+            return Stripped(f"{collection}.length"), None
+
+        elif isinstance(
+            collection_type, intermediate_type_inference.JsonObjectTypeAnnotation
+        ):
+            # NOTE (mristin):
+            # A JSON-able object is a plain object, so its length is the number
+            # of its own keys. A JSON-able *value* has no length at all --
+            # the type inference refuses it before we get here.
+            return Stripped(f"Object.keys({collection}).length"), None
 
         else:
             return None, Error(

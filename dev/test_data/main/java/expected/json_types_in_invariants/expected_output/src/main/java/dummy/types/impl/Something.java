@@ -28,20 +28,31 @@ import java.util.Objects;
 public class Something implements ISomething {
   private ObjectNode mapping;
 
+  private ArrayNode values;
+
   private ObjectNode optionalMapping;
 
-  public Something(ObjectNode mapping) {
+  public Something(
+    ObjectNode mapping,
+    ArrayNode values) {
     this.mapping = Objects.requireNonNull(
       mapping,
       "Argument \"mapping\" must be non-null.");
+    this.values = Objects.requireNonNull(
+      values,
+      "Argument \"values\" must be non-null.");
   }
 
   public Something(
     ObjectNode mapping,
+    ArrayNode values,
     ObjectNode optionalMapping) {
     this.mapping = Objects.requireNonNull(
       mapping,
       "Argument \"mapping\" must be non-null.");
+    this.values = Objects.requireNonNull(
+      values,
+      "Argument \"values\" must be non-null.");
     this.optionalMapping = optionalMapping;
   }
 
@@ -55,6 +66,18 @@ public class Something implements ISomething {
     this.mapping = Objects.requireNonNull(
       mapping,
       "Argument \"mapping\" must be non-null.");
+  }
+
+  @Override
+  public ArrayNode getValues() {
+    return values;
+  }
+
+  @Override
+  public void setValues(ArrayNode values) {
+    this.values = Objects.requireNonNull(
+      values,
+      "Argument \"values\" must be non-null.");
   }
 
   @Override

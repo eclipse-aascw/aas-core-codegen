@@ -51,6 +51,12 @@ namespace dummy
                 set => _instance.Mapping = value;
             }
 
+            public Nodes.JsonArray Values
+            {
+                get => _instance.Values;
+                set => _instance.Values = value;
+            }
+
             public Nodes.JsonObject? OptionalMapping
             {
                 get => _instance.OptionalMapping;

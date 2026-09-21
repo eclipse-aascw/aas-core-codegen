@@ -44,6 +44,16 @@ public class EnhancedSomething<EnhancementT>
   }
 
   @Override
+  public ArrayNode getValues() {
+    return instance.getValues();
+  }
+
+  @Override
+  public void setValues(ArrayNode values) {
+    instance.setValues(values);
+  }
+
+  @Override
   public Optional<ObjectNode> getOptionalMapping() {
     return instance.getOptionalMapping();
   }

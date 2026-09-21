@@ -686,6 +686,20 @@ class Transpiler(
                 ):
                     return Stripped(f"{collection}.size()"), None
 
+                # NOTE (mristin):
+                # A JSON-able array is an ``ArrayNode`` and a JSON-able object
+                # an ``ObjectNode``, and both count their items the same way.
+                # A JSON-able *value* has no length at all -- the type
+                # inference refuses it before we get here.
+                elif isinstance(
+                    arg_type,
+                    (
+                        intermediate_type_inference.JsonArrayTypeAnnotation,
+                        intermediate_type_inference.JsonObjectTypeAnnotation,
+                    ),
+                ):
+                    return Stripped(f"{collection}.size()"), None
+
                 else:
                     return None, Error(
                         node.original_node,

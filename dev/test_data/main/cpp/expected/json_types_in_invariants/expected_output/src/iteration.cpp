@@ -24,6 +24,8 @@ std::wstring PropertyToWstring(
       return L"mapping";
     case Property::kOptionalMapping:
       return L"optional_mapping";
+    case Property::kValues:
+      return L"values";
     default:
       throw std::invalid_argument(
         common::Concat(

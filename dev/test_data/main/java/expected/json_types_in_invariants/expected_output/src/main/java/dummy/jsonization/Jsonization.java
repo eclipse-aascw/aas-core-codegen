@@ -309,6 +309,7 @@ public class Jsonization {
         }
 
         ObjectNode theMapping = null;
+        ArrayNode theValues = null;
         ObjectNode theOptionalMapping = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
@@ -323,6 +324,14 @@ public class Jsonization {
                 return prependName(parsed, key);
               }
               theMapping = parsed.getResult();
+              break;
+            }
+            case "values": {
+              final Reporting.Result<? extends ArrayNode> parsed = tryJsonArrayFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
+              }
+              theValues = parsed.getResult();
               break;
             }
             case "optionalMapping": {
@@ -342,8 +351,13 @@ public class Jsonization {
           return missingRequiredProperty("mapping");
         }
 
+        if (theValues == null) {
+          return missingRequiredProperty("values");
+        }
+
         return Reporting.Result.success(new Something(
           theMapping,
+          theValues,
           theOptionalMapping));
       }
     }
@@ -612,6 +626,10 @@ public class Jsonization {
         setProperty(
           result, "mapping", "getMapping()",
           that.getMapping(), _Transformer::jsonValueToJsonNode);
+
+        setProperty(
+          result, "values", "getValues()",
+          that.getValues(), _Transformer::jsonValueToJsonNode);
 
         setOptionalProperty(
           result, "optionalMapping", "getOptionalMapping()",

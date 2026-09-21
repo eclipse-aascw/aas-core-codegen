@@ -50,6 +50,17 @@ func (es *enhancedSomething[E]) SetMapping(
 	es.instance.SetMapping(value)
 }
 
+func (es *enhancedSomething[E]) Values(
+) aastypes.JsonArray {
+	return es.instance.Values()
+}
+
+func (es *enhancedSomething[E]) SetValues(
+	value aastypes.JsonArray,
+) {
+	es.instance.SetValues(value)
+}
+
 func (es *enhancedSomething[E]) OptionalMapping(
 ) aastypes.JsonObject {
 	return es.instance.OptionalMapping()

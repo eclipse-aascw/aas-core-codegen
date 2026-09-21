@@ -254,6 +254,20 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
             self.is_pointer_map[node] = is_pointer_type(item_type_anno)
             return None
 
+        if isinstance(
+            collection_type_anno,
+            (
+                intermediate_type_inference.JsonArrayTypeAnnotation,
+                intermediate_type_inference.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # An item of a JSON-able array, and a value of a JSON-able object,
+            # is itself a JSON-able value, which is an ``interface{}`` and
+            # hence no pointer.
+            self.is_pointer_map[node] = False
+            return None
+
         if not isinstance(
             collection_type_anno, intermediate_type_inference.ListTypeAnnotation
         ):

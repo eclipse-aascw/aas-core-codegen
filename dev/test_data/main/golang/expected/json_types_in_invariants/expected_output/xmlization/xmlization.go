@@ -310,9 +310,11 @@ func readSomethingAsSequence(
 	err error,
 ) {
 	var theMapping aastypes.JsonObject
+	var theValues aastypes.JsonArray
 	var theOptionalMapping aastypes.JsonObject
 
 	foundMapping := false
+	foundValues := false
 	foundOptionalMapping := false
 
 	for {
@@ -337,6 +339,15 @@ func readSomethingAsSequence(
 				decoder, current,
 			)
 			foundMapping = true
+		case "values":
+			if foundValues {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
+			theValues, current, valueErr = readJsonArray(
+				decoder, current,
+			)
+			foundValues = true
 		case "optionalMapping":
 			if foundOptionalMapping {
 				valueErr = duplicatePropertyError(local)
@@ -365,8 +376,14 @@ func readSomethingAsSequence(
 		return
 	}
 
+	if !foundValues {
+		err = missingProperty("values")
+		return
+	}
+
 	instance = aastypes.NewSomething(
 		theMapping,
+		theValues,
 	)
 	instance.SetOptionalMapping(theOptionalMapping)
 	return
@@ -672,6 +689,16 @@ func writeSomethingAsSequence(
 		"Mapping()",
 		xmlcommon.WriteElement(
 			encoder, "mapping", that.Mapping(), xmlrpc.WriteObjectContent,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"Values()",
+		xmlcommon.WriteElement(
+			encoder, "values", that.Values(), xmlrpc.WriteArrayContent,
 		),
 	)
 	if err != nil {

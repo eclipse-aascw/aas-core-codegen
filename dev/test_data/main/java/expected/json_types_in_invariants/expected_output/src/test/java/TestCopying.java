@@ -32,6 +32,8 @@ public class TestCopying {
       return (
         that.getMapping().equals(
           casted.getMapping())
+        && that.getValues().equals(
+          casted.getValues())
         && (that.getOptionalMapping().isPresent()
           ? casted.getOptionalMapping().isPresent()
             && that.getOptionalMapping().get().equals(
@@ -105,6 +107,7 @@ public class TestCopying {
     Something other) {
     return (
       that.getMapping().equals(other.getMapping())
+      && that.getValues().equals(other.getValues())
       && that.getOptionalMapping().equals(other.getOptionalMapping()));
   }
 

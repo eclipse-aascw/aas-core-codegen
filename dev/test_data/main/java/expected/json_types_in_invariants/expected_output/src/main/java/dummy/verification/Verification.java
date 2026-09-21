@@ -43,6 +43,18 @@ public class Verification {
   }
 
   /**
+   * Check that the {@code value} is acceptable.
+   *
+   * <p>A JSON-able value is opaque to the meta-model, so there is nothing to be
+   * checked about it here. This function exists so that an indexing into
+   * a JSON-able object or array has somewhere to be handed over to.
+   */
+  public static Boolean isAcceptable(
+    JsonNode value) {
+    return true;
+  }
+
+  /**
    * Hash allowed enum values for efficient validation of enums.
    */
   private static class _EnumValueSet {
@@ -167,6 +179,47 @@ public class Verification {
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
+      if (!(
+        !(that.getValues().size() >= 1)
+        || isAcceptable(that.getValues().get(that.getValues().size() - 1)))) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "The last value must be acceptable")));
+      }
+
+      if (!(
+        !(that.getValues().size() > 0)
+        || isAcceptable(that.getValues().get(0)))) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "The first value must be acceptable")));
+      }
+
+      if (!(that.getValues().size() > 0)) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "There must be at least one value")));
+      }
+
+      if (!(that.getMapping().size() > 1)) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "The mapping must specify something besides the type")));
+      }
+
+      if (!(
+        !that.getMapping().has("type")
+        || isAcceptable(that.getMapping().get("type")))) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "The type of the mapping must be acceptable")));
+      }
+
       if (!specifiesTheType(that.getMapping())) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -197,6 +250,15 @@ public class Verification {
             .map(error -> {
               error.prependSegment(
                 new Reporting.NameSegment("mapping"));
+              return error;
+            }));
+
+      errorStream = Stream.<Reporting.Error>concat(errorStream,
+        Stream.of(that.getValues())
+          .flatMap(Verification::verifyJsonArray)
+            .map(error -> {
+              error.prependSegment(
+                new Reporting.NameSegment("values"));
               return error;
             }));
 

@@ -44,7 +44,9 @@ import {
 } from "./xmlcommon";
 
 import {
+  parseArrayBody as parse_jsonArray,
   parseStructBody as parse_jsonObject,
+  writeArrayBody as write_jsonArray,
   writeStructBody as write_jsonObject
 } from "./xmlrpc";
 
@@ -216,6 +218,7 @@ function parseSomethingFromSequence(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Something, DeserializationError> {
   let theMapping: AasTypes.JsonObject | null = null;
+  let theValues: AasTypes.JsonArray | null = null;
   let theOptionalMapping: AasTypes.JsonObject | null = null;
 
   const className = AasTypes.Something.name;
@@ -251,6 +254,22 @@ function parseSomethingFromSequence(
         );
         propertyError = parsed.error;
         theMapping = parsed.value;
+        break;
+      }
+
+      case "values": {
+        if (theValues !== null) {
+          propertyError = duplicatePropertyError(propertyLocalName);
+          break;
+        }
+
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_jsonArray
+        );
+        propertyError = parsed.error;
+        theValues = parsed.value;
         break;
       }
 
@@ -295,8 +314,15 @@ function parseSomethingFromSequence(
     );
   }
 
+  if (theValues === null) {
+    return newDeserializationError<AasTypes.Something>(
+      "The required property 'values' is missing"
+    );
+  }
+
   const instance = new AasTypes.Something(
     theMapping,
+    theValues,
     theOptionalMapping
   );
   return new AasCommon.Either<AasTypes.Something, DeserializationError>(
@@ -320,6 +346,12 @@ function writeSomethingAsSequence(
     "mapping",
     that.mapping,
     write_jsonObject
+  );
+  writeProperty(
+    parts,
+    "values",
+    that.values,
+    write_jsonArray
   );
   writeOptionalProperty(
     parts,

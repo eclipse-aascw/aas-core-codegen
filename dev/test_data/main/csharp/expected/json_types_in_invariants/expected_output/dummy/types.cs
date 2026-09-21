@@ -60,12 +60,16 @@ namespace dummy
     {
         public Nodes.JsonObject Mapping { get; set; }
 
+        public Nodes.JsonArray Values { get; set; }
+
         public Nodes.JsonObject? OptionalMapping { get; set; }
     }
 
     public class Something : ISomething
     {
         public Nodes.JsonObject Mapping { get; set; }
+
+        public Nodes.JsonArray Values { get; set; }
 
         public Nodes.JsonObject? OptionalMapping { get; set; }
 
@@ -130,9 +134,11 @@ namespace dummy
 
         public Something(
             Nodes.JsonObject mapping,
+            Nodes.JsonArray values,
             Nodes.JsonObject? optionalMapping = null)
         {
             Mapping = mapping;
+            Values = values;
             OptionalMapping = optionalMapping;
         }
     }

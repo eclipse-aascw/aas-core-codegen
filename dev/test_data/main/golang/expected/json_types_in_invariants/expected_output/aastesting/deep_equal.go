@@ -25,6 +25,15 @@ func deepEqualSomething(
 		return false
 	}
 
+	thatValues := that.Values()
+	otherValues := other.Values()
+	if !reflect.DeepEqual(
+		thatValues,
+		otherValues,
+	) {
+		return false
+	}
+
 	thatOptionalMapping := that.OptionalMapping()
 	otherOptionalMapping := other.OptionalMapping()
 	if
