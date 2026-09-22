@@ -2,7 +2,7 @@
 
 import io
 import itertools
-from typing import List, Optional, Iterable, Final, Mapping, Tuple, Union, Literal
+from typing import List, Optional, Iterable, Final, Mapping, Set, Tuple
 
 from icontract import ensure, require
 
@@ -3652,6 +3652,19 @@ nlohmann::json SerializeByteArray(
     )
 
 
+_PRIMITIVE_TYPE_TO_SERIALIZE = {
+    intermediate.PrimitiveType.BOOL: Stripped("SerializeBool"),
+    intermediate.PrimitiveType.INT: Stripped("SerializeInt64"),
+    intermediate.PrimitiveType.FLOAT: Stripped("SerializeDouble"),
+    intermediate.PrimitiveType.STR: Stripped("SerializeWstring"),
+    intermediate.PrimitiveType.BYTEARRAY: Stripped("stringification::Base64Encode"),
+}
+assert all(
+    primitive_type in _PRIMITIVE_TYPE_TO_SERIALIZE
+    for primitive_type in intermediate.PrimitiveType
+)
+
+
 def _generate_serialize_list_with_fallible_item_serialization() -> Stripped:
     """Generate a function to serialize a list with fallible item serialization."""
     return Stripped(
@@ -3749,11 +3762,9 @@ def _generate_serialize_tuple_function(arity: int) -> Stripped:
     Generate a generic function to serialize a tuple of the given ``arity``.
 
     Each positional item is serialized by its own ``serialize_item{i}``
-    callable, which must return a
-    ``std::pair<common::optional<nlohmann::json>, common::optional<SerializationError>>``
-    regardless of whether the item's own JSON conversion can actually fail --
-    mirroring how ``SerializeListWithFallible`` expects a fallible callable for
-    every list item.
+    callable, in whichever shape that item's own serialization has. ``AsFallible``
+    lifts the ones which can not fail, so the items of a tuple need no
+    normalizing lambda per kind at the call site.
     """
     assert arity > 0
 
@@ -3777,8 +3788,10 @@ common::optional<nlohmann::json> json_item{i};
 std::tie(
 {I}json_item{i},
 {I}error
-) = serialize_item{i}(
-{I}std::get<{i}>(value)
+) = AsFallible(
+{I}serialize_item{i}(
+{II}Deref(std::get<{i}>(value))
+{I})
 );
 if (error.has_value()) {{
 {I}error->path.segments.emplace_front(
@@ -3839,692 +3852,427 @@ std::pair<
     )
 
 
-def _generate_identity() -> Stripped:
-    """Generate the function for identity serialization which we can pass to list serialization."""
-    return Stripped(
-        f"""\
-/**
- * Just forward the value as it is.
- */
-template<typename T>
-const T& Identity(const T& value) {{
-{I}return value;
-}}"""
-    )
-
-
-def _generate_serialize_iclass_definition() -> List[Stripped]:
-    """Generate the definition of the main dispatch for serializing ``IClass``."""
+def _generate_no_json_and_error_factories() -> List[Stripped]:
+    """Generate the factories of a failed serialization."""
     return [
         Stripped(
             f"""\
+/**
+ * \\brief Give out a failed serialization with \\p cause as its message.
+ *
+ * \\param cause human-readable description of the failure
+ * \\return no value, and the error
+ */
 std::pair<
 {I}common::optional<nlohmann::json>,
 {I}common::optional<SerializationError>
-> SerializeIClass(
-{I}const types::IClass& that
-);"""
+> NoJsonAndSerializationErrorWithCause(
+{I}std::wstring cause
+) {{
+{I}return std::make_pair<
+{II}common::optional<nlohmann::json>,
+{II}common::optional<SerializationError>
+{I}>(
+{II}common::nullopt,
+{II}common::make_optional<SerializationError>(
+{III}std::move(cause)
+{II})
+{I});
+}}"""
         ),
         Stripped(
             f"""\
+/**
+ * \\brief Give out a failed serialization with \\p error.
+ *
+ * \\param error of the serialization
+ * \\return no value, and the error
+ */
 std::pair<
 {I}common::optional<nlohmann::json>,
 {I}common::optional<SerializationError>
-> SerializeIClassPtr(
-{I}const std::shared_ptr<types::IClass>& that
-);"""
+> NoJsonAndSerializationError(
+{I}SerializationError error
+) {{
+{I}return std::make_pair<
+{II}common::optional<nlohmann::json>,
+{II}common::optional<SerializationError>
+{I}>(
+{II}common::nullopt,
+{II}common::make_optional<SerializationError>(
+{III}std::move(error)
+{II})
+{I});
+}}"""
         ),
     ]
 
 
-def _generate_serialize_number_property(
-    serialize_function: Stripped,
-    getter_expr: Stripped,
-    property_name: Identifier,
-    json_name: str,
-) -> Stripped:
-    """
-    Generate the snippet to serialize a number property.
-
-    Both an integer and a floating-point number can fall outside what JSON can
-    represent, so ``serialize_function`` is fallible and the property segment
-    has to be prepended to the path of its error.
-    """
-    json_prop_name_literal = cpp_common.string_literal(json_name)
-
-    serialized_var = cpp_naming.variable_name(Identifier(f"json_{property_name}"))
-
+def _generate_serialize_into() -> Stripped:
+    """Generate the function to put the result of a serialization under a key."""
     return Stripped(
         f"""\
-common::optional<nlohmann::json> {serialized_var};
-std::tie(
-{I}{serialized_var},
-{I}error
-) = {serialize_function}(
-{I}{indent_but_first_line(getter_expr, I)}
-);
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<iteration::PropertySegment>(
-{III}iteration::Property::{cpp_naming.enum_literal_name(property_name)}
-{II})
-{I});
-
-{I}return std::make_pair<
+/**
+ * \\brief Put the value serialized under \\p key of \\p result, or give out
+ * the error of the serialization, marked with \\p property.
+ *
+ * We deliberately take the *result* of a serialization instead of the value
+ * and the function which serializes it. The item serializers of a tuple vary
+ * both in number and in type, so no signature taking the serializer could
+ * serve every serialization; taking the result lets this single function
+ * serve all of them.
+ *
+ * \\param result object to be written to
+ * \\param key of the property in the JSON object
+ * \\param property which the key stands for, for the path of the error
+ * \\param serialized result of the serialization
+ * \\return the error, if the serialization failed
+ */
+common::optional<SerializationError> SerializeInto(
+{I}nlohmann::json& result,
+{I}const char* key,
+{I}iteration::Property property,
+{I}std::pair<
 {II}common::optional<nlohmann::json>,
 {II}common::optional<SerializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}
+{I}>&& serialized
+) {{
+{I}if (serialized.second.has_value()) {{
+{II}serialized.second->path.segments.emplace_front(
+{III}common::make_unique<iteration::PropertySegment>(property)
+{II});
 
-result[{json_prop_name_literal}] = std::move(
-{I}{serialized_var}.value()
-);"""
+{II}return std::move(serialized.second);
+{I}}}
+
+{I}result[key] = std::move(*serialized.first);
+
+{I}return common::nullopt;
+}}"""
     )
 
 
-def _generate_serialize_primitive_property(
-    getter_expr: Stripped,
-    primitive_type: intermediate.PrimitiveType,
-    property_name: Identifier,
-    json_name: str,
+def _serialization_is_fallible(
+    type_annotation: intermediate.TypeAnnotationUnion,
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
+) -> bool:
+    """
+    Check whether the serialization of a value of ``type_annotation`` can fail.
+
+    A number is the only value we may have to refuse: JSON holds neither an
+    infinity nor a not-a-number, and an integer only within
+    [-2^53 + 1, 2^53 - 1]. Everything else goes as it comes -- an enumeration
+    literal is written as its text, and a string, a boolean and a byte array
+    are written verbatim -- so a serializer can fail exactly where a number is
+    reachable from what it serializes.
+
+    The ``ids_of_fallible_types`` comes from
+    :py:func:`_collect_ids_of_types_with_fallible_serialization`.
+    """
+    type_anno = intermediate.beneath_optional(type_annotation)
+
+    a_type = intermediate.try_primitive_type(type_anno)
+    if a_type is not None:
+        return (
+            a_type is intermediate.PrimitiveType.INT
+            or a_type is intermediate.PrimitiveType.FLOAT
+        )
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return _serialization_is_fallible(type_anno.items, ids_of_fallible_types)
+
+    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        # NOTE (mristin):
+        # One ``SerializeTuple{N}`` serves every tuple of that arity, and those
+        # differ in whether their items can fail, so it has a single shape and
+        # that shape has to be the fallible one. A tuple of items which can not
+        # fail therefore carries a check which can not fire -- the one place
+        # where we pay for something which can not happen, and it costs a tuple
+        # property a branch.
+        return True
+
+    if isinstance(type_anno, intermediate.OurTypeAnnotation):
+        # NOTE (mristin):
+        # An enumeration is a leaf here -- a literal is not a number -- and every
+        # other one of our types is reported by the fixed point.
+        return intermediate.runtime_id(type_anno.our_type) in ids_of_fallible_types
+
+    if isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # A JSON-able value is shaped only at run time, so we have to assume that
+        # it holds a number. This is the one place where the analysis approximates,
+        # and it errs on the side of the number being there: a JSON-able value
+        # carrying an infinity is exactly what we have to refuse.
+        return True
+
+    return False
+
+
+def _collect_ids_of_types_with_fallible_serialization(
+    symbol_table: intermediate.SymbolTable,
+) -> Set[intermediate.IdOfOurType]:
+    """
+    Collect the IDs of our types whose serialization can fail.
+
+    This is a fixed point, as the classes refer to each other and a cycle must
+    not be walked twice. The set handed to :py:func:`_serialization_is_fallible`
+    is the one being built, so it answers only for the types already in it, which
+    is all the fixed point needs and is why it grows until nothing changes.
+    """
+    result = set()  # type: Set[intermediate.IdOfOurType]
+
+    changed = True
+    while changed:
+        changed = False
+
+        for cls in symbol_table.classes:
+            if intermediate.runtime_id(cls) in result:
+                continue
+
+            if any(
+                _serialization_is_fallible(prop.type_annotation, result)
+                for prop in cls.properties
+            ) or any(
+                intermediate.runtime_id(descendant) in result
+                for descendant in cls.concrete_descendants
+            ):
+                result.add(intermediate.runtime_id(cls))
+                changed = True
+
+        for union in symbol_table.named_unions:
+            if intermediate.runtime_id(union) in result:
+                continue
+
+            if any(
+                intermediate.runtime_id(implementer) in result
+                for implementer in union.implementers
+            ):
+                result.add(intermediate.runtime_id(union))
+                changed = True
+
+    return result
+
+
+def _determine_serialize_function_for_class(
+    cls: intermediate.ClassUnion,
 ) -> Stripped:
     """
-    Generate the snippet to serialize the given primitive property.
+    Determine the function which serializes an instance of ``cls``.
 
-    The ``getter_expr`` refers to the C++ expression specifying the value
-    to be serialized.
-
-    The ``property_name`` refers to the intermediate property name, and
-    the ``json_name`` to its name in the JSON serialization.
+    The run-time type of a value is open only where the declared type leaves it
+    open -- an abstract class, or a concrete class with concrete descendants --
+    and only there do we dispatch. Everywhere else the declared type already
+    answers which serializer to call, so we name it and pay neither
+    the ``model_type()`` nor the ``switch`` nor the ``dynamic_cast``.
     """
-    json_prop_name_literal = cpp_common.string_literal(json_name)
+    if len(cls.concrete_descendants) > 0 or isinstance(cls, intermediate.AbstractClass):
+        return Stripped("SerializeIClass")
 
-    if primitive_type is intermediate.PrimitiveType.BOOL:
-        return Stripped(
-            f"""\
-result[{json_prop_name_literal}] = SerializeBool(
-{I}{getter_expr}
-);"""
-        )
-
-    elif primitive_type is intermediate.PrimitiveType.INT:
-        return _generate_serialize_number_property(
-            serialize_function=Stripped("SerializeInt64"),
-            getter_expr=getter_expr,
-            property_name=property_name,
-            json_name=json_name,
-        )
-
-    elif primitive_type is intermediate.PrimitiveType.FLOAT:
-        return _generate_serialize_number_property(
-            serialize_function=Stripped("SerializeDouble"),
-            getter_expr=getter_expr,
-            property_name=property_name,
-            json_name=json_name,
-        )
-
-    elif primitive_type is intermediate.PrimitiveType.STR:
-        return Stripped(
-            f"""\
-result[{json_prop_name_literal}] = SerializeWstring(
-{I}{indent_but_first_line(getter_expr, II)}
-);"""
-        )
-
-    elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-        return Stripped(
-            f"""\
-result[{json_prop_name_literal}] = stringification::Base64Encode(
-{I}{getter_expr}
-);"""
-        )
-    else:
-        # noinspection PyTypeChecker
-        assert_never(primitive_type)
+    return Stripped(cpp_naming.function_name(Identifier(f"serialize_{cls.name}")))
 
 
-def _generate_serialize_json_property(
-    getter_expr: Stripped,
-    type_anno: intermediate.TypeAnnotationUnion,
-    property_name: Identifier,
-    json_name: str,
+def _serialize_item_expr(
+    item_type_anno: intermediate.AtomicTypeAnnotation,
 ) -> Stripped:
     """
-    Generate the snippet to serialize the given JSON-able property.
+    Generate the expression of the serializer of an item of a list or a tuple.
 
-    The ``getter_expr`` refers to the C++ expression specifying the value
-    to be serialized.
-
-    The ``property_name`` refers to the intermediate property name, and
-    the ``json_name`` to its name in the JSON serialization.
+    An instance is held as a ``std::shared_ptr``, and the serializer takes
+    the instance, so somebody has to dereference it. A list is homogeneous, so
+    ``SerializeListOfInstancesWith*`` knows to; a tuple is not, so
+    ``SerializeTuple{N}`` asks ``Deref`` per item. Either way there is nothing
+    left to do here.
     """
-    json_prop_name_literal = cpp_common.string_literal(json_name)
-    serialize_function = _json_serialize_function_for(type_anno)
-    serialized_var = cpp_naming.variable_name(Identifier(f"json_{property_name}"))
-
-    return Stripped(
-        f"""\
-common::optional<nlohmann::json> {serialized_var};
-std::tie(
-{I}{serialized_var},
-{I}error
-) = {serialize_function}(
-{I}{indent_but_first_line(getter_expr, I)}
-);
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<iteration::PropertySegment>(
-{III}iteration::Property::{cpp_naming.enum_literal_name(property_name)}
-{II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<nlohmann::json>,
-{II}common::optional<SerializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}
-
-result[{json_prop_name_literal}] = std::move(
-{I}{serialized_var}.value()
-);"""
-    )
-
-
-def _generate_serialize_list_property(
-    getter_expr: Stripped,
-    type_anno: intermediate.ListTypeAnnotation,
-    property_name: Identifier,
-    json_name: str,
-) -> Stripped:
-    """
-    Generate the snippet to serialize the given property as a list.
-
-    The ``getter_expr`` refers to the C++ expression specifying the list
-    to be serialized.
-
-    The ``property_name`` refers to the intermediate property name, and
-    the ``json_name`` to its name in the JSON serialization.
-    """
-    serialize_list: Union[
-        Literal["SerializeListWithFallible"], Literal["SerializeListWithInfallible"]
-    ]
-
-    serialize_item_expr: Stripped
-
-    assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
-        "List items are restricted to atomic types (primitives, "
-        "constrained primitives, classes, enumerations and JSON-able values), "
-        "so no nested optionals, lists or tuples are expected here."
-    )
-
-    items_primitive_type = intermediate.try_primitive_type(type_anno.items)
+    items_primitive_type = intermediate.try_primitive_type(item_type_anno)
 
     if items_primitive_type is not None:
-        if items_primitive_type is intermediate.PrimitiveType.BOOL:
-            serialize_list = "SerializeListWithInfallible"
+        return _PRIMITIVE_TYPE_TO_SERIALIZE[items_primitive_type]
 
-            serialize_item_expr = Stripped("SerializeBool")
+    if isinstance(item_type_anno, intermediate.PrimitiveTypeAnnotation):
+        raise AssertionError("Expected this case to be handled before")
 
-        elif items_primitive_type is intermediate.PrimitiveType.INT:
-            serialize_list = "SerializeListWithFallible"
+    elif isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+        if isinstance(item_type_anno.our_type, intermediate.Enumeration):
+            enum_name = cpp_naming.enum_name(item_type_anno.our_type.name)
 
-            serialize_item_expr = Stripped("SerializeInt64")
+            return Stripped(f"SerializeEnumeration<types::{enum_name}>")
 
-        elif items_primitive_type is intermediate.PrimitiveType.FLOAT:
-            serialize_list = "SerializeListWithFallible"
-
-            serialize_item_expr = Stripped("SerializeDouble")
-
-        elif items_primitive_type is intermediate.PrimitiveType.STR:
-            serialize_list = "SerializeListWithInfallible"
-
-            serialize_item_expr = Stripped("SerializeWstring")
-
-        elif items_primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-            serialize_list = "SerializeListWithInfallible"
-
-            serialize_item_expr = Stripped("stringification::Base64Encode")
-
-        else:
-            # noinspection PyTypeChecker
-            assert_never(items_primitive_type)
-
-    else:
-        if isinstance(type_anno.items, intermediate.PrimitiveTypeAnnotation):
+        elif isinstance(item_type_anno.our_type, intermediate.ConstrainedPrimitive):
             raise AssertionError("Expected this case to be handled before")
 
-        elif isinstance(type_anno.items, intermediate.OurTypeAnnotation):
-            if isinstance(type_anno.items.our_type, intermediate.Enumeration):
-                serialize_list = "SerializeListWithInfallible"
-
-                enum_name = cpp_naming.enum_name(type_anno.items.our_type.name)
-
-                # NOTE (mristin):
-                # We have to make a lambda since passing
-                # stringification::to_string<enum name> results in ambiguous grammar
-                # in C++: the ``<`` and ``>`` are interpreted as less and greater
-                # operators.
-                serialize_item_expr = Stripped(
-                    f"""\
-[](const types::{enum_name}& an_item) {{
-{I}return stringification::to_string(an_item);
-}}"""
-                )
-
-            elif isinstance(
-                type_anno.items.our_type, intermediate.ConstrainedPrimitive
-            ):
-                raise AssertionError("Expected this case to be handled before")
-
-            elif isinstance(
-                type_anno.items.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
-            ):
-                serialize_list = "SerializeListWithFallible"
-
-                serialize_item_expr = Stripped("SerializeIClassPtr")
-
-            elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
-                serialize_list = "SerializeListWithFallible"
-
-                union_name = cpp_naming.union_name(type_anno.items.our_type.name)
-                serialize_item_expr = Stripped(f"Serialize{union_name}")
-
-            else:
-                # noinspection PyTypeChecker
-                assert_never(type_anno.items.our_type)
-
         elif isinstance(
-            type_anno.items,
-            (
-                intermediate.JsonValueTypeAnnotation,
-                intermediate.JsonArrayTypeAnnotation,
-                intermediate.JsonObjectTypeAnnotation,
-            ),
+            item_type_anno.our_type,
+            (intermediate.AbstractClass, intermediate.ConcreteClass),
         ):
-            serialize_list = "SerializeListWithFallible"
+            return _determine_serialize_function_for_class(item_type_anno.our_type)
 
-            serialize_item_expr = _json_serialize_function_for(type_anno.items)
+        elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+            union_name = cpp_naming.union_name(item_type_anno.our_type.name)
+            return Stripped(f"Serialize{union_name}")
 
         else:
             # noinspection PyTypeChecker
-            assert_never(type_anno.items)
+            assert_never(item_type_anno.our_type)
 
-    json_prop_name_literal = cpp_common.string_literal(json_name)
-
-    if serialize_list == "SerializeListWithInfallible":
-        return Stripped(
-            f"""\
-result[{json_prop_name_literal}] = {serialize_list}(
-{I}{indent_but_first_line(getter_expr, I)},
-{I}{indent_but_first_line(serialize_item_expr, I)}
-);"""
-        )
-
-    elif serialize_list == "SerializeListWithFallible":
-        serialized_var = cpp_naming.variable_name(Identifier(f"json_{property_name}"))
-
-        return Stripped(
-            f"""\
-common::optional<nlohmann::json> {serialized_var};
-std::tie(
-{I}{serialized_var},
-{I}error
-) = {serialize_list}(
-{I}{indent_but_first_line(getter_expr, I)},
-{I}{serialize_item_expr}
-);
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<iteration::PropertySegment>(
-{III}iteration::Property::{cpp_naming.enum_literal_name(property_name)}
-{II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<nlohmann::json>,
-{II}common::optional<SerializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}
-
-result[{json_prop_name_literal}] = std::move(
-{I}{serialized_var}.value()
-);"""
-        )
+    elif isinstance(
+        item_type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        return _json_serialize_function_for(item_type_anno)
 
     else:
         # noinspection PyTypeChecker
-        assert_never(serialize_list)
+        assert_never(item_type_anno)
+
+    raise AssertionError("Should not have gotten here")
 
 
-def _generate_serialize_tuple_property(
-    getter_expr: Stripped,
-    type_anno: intermediate.TupleTypeAnnotation,
-    property_name: Identifier,
-    json_name: str,
+def _serialize_value_expr(
+    type_anno: intermediate.TypeAnnotationUnion,
+    value_expr: Stripped,
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
 ) -> Stripped:
     """
-    Generate the snippet to serialize the given property as a tuple.
+    Generate the expression serializing ``value_expr`` of the ``type_anno``.
 
-    The ``getter_expr`` refers to the C++ expression specifying the tuple
-    to be serialized.
-
-    The ``property_name`` refers to the intermediate property name, and
-    the ``json_name`` to its name in the JSON serialization.
-
-    Every per-item closure built here is normalized to return
-    ``std::pair<common::optional<nlohmann::json>, common::optional<SerializationError>>``
-    -- even for primitive kinds whose own JSON conversion can never fail --
-    so that the generic ``SerializeTupleN`` (see
-    :py:func:`_generate_serialize_tuple_function`) can treat every item
-    uniformly. The actual per-item error-path bookkeeping is delegated to
-    that generic function.
+    The expression evaluates to a ``nlohmann::json`` if the serialization can
+    not fail, and to the pair of the optional value and the optional error if
+    it can -- which
+    :py:func:`_serialization_is_fallible` decides for the very same
+    ``type_anno``.
     """
-    item_exprs = []  # type: List[Stripped]
+    primitive_type = intermediate.try_primitive_type(type_anno)
 
-    for item_type_anno in type_anno.items:
-        assert isinstance(item_type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
-            "Tuple items are restricted to atomic types (primitives, "
-            "constrained primitives, classes and enumerations) by "
-            "intermediate._translate._verify_only_simple_type_patterns, so no "
-            "nested optionals, lists or tuples are expected here."
+    if primitive_type is not None:
+        serialize_function = _PRIMITIVE_TYPE_TO_SERIALIZE[primitive_type]
+
+        return Stripped(
+            f"""\
+{serialize_function}(
+{I}{indent_but_first_line(value_expr, I)}
+)"""
         )
-
-        items_primitive_type = intermediate.try_primitive_type(item_type_anno)
-
-        if items_primitive_type is not None:
-            if items_primitive_type is intermediate.PrimitiveType.BOOL:
-                item_exprs.append(
-                    Stripped(
-                        f"""\
-[](bool item) {{
-{I}return std::make_pair(
-{II}common::make_optional<nlohmann::json>(item),
-{II}common::nullopt
-{I});
-}}"""
-                    )
-                )
-
-            elif items_primitive_type is intermediate.PrimitiveType.INT:
-                item_exprs.append(Stripped("SerializeInt64"))
-
-            elif items_primitive_type is intermediate.PrimitiveType.FLOAT:
-                item_exprs.append(Stripped("SerializeDouble"))
-
-            elif items_primitive_type is intermediate.PrimitiveType.STR:
-                item_exprs.append(
-                    Stripped(
-                        f"""\
-[](const std::wstring& item) {{
-{I}return std::make_pair(
-{II}common::make_optional<nlohmann::json>(
-{III}SerializeWstring(item)
-{II}),
-{II}common::nullopt
-{I});
-}}"""
-                    )
-                )
-
-            elif items_primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-                item_exprs.append(
-                    Stripped(
-                        f"""\
-[](const std::vector<std::uint8_t>& item) {{
-{I}return std::make_pair(
-{II}common::make_optional<nlohmann::json>(
-{III}stringification::Base64Encode(item)
-{II}),
-{II}common::nullopt
-{I});
-}}"""
-                    )
-                )
-
-            else:
-                # noinspection PyTypeChecker
-                assert_never(items_primitive_type)
-
-        elif isinstance(item_type_anno, intermediate.PrimitiveTypeAnnotation):
-            raise AssertionError("Expected this case to be handled before")
-
-        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation):
-            if isinstance(item_type_anno.our_type, intermediate.Enumeration):
-                enum_name = cpp_naming.enum_name(item_type_anno.our_type.name)
-
-                item_exprs.append(
-                    Stripped(
-                        f"""\
-[](types::{enum_name} item) {{
-{I}return std::make_pair(
-{II}common::make_optional<nlohmann::json>(
-{III}stringification::to_string(item)
-{II}),
-{II}common::nullopt
-{I});
-}}"""
-                    )
-                )
-
-            elif isinstance(item_type_anno.our_type, intermediate.ConstrainedPrimitive):
-                raise AssertionError("Expected this case to be handled before")
-
-            elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
-                union_name = cpp_naming.union_name(item_type_anno.our_type.name)
-                item_exprs.append(Stripped(f"Serialize{union_name}"))
-
-            elif isinstance(
-                item_type_anno.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
-            ):
-                item_type = cpp_common.generate_type(
-                    item_type_anno, types_namespace=cpp_common.TYPES_NAMESPACE
-                )
-
-                item_exprs.append(
-                    Stripped(
-                        f"""\
-[](
-{I}const {indent_but_first_line(item_type, I)}& item
-) {{
-{I}return SerializeIClass(
-{II}*item
-{I});
-}}"""
-                    )
-                )
-
-            else:
-                # noinspection PyTypeChecker
-                assert_never(item_type_anno.our_type)
-
-        elif isinstance(
-            item_type_anno,
-            (
-                intermediate.JsonValueTypeAnnotation,
-                intermediate.JsonArrayTypeAnnotation,
-                intermediate.JsonObjectTypeAnnotation,
-            ),
-        ):
-            item_exprs.append(_json_serialize_function_for(item_type_anno))
-
-        else:
-            # noinspection PyTypeChecker
-            assert_never(item_type_anno)
-
-    item_exprs_joined = ",\n".join(item_exprs)
-
-    json_prop_name_literal = cpp_common.string_literal(json_name)
-    serialized_var = cpp_naming.variable_name(Identifier(f"json_{property_name}"))
-    function_name = f"SerializeTuple{len(type_anno.items)}"
-
-    return Stripped(
-        f"""\
-common::optional<nlohmann::json> {serialized_var};
-std::tie(
-{I}{serialized_var},
-{I}error
-) = {function_name}(
-{I}{indent_but_first_line(getter_expr, I)},
-{I}{indent_but_first_line(item_exprs_joined, I)}
-);
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<iteration::PropertySegment>(
-{III}iteration::Property::{cpp_naming.enum_literal_name(property_name)}
-{II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<nlohmann::json>,
-{II}common::optional<SerializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}
-
-result[{json_prop_name_literal}] = std::move(
-{I}*{serialized_var}
-);"""
-    )
-
-
-def _generate_serialize_property(prop: intermediate.Property) -> Stripped:
-    """Generate code snippet to serialize the property ``prop``."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    code = None  # type: Optional[Stripped]
-
-    getter = cpp_naming.getter_name(prop.name)
-    maybe_var = None
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        maybe_var = cpp_naming.variable_name(Identifier(f"maybe_{prop.name}"))
-        getter_expr = Stripped(f"*{maybe_var}")
-    else:
-        getter_expr = Stripped(f"that.{getter}()")
-
-    json_prop_name = prop.json_name
 
     if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
-        code = _generate_serialize_primitive_property(
-            getter_expr=getter_expr,
-            primitive_type=type_anno.a_type,
-            property_name=prop.name,
-            json_name=json_prop_name,
-        )
+        raise AssertionError("Expected this case to be handled before")
 
     elif isinstance(type_anno, intermediate.OurTypeAnnotation):
         if isinstance(type_anno.our_type, intermediate.Enumeration):
-            code = Stripped(
+            return Stripped(
                 f"""\
-result[{cpp_common.string_literal(json_prop_name)}] = stringification::to_string(
-{I}{indent_but_first_line(getter_expr, I)}
-);"""
+SerializeEnumeration(
+{I}{indent_but_first_line(value_expr, I)}
+)"""
             )
+
         elif isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive):
-            code = _generate_serialize_primitive_property(
-                getter_expr=getter_expr,
-                primitive_type=type_anno.our_type.constrainee,
-                property_name=prop.name,
-                json_name=json_prop_name,
-            )
+            raise AssertionError("Expected this case to be handled before")
+
         elif isinstance(
-            type_anno.our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            type_anno.our_type,
+            (intermediate.AbstractClass, intermediate.ConcreteClass),
         ):
-            serialized_var = cpp_naming.variable_name(Identifier(f"json_{prop.name}"))
-
-            code = Stripped(
-                f"""\
-common::optional<nlohmann::json> {serialized_var};
-std::tie(
-{I}{serialized_var},
-{I}error
-) = SerializeIClass(
-{I}*{indent_but_first_line(getter_expr, I)}
-);
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<iteration::PropertySegment>(
-{III}iteration::Property::{cpp_naming.enum_literal_name(prop.name)}
-{II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<nlohmann::json>,
-{II}common::optional<SerializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}
-
-result[{cpp_common.string_literal(json_prop_name)}] = std::move(
-{I}*{serialized_var}
-);"""
+            serialize_function = _determine_serialize_function_for_class(
+                type_anno.our_type
             )
-        elif isinstance(type_anno.our_type, intermediate.NamedUnion):
-            serialized_var = cpp_naming.variable_name(Identifier(f"json_{prop.name}"))
 
+            return Stripped(
+                f"""\
+{serialize_function}(
+{I}*({indent_but_first_line(value_expr, I)})
+)"""
+            )
+
+        elif isinstance(type_anno.our_type, intermediate.NamedUnion):
             union_name = cpp_naming.union_name(type_anno.our_type.name)
 
-            code = Stripped(
+            return Stripped(
                 f"""\
-common::optional<nlohmann::json> {serialized_var};
-std::tie(
-{I}{serialized_var},
-{I}error
-) = Serialize{union_name}(
-{I}{indent_but_first_line(getter_expr, I)}
-);
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<iteration::PropertySegment>(
-{III}iteration::Property::{cpp_naming.enum_literal_name(prop.name)}
-{II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<nlohmann::json>,
-{II}common::optional<SerializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}
-
-result[{cpp_common.string_literal(json_prop_name)}] = std::move(
-{I}*{serialized_var}
-);"""
+Serialize{union_name}(
+{I}{indent_but_first_line(value_expr, I)}
+)"""
             )
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno.our_type)
 
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        code = _generate_serialize_list_property(
-            getter_expr=getter_expr,
-            type_anno=type_anno,
-            property_name=prop.name,
-            json_name=json_prop_name,
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
+            "List items are restricted to atomic types (primitives, "
+            "constrained primitives, classes, enumerations and JSON-able values), "
+            "so no nested optionals, lists or tuples are expected here."
+        )
+
+        # NOTE (mristin):
+        # A list of instances holds pointers, so it is served by the functions
+        # which dereference an item; everything else holds the value itself.
+        of_instances = isinstance(
+            type_anno.items, intermediate.OurTypeAnnotation
+        ) and isinstance(
+            type_anno.items.our_type,
+            (intermediate.AbstractClass, intermediate.ConcreteClass),
+        )
+
+        if _serialization_is_fallible(type_anno.items, ids_of_fallible_types):
+            serialize_list = (
+                "SerializeListOfInstancesWithFallible"
+                if of_instances
+                else "SerializeListWithFallible"
+            )
+        else:
+            serialize_list = (
+                "SerializeListOfInstancesWithInfallible"
+                if of_instances
+                else "SerializeListWithInfallible"
+            )
+
+        serialize_item = _serialize_item_expr(type_anno.items)
+
+        return Stripped(
+            f"""\
+{serialize_list}(
+{I}{indent_but_first_line(value_expr, I)},
+{I}{indent_but_first_line(serialize_item, I)}
+)"""
         )
 
     elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        code = _generate_serialize_tuple_property(
-            getter_expr=getter_expr,
-            type_anno=type_anno,
-            property_name=prop.name,
-            json_name=json_prop_name,
+        item_exprs = []  # type: List[Stripped]
+
+        for item_type_anno in type_anno.items:
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, "
+                "constrained primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so no "
+                "nested optionals, lists or tuples are expected here."
+            )
+
+            item_exprs.append(_serialize_item_expr(item_type_anno))
+
+        item_exprs_joined = ",\n".join(item_exprs)
+
+        function_name = f"SerializeTuple{len(type_anno.items)}"
+
+        return Stripped(
+            f"""\
+{function_name}(
+{I}{indent_but_first_line(value_expr, I)},
+{I}{indent_but_first_line(item_exprs_joined, I)}
+)"""
         )
 
     elif isinstance(
@@ -4535,33 +4283,95 @@ result[{cpp_common.string_literal(json_prop_name)}] = std::move(
             intermediate.JsonObjectTypeAnnotation,
         ),
     ):
-        code = _generate_serialize_json_property(
-            getter_expr=getter_expr,
-            type_anno=type_anno,
-            property_name=prop.name,
-            json_name=json_prop_name,
+        serialize_function = _json_serialize_function_for(type_anno)
+
+        return Stripped(
+            f"""\
+{serialize_function}(
+{I}{indent_but_first_line(value_expr, I)}
+)"""
+        )
+
+    elif isinstance(type_anno, intermediate.OptionalTypeAnnotation):
+        raise AssertionError(
+            f"Expected the optional to have been stripped by the caller, "
+            f"but got: {type_anno}"
         )
 
     else:
         # noinspection PyTypeChecker
         assert_never(type_anno)
 
-    assert code is not None
+    raise AssertionError("Should not have gotten here")
+
+
+def _generate_serialize_property(
+    prop: intermediate.Property,
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
+) -> Stripped:
+    """Generate the statements which serialize the property ``prop``."""
+    getter = cpp_naming.getter_name(prop.name)
+
+    value_expr: Stripped
+    maybe_var = None  # type: Optional[Identifier]
 
     if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+        maybe_var = cpp_naming.variable_name(Identifier(f"maybe_{prop.name}"))
+        value_expr = Stripped(f"*{maybe_var}")
+    else:
+        value_expr = Stripped(f"that.{getter}()")
+
+    type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+    serialize_expr = _serialize_value_expr(
+        type_anno=type_anno,
+        value_expr=value_expr,
+        ids_of_fallible_types=ids_of_fallible_types,
+    )
+
+    json_prop_name_literal = cpp_common.string_literal(prop.json_name)
+
+    code: Stripped
+
+    if _serialization_is_fallible(type_anno, ids_of_fallible_types):
+        prop_literal = cpp_naming.enum_literal_name(prop.name)
+
+        code = Stripped(
+            f"""\
+error = SerializeInto(
+{I}result,
+{I}{json_prop_name_literal},
+{I}iteration::Property::{prop_literal},
+{I}{indent_but_first_line(serialize_expr, I)}
+);
+if (error.has_value()) {{
+{I}return NoJsonAndSerializationError(
+{II}std::move(*error)
+{I});
+}}"""
+        )
+    else:
+        code = Stripped(
+            f"""\
+result[{json_prop_name_literal}] = {indent_but_first_line(serialize_expr, "")};"""
+        )
+
+    if maybe_var is not None:
         maybe_var_type = cpp_common.generate_type_with_const_ref_if_applicable(
             type_annotation=prop.type_annotation,
             types_namespace=cpp_common.TYPES_NAMESPACE,
         )
 
-        assert maybe_var is not None
-
+        # NOTE (mristin):
+        # We test the binding rather than the getter. The getter is virtual, so
+        # calling it a second time here would double its cost for every optional
+        # property of every instance.
         code = Stripped(
             f"""\
 {maybe_var_type} {maybe_var}(
 {I}that.{getter}()
 );
-if (that.{getter}().has_value()) {{
+if ({maybe_var}.has_value()) {{
 {I}{indent_but_first_line(code, I)}
 }}"""
         )
@@ -4569,104 +4379,55 @@ if (that.{getter}().has_value()) {{
     return code
 
 
+def _serialize_cls_return_type(fallible: bool) -> Stripped:
+    """
+    Generate the return type of a serializer.
+
+    A serializer which can not fail gives the JSON value out plainly, so that
+    neither it nor its caller carries an error which could never be set.
+    """
+    if not fallible:
+        return Stripped("nlohmann::json")
+
+    return Stripped(
+        f"""\
+std::pair<
+{I}common::optional<nlohmann::json>,
+{I}common::optional<SerializationError>
+>"""
+    )
+
+
 def _generate_serialize_cls(
     cls: intermediate.ConcreteClass,
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
 ) -> Stripped:
     """Generate the serialization function for the class ``cls``."""
+    fallible = intermediate.runtime_id(cls) in ids_of_fallible_types
+
     blocks = [
-        Stripped(
-            """\
-nlohmann::json result = nlohmann::json::object();"""
-        )
+        Stripped("nlohmann::json result = nlohmann::json::object();")
     ]  # type: List[Stripped]
 
-    needs_error = False
-    for prop in cls.properties:
-        type_anno = intermediate.beneath_optional(prop.type_annotation)
-        primitive_type = intermediate.try_primitive_type(type_anno)
-
-        if primitive_type is not None and (
-            primitive_type is intermediate.PrimitiveType.INT
-        ):
-            needs_error = True
-            break
-
-        if isinstance(type_anno, intermediate.OurTypeAnnotation):
-            needs_error = True
-            break
-
-        if isinstance(
-            type_anno,
-            (
-                intermediate.JsonValueTypeAnnotation,
-                intermediate.JsonArrayTypeAnnotation,
-                intermediate.JsonObjectTypeAnnotation,
-            ),
-        ):
-            needs_error = True
-            break
-
-        if isinstance(type_anno, intermediate.ListTypeAnnotation):
-            items_primitive_type = intermediate.try_primitive_type(type_anno.items)
-
-            if items_primitive_type is intermediate.PrimitiveType.INT:
-                needs_error = True
-                break
-
-            if isinstance(type_anno.items, intermediate.OurTypeAnnotation):
-                needs_error = True
-                break
-
-            if isinstance(
-                type_anno.items,
-                (
-                    intermediate.JsonValueTypeAnnotation,
-                    intermediate.JsonArrayTypeAnnotation,
-                    intermediate.JsonObjectTypeAnnotation,
-                ),
-            ):
-                needs_error = True
-                break
-
-        if isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            for item_type_anno in type_anno.items:
-                item_primitive_type = intermediate.try_primitive_type(item_type_anno)
-
-                if item_primitive_type is intermediate.PrimitiveType.INT:
-                    needs_error = True
-                    break
-
-                if isinstance(item_type_anno, intermediate.OurTypeAnnotation):
-                    needs_error = True
-                    break
-
-                if isinstance(
-                    item_type_anno,
-                    (
-                        intermediate.JsonValueTypeAnnotation,
-                        intermediate.JsonArrayTypeAnnotation,
-                        intermediate.JsonObjectTypeAnnotation,
-                    ),
-                ):
-                    needs_error = True
-                    break
-
-            if needs_error:
-                break
-
-    if needs_error:
+    if fallible:
         blocks.append(Stripped("common::optional<SerializationError> error;"))
 
     for prop in cls.properties:
-        blocks.append(_generate_serialize_property(prop=prop))
+        blocks.append(
+            _generate_serialize_property(
+                prop=prop,
+                ids_of_fallible_types=ids_of_fallible_types,
+            )
+        )
 
     if cls.serialization.with_model_type:
         model_type_literal = cpp_common.string_literal(naming.json_model_type(cls.name))
         blocks.append(Stripped(f'result["modelType"] = {model_type_literal};'))
 
-    blocks.append(
-        Stripped(
-            f"""\
+    if fallible:
+        blocks.append(
+            Stripped(
+                f"""\
 return std::make_pair<
 {I}common::optional<nlohmann::json>,
 {I}common::optional<SerializationError>
@@ -4674,8 +4435,10 @@ return std::make_pair<
 {I}common::make_optional<nlohmann::json>(std::move(result)),
 {I}common::nullopt
 );"""
+            )
         )
-    )
+    else:
+        blocks.append(Stripped("return result;"))
 
     blocks_joined = "\n\n".join(blocks)
 
@@ -4685,10 +4448,7 @@ return std::make_pair<
 
     return Stripped(
         f"""\
-std::pair<
-{I}common::optional<nlohmann::json>,
-{I}common::optional<SerializationError>
-> {serialize_name}(
+{_serialize_cls_return_type(fallible)} {serialize_name}(
 {I}const types::{interface_name}& that
 ) {{
 {I}{indent_but_first_line(blocks_joined, I)}
@@ -4696,10 +4456,283 @@ std::pair<
     )
 
 
+def _generate_deref() -> Stripped:
+    """Generate the dereference of a pointer item of a tuple."""
+    return Stripped(
+        f"""\
+/**
+ * \\brief Give out the instance behind \\p pointer.
+ *
+ * The items of a tuple are heterogeneous, so ``SerializeTuple{{N}}`` can not
+ * know which of them are instances -- held as a ``std::shared_ptr`` -- and
+ * which are values. It asks per item instead, and this is the answer for
+ * a pointer. See the overload for everything else.
+ */
+template <typename T>
+const T& Deref(const std::shared_ptr<T>& pointer) {{
+{I}return *pointer;
+}}"""
+    )
+
+
+def _generate_deref_identity() -> Stripped:
+    """Generate the pass-through of a non-pointer item of a tuple."""
+    return Stripped(
+        f"""\
+/**
+ * @copybrief Deref
+ *
+ * The item is the value itself, so there is nothing to dereference.
+ */
+template <typename T>
+const T& Deref(const T& value) {{
+{I}return value;
+}}"""
+    )
+
+
+def _generate_serialize_enumeration() -> Stripped:
+    """
+    Generate the one function which serializes a literal of any enumeration.
+
+    ``stringification::to_string`` is an overload set of plain functions, one
+    per enumeration, so it can not be named where a serializer is expected:
+    the serializer is a template parameter there, and without a target type
+    there is nothing for the overload resolution to go on. Inside a template
+    the call is dependent on ``EnumT``, so it is resolved once that is known --
+    which is why one function serves every enumeration, and a call site which
+    has to name a serializer names the specialization it wants.
+    """
+    return Stripped(
+        f"""\
+/**
+ * Serialize the literal \\p that of an enumeration to a JSON value.
+ *
+ * \\param that literal to be serialized
+ * \\return the JSON value
+ */
+template <typename EnumT>
+nlohmann::json SerializeEnumeration(
+{I}const EnumT& that
+) {{
+{I}return stringification::to_string(that);
+}}"""
+    )
+
+
+def _generate_as_fallible() -> Stripped:
+    """Generate the lifting of an infallible serialization into the fallible shape."""
+    return Stripped(
+        f"""\
+/**
+ * \\brief Give the value out in the shape of a serialization which can fail.
+ *
+ * ``SerializeTuple{{N}}`` takes one item serializer per item, and the items of
+ * a tuple differ in kind, so some of them can fail and some of them can not.
+ * Lifting the ones which can not is what lets the tuple treat all of them
+ * alike, without a normalizing lambda per kind at the call site.
+ */
+template <typename T>
+std::pair<
+{I}common::optional<nlohmann::json>,
+{I}common::optional<SerializationError>
+> AsFallible(T&& value) {{
+{I}return std::make_pair(
+{II}common::make_optional<nlohmann::json>(std::forward<T>(value)),
+{II}common::nullopt
+{I});
+}}"""
+    )
+
+
+def _generate_as_fallible_identity() -> Stripped:
+    """Generate the overload of ``AsFallible`` for an already fallible result."""
+    return Stripped(
+        f"""\
+/**
+ * @copybrief AsFallible
+ *
+ * The serialization could already fail, so there is nothing to lift.
+ */
+inline std::pair<
+{I}common::optional<nlohmann::json>,
+{I}common::optional<SerializationError>
+> AsFallible(
+{I}std::pair<
+{II}common::optional<nlohmann::json>,
+{II}common::optional<SerializationError>
+{I}>&& serialized
+) {{
+{I}return std::move(serialized);
+}}"""
+    )
+
+
+def _generate_serialize_list_of_instances_overloads() -> List[Stripped]:
+    """
+    Generate the list serializations which dereference a pointer item.
+
+    A list of instances holds ``std::shared_ptr``, while its item serializer
+    takes the instance, so the dereference belongs here rather than in
+    a lambda at each of the call sites.
+
+    These are named apart from ``SerializeListWith*`` rather than overloading
+    them. The caller always knows whether its items are instances, so there is
+    nothing for the overload resolution to decide, and a name says at the call
+    site what an overload would leave to be worked out.
+    """
+    return [
+        Stripped(
+            f"""\
+/**
+ * Serialize the given list of instances to a JSON array where item
+ * serialization might fail.
+ *
+ * The items are pointers, which we dereference for the item serializer.
+ */
+template<typename T, typename FallibleSerializeItemT>
+std::pair<
+{I}common::optional<nlohmann::json>,
+{I}common::optional<SerializationError>
+> SerializeListOfInstancesWithFallible(
+{I}const std::vector<std::shared_ptr<T> >& list,
+{I}FallibleSerializeItemT&& fallible_serialize_item
+) {{
+{I}nlohmann::json serialized = nlohmann::json::array();
+
+{I}serialized.get_ptr<nlohmann::json::array_t*>()->reserve(
+{II}list.size()
+{I});
+
+{I}size_t index = 0;
+
+{I}for (const std::shared_ptr<T>& item : list) {{
+{II}common::optional<nlohmann::json> json_item;
+{II}common::optional<SerializationError> error;
+
+{II}std::tie(
+{III}json_item,
+{III}error
+{II}) = fallible_serialize_item(*item);
+
+{II}if (error.has_value()) {{
+{III}error->path.segments.emplace_front(
+{IIII}common::make_unique<iteration::IndexSegment>(
+{IIIII}index
+{IIII})
+{III});
+
+{III}return std::make_pair<
+{IIII}common::optional<nlohmann::json>,
+{IIII}common::optional<SerializationError>
+{III}>(
+{IIII}common::nullopt,
+{IIII}std::move(error)
+{III});
+{II}}}
+
+{II}serialized.emplace_back(
+{III}std::move(*json_item)
+{II});
+
+{II}++index;
+{I}}}
+
+{I}return std::make_pair(
+{II}std::move(serialized),
+{II}common::nullopt
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Serialize the given list of instances to a JSON array where item
+ * serialization can not fail.
+ *
+ * The items are pointers, which we dereference for the item serializer.
+ */
+template<typename T, typename InfallibleSerializeItemT>
+nlohmann::json SerializeListOfInstancesWithInfallible(
+{I}const std::vector<std::shared_ptr<T> >& list,
+{I}InfallibleSerializeItemT&& infallible_serialize_item
+) {{
+{I}nlohmann::json serialized = nlohmann::json::array();
+
+{I}serialized.get_ptr<nlohmann::json::array_t*>()->reserve(
+{II}list.size()
+{I});
+
+{I}for (const std::shared_ptr<T>& item : list) {{
+{II}serialized.emplace_back(
+{III}infallible_serialize_item(*item)
+{II});
+{I}}}
+
+{I}return serialized;
+}}"""
+        ),
+    ]
+
+
+def _generate_serialize_cls_declaration(
+    cls: intermediate.ConcreteClass,
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
+) -> Stripped:
+    """
+    Generate the forward declaration of the serializer of ``cls``.
+
+    A class names the serializer of every class it holds, and the classes are
+    emitted in the order of the symbol table, so a serializer has to be
+    declared before any of them can call it.
+    """
+    fallible = intermediate.runtime_id(cls) in ids_of_fallible_types
+
+    serialize_name = cpp_naming.function_name(Identifier(f"serialize_{cls.name}"))
+
+    interface_name = cpp_naming.interface_name(cls.name)
+
+    return Stripped(
+        f"""\
+/**
+ * \\brief Serialize \\p that instance of types::{interface_name} to a JSON value.
+ *
+ * \\param that instance to be serialized
+ * \\return the JSON value{" , or an error, if any" if fallible else ""}
+ */
+{_serialize_cls_return_type(fallible)} {serialize_name}(
+{I}const types::{interface_name}& that
+);"""
+    )
+
+
+def _generate_serialize_iclass_definition(fallible: bool) -> Stripped:
+    """Generate the definition of the main dispatch for serializing ``IClass``."""
+    return Stripped(
+        f"""\
+/**
+ * \\brief Serialize \\p that instance to a JSON value, dispatching on its
+ * model type.
+ *
+ * \\param that instance to be serialized
+ * \\return the JSON value{" , or an error, if any" if fallible else ""}
+ */
+{_serialize_cls_return_type(fallible)} SerializeIClass(
+{I}const types::IClass& that
+);"""
+    )
+
+
 def _generate_serialize_iclass_implementation(
     symbol_table: intermediate.SymbolTable,
-) -> List[Stripped]:
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
+) -> Stripped:
     """Generate the main dispatch function for serializing ``IClass``."""
+    fallible = any(
+        intermediate.runtime_id(cls) in ids_of_fallible_types
+        for cls in symbol_table.concrete_classes
+    )
+
     case_blocks = []  # type: List[Stripped]
     for cls in symbol_table.concrete_classes:
         serialize_name = cpp_naming.function_name(Identifier(f"serialize_{cls.name}"))
@@ -4709,13 +4742,29 @@ def _generate_serialize_iclass_implementation(
 
         interface_name = cpp_naming.interface_name(cls.name)
 
+        call = Stripped(
+            f"""\
+{serialize_name}(
+{I}dynamic_cast<const types::{interface_name}&>(that)
+)"""
+        )
+
+        # NOTE (mristin):
+        # The dispatch has to give out one shape for every class, so a class
+        # whose serialization can not fail is lifted into the fallible one.
+        if fallible and intermediate.runtime_id(cls) not in ids_of_fallible_types:
+            call = Stripped(
+                f"""\
+AsFallible(
+{I}{indent_but_first_line(call, I)}
+)"""
+            )
+
         case_blocks.append(
             Stripped(
                 f"""\
 case types::{model_type_enum}::{model_type_literal}:
-{I}return {serialize_name}(
-{II}dynamic_cast<const types::{interface_name}&>(that)
-{I});"""
+{I}return {indent_but_first_line(call, I)};"""
             )
         )
 
@@ -4739,127 +4788,30 @@ default: {{
 
     case_blocks_joined = "\n".join(case_blocks)
 
-    return [
-        Stripped(
-            f"""\
-std::pair<
-{I}common::optional<nlohmann::json>,
-{I}common::optional<SerializationError>
-> SerializeIClass(
+    return Stripped(
+        f"""\
+{_serialize_cls_return_type(fallible)} SerializeIClass(
 {I}const types::IClass& that
 ) {{
 {I}switch (that.model_type()) {{
 {II}{indent_but_first_line(case_blocks_joined, II)}
 {I}}};
 }}"""
-        ),
-        Stripped(
-            f"""\
-std::pair<
-{I}common::optional<nlohmann::json>,
-{I}common::optional<SerializationError>
-> SerializeIClassPtr(
-{I}const std::shared_ptr<types::IClass>& that
-) {{
-{I}return SerializeIClass(*that);
-}}"""
-        ),
-    ]
-
-
-def _generate_serialize_named_union_declaration(
-    named_union: intermediate.NamedUnion,
-) -> Stripped:
-    """
-    Generate the forward declaration of a named union's ``Serialize`` function.
-
-    We emit this once per union, before any class's own serialize
-    implementation that might reference it by name (this mirrors
-    :py:func:`_generate_serialize_iclass_definition`) -- otherwise a class
-    with a union-typed property would call a not-yet-declared function.
-    """
-    union_name = cpp_naming.union_name(named_union.name)
-
-    return Stripped(
-        f"""\
-std::pair<
-{I}common::optional<nlohmann::json>,
-{I}common::optional<SerializationError>
-> Serialize{union_name}(
-{I}const types::{union_name}& that
-);"""
     )
 
 
-@require(lambda named_union: len(named_union.implementers) > 0)
-def _generate_serialize_named_union_implementation(
-    named_union: intermediate.NamedUnion,
-) -> Stripped:
-    """
-    Generate the function to serialize a named union, once per union.
-
-    This mirrors :py:func:`_generate_serialize_iclass_implementation`'s
-    ``switch``-based dispatch shape, but switches on the ``std::variant``'s
-    own ``index()`` instead of ``model_type()`` -- the variant already knows
-    which alternative it holds, so no dynamic cast is needed either. We
-    generate this once per named union and reference it *by name* wherever
-    the union appears (property, list item, tuple item), instead of
-    inlining a lambda at every use site.
-    """
-    union_name = cpp_naming.union_name(named_union.name)
-
-    case_blocks = []  # type: List[Stripped]
-    for i, implementer in enumerate(named_union.implementers):
-        # NOTE (mristin):
-        # We call the implementer's own serialize function directly on the
-        # dereferenced pointer, instead of going through ``SerializeIClassPtr``
-        # -- the variant's index already tells us the concrete type
-        # unambiguously, so a second (redundant) dispatch by ``model_type()``
-        # with a ``dynamic_cast`` would be pure waste.
-        serialize_function = cpp_naming.function_name(
-            Identifier(f"serialize_{implementer.name}")
-        )
-
-        case_blocks.append(
-            Stripped(
-                f"""\
-case {i}:
-{I}return {serialize_function}(*std::get<{i}>(that));"""
-            )
-        )
-
-    case_blocks.append(
-        Stripped(
-            f"""\
-default:
-{I}throw std::logic_error(
-{II}common::Concat(
-{III}"Invalid variant index for {union_name}: ",
-{III}std::to_string(that.index())
-{II})
-{I});"""
-        )
-    )
-
-    case_blocks_joined = "\n".join(case_blocks)
-
-    return Stripped(
-        f"""\
-std::pair<
-{I}common::optional<nlohmann::json>,
-{I}common::optional<SerializationError>
-> Serialize{union_name}(
-{I}const types::{union_name}& that
-) {{
-{I}switch (that.index()) {{
-{II}{indent_but_first_line(case_blocks_joined, II)}
-{I}}};
-}}"""
-    )
-
-
-def _generate_serialize_implementation() -> Stripped:
+def _generate_serialize_implementation(fallible: bool) -> Stripped:
     """Generate the main serialization function."""
+    if not fallible:
+        return Stripped(
+            f"""\
+nlohmann::json Serialize(
+{I}const types::IClass& that
+) {{
+{I}return SerializeIClass(that);
+}}"""
+        )
+
     return Stripped(
         f"""\
 nlohmann::json Serialize(
@@ -4882,6 +4834,137 @@ nlohmann::json Serialize(
 
 {I}return std::move(*result);
 }}"""
+    )
+
+
+def _named_union_serialization_is_fallible(
+    named_union: intermediate.NamedUnion,
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
+) -> bool:
+    """Check whether the serialization of ``named_union`` can fail."""
+    return any(
+        intermediate.runtime_id(implementer) in ids_of_fallible_types
+        for implementer in named_union.implementers
+    )
+
+
+def _generate_serialize_named_union_declaration(
+    named_union: intermediate.NamedUnion,
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
+) -> Stripped:
+    """
+    Generate the forward declaration of a named union's ``Serialize`` function.
+
+    We emit this once per union, before any class's own serialize
+    implementation that might reference it by name -- otherwise a class with
+    a union-typed property would call a not-yet-declared function.
+    """
+    fallible = _named_union_serialization_is_fallible(
+        named_union, ids_of_fallible_types
+    )
+
+    union_name = cpp_naming.union_name(named_union.name)
+
+    return Stripped(
+        f"""\
+{_serialize_cls_return_type(fallible)} Serialize{union_name}(
+{I}const types::{union_name}& that
+);"""
+    )
+
+
+@require(lambda named_union: len(named_union.implementers) > 0)
+def _generate_serialize_named_union_implementation(
+    named_union: intermediate.NamedUnion,
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
+) -> Stripped:
+    """
+    Generate the function to serialize a named union, once per union.
+
+    This switches on the ``std::variant``'s own ``index()`` -- the variant
+    already knows which alternative it holds, so neither a ``model_type()``
+    nor a dynamic cast is needed.
+    """
+    fallible = _named_union_serialization_is_fallible(
+        named_union, ids_of_fallible_types
+    )
+
+    union_name = cpp_naming.union_name(named_union.name)
+
+    case_blocks = []  # type: List[Stripped]
+    for i, implementer in enumerate(named_union.implementers):
+        serialize_function = cpp_naming.function_name(
+            Identifier(f"serialize_{implementer.name}")
+        )
+
+        call = Stripped(f"{serialize_function}(*std::get<{i}>(that))")
+
+        if (
+            fallible
+            and intermediate.runtime_id(implementer) not in ids_of_fallible_types
+        ):
+            call = Stripped(
+                f"""\
+AsFallible(
+{I}{indent_but_first_line(call, I)}
+)"""
+            )
+
+        case_blocks.append(
+            Stripped(
+                f"""\
+case {i}:
+{I}return {indent_but_first_line(call, I)};"""
+            )
+        )
+
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}throw std::logic_error(
+{II}common::Concat(
+{III}"Invalid variant index for {union_name}: ",
+{III}std::to_string(that.index())
+{II})
+{I});"""
+        )
+    )
+
+    case_blocks_joined = "\n".join(case_blocks)
+
+    return Stripped(
+        f"""\
+{_serialize_cls_return_type(fallible)} Serialize{union_name}(
+{I}const types::{union_name}& that
+) {{
+{I}switch (that.index()) {{
+{II}{indent_but_first_line(case_blocks_joined, II)}
+{I}}};
+}}"""
+    )
+
+
+def _type_annotation_contains_list_of_instances(
+    type_annotation: intermediate.TypeAnnotationUnion,
+) -> bool:
+    """
+    Check whether the type annotation holds a list of instances.
+
+    Only such a list needs the ``SerializeListWith*`` overloads which
+    dereference a ``std::shared_ptr`` item.
+    """
+    type_anno = intermediate.beneath_optional(type_annotation)
+
+    if not isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return False
+
+    if not isinstance(type_anno.items, intermediate.OurTypeAnnotation):
+        return False
+
+    return isinstance(
+        type_anno.items.our_type,
+        (intermediate.AbstractClass, intermediate.ConcreteClass),
     )
 
 
@@ -5109,6 +5192,41 @@ struct SerializationError {{
         ]
     )
 
+    # NOTE (mristin):
+    # A serializer can fail only where a number can be reached from what it
+    # serializes, since a number is the only value JSON may have to refuse.
+    # We compute that once, as a fixed point over the whole type graph, and
+    # thread it through.
+    ids_of_fallible_types = _collect_ids_of_types_with_fallible_serialization(
+        symbol_table
+    )
+
+    iclass_is_fallible = any(
+        intermediate.runtime_id(cls) in ids_of_fallible_types
+        for cls in symbol_table.concrete_classes
+    )
+
+    if any(
+        _type_annotation_contains_list_of_instances(prop.type_annotation)
+        for cls in symbol_table.concrete_classes
+        for prop in cls.properties
+    ):
+        blocks.extend(_generate_serialize_list_of_instances_overloads())
+
+    if iclass_is_fallible:
+        blocks.extend(_generate_no_json_and_error_factories())
+        blocks.append(_generate_serialize_into())
+
+    has_tuple = len(list(intermediate.tuple_arities(symbol_table))) > 0
+
+    if iclass_is_fallible or has_tuple:
+        blocks.append(_generate_as_fallible())
+        blocks.append(_generate_as_fallible_identity())
+
+    if has_tuple:
+        blocks.append(_generate_deref())
+        blocks.append(_generate_deref_identity())
+
     if intermediate.uses_json_types(symbol_table):
         blocks.extend(
             [
@@ -5121,24 +5239,51 @@ struct SerializationError {{
     for arity in intermediate.tuple_arities(symbol_table):
         blocks.append(_generate_serialize_tuple_function(arity))
 
-    blocks.extend(_generate_serialize_iclass_definition())
+    if len(symbol_table.enumerations) > 0:
+        blocks.append(_generate_serialize_enumeration())
+
+    blocks.append(_generate_serialize_iclass_definition(fallible=iclass_is_fallible))
+
+    for cls in symbol_table.concrete_classes:
+        blocks.append(
+            _generate_serialize_cls_declaration(
+                cls=cls,
+                ids_of_fallible_types=ids_of_fallible_types,
+            )
+        )
 
     for named_union in symbol_table.named_unions:
         blocks.append(
-            _generate_serialize_named_union_declaration(named_union=named_union)
+            _generate_serialize_named_union_declaration(
+                named_union=named_union,
+                ids_of_fallible_types=ids_of_fallible_types,
+            )
         )
 
     for cls in symbol_table.concrete_classes:
-        blocks.append(_generate_serialize_cls(cls=cls))
+        blocks.append(
+            _generate_serialize_cls(
+                cls=cls,
+                ids_of_fallible_types=ids_of_fallible_types,
+            )
+        )
 
-    blocks.extend(_generate_serialize_iclass_implementation(symbol_table=symbol_table))
+    blocks.append(
+        _generate_serialize_iclass_implementation(
+            symbol_table=symbol_table,
+            ids_of_fallible_types=ids_of_fallible_types,
+        )
+    )
 
     for named_union in symbol_table.named_unions:
         blocks.append(
-            _generate_serialize_named_union_implementation(named_union=named_union)
+            _generate_serialize_named_union_implementation(
+                named_union=named_union,
+                ids_of_fallible_types=ids_of_fallible_types,
+            )
         )
 
-    blocks.append(_generate_serialize_implementation())
+    blocks.append(_generate_serialize_implementation(fallible=iclass_is_fallible))
 
     blocks.extend(
         [

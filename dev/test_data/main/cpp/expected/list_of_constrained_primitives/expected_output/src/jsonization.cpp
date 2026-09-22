@@ -1310,48 +1310,41 @@ nlohmann::json SerializeListWithInfallible(
   return serialized;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClass(
+/**
+ * \brief Serialize \p that instance to a JSON value, dispatching on its
+ * model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeIClass(
   const types::IClass& that
 );
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClassPtr(
-  const std::shared_ptr<types::IClass>& that
+/**
+ * \brief Serialize \p that instance of types::ISomething to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeSomething(
+  const types::ISomething& that
 );
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeSomething(
+nlohmann::json SerializeSomething(
   const types::ISomething& that
 ) {
   nlohmann::json result = nlohmann::json::object();
-
-  common::optional<SerializationError> error;
 
   result["someNames"] = SerializeListWithInfallible(
     that.some_names(),
     SerializeWstring
   );
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClass(
+nlohmann::json SerializeIClass(
   const types::IClass& that
 ) {
   switch (that.model_type()) {
@@ -1374,34 +1367,10 @@ std::pair<
   };
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClassPtr(
-  const std::shared_ptr<types::IClass>& that
-) {
-  return SerializeIClass(*that);
-}
-
 nlohmann::json Serialize(
   const types::IClass& that
 ) {
-  common::optional<nlohmann::json> result;
-  common::optional<SerializationError> error;
-
-  std::tie(
-    result,
-    error
-  ) = SerializeIClass(that);
-
-  if (error.has_value()) {
-    throw SerializationException(
-      std::move(error->cause),
-      std::move(error->path)
-    );
-  }
-
-  return std::move(*result);
+  return SerializeIClass(that);
 }
 
 // endregion Serialization

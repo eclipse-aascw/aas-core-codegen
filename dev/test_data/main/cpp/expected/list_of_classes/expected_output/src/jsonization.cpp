@@ -2078,6 +2078,219 @@ nlohmann::json SerializeListWithInfallible(
   return serialized;
 }
 
+/**
+ * Serialize the given list of instances to a JSON array where item
+ * serialization might fail.
+ *
+ * The items are pointers, which we dereference for the item serializer.
+ */
+template<typename T, typename FallibleSerializeItemT>
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> SerializeListOfInstancesWithFallible(
+  const std::vector<std::shared_ptr<T> >& list,
+  FallibleSerializeItemT&& fallible_serialize_item
+) {
+  nlohmann::json serialized = nlohmann::json::array();
+
+  serialized.get_ptr<nlohmann::json::array_t*>()->reserve(
+    list.size()
+  );
+
+  size_t index = 0;
+
+  for (const std::shared_ptr<T>& item : list) {
+    common::optional<nlohmann::json> json_item;
+    common::optional<SerializationError> error;
+
+    std::tie(
+      json_item,
+      error
+    ) = fallible_serialize_item(*item);
+
+    if (error.has_value()) {
+      error->path.segments.emplace_front(
+        common::make_unique<iteration::IndexSegment>(
+          index
+        )
+      );
+
+      return std::make_pair<
+        common::optional<nlohmann::json>,
+        common::optional<SerializationError>
+      >(
+        common::nullopt,
+        std::move(error)
+      );
+    }
+
+    serialized.emplace_back(
+      std::move(*json_item)
+    );
+
+    ++index;
+  }
+
+  return std::make_pair(
+    std::move(serialized),
+    common::nullopt
+  );
+}
+
+/**
+ * Serialize the given list of instances to a JSON array where item
+ * serialization can not fail.
+ *
+ * The items are pointers, which we dereference for the item serializer.
+ */
+template<typename T, typename InfallibleSerializeItemT>
+nlohmann::json SerializeListOfInstancesWithInfallible(
+  const std::vector<std::shared_ptr<T> >& list,
+  InfallibleSerializeItemT&& infallible_serialize_item
+) {
+  nlohmann::json serialized = nlohmann::json::array();
+
+  serialized.get_ptr<nlohmann::json::array_t*>()->reserve(
+    list.size()
+  );
+
+  for (const std::shared_ptr<T>& item : list) {
+    serialized.emplace_back(
+      infallible_serialize_item(*item)
+    );
+  }
+
+  return serialized;
+}
+
+/**
+ * \brief Give out a failed serialization with \p cause as its message.
+ *
+ * \param cause human-readable description of the failure
+ * \return no value, and the error
+ */
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> NoJsonAndSerializationErrorWithCause(
+  std::wstring cause
+) {
+  return std::make_pair<
+    common::optional<nlohmann::json>,
+    common::optional<SerializationError>
+  >(
+    common::nullopt,
+    common::make_optional<SerializationError>(
+      std::move(cause)
+    )
+  );
+}
+
+/**
+ * \brief Give out a failed serialization with \p error.
+ *
+ * \param error of the serialization
+ * \return no value, and the error
+ */
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> NoJsonAndSerializationError(
+  SerializationError error
+) {
+  return std::make_pair<
+    common::optional<nlohmann::json>,
+    common::optional<SerializationError>
+  >(
+    common::nullopt,
+    common::make_optional<SerializationError>(
+      std::move(error)
+    )
+  );
+}
+
+/**
+ * \brief Put the value serialized under \p key of \p result, or give out
+ * the error of the serialization, marked with \p property.
+ *
+ * We deliberately take the *result* of a serialization instead of the value
+ * and the function which serializes it. The item serializers of a tuple vary
+ * both in number and in type, so no signature taking the serializer could
+ * serve every serialization; taking the result lets this single function
+ * serve all of them.
+ *
+ * \param result object to be written to
+ * \param key of the property in the JSON object
+ * \param property which the key stands for, for the path of the error
+ * \param serialized result of the serialization
+ * \return the error, if the serialization failed
+ */
+common::optional<SerializationError> SerializeInto(
+  nlohmann::json& result,
+  const char* key,
+  iteration::Property property,
+  std::pair<
+    common::optional<nlohmann::json>,
+    common::optional<SerializationError>
+  >&& serialized
+) {
+  if (serialized.second.has_value()) {
+    serialized.second->path.segments.emplace_front(
+      common::make_unique<iteration::PropertySegment>(property)
+    );
+
+    return std::move(serialized.second);
+  }
+
+  result[key] = std::move(*serialized.first);
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Give the value out in the shape of a serialization which can fail.
+ *
+ * ``SerializeTuple{N}`` takes one item serializer per item, and the items of
+ * a tuple differ in kind, so some of them can fail and some of them can not.
+ * Lifting the ones which can not is what lets the tuple treat all of them
+ * alike, without a normalizing lambda per kind at the call site.
+ */
+template <typename T>
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> AsFallible(T&& value) {
+  return std::make_pair(
+    common::make_optional<nlohmann::json>(std::forward<T>(value)),
+    common::nullopt
+  );
+}
+
+/**
+ * @copybrief AsFallible
+ *
+ * The serialization could already fail, so there is nothing to lift.
+ */
+inline std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> AsFallible(
+  std::pair<
+    common::optional<nlohmann::json>,
+    common::optional<SerializationError>
+  >&& serialized
+) {
+  return std::move(serialized);
+}
+
+/**
+ * \brief Serialize \p that instance to a JSON value, dispatching on its
+ * model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value , or an error, if any
+ */
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
@@ -2085,17 +2298,53 @@ std::pair<
   const types::IClass& that
 );
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClassPtr(
-  const std::shared_ptr<types::IClass>& that
+/**
+ * \brief Serialize \p that instance of types::ISomeItem to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeSomeItem(
+  const types::ISomeItem& that
 );
 
+/**
+ * \brief Serialize \p that instance of types::IAnotherItem to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value , or an error, if any
+ */
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
-> SerializeSomeItem(
+> SerializeAnotherItem(
+  const types::IAnotherItem& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::ISimple to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeSimple(
+  const types::ISimple& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::ISomething to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value , or an error, if any
+ */
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> SerializeSomething(
+  const types::ISomething& that
+);
+
+nlohmann::json SerializeSomeItem(
   const types::ISomeItem& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -2106,13 +2355,7 @@ std::pair<
 
   result["modelType"] = "SomeItem";
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
 std::pair<
@@ -2125,32 +2368,19 @@ std::pair<
 
   common::optional<SerializationError> error;
 
-  common::optional<nlohmann::json> json_serial_number;
-  std::tie(
-    json_serial_number,
-    error
-  ) = SerializeInt64(
-    that.serial_number()
+  error = SerializeInto(
+    result,
+    "serialNumber",
+    iteration::Property::kSerialNumber,
+    SerializeInt64(
+      that.serial_number()
+    )
   );
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(
-        iteration::Property::kSerialNumber
-      )
-    );
-
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      std::move(error)
+    return NoJsonAndSerializationError(
+      std::move(*error)
     );
   }
-
-  result["serialNumber"] = std::move(
-    json_serial_number.value()
-  );
 
   result["modelType"] = "AnotherItem";
 
@@ -2163,10 +2393,7 @@ std::pair<
   );
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeSimple(
+nlohmann::json SerializeSimple(
   const types::ISimple& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -2175,13 +2402,7 @@ std::pair<
     that.name()
   );
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
 std::pair<
@@ -2194,60 +2415,24 @@ std::pair<
 
   common::optional<SerializationError> error;
 
-  common::optional<nlohmann::json> json_some_items;
-  std::tie(
-    json_some_items,
-    error
-  ) = SerializeListWithFallible(
-    that.some_items(),
-    SerializeIClassPtr
+  error = SerializeInto(
+    result,
+    "someItems",
+    iteration::Property::kSomeItems,
+    SerializeListOfInstancesWithFallible(
+      that.some_items(),
+      SerializeIClass
+    )
   );
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(
-        iteration::Property::kSomeItems
-      )
-    );
-
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      std::move(error)
+    return NoJsonAndSerializationError(
+      std::move(*error)
     );
   }
 
-  result["someItems"] = std::move(
-    json_some_items.value()
-  );
-
-  common::optional<nlohmann::json> json_some_simples;
-  std::tie(
-    json_some_simples,
-    error
-  ) = SerializeListWithFallible(
+  result["someSimples"] = SerializeListOfInstancesWithInfallible(
     that.some_simples(),
-    SerializeIClassPtr
-  );
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(
-        iteration::Property::kSomeSimples
-      )
-    );
-
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  result["someSimples"] = std::move(
-    json_some_simples.value()
+    SerializeSimple
   );
 
   return std::make_pair<
@@ -2267,16 +2452,20 @@ std::pair<
 ) {
   switch (that.model_type()) {
     case types::ModelType::kSomeItem:
-      return SerializeSomeItem(
-        dynamic_cast<const types::ISomeItem&>(that)
+      return AsFallible(
+        SerializeSomeItem(
+          dynamic_cast<const types::ISomeItem&>(that)
+        )
       );
     case types::ModelType::kAnotherItem:
       return SerializeAnotherItem(
         dynamic_cast<const types::IAnotherItem&>(that)
       );
     case types::ModelType::kSimple:
-      return SerializeSimple(
-        dynamic_cast<const types::ISimple&>(that)
+      return AsFallible(
+        SerializeSimple(
+          dynamic_cast<const types::ISimple&>(that)
+        )
       );
     case types::ModelType::kSomething:
       return SerializeSomething(
@@ -2295,15 +2484,6 @@ std::pair<
       throw std::invalid_argument(message);
     }
   };
-}
-
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClassPtr(
-  const std::shared_ptr<types::IClass>& that
-) {
-  return SerializeIClass(*that);
 }
 
 nlohmann::json Serialize(

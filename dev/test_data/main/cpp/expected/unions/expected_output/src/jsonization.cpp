@@ -3986,6 +3986,149 @@ nlohmann::json SerializeListWithInfallible(
 }
 
 /**
+ * \brief Give out a failed serialization with \p cause as its message.
+ *
+ * \param cause human-readable description of the failure
+ * \return no value, and the error
+ */
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> NoJsonAndSerializationErrorWithCause(
+  std::wstring cause
+) {
+  return std::make_pair<
+    common::optional<nlohmann::json>,
+    common::optional<SerializationError>
+  >(
+    common::nullopt,
+    common::make_optional<SerializationError>(
+      std::move(cause)
+    )
+  );
+}
+
+/**
+ * \brief Give out a failed serialization with \p error.
+ *
+ * \param error of the serialization
+ * \return no value, and the error
+ */
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> NoJsonAndSerializationError(
+  SerializationError error
+) {
+  return std::make_pair<
+    common::optional<nlohmann::json>,
+    common::optional<SerializationError>
+  >(
+    common::nullopt,
+    common::make_optional<SerializationError>(
+      std::move(error)
+    )
+  );
+}
+
+/**
+ * \brief Put the value serialized under \p key of \p result, or give out
+ * the error of the serialization, marked with \p property.
+ *
+ * We deliberately take the *result* of a serialization instead of the value
+ * and the function which serializes it. The item serializers of a tuple vary
+ * both in number and in type, so no signature taking the serializer could
+ * serve every serialization; taking the result lets this single function
+ * serve all of them.
+ *
+ * \param result object to be written to
+ * \param key of the property in the JSON object
+ * \param property which the key stands for, for the path of the error
+ * \param serialized result of the serialization
+ * \return the error, if the serialization failed
+ */
+common::optional<SerializationError> SerializeInto(
+  nlohmann::json& result,
+  const char* key,
+  iteration::Property property,
+  std::pair<
+    common::optional<nlohmann::json>,
+    common::optional<SerializationError>
+  >&& serialized
+) {
+  if (serialized.second.has_value()) {
+    serialized.second->path.segments.emplace_front(
+      common::make_unique<iteration::PropertySegment>(property)
+    );
+
+    return std::move(serialized.second);
+  }
+
+  result[key] = std::move(*serialized.first);
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Give the value out in the shape of a serialization which can fail.
+ *
+ * ``SerializeTuple{N}`` takes one item serializer per item, and the items of
+ * a tuple differ in kind, so some of them can fail and some of them can not.
+ * Lifting the ones which can not is what lets the tuple treat all of them
+ * alike, without a normalizing lambda per kind at the call site.
+ */
+template <typename T>
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> AsFallible(T&& value) {
+  return std::make_pair(
+    common::make_optional<nlohmann::json>(std::forward<T>(value)),
+    common::nullopt
+  );
+}
+
+/**
+ * @copybrief AsFallible
+ *
+ * The serialization could already fail, so there is nothing to lift.
+ */
+inline std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> AsFallible(
+  std::pair<
+    common::optional<nlohmann::json>,
+    common::optional<SerializationError>
+  >&& serialized
+) {
+  return std::move(serialized);
+}
+
+/**
+ * \brief Give out the instance behind \p pointer.
+ *
+ * The items of a tuple are heterogeneous, so ``SerializeTuple{N}`` can not
+ * know which of them are instances -- held as a ``std::shared_ptr`` -- and
+ * which are values. It asks per item instead, and this is the answer for
+ * a pointer. See the overload for everything else.
+ */
+template <typename T>
+const T& Deref(const std::shared_ptr<T>& pointer) {
+  return *pointer;
+}
+
+/**
+ * @copybrief Deref
+ *
+ * The item is the value itself, so there is nothing to dereference.
+ */
+template <typename T>
+const T& Deref(const T& value) {
+  return value;
+}
+
+/**
  * Serialize a tuple of 3 item(s) to a JSON array.
  */
 template <
@@ -4020,8 +4163,10 @@ std::pair<
   std::tie(
     json_item0,
     error
-  ) = serialize_item0(
-    std::get<0>(value)
+  ) = AsFallible(
+    serialize_item0(
+      Deref(std::get<0>(value))
+    )
   );
   if (error.has_value()) {
     error->path.segments.emplace_front(
@@ -4046,8 +4191,10 @@ std::pair<
   std::tie(
     json_item1,
     error
-  ) = serialize_item1(
-    std::get<1>(value)
+  ) = AsFallible(
+    serialize_item1(
+      Deref(std::get<1>(value))
+    )
   );
   if (error.has_value()) {
     error->path.segments.emplace_front(
@@ -4072,8 +4219,10 @@ std::pair<
   std::tie(
     json_item2,
     error
-  ) = serialize_item2(
-    std::get<2>(value)
+  ) = AsFallible(
+    serialize_item2(
+      Deref(std::get<2>(value))
+    )
   );
   if (error.has_value()) {
     error->path.segments.emplace_front(
@@ -4100,6 +4249,13 @@ std::pair<
   );
 }
 
+/**
+ * \brief Serialize \p that instance to a JSON value, dispatching on its
+ * model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value , or an error, if any
+ */
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
@@ -4107,38 +4263,122 @@ std::pair<
   const types::IClass& that
 );
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClassPtr(
-  const std::shared_ptr<types::IClass>& that
+/**
+ * \brief Serialize \p that instance of types::IStructuralFirst to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeStructuralFirst(
+  const types::IStructuralFirst& that
 );
 
+/**
+ * \brief Serialize \p that instance of types::IStructuralSecond to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeStructuralSecond(
+  const types::IStructuralSecond& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IMixedAbstractDescendantOne to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeMixedAbstractDescendantOne(
+  const types::IMixedAbstractDescendantOne& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IMixedAbstractDescendantTwo to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeMixedAbstractDescendantTwo(
+  const types::IMixedAbstractDescendantTwo& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IMixedConcreteWithDescendants to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeMixedConcreteWithDescendants(
+  const types::IMixedConcreteWithDescendants& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IMixedConcreteWithDescendantsChild to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeMixedConcreteWithDescendantsChild(
+  const types::IMixedConcreteWithDescendantsChild& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IMixedConcreteLeaf to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeMixedConcreteLeaf(
+  const types::IMixedConcreteLeaf& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IModelTypedFirst to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeModelTypedFirst(
+  const types::IModelTypedFirst& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IModelTypedSecond to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeModelTypedSecond(
+  const types::IModelTypedSecond& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::ISomething to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value , or an error, if any
+ */
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
-> SerializeStructuralUnion(
+> SerializeSomething(
+  const types::ISomething& that
+);
+
+nlohmann::json SerializeStructuralUnion(
   const types::StructuralUnion& that
 );
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeMixedUnion(
+nlohmann::json SerializeMixedUnion(
   const types::MixedUnion& that
 );
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeModelTypedUnion(
+nlohmann::json SerializeModelTypedUnion(
   const types::ModelTypedUnion& that
 );
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeStructuralFirst(
+nlohmann::json SerializeStructuralFirst(
   const types::IStructuralFirst& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -4147,19 +4387,10 @@ std::pair<
     that.unique_to_first()
   );
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeStructuralSecond(
+nlohmann::json SerializeStructuralSecond(
   const types::IStructuralSecond& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -4168,19 +4399,10 @@ std::pair<
     that.unique_to_second()
   );
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeMixedAbstractDescendantOne(
+nlohmann::json SerializeMixedAbstractDescendantOne(
   const types::IMixedAbstractDescendantOne& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -4189,19 +4411,10 @@ std::pair<
     that.unique_to_abstract_descendant_one()
   );
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeMixedAbstractDescendantTwo(
+nlohmann::json SerializeMixedAbstractDescendantTwo(
   const types::IMixedAbstractDescendantTwo& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -4210,19 +4423,10 @@ std::pair<
     that.unique_to_abstract_descendant_two()
   );
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeMixedConcreteWithDescendants(
+nlohmann::json SerializeMixedConcreteWithDescendants(
   const types::IMixedConcreteWithDescendants& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -4233,19 +4437,10 @@ std::pair<
 
   result["modelType"] = "MixedConcreteWithDescendants";
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeMixedConcreteWithDescendantsChild(
+nlohmann::json SerializeMixedConcreteWithDescendantsChild(
   const types::IMixedConcreteWithDescendantsChild& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -4260,19 +4455,10 @@ std::pair<
 
   result["modelType"] = "MixedConcreteWithDescendantsChild";
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeMixedConcreteLeaf(
+nlohmann::json SerializeMixedConcreteLeaf(
   const types::IMixedConcreteLeaf& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -4281,19 +4467,10 @@ std::pair<
     that.unique_to_concrete_leaf()
   );
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeModelTypedFirst(
+nlohmann::json SerializeModelTypedFirst(
   const types::IModelTypedFirst& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -4304,19 +4481,10 @@ std::pair<
 
   result["modelType"] = "ModelTypedFirst";
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeModelTypedSecond(
+nlohmann::json SerializeModelTypedSecond(
   const types::IModelTypedSecond& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -4327,13 +4495,7 @@ std::pair<
 
   result["modelType"] = "ModelTypedSecond";
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
 std::pair<
@@ -4346,294 +4508,74 @@ std::pair<
 
   common::optional<SerializationError> error;
 
-  common::optional<nlohmann::json> json_structural_property;
-  std::tie(
-    json_structural_property,
-    error
-  ) = SerializeStructuralUnion(
+  result["structuralProperty"] = SerializeStructuralUnion(
     that.structural_property()
   );
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(
-        iteration::Property::kStructuralProperty
-      )
-    );
 
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  result["structuralProperty"] = std::move(
-    *json_structural_property
-  );
-
-  common::optional<nlohmann::json> json_mixed_property;
-  std::tie(
-    json_mixed_property,
-    error
-  ) = SerializeMixedUnion(
+  result["mixedProperty"] = SerializeMixedUnion(
     that.mixed_property()
   );
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(
-        iteration::Property::kMixedProperty
-      )
-    );
 
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  result["mixedProperty"] = std::move(
-    *json_mixed_property
-  );
-
-  common::optional<nlohmann::json> json_model_typed_property;
-  std::tie(
-    json_model_typed_property,
-    error
-  ) = SerializeModelTypedUnion(
+  result["modelTypedProperty"] = SerializeModelTypedUnion(
     that.model_typed_property()
   );
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(
-        iteration::Property::kModelTypedProperty
-      )
-    );
 
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  result["modelTypedProperty"] = std::move(
-    *json_model_typed_property
-  );
-
-  common::optional<nlohmann::json> json_list_structural_property;
-  std::tie(
-    json_list_structural_property,
-    error
-  ) = SerializeListWithFallible(
+  result["listStructuralProperty"] = SerializeListWithInfallible(
     that.list_structural_property(),
     SerializeStructuralUnion
   );
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(
-        iteration::Property::kListStructuralProperty
-      )
-    );
 
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  result["listStructuralProperty"] = std::move(
-    json_list_structural_property.value()
-  );
-
-  common::optional<nlohmann::json> json_list_mixed_property;
-  std::tie(
-    json_list_mixed_property,
-    error
-  ) = SerializeListWithFallible(
+  result["listMixedProperty"] = SerializeListWithInfallible(
     that.list_mixed_property(),
     SerializeMixedUnion
   );
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(
-        iteration::Property::kListMixedProperty
-      )
-    );
 
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  result["listMixedProperty"] = std::move(
-    json_list_mixed_property.value()
-  );
-
-  common::optional<nlohmann::json> json_list_model_typed_property;
-  std::tie(
-    json_list_model_typed_property,
-    error
-  ) = SerializeListWithFallible(
+  result["listModelTypedProperty"] = SerializeListWithInfallible(
     that.list_model_typed_property(),
     SerializeModelTypedUnion
   );
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(
-        iteration::Property::kListModelTypedProperty
-      )
-    );
 
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  result["listModelTypedProperty"] = std::move(
-    json_list_model_typed_property.value()
-  );
-
-  common::optional<nlohmann::json> json_tuple_property;
-  std::tie(
-    json_tuple_property,
-    error
-  ) = SerializeTuple3(
-    that.tuple_property(),
-    SerializeStructuralUnion,
-    SerializeMixedUnion,
-    SerializeModelTypedUnion
+  error = SerializeInto(
+    result,
+    "tupleProperty",
+    iteration::Property::kTupleProperty,
+    SerializeTuple3(
+      that.tuple_property(),
+      SerializeStructuralUnion,
+      SerializeMixedUnion,
+      SerializeModelTypedUnion
+    )
   );
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(
-        iteration::Property::kTupleProperty
-      )
-    );
-
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      std::move(error)
+    return NoJsonAndSerializationError(
+      std::move(*error)
     );
   }
-
-  result["tupleProperty"] = std::move(
-    *json_tuple_property
-  );
 
   const common::optional<types::StructuralUnion>& maybe_optional_structural_property(
     that.optional_structural_property()
   );
-  if (that.optional_structural_property().has_value()) {
-    common::optional<nlohmann::json> json_optional_structural_property;
-    std::tie(
-      json_optional_structural_property,
-      error
-    ) = SerializeStructuralUnion(
+  if (maybe_optional_structural_property.has_value()) {
+    result["optionalStructuralProperty"] = SerializeStructuralUnion(
       *maybe_optional_structural_property
-    );
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<iteration::PropertySegment>(
-          iteration::Property::kOptionalStructuralProperty
-        )
-      );
-
-      return std::make_pair<
-        common::optional<nlohmann::json>,
-        common::optional<SerializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-
-    result["optionalStructuralProperty"] = std::move(
-      *json_optional_structural_property
     );
   }
 
   const common::optional<types::MixedUnion>& maybe_optional_mixed_property(
     that.optional_mixed_property()
   );
-  if (that.optional_mixed_property().has_value()) {
-    common::optional<nlohmann::json> json_optional_mixed_property;
-    std::tie(
-      json_optional_mixed_property,
-      error
-    ) = SerializeMixedUnion(
+  if (maybe_optional_mixed_property.has_value()) {
+    result["optionalMixedProperty"] = SerializeMixedUnion(
       *maybe_optional_mixed_property
-    );
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<iteration::PropertySegment>(
-          iteration::Property::kOptionalMixedProperty
-        )
-      );
-
-      return std::make_pair<
-        common::optional<nlohmann::json>,
-        common::optional<SerializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-
-    result["optionalMixedProperty"] = std::move(
-      *json_optional_mixed_property
     );
   }
 
   const common::optional<types::ModelTypedUnion>& maybe_optional_model_typed_property(
     that.optional_model_typed_property()
   );
-  if (that.optional_model_typed_property().has_value()) {
-    common::optional<nlohmann::json> json_optional_model_typed_property;
-    std::tie(
-      json_optional_model_typed_property,
-      error
-    ) = SerializeModelTypedUnion(
+  if (maybe_optional_model_typed_property.has_value()) {
+    result["optionalModelTypedProperty"] = SerializeModelTypedUnion(
       *maybe_optional_model_typed_property
-    );
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<iteration::PropertySegment>(
-          iteration::Property::kOptionalModelTypedProperty
-        )
-      );
-
-      return std::make_pair<
-        common::optional<nlohmann::json>,
-        common::optional<SerializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-
-    result["optionalModelTypedProperty"] = std::move(
-      *json_optional_model_typed_property
     );
   }
 
@@ -4654,40 +4596,58 @@ std::pair<
 ) {
   switch (that.model_type()) {
     case types::ModelType::kStructuralFirst:
-      return SerializeStructuralFirst(
-        dynamic_cast<const types::IStructuralFirst&>(that)
+      return AsFallible(
+        SerializeStructuralFirst(
+          dynamic_cast<const types::IStructuralFirst&>(that)
+        )
       );
     case types::ModelType::kStructuralSecond:
-      return SerializeStructuralSecond(
-        dynamic_cast<const types::IStructuralSecond&>(that)
+      return AsFallible(
+        SerializeStructuralSecond(
+          dynamic_cast<const types::IStructuralSecond&>(that)
+        )
       );
     case types::ModelType::kMixedAbstractDescendantOne:
-      return SerializeMixedAbstractDescendantOne(
-        dynamic_cast<const types::IMixedAbstractDescendantOne&>(that)
+      return AsFallible(
+        SerializeMixedAbstractDescendantOne(
+          dynamic_cast<const types::IMixedAbstractDescendantOne&>(that)
+        )
       );
     case types::ModelType::kMixedAbstractDescendantTwo:
-      return SerializeMixedAbstractDescendantTwo(
-        dynamic_cast<const types::IMixedAbstractDescendantTwo&>(that)
+      return AsFallible(
+        SerializeMixedAbstractDescendantTwo(
+          dynamic_cast<const types::IMixedAbstractDescendantTwo&>(that)
+        )
       );
     case types::ModelType::kMixedConcreteWithDescendants:
-      return SerializeMixedConcreteWithDescendants(
-        dynamic_cast<const types::IMixedConcreteWithDescendants&>(that)
+      return AsFallible(
+        SerializeMixedConcreteWithDescendants(
+          dynamic_cast<const types::IMixedConcreteWithDescendants&>(that)
+        )
       );
     case types::ModelType::kMixedConcreteWithDescendantsChild:
-      return SerializeMixedConcreteWithDescendantsChild(
-        dynamic_cast<const types::IMixedConcreteWithDescendantsChild&>(that)
+      return AsFallible(
+        SerializeMixedConcreteWithDescendantsChild(
+          dynamic_cast<const types::IMixedConcreteWithDescendantsChild&>(that)
+        )
       );
     case types::ModelType::kMixedConcreteLeaf:
-      return SerializeMixedConcreteLeaf(
-        dynamic_cast<const types::IMixedConcreteLeaf&>(that)
+      return AsFallible(
+        SerializeMixedConcreteLeaf(
+          dynamic_cast<const types::IMixedConcreteLeaf&>(that)
+        )
       );
     case types::ModelType::kModelTypedFirst:
-      return SerializeModelTypedFirst(
-        dynamic_cast<const types::IModelTypedFirst&>(that)
+      return AsFallible(
+        SerializeModelTypedFirst(
+          dynamic_cast<const types::IModelTypedFirst&>(that)
+        )
       );
     case types::ModelType::kModelTypedSecond:
-      return SerializeModelTypedSecond(
-        dynamic_cast<const types::IModelTypedSecond&>(that)
+      return AsFallible(
+        SerializeModelTypedSecond(
+          dynamic_cast<const types::IModelTypedSecond&>(that)
+        )
       );
     case types::ModelType::kSomething:
       return SerializeSomething(
@@ -4708,19 +4668,7 @@ std::pair<
   };
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClassPtr(
-  const std::shared_ptr<types::IClass>& that
-) {
-  return SerializeIClass(*that);
-}
-
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeStructuralUnion(
+nlohmann::json SerializeStructuralUnion(
   const types::StructuralUnion& that
 ) {
   switch (that.index()) {
@@ -4738,10 +4686,7 @@ std::pair<
   };
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeMixedUnion(
+nlohmann::json SerializeMixedUnion(
   const types::MixedUnion& that
 ) {
   switch (that.index()) {
@@ -4765,10 +4710,7 @@ std::pair<
   };
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeModelTypedUnion(
+nlohmann::json SerializeModelTypedUnion(
   const types::ModelTypedUnion& that
 ) {
   switch (that.index()) {
