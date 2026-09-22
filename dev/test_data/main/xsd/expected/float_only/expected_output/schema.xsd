@@ -1,0 +1,30 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="https://dummy.com" elementFormDefault="qualified" targetNamespace="https://dummy.com">
+  <xs:group name="something">
+    <xs:sequence>
+      <xs:element name="someFloat" type="xs:double"/>
+      <xs:element name="someOptionalFloat" type="xs:double" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="someFloats">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="v" type="xs:double" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="somePair">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="v1" type="xs:string"/>
+            <xs:element name="v2" type="xs:double"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:complexType name="something_t">
+    <xs:sequence>
+      <xs:group ref="something"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="something" type="something_t"/>
+</xs:schema>
