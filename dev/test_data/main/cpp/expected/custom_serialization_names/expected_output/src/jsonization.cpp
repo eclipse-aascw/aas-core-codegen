@@ -516,13 +516,277 @@ std::pair<
 }
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IQueryCondition.
+ * \brief Give out a failed de-serialization with \p cause as its message.
+ *
+ * \tparam T type of the value which could not be de-serialized
+ * \param cause human-readable description of the failure
+ * \return no value, and the error
+ */
+template <typename T>
+std::pair<
+  common::optional<T>,
+  common::optional<DeserializationError>
+> NoInstanceAndDeserializationErrorWithCause(
+  std::wstring cause
+) {
+  return std::make_pair<
+    common::optional<T>,
+    common::optional<DeserializationError>
+  >(
+    common::nullopt,
+    common::make_optional<DeserializationError>(
+      std::move(cause)
+    )
+  );
+}
+
+/**
+ * \brief Give out a failed de-serialization with \p error.
+ *
+ * \tparam T type of the value which could not be de-serialized
+ * \param error of the de-serialization
+ * \return no value, and the error
+ */
+template <typename T>
+std::pair<
+  common::optional<T>,
+  common::optional<DeserializationError>
+> NoInstanceAndDeserializationError(
+  DeserializationError error
+) {
+  return std::make_pair<
+    common::optional<T>,
+    common::optional<DeserializationError>
+  >(
+    common::nullopt,
+    common::make_optional<DeserializationError>(
+      std::move(error)
+    )
+  );
+}
+
+namespace properties {
+
+enum class OfQueryCondition : std::uint32_t {
+  kEq,
+  kNotEq
+};  // enum class OfQueryCondition
+
+const std::unordered_map<
+  std::string,
+  OfQueryCondition
+> kMapOfQueryCondition = {
+  {
+    "$eq",
+    OfQueryCondition::kEq
+  },
+  {
+    "$ne",
+    OfQueryCondition::kNotEq
+  }
+};
+
+}  // namespace properties
+
+/**
+ * \brief Create the exception to be thrown on an unexpected property literal.
+ *
+ * Every ``switch`` over the properties of a class covers all the literals of
+ * its enumeration, so we can only get here if the value has been corrupted.
+ * We report that as a logic error, and not as a de-serialization error, since
+ * it does not originate in the input.
+ *
+ * \param enum_name name of the property enumeration, for the message
+ * \param property the unexpected literal
+ * \return the exception to be thrown
+ */
+template <typename EnumT>
+std::logic_error UnexpectedPropertyLiteralError(
+  const char* enum_name,
+  EnumT property
+) {
+  return std::logic_error(
+    common::Concat(
+      "Unexpected properties literal of ",
+      enum_name,
+      ": ",
+      std::to_string(
+        static_cast<std::uint32_t>(property)
+      )
+    )
+  );
+}
+
+/**
+ * \brief Parse the properties of an instance from \p json.
+ *
+ * This function factors out everything which the property loop of a class does
+ * not say about the class it belongs to: walking the keys, looking the property
+ * up, refusing or accepting an unknown one and marking the property on
+ * the error path. The class itself supplies only \p on_property, which
+ * dispatches on the property and assigns the local variables that its
+ * constructor is finally called with.
+ *
+ * NOTE (mristin):
+ * We walk the keys which are actually there, instead of asking for each
+ * property of the class whether it is there. An instance carries only a few of
+ * the many properties which a class declares, and nlohmann's object is
+ * a ``std::map``, so asking costs a tree walk per property -- twice over, as
+ * the value then has to be fetched. Walking also detects an unknown key on
+ * the way, which is why there is no separate pass for that.
+ *
+ * NOTE (mristin):
+ * We take \p map_of_properties in, instead of letting \p on_property work on
+ * the JSON name of the property, because we want the class to dispatch with
+ * a hard-wired ``switch`` whose branches assign the local variables of
+ * the caller.
+ *
+ * A ``switch`` needs an integral constant, and C++ can not switch on a string,
+ * so the name has to be translated into a literal of the property enumeration
+ * first. We do that here rather than in the class so that the translation, and
+ * the error reported when the name matches no property at all, are written
+ * once instead of once per class.
+ *
+ * \param json object whose properties are to be parsed
+ * \param map_of_properties maps the JSON name of a property to its literal
+ * \param additional_properties if not set, refuse a key which matches
+ * no property
+ * \param on_property parses the value of the recognized property
+ * \return the error, if the parsing failed
+ */
+template <typename EnumT, typename OnPropertyT>
+common::optional<DeserializationError> ParseProperties(
+  const nlohmann::json& json,
+  const std::unordered_map<std::string, EnumT>& map_of_properties,
+  bool additional_properties,
+  const OnPropertyT& on_property
+) {
+  #ifdef DEBUG
+  if (!json.is_object()) {
+    throw std::logic_error(
+      "Unexpected non-object in ParseProperties. "
+      "ParseProperties expects the caller to have checked that."
+    );
+  }
+  #endif
+
+  for (const auto& key_val : json.items()) {
+    auto it(
+      map_of_properties.find(key_val.key())
+    );
+
+    if (it == map_of_properties.end()) {
+      if (additional_properties) {
+        continue;
+      }
+
+      return DeserializationError(
+        common::Concat(
+          L"Unexpected additional property: ",
+          common::Utf8ToWstring(key_val.key())
+        )
+      );
+    }
+
+    common::optional<DeserializationError> error(
+      on_property(it->second, key_val.value())
+    );
+
+    if (error.has_value()) {
+      error->path.segments.emplace_front(
+        common::make_unique<PropertySegment>(
+          common::Utf8ToWstring(key_val.key())
+        )
+      );
+
+      return error;
+    }
+  }
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Check that \p json is a JSON object.
+ *
+ * \param json value to be checked
+ * \return the error, if \p json is anything else
+ */
+common::optional<DeserializationError> CheckJsonObject(
+  const nlohmann::json& json
+) {
+  if (!json.is_object()) {
+    return DeserializationError(
+      common::Concat(
+        L"Expected an object, but got: ",
+        common::Utf8ToWstring(json.type_name())
+      )
+    );
+  }
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Assign the value parsed to \p target, or give out the error of the parse.
+ *
+ * We deliberately take the *result* of a parse instead of the JSON value and
+ * the function which parses it. The item parsers of a tuple vary both in number
+ * and in type, so no signature taking the parser could serve every parse;
+ * taking the result lets this single function serve all of them.
+ *
+ * \param target variable to be assigned the value parsed
+ * \param parsed result of the parse
+ * \return the error, if the parse failed
+ */
+template <typename T>
+common::optional<DeserializationError> ParseInto(
+  common::optional<T>& target,
+  std::pair<
+    common::optional<T>,
+    common::optional<DeserializationError>
+  >&& parsed
+) {
+  if (parsed.second.has_value()) {
+    return std::move(parsed.second);
+  }
+
+  target = std::move(parsed.first);
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Parse the properties of an instance of types::IQueryCondition.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IQueryCondition>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfQueryCondition(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IQueryCondition.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -534,128 +798,56 @@ std::pair<
   bool additional_properties
 );
 
-std::set<std::string> kPropertiesInQueryCondition = {
-  "$eq",
-  "$ne"
-};
-
 std::pair<
   common::optional<
     std::shared_ptr<types::IQueryCondition>
   >,
   common::optional<DeserializationError>
-> DeserializeQueryCondition(
+> ParsePropertiesOfQueryCondition(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IQueryCondition> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInQueryCondition.find(key_val.key())
-      );
-      if (it == kPropertiesInQueryCondition.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IQueryCondition> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_eq;
 
   common::optional<std::wstring> the_not_eq;
 
-  // endregion Initialization
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfQueryCondition,
+      additional_properties,
+      [&](
+        properties::OfQueryCondition property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfQueryCondition::kEq:
+            return ParseInto(
+              the_eq,
+              DeserializeWstring(value)
+            );
+          case properties::OfQueryCondition::kNotEq:
+            return ParseInto(
+              the_not_eq,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfQueryCondition",
+              property
+            );
+        }
+      }
+    )
+  );
 
-  // region De-serialize $eq
-
-  if (json.contains("$eq")) {
-    std::tie(
-      the_eq,
-      error
-    ) = DeserializeWstring(
-      json["$eq"]
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IQueryCondition>
+    >(
+      std::move(*error)
     );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"$eq"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IQueryCondition> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
   }
-
-  // endregion De-serialize $eq
-
-  // region De-serialize $ne
-
-  if (json.contains("$ne")) {
-    std::tie(
-      the_not_eq,
-      error
-    ) = DeserializeWstring(
-      json["$ne"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"$ne"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IQueryCondition> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize $ne
 
   return std::make_pair(
     common::make_optional<
@@ -673,26 +865,55 @@ std::pair<
   );
 }
 
-common::expected<
-  std::shared_ptr<types::IQueryCondition>,
-  DeserializationError
-> QueryConditionFrom(
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IQueryCondition>
+  >,
+  common::optional<DeserializationError>
+> DeserializeQueryCondition(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
-    std::shared_ptr<types::IQueryCondition>
-  > instance;
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
 
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IQueryCondition>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfQueryCondition(json, additional_properties);
+}
+
+/**
+ * \brief De-serialize \p json and render the outcome as an expected value.
+ *
+ * \param json value to be de-serialized
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \param deserialize de-serializes the value
+ * \return the de-serialized value, or the error
+ */
+template <typename T, typename DeserializeT>
+common::expected<
+  T,
+  DeserializationError
+> DeserializeFrom(
+  const nlohmann::json& json,
+  bool additional_properties,
+  const DeserializeT& deserialize
+) {
+  common::optional<T> instance;
   common::optional<DeserializationError> error;
 
   std::tie(
     instance,
     error
-  ) = DeserializeQueryCondition(
-    json,
-    additional_properties
-  );
+  ) = deserialize(json, additional_properties);
 
   if (instance.has_value()) {
     return std::move(*instance);
@@ -703,8 +924,25 @@ common::expected<
       "Unexpected null error when null instance."
     );
   }
+
   return common::make_unexpected(
     std::move(*error)
+  );
+}
+
+common::expected<
+  std::shared_ptr<types::IQueryCondition>,
+  DeserializationError
+> QueryConditionFrom(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  return DeserializeFrom<
+    std::shared_ptr<types::IQueryCondition>
+  >(
+    json,
+    additional_properties,
+    DeserializeQueryCondition
   );
 }
 
