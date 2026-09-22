@@ -1716,17 +1716,14 @@ def _generate_self_closing_writer_declaration(
 {I} * \\p undeclare_namespace tells whether this is the outermost such element.
 {I} * That one undeclares the default namespace of the enclosing document, and
 {I} * the elements nested in it inherit that.
+{I} *
+{I} * Mind that the counterpart is the plain \\ref StopElement: a stop element
+{I} * carries no attribute, and the names are not prefixed, so there is nothing
+{I} * in it which the namespace could change.
 {I} */
 {I}void StartElementInNoNamespace(
 {II}std::string name,
 {II}bool undeclare_namespace
-{I});
-
-{I}/**
-{I} * Write a stop element which resides in no namespace at all.
-{I} */
-{I}void StopElementInNoNamespace(
-{II}const std::string& name
 {I});"""
         if uses_json_types
         else ""
@@ -1742,9 +1739,15 @@ def _generate_self_closing_writer_declaration(
  */
 class SelfClosingWriter {{
  public:
+{I}/**
+{I} * \\param os to write to
+{I} * \\param root_attributes attributes of the outermost element, written
+{I} * verbatim and each preceded by a space; the declaration of \\ref kNamespace,
+{I} * or nothing at all
+{I} */
 {I}SelfClosingWriter(
 {II}std::ostream& os,
-{II}std::string prefix
+{II}const char* root_attributes
 {I});
 
 {I}/**
@@ -1833,31 +1836,23 @@ class SelfClosingWriter {{
 
  private:
 {I}std::ostream& os_;
-{I}std::string prefix_;
 {I}common::optional<SerializationError> error_;
 {I}common::optional<std::string> pending_start_wo_text_;
 
 {I}/**
-{I} * Prefix of the pending start element; empty for an element which resides
-{I} * in no namespace
+{I} * \\brief Attributes of the outermost element, until it has been queued.
+{I} *
+{I} * The very first \\ref StartElement takes them and leaves nothing behind, so
+{I} * that the namespace is declared on the root element and on no other.
 {I} */
-{I}const char* pending_prefix_;
+{I}const char* root_attributes_;
 
 {I}/**
-{I} * Attributes of the pending start element; the undeclaration of the default
-{I} * namespace for the outermost element which resides in no namespace, and
-{I} * nothing otherwise
+{I} * Attributes of the pending start element; the declaration of the namespace
+{I} * for the outermost element, its undeclaration for the outermost element
+{I} * which resides in no namespace, and nothing otherwise
 {I} */
 {I}const char* pending_attributes_;
-
-{I}/**
-{I} * Write the stop element with the given \\p prefix, or shorten the pending
-{I} * start element to a self-closing one.
-{I} */
-{I}void StopElementWithPrefix(
-{II}const std::string& name,
-{II}const char* prefix
-{I});
 
 {I}/**
 {I} * \\brief Escape the given text to XML.
@@ -1920,16 +1915,14 @@ void SelfClosingWriter::StartElementInNoNamespace(
 {I}}}
 
 {I}pending_start_wo_text_ = std::move(name);
-{I}pending_prefix_ = "";
 {I}pending_attributes_ = undeclare_namespace ? " xmlns=\\"\\"" : "";
-}}"""
-            ),
-            Stripped(
-                f"""\
-void SelfClosingWriter::StopElementInNoNamespace(
-{I}const std::string& name
-) {{
-{I}StopElementWithPrefix(name, "");
+
+{I}// NOTE (mristin):
+{I}// An element which resides in no namespace is never the outermost one of
+{I}// a document which declares kNamespace, so it undeclares the default
+{I}// namespace instead of taking the attributes of the root. We still drop
+{I}// them here, so that they can not end up on any later element.
+{I}root_attributes_ = "";
 }}"""
             ),
         ]
@@ -1943,11 +1936,10 @@ void SelfClosingWriter::StopElementInNoNamespace(
             f"""\
 SelfClosingWriter::SelfClosingWriter(
 {I}std::ostream& os,
-{I}std::string prefix
+{I}const char* root_attributes
 ) :
 {I}os_(os),
-{I}prefix_(std::move(prefix)),
-{I}pending_prefix_(""),
+{I}root_attributes_(root_attributes),
 {I}pending_attributes_("") {{
 {I}// Intentionally empty.
 }}"""
@@ -1971,23 +1963,19 @@ void SelfClosingWriter::StartElement(
 {I}}}
 
 {I}pending_start_wo_text_ = std::move(name);
-{I}pending_prefix_ = prefix_.c_str();
-{I}pending_attributes_ = "";
+
+{I}// NOTE (mristin):
+{I}// The outermost element carries the attributes of the root, and every other
+{I}// element carries none. We take them here instead of asking whether this is
+{I}// the first element, since the assignment has to happen either way.
+{I}pending_attributes_ = root_attributes_;
+{I}root_attributes_ = "";
 }}"""
         ),
         Stripped(
             f"""\
 void SelfClosingWriter::StopElement(
 {I}const std::string& name
-) {{
-{I}StopElementWithPrefix(name, prefix_.c_str());
-}}"""
-        ),
-        Stripped(
-            f"""\
-void SelfClosingWriter::StopElementWithPrefix(
-{I}const std::string& name,
-{I}const char* prefix
 ) {{
 {I}#ifdef DEBUG
 {I}if (error_.has_value()) {{
@@ -2018,10 +2006,9 @@ void SelfClosingWriter::StopElementWithPrefix(
 {II}WriteStringWithoutEscapingNorFlushing(
 {III}common::Concat(
 {IIII}"<",
-{IIII}pending_prefix_,
 {IIII}name,
 {IIII}pending_attributes_,
-{IIII}" />"
+{IIII}"/>"
 {III})
 {II});
 {I}}} else {{
@@ -2033,7 +2020,6 @@ void SelfClosingWriter::StopElementWithPrefix(
 {II}WriteStringWithoutEscapingNorFlushing(
 {III}common::Concat(
 {IIII}"</",
-{IIII}prefix,
 {IIII}name,
 {IIII}">"
 {III})
@@ -2505,7 +2491,6 @@ void SelfClosingWriter::WritePendingStartElementIfAvailable() {{
 {I}WriteStringWithoutEscapingNorFlushing(
 {II}common::Concat(
 {III}"<",
-{III}pending_prefix_,
 {III}*pending_start_wo_text_,
 {III}pending_attributes_,
 {III}">"

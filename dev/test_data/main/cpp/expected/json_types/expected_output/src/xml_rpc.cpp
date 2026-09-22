@@ -885,7 +885,7 @@ common::optional<SerializationError> SerializeValueBodyTo(
     // ``1``/``0``, which is also what ``DeserializeBooleanBodyFrom``
     // requires.
     writer.SerializeString(value.get<bool>() ? "1" : "0");
-    writer.StopElementInNoNamespace("boolean");
+    writer.StopElement("boolean");
   } else if (value.is_number()) {
     const double number = value.get<double>();
 
@@ -908,7 +908,7 @@ common::optional<SerializationError> SerializeValueBodyTo(
       "double", undeclare_namespace
     );
     writer.SerializeDouble(number);
-    writer.StopElementInNoNamespace("double");
+    writer.StopElement("double");
   } else if (value.is_string()) {
     writer.StartElementInNoNamespace(
       "string", undeclare_namespace
@@ -916,7 +916,7 @@ common::optional<SerializationError> SerializeValueBodyTo(
     writer.SerializeString(
       *value.get_ptr<const std::string*>()
     );
-    writer.StopElementInNoNamespace("string");
+    writer.StopElement("string");
   } else if (value.is_array()) {
     writer.StartElementInNoNamespace(
       "array", undeclare_namespace
@@ -929,7 +929,7 @@ common::optional<SerializationError> SerializeValueBodyTo(
       return error;
     }
 
-    writer.StopElementInNoNamespace("array");
+    writer.StopElement("array");
   } else if (value.is_object()) {
     writer.StartElementInNoNamespace(
       "struct", undeclare_namespace
@@ -942,7 +942,7 @@ common::optional<SerializationError> SerializeValueBodyTo(
       return error;
     }
 
-    writer.StopElementInNoNamespace("struct");
+    writer.StopElement("struct");
   } else {
     // NOTE (mristin):
     // This covers ``null``, a binary value and a discarded value -- none of
@@ -991,11 +991,11 @@ common::optional<SerializationError> SerializeArrayBodyTo(
       return error;
     }
 
-    writer.StopElementInNoNamespace("value");
+    writer.StopElement("value");
     ++index;
   }
 
-  writer.StopElementInNoNamespace("data");
+  writer.StopElement("data");
 
   return ConvertWriterError(writer);
 }
@@ -1021,7 +1021,7 @@ common::optional<SerializationError> SerializeStructBodyTo(
 
     writer.StartElementInNoNamespace("name", false);
     writer.SerializeString(item.key());
-    writer.StopElementInNoNamespace("name");
+    writer.StopElement("name");
 
     writer.StartElementInNoNamespace("value", false);
 
@@ -1037,9 +1037,9 @@ common::optional<SerializationError> SerializeStructBodyTo(
       return error;
     }
 
-    writer.StopElementInNoNamespace("value");
+    writer.StopElement("value");
 
-    writer.StopElementInNoNamespace("member");
+    writer.StopElement("member");
   }
 
   return ConvertWriterError(writer);

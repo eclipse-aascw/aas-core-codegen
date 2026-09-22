@@ -3768,7 +3768,7 @@ const iteration::Path& SerializationException::path() const noexcept {
 
 // endregion SerializationException
 
-common::optional<xml_common::SerializationError> SerializeBool(
+common::optional<xml_common::SerializationError> WriteBool(
   bool value,
   xml_common::SelfClosingWriter& writer
 ) {
@@ -3780,7 +3780,7 @@ common::optional<xml_common::SerializationError> SerializeBool(
   return common::nullopt;
 }
 
-common::optional<xml_common::SerializationError> SerializeInt64(
+common::optional<xml_common::SerializationError> WriteInt64(
   int64_t value,
   xml_common::SelfClosingWriter& writer
 ) {
@@ -3792,7 +3792,7 @@ common::optional<xml_common::SerializationError> SerializeInt64(
   return common::nullopt;
 }
 
-common::optional<xml_common::SerializationError> SerializeDouble(
+common::optional<xml_common::SerializationError> WriteDouble(
   double value,
   xml_common::SelfClosingWriter& writer
 ) {
@@ -3804,7 +3804,7 @@ common::optional<xml_common::SerializationError> SerializeDouble(
   return common::nullopt;
 }
 
-common::optional<xml_common::SerializationError> SerializeWstring(
+common::optional<xml_common::SerializationError> WriteWstring(
   const std::wstring& value,
   xml_common::SelfClosingWriter& writer
 ) {
@@ -3816,7 +3816,7 @@ common::optional<xml_common::SerializationError> SerializeWstring(
   return common::nullopt;
 }
 
-common::optional<xml_common::SerializationError> SerializeByteArray(
+common::optional<xml_common::SerializationError> WriteByteArray(
   const std::vector<std::uint8_t>& value,
   xml_common::SelfClosingWriter& writer
 ) {
@@ -3829,132 +3829,311 @@ common::optional<xml_common::SerializationError> SerializeByteArray(
 }
 
 /**
- * Serialize a property wrapped in its own named XML element.
+ * \brief Write \p value as an XML element named \p name.
+ *
+ * This is the only place where an element is framed. The element of a class,
+ * the `<v>` of a list item and the positional `<v1>`, `<v2>`, <i>etc.</i> of
+ * a tuple item differ only in the name and in the content, so all of them
+ * come through here.
+ *
+ * \param name of the XML element
+ * \param value to be written between the tags
+ * \param writer to write to
+ * \param write_content writes \p value between the tags
+ * \return an error, if any
  */
-template <typename T, typename SerializeT>
-common::optional<xml_common::SerializationError> SerializePropertyAsElement(
-  const std::string& name,
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteElement(
+  const char* name,
   const T& value,
   xml_common::SelfClosingWriter& writer,
-  iteration::Property property,
-  const SerializeT& serialize_value
+  const WriteT& write_content
 ) {
   writer.StartElement(name);
   if (writer.error().has_value()) {
     return writer.move_error();
   }
 
-  common::optional<xml_common::SerializationError> error = serialize_value(value, writer);
+  common::optional<xml_common::SerializationError> error(
+    write_content(value, writer)
+  );
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(property)
-    );
     return error;
   }
 
   writer.StopElement(name);
   if (writer.error().has_value()) {
-    error = writer.move_error();
+    return writer.move_error();
+  }
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Write \p value as the XML element of \p property.
+ *
+ * This is \ref WriteElement plus the one thing which a property knows and
+ * nothing beneath it does -- which property of the instance it is -- so that
+ * the path of the error is built as the stack unwinds.
+ *
+ * \param name of the XML element
+ * \param value of the property
+ * \param writer to write to
+ * \param property which the element stands for, for the path of the error
+ * \param write_content writes \p value between the tags
+ * \return an error, if any
+ */
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteProperty(
+  const char* name,
+  const T& value,
+  xml_common::SelfClosingWriter& writer,
+  iteration::Property property,
+  const WriteT& write_content
+) {
+  common::optional<xml_common::SerializationError> error(
+    WriteElement(name, value, writer, write_content)
+  );
+
+  if (error.has_value()) {
     error->path.segments.emplace_front(
       common::make_unique<iteration::PropertySegment>(property)
     );
-    return error;
   }
 
-  return common::nullopt;
+  return error;
 }
 
 /**
- * Serialize a list of instances.
+ * \brief Write the instance behind \p value as the XML element of
+ * \p property.
+ *
+ * See the overload which takes the value itself for what is written and
+ * for the path of the error.
  */
-template <typename T, typename SerializeT>
-common::optional<xml_common::SerializationError> SerializeListOfInstances(
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteProperty(
+  const char* name,
+  const std::shared_ptr<T>& value,
+  xml_common::SelfClosingWriter& writer,
+  iteration::Property property,
+  const WriteT& write_content
+) {
+  return WriteProperty(name, *value, writer, property, write_content);
+}
+
+/**
+ * \brief Write \p value as the XML element of \p property, or nothing at
+ * all if the property has not been given.
+ *
+ * See the overload which takes the value itself for what is written and
+ * for the path of the error.
+ */
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteProperty(
+  const char* name,
+  const common::optional<T>& value,
+  xml_common::SelfClosingWriter& writer,
+  iteration::Property property,
+  const WriteT& write_content
+) {
+  if (!value.has_value()) {
+    return common::nullopt;
+  }
+
+  return WriteProperty(name, *value, writer, property, write_content);
+}
+
+/**
+ * \brief Write \p list as the XML element of \p property, every item as
+ * an XML element of its own.
+ *
+ * An instance is self-describing -- the name of its XML element is its model
+ * type -- so an item needs no positional tag here. A value encoded as text
+ * does need one, which is why a list of values is written by a function of
+ * its own instead of by this one with the name of the item passed in.
+ *
+ * \param name of the XML element
+ * \param list of the instances
+ * \param writer to write to
+ * \param property which the element stands for, for the path of the error
+ * \param write_item writes an item as an XML element of its own
+ * \return an error, if any
+ */
+template <typename T, typename WriteItemT>
+common::optional<xml_common::SerializationError> WriteListOfInstancesProperty(
+  const char* name,
   const std::vector<T>& list,
   xml_common::SelfClosingWriter& writer,
-  const SerializeT& serialize_item
+  iteration::Property property,
+  const WriteItemT& write_item
 ) {
-  for (size_t i = 0; i < list.size(); ++i) {
-    common::optional<xml_common::SerializationError> error = serialize_item(
-      list[i],
-      writer
-    );
+  return WriteProperty(
+    name,
+    list,
+    writer,
+    property,
+    [&write_item](
+      const std::vector<T>& a_list,
+      xml_common::SelfClosingWriter& a_writer
+    ) -> common::optional<xml_common::SerializationError> {
+      for (size_t i = 0; i < a_list.size(); ++i) {
+        common::optional<xml_common::SerializationError> error(
+          write_item(a_list[i], a_writer)
+        );
 
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<iteration::IndexSegment>(i)
-      );
+        if (error.has_value()) {
+          error->path.segments.emplace_front(
+            common::make_unique<iteration::IndexSegment>(i)
+          );
 
-      return error;
+          return error;
+        }
+      }
+
+      return common::nullopt;
     }
-  }
-
-  return common::nullopt;
+  );
 }
 
 /**
- * Serialize a tuple of 3 item(s).
+ * \brief Write \p list as the XML element of \p property, or nothing at all
+ * if the property has not been given.
+ *
+ * See the overload which takes the list itself for what is written and
+ * for the path of the error.
+ */
+template <typename T, typename WriteItemT>
+common::optional<xml_common::SerializationError> WriteListOfInstancesProperty(
+  const char* name,
+  const common::optional<std::vector<T> >& list,
+  xml_common::SelfClosingWriter& writer,
+  iteration::Property property,
+  const WriteItemT& write_item
+) {
+  if (!list.has_value()) {
+    return common::nullopt;
+  }
+
+  return WriteListOfInstancesProperty(
+    name,
+    *list,
+    writer,
+    property,
+    write_item
+  );
+}
+
+/**
+ * \brief Write \p value as the XML element of \p property, every item with
+ * the writer of its own.
+ *
+ * \param name of the XML element
+ * \param value of the property
+ * \param writer to write to
+ * \param property which the element stands for, for the path of the error
+ * \param write_item0 writes the item at 0
+ * \param write_item1 writes the item at 1
+ * \param write_item2 writes the item at 2
+ * \return an error, if any
  */
 template <
   typename T0,
   typename T1,
   typename T2,
-  typename SerializeT0,
-  typename SerializeT1,
-  typename SerializeT2
+  typename WriteT0,
+  typename WriteT1,
+  typename WriteT2
 >
-common::optional<xml_common::SerializationError> SerializeTuple3(
-  const std::tuple<
-    T0,
-    T1,
-    T2
-  >& value,
+common::optional<xml_common::SerializationError> WriteTuple3Property(
+  const char* name,
+  const std::tuple<T0, T1, T2>& value,
   xml_common::SelfClosingWriter& writer,
-  const SerializeT0& serialize_item0,
-  const SerializeT1& serialize_item1,
-  const SerializeT2& serialize_item2
+  iteration::Property property,
+  const WriteT0& write_item0,
+  const WriteT1& write_item1,
+  const WriteT2& write_item2
 ) {
-  common::optional<xml_common::SerializationError> error;
+  return WriteProperty(
+    name,
+    value,
+    writer,
+    property,
+    [&write_item0, &write_item1, &write_item2](
+      const std::tuple<T0, T1, T2>& a_value,
+      xml_common::SelfClosingWriter& a_writer
+    ) -> common::optional<xml_common::SerializationError> {
+      common::optional<xml_common::SerializationError> error;
 
-  error = serialize_item0(
-    std::get<0>(value),
-    writer
+      error = write_item0(std::get<0>(a_value), a_writer);
+      if (error.has_value()) {
+        error->path.segments.emplace_front(
+          common::make_unique<iteration::IndexSegment>(0)
+        );
+
+        return error;
+      }
+
+      error = write_item1(std::get<1>(a_value), a_writer);
+      if (error.has_value()) {
+        error->path.segments.emplace_front(
+          common::make_unique<iteration::IndexSegment>(1)
+        );
+
+        return error;
+      }
+
+      error = write_item2(std::get<2>(a_value), a_writer);
+      if (error.has_value()) {
+        error->path.segments.emplace_front(
+          common::make_unique<iteration::IndexSegment>(2)
+        );
+
+        return error;
+      }
+
+      return common::nullopt;
+    }
   );
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::IndexSegment>(
-        0
-      )
-    );
-    return error;
+}
+
+/**
+ * \brief Write \p value as the XML element of \p property, or nothing at
+ * all if the property has not been given.
+ *
+ * See the overload which takes the tuple itself for what is written and
+ * for the path of the error.
+ */
+template <
+  typename T0,
+  typename T1,
+  typename T2,
+  typename WriteT0,
+  typename WriteT1,
+  typename WriteT2
+>
+common::optional<xml_common::SerializationError> WriteTuple3Property(
+  const char* name,
+  const common::optional<std::tuple<T0, T1, T2> >& value,
+  xml_common::SelfClosingWriter& writer,
+  iteration::Property property,
+  const WriteT0& write_item0,
+  const WriteT1& write_item1,
+  const WriteT2& write_item2
+) {
+  if (!value.has_value()) {
+    return common::nullopt;
   }
 
-  error = serialize_item1(
-    std::get<1>(value),
-    writer
+  return WriteTuple3Property(
+    name,
+    *value,
+    writer,
+    property,
+    write_item0,
+    write_item1,
+    write_item2
   );
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::IndexSegment>(
-        1
-      )
-    );
-    return error;
-  }
-
-  error = serialize_item2(
-    std::get<2>(value),
-    writer
-  );
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::IndexSegment>(
-        2
-      )
-    );
-    return error;
-  }
-
-  return common::nullopt;
 }
 
 /**
@@ -4351,20 +4530,15 @@ common::optional<xml_common::SerializationError> SerializeStructuralFirstAsSeque
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "uniqueToFirst",
     that.unique_to_first(),
     writer,
     iteration::Property::kUniqueToFirst,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -4374,36 +4548,12 @@ common::optional<xml_common::SerializationError> SerializeStructuralFirstAsEleme
   const types::IStructuralFirst& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "structuralFirst"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeStructuralFirstAsSequence(
+  return WriteElement(
+    "structuralFirst",
     that,
-    writer
+    writer,
+    SerializeStructuralFirstAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "structuralFirst"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeStructuralFirstPtrAsElement(
@@ -4428,20 +4578,15 @@ common::optional<xml_common::SerializationError> SerializeStructuralSecondAsSequ
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "uniqueToSecond",
     that.unique_to_second(),
     writer,
     iteration::Property::kUniqueToSecond,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -4451,36 +4596,12 @@ common::optional<xml_common::SerializationError> SerializeStructuralSecondAsElem
   const types::IStructuralSecond& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "structuralSecond"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeStructuralSecondAsSequence(
+  return WriteElement(
+    "structuralSecond",
     that,
-    writer
+    writer,
+    SerializeStructuralSecondAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "structuralSecond"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeStructuralSecondPtrAsElement(
@@ -4545,20 +4666,15 @@ common::optional<xml_common::SerializationError> SerializeMixedAbstractDescendan
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "uniqueToAbstractDescendantOne",
     that.unique_to_abstract_descendant_one(),
     writer,
     iteration::Property::kUniqueToAbstractDescendantOne,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -4568,36 +4684,12 @@ common::optional<xml_common::SerializationError> SerializeMixedAbstractDescendan
   const types::IMixedAbstractDescendantOne& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "mixedAbstractDescendantOne"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeMixedAbstractDescendantOneAsSequence(
+  return WriteElement(
+    "mixedAbstractDescendantOne",
     that,
-    writer
+    writer,
+    SerializeMixedAbstractDescendantOneAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "mixedAbstractDescendantOne"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeMixedAbstractDescendantOnePtrAsElement(
@@ -4622,20 +4714,15 @@ common::optional<xml_common::SerializationError> SerializeMixedAbstractDescendan
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "uniqueToAbstractDescendantTwo",
     that.unique_to_abstract_descendant_two(),
     writer,
     iteration::Property::kUniqueToAbstractDescendantTwo,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -4645,36 +4732,12 @@ common::optional<xml_common::SerializationError> SerializeMixedAbstractDescendan
   const types::IMixedAbstractDescendantTwo& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "mixedAbstractDescendantTwo"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeMixedAbstractDescendantTwoAsSequence(
+  return WriteElement(
+    "mixedAbstractDescendantTwo",
     that,
-    writer
+    writer,
+    SerializeMixedAbstractDescendantTwoAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "mixedAbstractDescendantTwo"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeMixedAbstractDescendantTwoPtrAsElement(
@@ -4699,20 +4762,15 @@ common::optional<xml_common::SerializationError> SerializeMixedConcreteWithDesce
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "someBaseProperty",
     that.some_base_property(),
     writer,
     iteration::Property::kSomeBaseProperty,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -4733,36 +4791,12 @@ common::optional<xml_common::SerializationError> SerializeConcreteMixedConcreteW
   const types::IMixedConcreteWithDescendants& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "mixedConcreteWithDescendants"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeMixedConcreteWithDescendantsAsSequence(
+  return WriteElement(
+    "mixedConcreteWithDescendants",
     that,
-    writer
+    writer,
+    SerializeMixedConcreteWithDescendantsAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "mixedConcreteWithDescendants"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeMixedConcreteWithDescendantsAsElement(
@@ -4818,31 +4852,26 @@ common::optional<xml_common::SerializationError> SerializeMixedConcreteWithDesce
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "someBaseProperty",
     that.some_base_property(),
     writer,
     iteration::Property::kSomeBaseProperty,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "someChildProperty",
     that.some_child_property(),
     writer,
     iteration::Property::kSomeChildProperty,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -4852,36 +4881,12 @@ common::optional<xml_common::SerializationError> SerializeMixedConcreteWithDesce
   const types::IMixedConcreteWithDescendantsChild& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "mixedConcreteWithDescendantsChild"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeMixedConcreteWithDescendantsChildAsSequence(
+  return WriteElement(
+    "mixedConcreteWithDescendantsChild",
     that,
-    writer
+    writer,
+    SerializeMixedConcreteWithDescendantsChildAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "mixedConcreteWithDescendantsChild"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeMixedConcreteWithDescendantsChildPtrAsElement(
@@ -4906,20 +4911,15 @@ common::optional<xml_common::SerializationError> SerializeMixedConcreteLeafAsSeq
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "uniqueToConcreteLeaf",
     that.unique_to_concrete_leaf(),
     writer,
     iteration::Property::kUniqueToConcreteLeaf,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -4929,36 +4929,12 @@ common::optional<xml_common::SerializationError> SerializeMixedConcreteLeafAsEle
   const types::IMixedConcreteLeaf& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "mixedConcreteLeaf"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeMixedConcreteLeafAsSequence(
+  return WriteElement(
+    "mixedConcreteLeaf",
     that,
-    writer
+    writer,
+    SerializeMixedConcreteLeafAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "mixedConcreteLeaf"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeMixedConcreteLeafPtrAsElement(
@@ -4983,20 +4959,15 @@ common::optional<xml_common::SerializationError> SerializeModelTypedFirstAsSeque
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "someProperty",
     that.some_property(),
     writer,
     iteration::Property::kSomeProperty,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -5006,36 +4977,12 @@ common::optional<xml_common::SerializationError> SerializeModelTypedFirstAsEleme
   const types::IModelTypedFirst& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "modelTypedFirst"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeModelTypedFirstAsSequence(
+  return WriteElement(
+    "modelTypedFirst",
     that,
-    writer
+    writer,
+    SerializeModelTypedFirstAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "modelTypedFirst"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeModelTypedFirstPtrAsElement(
@@ -5060,20 +5007,15 @@ common::optional<xml_common::SerializationError> SerializeModelTypedSecondAsSequ
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "someProperty",
     that.some_property(),
     writer,
     iteration::Property::kSomeProperty,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -5083,36 +5025,12 @@ common::optional<xml_common::SerializationError> SerializeModelTypedSecondAsElem
   const types::IModelTypedSecond& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "modelTypedSecond"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeModelTypedSecondAsSequence(
+  return WriteElement(
+    "modelTypedSecond",
     that,
-    writer
+    writer,
+    SerializeModelTypedSecondAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "modelTypedSecond"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeModelTypedSecondPtrAsElement(
@@ -5137,7 +5055,7 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "structuralProperty",
     that.structural_property(),
     writer,
@@ -5148,7 +5066,7 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "mixedProperty",
     that.mixed_property(),
     writer,
@@ -5159,7 +5077,7 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "modelTypedProperty",
     that.model_typed_property(),
     writer,
@@ -5170,122 +5088,83 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteListOfInstancesProperty(
     "listStructuralProperty",
     that.list_structural_property(),
     writer,
     iteration::Property::kListStructuralProperty,
-    [](
-      const std::vector<types::StructuralUnion>& a_list,
-      xml_common::SelfClosingWriter& a_writer
-    ) {
-      return SerializeListOfInstances(a_list, a_writer, SerializeStructuralUnionAsElement);
-    }
+    SerializeStructuralUnionAsElement
   );
   if (error.has_value()) {
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteListOfInstancesProperty(
     "listMixedProperty",
     that.list_mixed_property(),
     writer,
     iteration::Property::kListMixedProperty,
-    [](
-      const std::vector<types::MixedUnion>& a_list,
-      xml_common::SelfClosingWriter& a_writer
-    ) {
-      return SerializeListOfInstances(a_list, a_writer, SerializeMixedUnionAsElement);
-    }
+    SerializeMixedUnionAsElement
   );
   if (error.has_value()) {
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteListOfInstancesProperty(
     "listModelTypedProperty",
     that.list_model_typed_property(),
     writer,
     iteration::Property::kListModelTypedProperty,
-    [](
-      const std::vector<types::ModelTypedUnion>& a_list,
-      xml_common::SelfClosingWriter& a_writer
-    ) {
-      return SerializeListOfInstances(a_list, a_writer, SerializeModelTypedUnionAsElement);
-    }
+    SerializeModelTypedUnionAsElement
   );
   if (error.has_value()) {
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteTuple3Property(
     "tupleProperty",
     that.tuple_property(),
     writer,
     iteration::Property::kTupleProperty,
-    [](
-      const std::tuple<
-        types::StructuralUnion,
-        types::MixedUnion,
-        types::ModelTypedUnion
-      >& a_tuple,
-      xml_common::SelfClosingWriter& a_writer
-    ) {
-      return SerializeTuple3(
-        a_tuple,
-        a_writer,
-        SerializeStructuralUnionAsElement,
-        SerializeMixedUnionAsElement,
-        SerializeModelTypedUnionAsElement
-      );
-    }
+    SerializeStructuralUnionAsElement,
+    SerializeMixedUnionAsElement,
+    SerializeModelTypedUnionAsElement
   );
   if (error.has_value()) {
     return error;
   }
 
-  if (that.optional_structural_property().has_value()) {
-    error = SerializePropertyAsElement(
-      "optionalStructuralProperty",
-      *(that.optional_structural_property()),
-      writer,
-      iteration::Property::kOptionalStructuralProperty,
-      SerializeStructuralUnionAsElement
-    );
-    if (error.has_value()) {
-      return error;
-    }
+  error = WriteProperty(
+    "optionalStructuralProperty",
+    that.optional_structural_property(),
+    writer,
+    iteration::Property::kOptionalStructuralProperty,
+    SerializeStructuralUnionAsElement
+  );
+  if (error.has_value()) {
+    return error;
   }
 
-  if (that.optional_mixed_property().has_value()) {
-    error = SerializePropertyAsElement(
-      "optionalMixedProperty",
-      *(that.optional_mixed_property()),
-      writer,
-      iteration::Property::kOptionalMixedProperty,
-      SerializeMixedUnionAsElement
-    );
-    if (error.has_value()) {
-      return error;
-    }
+  error = WriteProperty(
+    "optionalMixedProperty",
+    that.optional_mixed_property(),
+    writer,
+    iteration::Property::kOptionalMixedProperty,
+    SerializeMixedUnionAsElement
+  );
+  if (error.has_value()) {
+    return error;
   }
 
-  if (that.optional_model_typed_property().has_value()) {
-    error = SerializePropertyAsElement(
-      "optionalModelTypedProperty",
-      *(that.optional_model_typed_property()),
-      writer,
-      iteration::Property::kOptionalModelTypedProperty,
-      SerializeModelTypedUnionAsElement
-    );
-    if (error.has_value()) {
-      return error;
-    }
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
+  error = WriteProperty(
+    "optionalModelTypedProperty",
+    that.optional_model_typed_property(),
+    writer,
+    iteration::Property::kOptionalModelTypedProperty,
+    SerializeModelTypedUnionAsElement
+  );
+  if (error.has_value()) {
+    return error;
   }
 
   return common::nullopt;
@@ -5295,36 +5174,12 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsElement(
   const types::ISomething& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "something"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeSomethingAsSequence(
+  return WriteElement(
+    "something",
     that,
-    writer
+    writer,
+    SerializeSomethingAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "something"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeSomethingPtrAsElement(
@@ -5424,6 +5279,95 @@ common::optional<xml_common::SerializationError> SerializeModelTypedUnionAsEleme
   };
 }
 
+common::optional<xml_common::SerializationError> WriteClass(
+  const types::IClass& that,
+  xml_common::SelfClosingWriter& writer
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kStructuralFirst:
+      return SerializeStructuralFirstAsElement(
+        dynamic_cast<
+          const types::IStructuralFirst&
+        >(that),
+        writer
+      );
+    case types::ModelType::kStructuralSecond:
+      return SerializeStructuralSecondAsElement(
+        dynamic_cast<
+          const types::IStructuralSecond&
+        >(that),
+        writer
+      );
+    case types::ModelType::kMixedAbstractDescendantOne:
+      return SerializeMixedAbstractDescendantOneAsElement(
+        dynamic_cast<
+          const types::IMixedAbstractDescendantOne&
+        >(that),
+        writer
+      );
+    case types::ModelType::kMixedAbstractDescendantTwo:
+      return SerializeMixedAbstractDescendantTwoAsElement(
+        dynamic_cast<
+          const types::IMixedAbstractDescendantTwo&
+        >(that),
+        writer
+      );
+    case types::ModelType::kMixedConcreteWithDescendants:
+      return SerializeMixedConcreteWithDescendantsAsElement(
+        dynamic_cast<
+          const types::IMixedConcreteWithDescendants&
+        >(that),
+        writer
+      );
+    case types::ModelType::kMixedConcreteWithDescendantsChild:
+      return SerializeMixedConcreteWithDescendantsChildAsElement(
+        dynamic_cast<
+          const types::IMixedConcreteWithDescendantsChild&
+        >(that),
+        writer
+      );
+    case types::ModelType::kMixedConcreteLeaf:
+      return SerializeMixedConcreteLeafAsElement(
+        dynamic_cast<
+          const types::IMixedConcreteLeaf&
+        >(that),
+        writer
+      );
+    case types::ModelType::kModelTypedFirst:
+      return SerializeModelTypedFirstAsElement(
+        dynamic_cast<
+          const types::IModelTypedFirst&
+        >(that),
+        writer
+      );
+    case types::ModelType::kModelTypedSecond:
+      return SerializeModelTypedSecondAsElement(
+        dynamic_cast<
+          const types::IModelTypedSecond&
+        >(that),
+        writer
+      );
+    case types::ModelType::kSomething:
+      return SerializeSomethingAsElement(
+        dynamic_cast<
+          const types::ISomething&
+        >(that),
+        writer
+      );
+    default:
+      throw std::invalid_argument(
+        common::Concat(
+          "Invalid model type: ",
+          stringification::to_string(that.model_type())
+        )
+      );
+  };
+}
+
 void Serialize(
   const types::IClass& that,
   const WritingOptions& options,
@@ -5438,362 +5382,21 @@ void Serialize(
     }
   }
 
+  // NOTE (mristin):
+  // The namespace is declared on the root element and on no other one, so we
+  // hand it to the writer instead of asking at every single element whether it
+  // is the root. The writer takes the attributes at the very first element and
+  // leaves nothing behind.
   xml_common::SelfClosingWriter writer(
     os,
-    options.prefix
+    options.write_namespace
+      ? " xmlns=\"https://dummy.com\""
+      : ""
   );
 
-  common::optional<xml_common::SerializationError> error;
-
-  // NOTE (mristin):
-  // Instead of using `Serialize*AsElement`, we write the root XML element
-  // in this functions so that we check for the XML namespace only once, namely
-  // here. Otherwise, we would have a condition check in <em>every</em> nested
-  // `Serialize*AsElement` which could cause a significant efficiency hit.
-
-  // NOTE (mristin):
-  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
-  // we would have used static casts.
-
-  switch (that.model_type()) {
-    case types::ModelType::kStructuralFirst:
-      if (options.write_namespace) {
-        os << (
-          "<structuralFirst "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<structuralFirst>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeStructuralFirstAsSequence(
-        dynamic_cast<
-          const types::IStructuralFirst&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</structuralFirst>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kStructuralSecond:
-      if (options.write_namespace) {
-        os << (
-          "<structuralSecond "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<structuralSecond>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeStructuralSecondAsSequence(
-        dynamic_cast<
-          const types::IStructuralSecond&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</structuralSecond>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kMixedAbstractDescendantOne:
-      if (options.write_namespace) {
-        os << (
-          "<mixedAbstractDescendantOne "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<mixedAbstractDescendantOne>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeMixedAbstractDescendantOneAsSequence(
-        dynamic_cast<
-          const types::IMixedAbstractDescendantOne&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</mixedAbstractDescendantOne>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kMixedAbstractDescendantTwo:
-      if (options.write_namespace) {
-        os << (
-          "<mixedAbstractDescendantTwo "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<mixedAbstractDescendantTwo>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeMixedAbstractDescendantTwoAsSequence(
-        dynamic_cast<
-          const types::IMixedAbstractDescendantTwo&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</mixedAbstractDescendantTwo>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kMixedConcreteWithDescendants:
-      if (options.write_namespace) {
-        os << (
-          "<mixedConcreteWithDescendants "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<mixedConcreteWithDescendants>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeMixedConcreteWithDescendantsAsSequence(
-        dynamic_cast<
-          const types::IMixedConcreteWithDescendants&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</mixedConcreteWithDescendants>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kMixedConcreteWithDescendantsChild:
-      if (options.write_namespace) {
-        os << (
-          "<mixedConcreteWithDescendantsChild "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<mixedConcreteWithDescendantsChild>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeMixedConcreteWithDescendantsChildAsSequence(
-        dynamic_cast<
-          const types::IMixedConcreteWithDescendantsChild&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</mixedConcreteWithDescendantsChild>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kMixedConcreteLeaf:
-      if (options.write_namespace) {
-        os << (
-          "<mixedConcreteLeaf "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<mixedConcreteLeaf>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeMixedConcreteLeafAsSequence(
-        dynamic_cast<
-          const types::IMixedConcreteLeaf&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</mixedConcreteLeaf>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kModelTypedFirst:
-      if (options.write_namespace) {
-        os << (
-          "<modelTypedFirst "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<modelTypedFirst>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeModelTypedFirstAsSequence(
-        dynamic_cast<
-          const types::IModelTypedFirst&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</modelTypedFirst>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kModelTypedSecond:
-      if (options.write_namespace) {
-        os << (
-          "<modelTypedSecond "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<modelTypedSecond>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeModelTypedSecondAsSequence(
-        dynamic_cast<
-          const types::IModelTypedSecond&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</modelTypedSecond>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kSomething:
-      if (options.write_namespace) {
-        os << (
-          "<something "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<something>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeSomethingAsSequence(
-        dynamic_cast<
-          const types::ISomething&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</something>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    default:
-      throw std::invalid_argument(
-        common::Concat(
-          "Invalid model type: ",
-          stringification::to_string(that.model_type())
-        )
-      );
-  }
+  common::optional<xml_common::SerializationError> error(
+    WriteClass(that, writer)
+  );
 
   if (error.has_value()) {
     throw SerializationException(

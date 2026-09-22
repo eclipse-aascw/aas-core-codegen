@@ -1,7 +1,7 @@
 """Generate code for XML de/serialization."""
 
 import io
-from typing import List, Sequence, Final, Mapping
+from typing import List, Optional, Sequence, Final, Mapping
 
 from icontract import ensure, require
 
@@ -234,16 +234,6 @@ class SerializationException : public std::exception {{
  *
  * We selected the defaults so that they can be used when you serialize to
  * a file.
- *
- * Usually, you want to write the namespace at the root element, and no
- * prefixes are written in the XML names. However, if you are embedding
- * the XML in a larger XML structure, you specify the namespace
- * aliases and then use them as XML name prefixes. The prefix usually ends
- * with a full colon (`:`).
- *
- * We can not imagine in what situation you would want to write both
- * the namespace <em>and</em> the prefix. Nevertheless, we allow for that
- * possibility and do not throw any exception if you specify the both.
  */
 struct WritingOptions {{
 {I}/**
@@ -256,11 +246,6 @@ struct WritingOptions {{
 {I} * set as the XML attribute `xmlns`.
 {I} */
 {I}bool write_namespace = true;
-
-{I}/**
-{I} * The prefix is prepended to the name of each XML element.
-{I} */
-{I} std::string prefix = "";
 }};  // struct WritingOptions"""
         ),
         Stripped(
@@ -1438,7 +1423,7 @@ def _generate_wrap_deserialized_as_variant_function() -> Stripped:
     This shape is identical for every implementer of every union (only the
     types differ), so we factor it out into a single generic function
     instead of unrolling it at each dispatch case, mirroring how
-    ``DeserializeTupleN``/``SerializeTupleN`` factor out the per-item
+    ``DeserializeTupleN``/``WriteTupleNProperty`` factor out the per-item
     boilerplate for tuples.
     """
     return Stripped(
@@ -2470,7 +2455,7 @@ def _xml_json_deserialize_function_for(
         )
 
 
-def _xml_json_serialize_function_for(
+def _xml_json_write_function_for(
     type_anno: intermediate.TypeAnnotationUnion,
 ) -> Stripped:
     """
@@ -2479,14 +2464,14 @@ def _xml_json_serialize_function_for(
     Each of these functions wraps the corresponding ``xml_rpc`` function,
     converting a caught ``xml_rpc::SerializationError`` into this module's
     own ``xml_common::SerializationError`` -- see
-    :py:func:`_generate_serialize_json_to_xml_rpc_implementation`.
+    :py:func:`_generate_write_json_to_xml_rpc_implementation`.
     """
     if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
-        return Stripped("SerializeJsonValueToXmlRpc")
+        return Stripped("WriteJsonValueToXmlRpc")
     elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
-        return Stripped("SerializeJsonArrayToXmlRpc")
+        return Stripped("WriteJsonArrayToXmlRpc")
     elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
-        return Stripped("SerializeJsonObjectToXmlRpc")
+        return Stripped("WriteJsonObjectToXmlRpc")
     else:
         raise AssertionError(
             f"Expected a JSON-able type annotation, but got: {type_anno}"
@@ -2620,12 +2605,12 @@ std::pair<
     ]
 
 
-def _generate_serialize_json_to_xml_rpc_implementation() -> List[Stripped]:
+def _generate_write_json_to_xml_rpc_implementation() -> List[Stripped]:
     """Generate the ``xml_rpc``-wrapping JSON-able serialization functions."""
     return [
         Stripped(
             f"""\
-common::optional<xml_common::SerializationError> SerializeJsonValueToXmlRpc(
+common::optional<xml_common::SerializationError> WriteJsonValueToXmlRpc(
 {I}const nlohmann::json& value,
 {I}xml_common::SelfClosingWriter& writer
 ) {{
@@ -2644,7 +2629,7 @@ common::optional<xml_common::SerializationError> SerializeJsonValueToXmlRpc(
         ),
         Stripped(
             f"""\
-common::optional<xml_common::SerializationError> SerializeJsonArrayToXmlRpc(
+common::optional<xml_common::SerializationError> WriteJsonArrayToXmlRpc(
 {I}const nlohmann::json& value,
 {I}xml_common::SelfClosingWriter& writer
 ) {{
@@ -2663,7 +2648,7 @@ common::optional<xml_common::SerializationError> SerializeJsonArrayToXmlRpc(
         ),
         Stripped(
             f"""\
-common::optional<xml_common::SerializationError> SerializeJsonObjectToXmlRpc(
+common::optional<xml_common::SerializationError> WriteJsonObjectToXmlRpc(
 {I}const nlohmann::json& value,
 {I}xml_common::SelfClosingWriter& writer
 ) {{
@@ -3487,11 +3472,12 @@ const iteration::Path& SerializationException::path() const noexcept {{
     ]
 
 
-def _generate_serialize_primitives() -> List[Stripped]:
+def _generate_write_primitives() -> List[Stripped]:
+    """Generate the writers of the primitive values as the content of an element."""
     return [
         Stripped(
             f"""\
-common::optional<xml_common::SerializationError> SerializeBool(
+common::optional<xml_common::SerializationError> WriteBool(
 {I}bool value,
 {I}xml_common::SelfClosingWriter& writer
 ) {{
@@ -3505,7 +3491,7 @@ common::optional<xml_common::SerializationError> SerializeBool(
         ),
         Stripped(
             f"""\
-common::optional<xml_common::SerializationError> SerializeInt64(
+common::optional<xml_common::SerializationError> WriteInt64(
 {I}int64_t value,
 {I}xml_common::SelfClosingWriter& writer
 ) {{
@@ -3519,7 +3505,7 @@ common::optional<xml_common::SerializationError> SerializeInt64(
         ),
         Stripped(
             f"""\
-common::optional<xml_common::SerializationError> SerializeDouble(
+common::optional<xml_common::SerializationError> WriteDouble(
 {I}double value,
 {I}xml_common::SelfClosingWriter& writer
 ) {{
@@ -3533,7 +3519,7 @@ common::optional<xml_common::SerializationError> SerializeDouble(
         ),
         Stripped(
             f"""\
-common::optional<xml_common::SerializationError> SerializeWstring(
+common::optional<xml_common::SerializationError> WriteWstring(
 {I}const std::wstring& value,
 {I}xml_common::SelfClosingWriter& writer
 ) {{
@@ -3547,7 +3533,7 @@ common::optional<xml_common::SerializationError> SerializeWstring(
         ),
         Stripped(
             f"""\
-common::optional<xml_common::SerializationError> SerializeByteArray(
+common::optional<xml_common::SerializationError> WriteByteArray(
 {I}const std::vector<std::uint8_t>& value,
 {I}xml_common::SelfClosingWriter& writer
 ) {{
@@ -3562,65 +3548,59 @@ common::optional<xml_common::SerializationError> SerializeByteArray(
     ]
 
 
-_PRIMITIVE_TYPE_TO_SERIALIZE = {
-    intermediate.PrimitiveType.BOOL: "SerializeBool",
-    intermediate.PrimitiveType.INT: "SerializeInt64",
-    intermediate.PrimitiveType.FLOAT: "SerializeDouble",
-    intermediate.PrimitiveType.STR: "SerializeWstring",
-    intermediate.PrimitiveType.BYTEARRAY: "SerializeByteArray",
+_PRIMITIVE_TYPE_TO_WRITE = {
+    intermediate.PrimitiveType.BOOL: "WriteBool",
+    intermediate.PrimitiveType.INT: "WriteInt64",
+    intermediate.PrimitiveType.FLOAT: "WriteDouble",
+    intermediate.PrimitiveType.STR: "WriteWstring",
+    intermediate.PrimitiveType.BYTEARRAY: "WriteByteArray",
 }
 assert all(
-    primitive_type in _PRIMITIVE_TYPE_TO_SERIALIZE
+    primitive_type in _PRIMITIVE_TYPE_TO_WRITE
     for primitive_type in intermediate.PrimitiveType
 )
 
 
-def _generate_serialize_list_of_v_elements() -> Stripped:
-    """Generate the generic function to serialize lists of <v> elements."""
+def _generate_write_element() -> Stripped:
+    """Generate the generic function to write a value as a whole XML element."""
     return Stripped(
         f"""\
 /**
- * Serialize a list of items enclosed in <v> elements.
+ * \\brief Write \\p value as an XML element named \\p name.
+ *
+ * This is the only place where an element is framed. The element of a class,
+ * the `<v>` of a list item and the positional `<v1>`, `<v2>`, <i>etc.</i> of
+ * a tuple item differ only in the name and in the content, so all of them
+ * come through here.
+ *
+ * \\param name of the XML element
+ * \\param value to be written between the tags
+ * \\param writer to write to
+ * \\param write_content writes \\p value between the tags
+ * \\return an error, if any
  */
-template <typename T, typename SerializeT>
-common::optional<xml_common::SerializationError> SerializeListOfVElements(
-{I}const std::vector<T>& list,
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteElement(
+{I}const char* name,
+{I}const T& value,
 {I}xml_common::SelfClosingWriter& writer,
-{I}const SerializeT& serialize_item
+{I}const WriteT& write_content
 ) {{
-{I}for (size_t i = 0; i < list.size(); ++i) {{
-{II}writer.StartElement("v");
-{II}if (writer.error().has_value()) {{
-{III}common::optional<xml_common::SerializationError>&& error = writer.move_error();
-{III}error->path.segments.emplace_front(
-{IIII}common::make_unique<iteration::IndexSegment>(i)
-{III});
+{I}writer.StartElement(name);
+{I}if (writer.error().has_value()) {{
+{II}return writer.move_error();
+{I}}}
 
-{III}return error;
-{II}}}
+{I}common::optional<xml_common::SerializationError> error(
+{II}write_content(value, writer)
+{I});
+{I}if (error.has_value()) {{
+{II}return error;
+{I}}}
 
-{II}common::optional<xml_common::SerializationError> error = serialize_item(
-{III}list[i],
-{III}writer
-{II});
-
-{II}if (error.has_value()) {{
-{III}error->path.segments.emplace_front(
-{IIII}common::make_unique<iteration::IndexSegment>(i)
-{III});
-
-{III}return error;
-{II}}}
-
-{II}writer.StopElement("v");
-{II}if (writer.error().has_value()) {{
-{III}common::optional<xml_common::SerializationError>&& error = writer.move_error();
-{III}error->path.segments.emplace_front(
-{IIII}common::make_unique<iteration::IndexSegment>(i)
-{III});
-
-{III}return error;
-{II}}}
+{I}writer.StopElement(name);
+{I}if (writer.error().has_value()) {{
+{II}return writer.move_error();
 {I}}}
 
 {I}return common::nullopt;
@@ -3628,107 +3608,401 @@ common::optional<xml_common::SerializationError> SerializeListOfVElements(
     )
 
 
-def _generate_serialize_list_of_instances() -> Stripped:
-    """Generate the generic function to serialize lists of instances."""
-    return Stripped(
-        f"""\
-/**
- * Serialize a list of instances.
- */
-template <typename T, typename SerializeT>
-common::optional<xml_common::SerializationError> SerializeListOfInstances(
-{I}const std::vector<T>& list,
-{I}xml_common::SelfClosingWriter& writer,
-{I}const SerializeT& serialize_item
-) {{
-{I}for (size_t i = 0; i < list.size(); ++i) {{
-{II}common::optional<xml_common::SerializationError> error = serialize_item(
-{III}list[i],
-{III}writer
-{II});
-
-{II}if (error.has_value()) {{
-{III}error->path.segments.emplace_front(
-{IIII}common::make_unique<iteration::IndexSegment>(i)
-{III});
-
-{III}return error;
-{II}}}
-{I}}}
-
-{I}return common::nullopt;
-}}"""
-    )
-
-
-def _generate_serialize_tuple_function(arity: int) -> Stripped:
+def _generate_write_property() -> List[Stripped]:
     """
-    Generate a generic function to serialize a tuple of the given ``arity``.
+    Generate the generic functions to write a property as an XML element.
 
-    Each positional item is serialized by its own ``serialize_item{i}``
-    callable, which is expected to write its own opening and closing tags (if
-    any) -- mirroring how :py:func:`_generate_serialize_list_of_instances`
-    delegates the actual item serialization to a caller-supplied callable.
+    The overloads take the value exactly as the getter of the property returns
+    it, so that the caller needs neither to unwrap nor to ask whether
+    the property was given. Mind the order: an overload calls the ones above
+    it, and the call is not dependent on the argument-dependent lookup, so
+    the ones it calls have to be declared before it.
+    """
+    return [
+        Stripped(
+            f"""\
+/**
+ * \\brief Write \\p value as the XML element of \\p property.
+ *
+ * This is \\ref WriteElement plus the one thing which a property knows and
+ * nothing beneath it does -- which property of the instance it is -- so that
+ * the path of the error is built as the stack unwinds.
+ *
+ * \\param name of the XML element
+ * \\param value of the property
+ * \\param writer to write to
+ * \\param property which the element stands for, for the path of the error
+ * \\param write_content writes \\p value between the tags
+ * \\return an error, if any
+ */
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteProperty(
+{I}const char* name,
+{I}const T& value,
+{I}xml_common::SelfClosingWriter& writer,
+{I}iteration::Property property,
+{I}const WriteT& write_content
+) {{
+{I}common::optional<xml_common::SerializationError> error(
+{II}WriteElement(name, value, writer, write_content)
+{I});
+
+{I}if (error.has_value()) {{
+{II}error->path.segments.emplace_front(
+{III}common::make_unique<iteration::PropertySegment>(property)
+{II});
+{I}}}
+
+{I}return error;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * \\brief Write the instance behind \\p value as the XML element of
+ * \\p property.
+ *
+ * See the overload which takes the value itself for what is written and
+ * for the path of the error.
+ */
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteProperty(
+{I}const char* name,
+{I}const std::shared_ptr<T>& value,
+{I}xml_common::SelfClosingWriter& writer,
+{I}iteration::Property property,
+{I}const WriteT& write_content
+) {{
+{I}return WriteProperty(name, *value, writer, property, write_content);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * \\brief Write \\p value as the XML element of \\p property, or nothing at
+ * all if the property has not been given.
+ *
+ * See the overload which takes the value itself for what is written and
+ * for the path of the error.
+ */
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteProperty(
+{I}const char* name,
+{I}const common::optional<T>& value,
+{I}xml_common::SelfClosingWriter& writer,
+{I}iteration::Property property,
+{I}const WriteT& write_content
+) {{
+{I}if (!value.has_value()) {{
+{II}return common::nullopt;
+{I}}}
+
+{I}return WriteProperty(name, *value, writer, property, write_content);
+}}"""
+        ),
+    ]
+
+
+def _generate_write_list_of_instances_property() -> List[Stripped]:
+    """Generate the generic functions to write a property holding instances."""
+    return [
+        Stripped(
+            f"""\
+/**
+ * \\brief Write \\p list as the XML element of \\p property, every item as
+ * an XML element of its own.
+ *
+ * An instance is self-describing -- the name of its XML element is its model
+ * type -- so an item needs no positional tag here. A value encoded as text
+ * does need one, which is why a list of values is written by a function of
+ * its own instead of by this one with the name of the item passed in.
+ *
+ * \\param name of the XML element
+ * \\param list of the instances
+ * \\param writer to write to
+ * \\param property which the element stands for, for the path of the error
+ * \\param write_item writes an item as an XML element of its own
+ * \\return an error, if any
+ */
+template <typename T, typename WriteItemT>
+common::optional<xml_common::SerializationError> WriteListOfInstancesProperty(
+{I}const char* name,
+{I}const std::vector<T>& list,
+{I}xml_common::SelfClosingWriter& writer,
+{I}iteration::Property property,
+{I}const WriteItemT& write_item
+) {{
+{I}return WriteProperty(
+{II}name,
+{II}list,
+{II}writer,
+{II}property,
+{II}[&write_item](
+{III}const std::vector<T>& a_list,
+{III}xml_common::SelfClosingWriter& a_writer
+{II}) -> common::optional<xml_common::SerializationError> {{
+{III}for (size_t i = 0; i < a_list.size(); ++i) {{
+{IIII}common::optional<xml_common::SerializationError> error(
+{IIIII}write_item(a_list[i], a_writer)
+{IIII});
+
+{IIII}if (error.has_value()) {{
+{IIIII}error->path.segments.emplace_front(
+{IIIIII}common::make_unique<iteration::IndexSegment>(i)
+{IIIII});
+
+{IIIII}return error;
+{IIII}}}
+{III}}}
+
+{III}return common::nullopt;
+{II}}}
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * \\brief Write \\p list as the XML element of \\p property, or nothing at all
+ * if the property has not been given.
+ *
+ * See the overload which takes the list itself for what is written and
+ * for the path of the error.
+ */
+template <typename T, typename WriteItemT>
+common::optional<xml_common::SerializationError> WriteListOfInstancesProperty(
+{I}const char* name,
+{I}const common::optional<std::vector<T> >& list,
+{I}xml_common::SelfClosingWriter& writer,
+{I}iteration::Property property,
+{I}const WriteItemT& write_item
+) {{
+{I}if (!list.has_value()) {{
+{II}return common::nullopt;
+{I}}}
+
+{I}return WriteListOfInstancesProperty(
+{II}name,
+{II}*list,
+{II}writer,
+{II}property,
+{II}write_item
+{I});
+}}"""
+        ),
+    ]
+
+
+def _generate_write_list_of_values_property() -> List[Stripped]:
+    """Generate the generic functions to write a property holding text values."""
+    return [
+        Stripped(
+            f"""\
+/**
+ * \\brief Write \\p list as the XML element of \\p property, every item
+ * wrapped in a `<v>` element of its own.
+ *
+ * A value encoded as text says nothing about itself, so it is the position in
+ * the list which names it. A list of instances needs no such tag, and is
+ * written by a function of its own.
+ *
+ * \\param name of the XML element
+ * \\param list of the values
+ * \\param writer to write to
+ * \\param property which the element stands for, for the path of the error
+ * \\param write_value writes a value between the tags of its `<v>`
+ * \\return an error, if any
+ */
+template <typename T, typename WriteValueT>
+common::optional<xml_common::SerializationError> WriteListOfValuesProperty(
+{I}const char* name,
+{I}const std::vector<T>& list,
+{I}xml_common::SelfClosingWriter& writer,
+{I}iteration::Property property,
+{I}const WriteValueT& write_value
+) {{
+{I}return WriteProperty(
+{II}name,
+{II}list,
+{II}writer,
+{II}property,
+{II}[&write_value](
+{III}const std::vector<T>& a_list,
+{III}xml_common::SelfClosingWriter& a_writer
+{II}) -> common::optional<xml_common::SerializationError> {{
+{III}for (size_t i = 0; i < a_list.size(); ++i) {{
+{IIII}common::optional<xml_common::SerializationError> error(
+{IIIII}WriteElement("v", a_list[i], a_writer, write_value)
+{IIII});
+
+{IIII}if (error.has_value()) {{
+{IIIII}error->path.segments.emplace_front(
+{IIIIII}common::make_unique<iteration::IndexSegment>(i)
+{IIIII});
+
+{IIIII}return error;
+{IIII}}}
+{III}}}
+
+{III}return common::nullopt;
+{II}}}
+{I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * \\brief Write \\p list as the XML element of \\p property, or nothing at all
+ * if the property has not been given.
+ *
+ * See the overload which takes the list itself for what is written and
+ * for the path of the error.
+ */
+template <typename T, typename WriteValueT>
+common::optional<xml_common::SerializationError> WriteListOfValuesProperty(
+{I}const char* name,
+{I}const common::optional<std::vector<T> >& list,
+{I}xml_common::SelfClosingWriter& writer,
+{I}iteration::Property property,
+{I}const WriteValueT& write_value
+) {{
+{I}if (!list.has_value()) {{
+{II}return common::nullopt;
+{I}}}
+
+{I}return WriteListOfValuesProperty(
+{II}name,
+{II}*list,
+{II}writer,
+{II}property,
+{II}write_value
+{I});
+}}"""
+        ),
+    ]
+
+
+def _generate_write_tuple_property(arity: int) -> List[Stripped]:
+    """
+    Generate the generic functions to write a tuple-valued property.
+
+    A tuple is heterogeneous and of a fixed length, so every item is written by
+    a writer of its own, which the caller supplies. An item which writes no
+    element of its own is wrapped in its positional ``<v1>``, ``<v2>``,
+    *etc.* by the caller as well, since only the caller knows which items those
+    are.
     """
     assert arity > 0
 
+    function_name = f"WriteTuple{arity}Property"
+
     template_params_joined = ",\n".join(
         [f"typename T{i}" for i in range(arity)]
-        + [f"typename SerializeT{i}" for i in range(arity)]
+        + [f"typename WriteT{i}" for i in range(arity)]
     )
 
-    item_types_joined = ",\n".join(f"T{i}" for i in range(arity))
+    tuple_type = "std::tuple<{}>".format(", ".join(f"T{i}" for i in range(arity)))
 
-    parameters = ",\n".join(
-        f"const SerializeT{i}& serialize_item{i}" for i in range(arity)
+    parameters_joined = ",\n".join(
+        f"const WriteT{i}& write_item{i}" for i in range(arity)
     )
 
-    item_stmts = []  # type: List[Stripped]
-    for i in range(arity):
-        item_stmts.append(
-            Stripped(
-                f"""\
-error = serialize_item{i}(
-{I}std::get<{i}>(value),
-{I}writer
-);
+    captures_joined = ", ".join(f"&write_item{i}" for i in range(arity))
+
+    forwarded_joined = ",\n".join(f"write_item{i}" for i in range(arity))
+
+    item_stmts_joined = "\n\n".join(
+        f"""\
+error = write_item{i}(std::get<{i}>(a_value), a_writer);
 if (error.has_value()) {{
 {I}error->path.segments.emplace_front(
-{II}common::make_unique<iteration::IndexSegment>(
-{III}{i}
-{II})
+{II}common::make_unique<iteration::IndexSegment>({i})
 {I});
+
 {I}return error;
 }}"""
-            )
-        )
+        for i in range(arity)
+    )
 
-    item_stmts_joined = "\n\n".join(item_stmts)
+    item_params_joined = "\n".join(
+        f" * \\param write_item{i} writes the item at {i}" for i in range(arity)
+    )
 
-    function_name = f"SerializeTuple{arity}"
-
-    return Stripped(
-        f"""\
+    return [
+        Stripped(
+            f"""\
 /**
- * Serialize a tuple of {arity} item(s).
+ * \\brief Write \\p value as the XML element of \\p property, every item with
+ * the writer of its own.
+ *
+ * \\param name of the XML element
+ * \\param value of the property
+ * \\param writer to write to
+ * \\param property which the element stands for, for the path of the error
+{item_params_joined}
+ * \\return an error, if any
  */
 template <
 {I}{indent_but_first_line(template_params_joined, I)}
 >
 common::optional<xml_common::SerializationError> {function_name}(
-{I}const std::tuple<
-{II}{indent_but_first_line(item_types_joined, II)}
-{I}>& value,
+{I}const char* name,
+{I}const {tuple_type}& value,
 {I}xml_common::SelfClosingWriter& writer,
-{I}{indent_but_first_line(parameters, I)}
+{I}iteration::Property property,
+{I}{indent_but_first_line(parameters_joined, I)}
 ) {{
-{I}common::optional<xml_common::SerializationError> error;
+{I}return WriteProperty(
+{II}name,
+{II}value,
+{II}writer,
+{II}property,
+{II}[{captures_joined}](
+{III}const {tuple_type}& a_value,
+{III}xml_common::SelfClosingWriter& a_writer
+{II}) -> common::optional<xml_common::SerializationError> {{
+{III}common::optional<xml_common::SerializationError> error;
 
-{I}{indent_but_first_line(item_stmts_joined, I)}
+{III}{indent_but_first_line(item_stmts_joined, III)}
 
-{I}return common::nullopt;
+{III}return common::nullopt;
+{II}}}
+{I});
 }}"""
-    )
+        ),
+        Stripped(
+            f"""\
+/**
+ * \\brief Write \\p value as the XML element of \\p property, or nothing at
+ * all if the property has not been given.
+ *
+ * See the overload which takes the tuple itself for what is written and
+ * for the path of the error.
+ */
+template <
+{I}{indent_but_first_line(template_params_joined, I)}
+>
+common::optional<xml_common::SerializationError> {function_name}(
+{I}const char* name,
+{I}const common::optional<{tuple_type} >& value,
+{I}xml_common::SelfClosingWriter& writer,
+{I}iteration::Property property,
+{I}{indent_but_first_line(parameters_joined, I)}
+) {{
+{I}if (!value.has_value()) {{
+{II}return common::nullopt;
+{I}}}
+
+{I}return {function_name}(
+{II}name,
+{II}*value,
+{II}writer,
+{II}property,
+{II}{indent_but_first_line(forwarded_joined, II)}
+{I});
+}}"""
+        ),
+    ]
 
 
 def _generate_serialize_enumeration(enumeration: intermediate.Enumeration) -> Stripped:
@@ -3762,169 +4036,136 @@ common::optional<xml_common::SerializationError> {function_name}(
     )
 
 
-def _generate_serialize_property_as_element() -> Stripped:
-    """
-    Generate the generic function to serialize a property wrapped in its own
-    named XML element.
-
-    This factors out the ``StartElement``/serialize-call/``StopElement``
-    skeleton shared by every property regardless of kind (primitive, enum,
-    class or list), so that :py:func:`_generate_serialize_property` only
-    needs to supply the element name, the value and a value-specific
-    ``serialize_value`` callable.
-    """
-    return Stripped(
-        f"""\
-/**
- * Serialize a property wrapped in its own named XML element.
- */
-template <typename T, typename SerializeT>
-common::optional<xml_common::SerializationError> SerializePropertyAsElement(
-{I}const std::string& name,
-{I}const T& value,
-{I}xml_common::SelfClosingWriter& writer,
-{I}iteration::Property property,
-{I}const SerializeT& serialize_value
-) {{
-{I}writer.StartElement(name);
-{I}if (writer.error().has_value()) {{
-{II}return writer.move_error();
-{I}}}
-
-{I}common::optional<xml_common::SerializationError> error = serialize_value(value, writer);
-{I}if (error.has_value()) {{
-{II}error->path.segments.emplace_front(
-{III}common::make_unique<iteration::PropertySegment>(property)
-{II});
-{II}return error;
-{I}}}
-
-{I}writer.StopElement(name);
-{I}if (writer.error().has_value()) {{
-{II}error = writer.move_error();
-{II}error->path.segments.emplace_front(
-{III}common::make_unique<iteration::PropertySegment>(property)
-{II});
-{II}return error;
-{I}}}
-
-{I}return common::nullopt;
-}}"""
-    )
-
-
-def _xml_serialize_list_value_expr(
-    item_type_annotation: intermediate.TypeAnnotationUnion,
+def _xml_write_content_expr(
+    type_anno: intermediate.AtomicTypeAnnotation,
 ) -> Stripped:
     """
-    Build the ``(list, writer) -> optional<xml_common::SerializationError>`` callable for
-    a list-typed property, to be plugged into ``SerializePropertyAsElement``.
+    Generate the expression of the writer which writes an atomic value.
+
+    The writer writes the value where the writer already stands, and frames no
+    element of its own -- save for a class with concrete descendants and
+    a named union, which have to write the element telling which of them it is.
     """
-    assert isinstance(item_type_annotation, intermediate.AtomicTypeAnnotationAsTuple), (
-        "List items are restricted to atomic types (primitives, "
-        "constrained primitives, classes, enumerations and JSON-able values), "
-        "so no nested optionals, lists or tuples are expected here."
-    )
+    primitive_type = intermediate.try_primitive_type(type_anno)
 
-    item_type = cpp_common.generate_type(
-        type_annotation=item_type_annotation, types_namespace=cpp_common.TYPES_NAMESPACE
-    )
+    if primitive_type is not None:
+        return Stripped(_PRIMITIVE_TYPE_TO_WRITE[primitive_type])
 
-    items_primitive_type = intermediate.try_primitive_type(item_type_annotation)
+    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+        raise AssertionError("Expected to handle this case before")
 
-    list_helper: str
-    serialize_item: str
+    elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+        if isinstance(type_anno.our_type, intermediate.Enumeration):
+            return Stripped(
+                cpp_naming.function_name(
+                    Identifier(f"serialize_{type_anno.our_type.name}")
+                )
+            )
 
-    if items_primitive_type is not None:
-        serialize_item = _PRIMITIVE_TYPE_TO_SERIALIZE[items_primitive_type]
-        list_helper = "SerializeListOfVElements"
-
-    else:
-        if isinstance(item_type_annotation, intermediate.PrimitiveTypeAnnotation):
+        elif isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive):
             raise AssertionError("Expected to handle this case before")
 
-        elif isinstance(item_type_annotation, intermediate.OurTypeAnnotation):
-            if isinstance(item_type_annotation.our_type, intermediate.Enumeration):
-                serialize_item = cpp_naming.function_name(
-                    Identifier(f"serialize_{item_type_annotation.our_type.name}")
-                )
-                list_helper = "SerializeListOfVElements"
-
-            elif isinstance(
-                item_type_annotation.our_type, intermediate.ConstrainedPrimitive
-            ):
-                raise AssertionError("Expected to handle this case before")
-
-            elif isinstance(
-                item_type_annotation.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
-            ):
-                serialize_item = cpp_naming.function_name(
-                    Identifier(
-                        f"serialize_{item_type_annotation.our_type.name}_ptr_as_element"
-                    )
-                )
-                list_helper = "SerializeListOfInstances"
-
-            elif isinstance(item_type_annotation.our_type, intermediate.NamedUnion):
-                # NOTE (mristin):
-                # A named union has no ``*PtrAsElement`` counterpart -- its own
-                # value is already a ``std::variant``, not a pointer -- so we
-                # reference its ``*AsElement`` function directly.
-                serialize_item = cpp_naming.function_name(
-                    Identifier(
-                        f"serialize_{item_type_annotation.our_type.name}_as_element"
-                    )
-                )
-                list_helper = "SerializeListOfInstances"
-
-            else:
-                # noinspection PyTypeChecker
-                assert_never(item_type_annotation.our_type)
-
         elif isinstance(
-            item_type_annotation,
-            (
-                intermediate.JsonValueTypeAnnotation,
-                intermediate.JsonArrayTypeAnnotation,
-                intermediate.JsonObjectTypeAnnotation,
-            ),
+            type_anno.our_type,
+            (intermediate.AbstractClass, intermediate.ConcreteClass),
         ):
-            serialize_item = _xml_json_serialize_function_for(item_type_annotation)
-            list_helper = "SerializeListOfVElements"
+            if len(type_anno.our_type.concrete_descendants) == 0:
+                return Stripped(
+                    cpp_naming.function_name(
+                        Identifier(f"serialize_{type_anno.our_type.name}_as_sequence")
+                    )
+                )
+
+            return Stripped(
+                cpp_naming.function_name(
+                    Identifier(f"serialize_{type_anno.our_type.name}_as_element")
+                )
+            )
+
+        elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union always writes the element which tells which of its
+            # implementers it is, however few they are.
+            return Stripped(
+                cpp_naming.function_name(
+                    Identifier(f"serialize_{type_anno.our_type.name}_as_element")
+                )
+            )
 
         else:
             # noinspection PyTypeChecker
-            assert_never(item_type_annotation)
+            assert_never(type_anno.our_type)
+
+    elif isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        return _xml_json_write_function_for(type_anno)
+
+    else:
+        # noinspection PyTypeChecker
+        assert_never(type_anno)
+
+    raise AssertionError("Should not have gotten here")
+
+
+def _xml_writes_own_element(
+    type_anno: intermediate.AtomicTypeAnnotation,
+) -> bool:
+    """
+    Check whether a value of ``type_anno`` writes the element around itself.
+
+    An instance and a named union are self-describing -- the name of their XML
+    element is their model type -- while everything else has to be wrapped in
+    an element named after its position.
+    """
+    return isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type,
+        (
+            intermediate.AbstractClass,
+            intermediate.ConcreteClass,
+            intermediate.NamedUnion,
+        ),
+    )
+
+
+def _xml_write_own_element_expr(
+    type_anno: intermediate.OurTypeAnnotation,
+) -> Stripped:
+    """Generate the expression of the writer which writes a whole element."""
+    if isinstance(type_anno.our_type, intermediate.NamedUnion):
+        # NOTE (mristin):
+        # A named union has no ``*PtrAsElement`` counterpart -- its own value is
+        # already a ``std::variant``, not a pointer -- so we reference its
+        # ``*AsElement`` function directly.
+        return Stripped(
+            cpp_naming.function_name(
+                Identifier(f"serialize_{type_anno.our_type.name}_as_element")
+            )
+        )
 
     return Stripped(
-        f"""\
-[](
-{I}const std::vector<{indent_but_first_line(item_type, I)}>& a_list,
-{I}xml_common::SelfClosingWriter& a_writer
-) {{
-{I}return {list_helper}(a_list, a_writer, {serialize_item});
-}}"""
+        cpp_naming.function_name(
+            Identifier(f"serialize_{type_anno.our_type.name}_ptr_as_element")
+        )
     )
 
 
-def _xml_serialize_tuple_value_expr(
+def _xml_write_tuple_item_exprs(
     type_anno: intermediate.TupleTypeAnnotation,
-) -> Stripped:
+) -> List[Stripped]:
     """
-    Build the ``(tuple, writer) -> optional<xml_common::SerializationError>`` callable for
-    a tuple-typed property, to be plugged into ``SerializePropertyAsElement``.
+    Generate the expression of the writer of every item of a tuple.
 
-    Non-class items are wrapped in ``<v1>``, ``<v2>``, *etc.* elements (1-based),
-    while class items write their own element directly, mirroring how lists of
-    classes are handled. The actual per-item error-path bookkeeping is
-    delegated to the generic ``SerializeTupleN`` function generated once for
-    the tuple's arity by :py:func:`_generate_serialize_tuple_function`.
+    A class item and a named union item write their own element, so they are
+    named outright. Everything else is wrapped in its positional ``<v1>``,
+    ``<v2>``, *etc.* element here, since ``WriteTuple{N}Property`` knows
+    neither which items those are nor what to call them.
     """
-    tuple_type = cpp_common.generate_type(
-        type_annotation=type_anno, types_namespace=cpp_common.TYPES_NAMESPACE
-    )
-
     item_exprs = []  # type: List[Stripped]
 
     for i, item_type_anno in enumerate(type_anno.items):
@@ -3935,279 +4176,96 @@ def _xml_serialize_tuple_value_expr(
             "nested optionals, lists or tuples are expected here."
         )
 
+        if _xml_writes_own_element(item_type_anno):
+            assert isinstance(item_type_anno, intermediate.OurTypeAnnotation)
+            item_exprs.append(_xml_write_own_element_expr(item_type_anno))
+            continue
+
         item_type = cpp_common.generate_type(
             type_annotation=item_type_anno, types_namespace=cpp_common.TYPES_NAMESPACE
         )
 
-        items_primitive_type = intermediate.try_primitive_type(item_type_anno)
+        write_value = _xml_write_content_expr(item_type_anno)
 
-        # NOTE (mristin):
-        # Both classes and named unions are self-tagging (dispatched through
-        # their own element tag), unlike primitives/enumerations, which are
-        # wrapped in a synthetic ``<v1>``, ``<v2>``, *etc.* element.
-        is_class_item = isinstance(
-            item_type_anno, intermediate.OurTypeAnnotation
-        ) and isinstance(
-            item_type_anno.our_type,
-            (intermediate.AbstractClass, intermediate.ConcreteClass),
-        )
-        is_named_union_item = isinstance(
-            item_type_anno, intermediate.OurTypeAnnotation
-        ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion)
+        v_name_literal = cpp_common.string_literal(f"v{i + 1}")
 
-        if not (is_class_item or is_named_union_item):
-            if items_primitive_type is not None:
-                serialize_function = _PRIMITIVE_TYPE_TO_SERIALIZE[items_primitive_type]
-            elif isinstance(item_type_anno, intermediate.PrimitiveTypeAnnotation):
-                raise AssertionError("Expected to handle this case before")
-            elif isinstance(item_type_anno, intermediate.OurTypeAnnotation):
-                if isinstance(item_type_anno.our_type, intermediate.Enumeration):
-                    serialize_function = cpp_naming.function_name(
-                        Identifier(f"serialize_{item_type_anno.our_type.name}")
-                    )
-                elif isinstance(
-                    item_type_anno.our_type, intermediate.ConstrainedPrimitive
-                ):
-                    raise AssertionError("Expected to handle this case before")
-                else:
-                    # NOTE (mristin):
-                    # This branch is unreachable in practice: ``is_class_item`` is
-                    # ``False`` here, so ``item_type_anno.our_type`` can not be
-                    # an ``AbstractClass``/``ConcreteClass``, but mypy can not
-                    # correlate the ``is_class_item`` boolean with the narrowing
-                    # of ``item_type_anno.our_type``, so we can not use
-                    # ``assert_never`` here.
-                    raise AssertionError(
-                        f"Expected to handle this case above: {item_type_anno.our_type}"
-                    )
-            elif isinstance(
-                item_type_anno,
-                (
-                    intermediate.JsonValueTypeAnnotation,
-                    intermediate.JsonArrayTypeAnnotation,
-                    intermediate.JsonObjectTypeAnnotation,
-                ),
-            ):
-                serialize_function = _xml_json_serialize_function_for(item_type_anno)
-            else:
-                # noinspection PyTypeChecker
-                assert_never(item_type_anno)
-
-            v_name_literal = cpp_common.string_literal(f"v{i + 1}")
-
-            item_exprs.append(
-                Stripped(
-                    f"""\
+        item_exprs.append(
+            Stripped(
+                f"""\
 [](
 {I}const {indent_but_first_line(item_type, I)}& item,
 {I}xml_common::SelfClosingWriter& a_writer
-) -> common::optional<xml_common::SerializationError> {{
-{I}a_writer.StartElement(
-{II}{v_name_literal}
-{I});
-{I}if (a_writer.error().has_value()) {{
-{II}common::optional<xml_common::SerializationError>&& error = a_writer.move_error();
-{II}return error;
-{I}}}
-
-{I}common::optional<xml_common::SerializationError> error = {serialize_function}(
-{II}item,
-{II}a_writer
-{I});
-{I}if (error.has_value()) {{
-{II}return error;
-{I}}}
-
-{I}a_writer.StopElement(
-{II}{v_name_literal}
-{I});
-{I}if (a_writer.error().has_value()) {{
-{II}common::optional<xml_common::SerializationError>&& error = a_writer.move_error();
-{II}return error;
-{I}}}
-
-{I}return common::nullopt;
-}}"""
-                )
-            )
-        else:
-            assert isinstance(item_type_anno, intermediate.OurTypeAnnotation)
-
-            if isinstance(item_type_anno.our_type, intermediate.NamedUnion):
-                # NOTE (mristin):
-                # A named union has no ``*PtrAsElement`` counterpart -- its
-                # own value is already a ``std::variant``, not a pointer.
-                serialize_function = cpp_naming.function_name(
-                    Identifier(f"serialize_{item_type_anno.our_type.name}_as_element")
-                )
-            else:
-                serialize_function = cpp_naming.function_name(
-                    Identifier(
-                        f"serialize_{item_type_anno.our_type.name}_ptr_as_element"
-                    )
-                )
-
-            item_exprs.append(Stripped(serialize_function))
-
-    item_exprs_joined = ",\n".join(item_exprs)
-
-    function_name = f"SerializeTuple{len(type_anno.items)}"
-
-    return Stripped(
-        f"""\
-[](
-{I}const {indent_but_first_line(tuple_type, I)}& a_tuple,
-{I}xml_common::SelfClosingWriter& a_writer
 ) {{
-{I}return {function_name}(
-{II}a_tuple,
-{II}a_writer,
-{II}{indent_but_first_line(item_exprs_joined, II)}
-{I});
+{I}return WriteElement({v_name_literal}, item, a_writer, {write_value});
 }}"""
-    )
+            )
+        )
+
+    return item_exprs
 
 
-def _generate_serialize_property(prop: intermediate.Property) -> Stripped:
+def _generate_write_property_statements(prop: intermediate.Property) -> Stripped:
     """
-    Generate code to serialize a property.
+    Generate the statements which write a property.
 
-    The property is wrapped in its own named XML element via the generic
-    :py:func:`_generate_serialize_property_as_element`; this function only
-    needs to determine the value expression and the value-specific
-    ``serialize_value`` callable for the property's kind.
+    The value is handed over exactly as the getter returns it: the framer
+    dereferences an instance and writes nothing at all for a property which has
+    not been given, so a property is a single call whatever its type.
     """
     getter_name = cpp_naming.getter_name(prop.name)
 
-    getter_expr: Stripped
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        getter_expr = Stripped(f"*(that.{getter_name}())")
-    else:
-        getter_expr = Stripped(f"that.{getter_name}()")
-
     xml_name_literal = cpp_common.string_literal(prop.xml_name)
-
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    primitive_type = intermediate.try_primitive_type(type_anno)
-
-    value_expr: Stripped
-    serialize_value_expr: Stripped
-
-    if primitive_type is not None:
-        value_expr = getter_expr
-        serialize_value_expr = Stripped(_PRIMITIVE_TYPE_TO_SERIALIZE[primitive_type])
-
-    else:
-        if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
-            raise AssertionError("Expected to handle this case before")
-
-        elif isinstance(type_anno, intermediate.OurTypeAnnotation):
-            if isinstance(type_anno.our_type, intermediate.Enumeration):
-                value_expr = getter_expr
-                serialize_value_expr = Stripped(
-                    cpp_naming.function_name(
-                        Identifier(f"serialize_{type_anno.our_type.name}")
-                    )
-                )
-
-            elif isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive):
-                raise AssertionError("Expected to handle this case before")
-
-            elif isinstance(
-                type_anno.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
-            ):
-                value_expr = Stripped(f"*({getter_expr})")
-
-                if len(type_anno.our_type.concrete_descendants) == 0:
-                    serialize_value_expr = Stripped(
-                        cpp_naming.function_name(
-                            Identifier(
-                                f"serialize_{type_anno.our_type.name}_as_sequence"
-                            )
-                        )
-                    )
-                else:
-                    serialize_value_expr = Stripped(
-                        cpp_naming.function_name(
-                            Identifier(
-                                f"serialize_{type_anno.our_type.name}_as_element"
-                            )
-                        )
-                    )
-
-            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
-                # NOTE (mristin):
-                # A named union's own value is already a ``std::variant``,
-                # not a pointer, so -- unlike a class -- there is nothing
-                # to dereference here.
-                value_expr = getter_expr
-
-                serialize_value_expr = Stripped(
-                    cpp_naming.function_name(
-                        Identifier(f"serialize_{type_anno.our_type.name}_as_element")
-                    )
-                )
-
-            else:
-                # noinspection PyTypeChecker
-                assert_never(type_anno.our_type)
-
-        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-            value_expr = getter_expr
-
-            serialize_value_expr = _xml_serialize_list_value_expr(
-                item_type_annotation=type_anno.items
-            )
-
-        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            value_expr = getter_expr
-
-            serialize_value_expr = _xml_serialize_tuple_value_expr(type_anno=type_anno)
-
-        elif isinstance(
-            type_anno,
-            (
-                intermediate.JsonValueTypeAnnotation,
-                intermediate.JsonArrayTypeAnnotation,
-                intermediate.JsonObjectTypeAnnotation,
-            ),
-        ):
-            value_expr = getter_expr
-
-            serialize_value_expr = _xml_json_serialize_function_for(type_anno)
-
-        else:
-            # noinspection PyTypeChecker
-            assert_never(type_anno)
 
     prop_literal = cpp_naming.enum_literal_name(prop.name)
 
-    code = Stripped(
+    type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+    function_name: str
+    writer_exprs: List[Stripped]
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
+            "List items are restricted to atomic types (primitives, "
+            "constrained primitives, classes, enumerations and JSON-able values), "
+            "so no nested optionals, lists or tuples are expected here."
+        )
+
+        if _xml_writes_own_element(type_anno.items):
+            assert isinstance(type_anno.items, intermediate.OurTypeAnnotation)
+            function_name = "WriteListOfInstancesProperty"
+            writer_exprs = [_xml_write_own_element_expr(type_anno.items)]
+        else:
+            function_name = "WriteListOfValuesProperty"
+            writer_exprs = [_xml_write_content_expr(type_anno.items)]
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        function_name = f"WriteTuple{len(type_anno.items)}Property"
+        writer_exprs = _xml_write_tuple_item_exprs(type_anno)
+
+    else:
+        assert isinstance(type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
+            "A property is either a list, a tuple or an atomic value, and "
+            f"the optional has been stripped above, but we got: {type_anno}"
+        )
+
+        function_name = "WriteProperty"
+        writer_exprs = [_xml_write_content_expr(type_anno)]
+
+    writer_exprs_joined = ",\n".join(writer_exprs)
+
+    return Stripped(
         f"""\
-error = SerializePropertyAsElement(
+error = {function_name}(
 {I}{xml_name_literal},
-{I}{indent_but_first_line(value_expr, I)},
+{I}that.{getter_name}(),
 {I}writer,
 {I}iteration::Property::{prop_literal},
-{I}{indent_but_first_line(serialize_value_expr, I)}
+{I}{indent_but_first_line(writer_exprs_joined, I)}
 );
 if (error.has_value()) {{
 {I}return error;
 }}"""
     )
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        code = Stripped(
-            f"""\
-if (that.{getter_name}().has_value()) {{
-{I}{indent_but_first_line(code, I)}
-}}"""
-        )
-
-    return code
 
 
 def _generate_serialize_cls_as_sequence_definition(
@@ -4257,17 +4315,7 @@ def _generate_serialize_cls_as_sequence_implementation(
         )
 
         for prop in cls.properties:
-            blocks.append(_generate_serialize_property(prop=prop))
-
-        blocks.append(
-            Stripped(
-                f"""\
-writer.Finish();
-if (writer.error().has_value()) {{
-{I}return writer.move_error();
-}}"""
-            )
-        )
+            blocks.append(_generate_write_property_statements(prop=prop))
 
     blocks.append(Stripped("return common::nullopt;"))
 
@@ -4411,36 +4459,12 @@ def _generate_concrete_serialize_cls_as_element(
 
     body = Stripped(
         f"""\
-common::optional<xml_common::SerializationError> error;
-
-writer.StartElement(
-{I}{xml_class_literal}
-);
-if (writer.error().has_value()) {{
-{I}return writer.move_error();
-}}
-
-error = {serialize_as_sequence}(
+return WriteElement(
+{I}{xml_class_literal},
 {I}that,
-{I}writer
-);
-if (error.has_value()) {{
-{I}return error;
-}}
-
-writer.StopElement(
-{I}{xml_class_literal}
-);
-if (writer.error().has_value()) {{
-{I}return writer.move_error();
-}}
-
-writer.Finish();
-if (writer.error().has_value()) {{
-{I}return writer.move_error();
-}}
-
-return common::nullopt;"""
+{I}writer,
+{I}{serialize_as_sequence}
+);"""
     )
 
     function_name: Identifier
@@ -4493,28 +4517,36 @@ return common::nullopt;"""
     )
 
 
-@require(lambda cls: len(cls.concrete_descendants) > 0)
-def _generate_dispatching_serialize_cls_as_element(
-    cls: intermediate.ClassUnion,
+def _generate_dispatching_serialize_as_element(
+    function_name: Identifier,
+    interface_name: Identifier,
+    concrete_classes: Sequence[intermediate.ConcreteClass],
+    concrete_self: Optional[intermediate.ConcreteClass],
 ) -> Stripped:
-    """Generate the impl. for a dispatching serialization for an instance."""
+    """
+    Generate the impl. for a dispatching serialization for an instance.
+
+    The dispatch of a whole meta-model, ``WriteClass``, differs from the one of
+    an interface only in which classes it has to tell apart, so both come from
+    here -- as they do on the reading side, where one
+    :py:func:`_generate_class_from_element` serves ``ClassFromElement`` and
+    every ``{Cls}FromElement``.
+
+    :param function_name: name of the function to be generated
+    :param interface_name: name of the interface of the argument
+    :param concrete_classes: classes to be told apart
+    :param concrete_self:
+        the class whose interface this is, if it is concrete itself; its own
+        element is written by ``SerializeConcrete{Cls}AsElement``, since
+        ``Serialize{Cls}AsElement`` is this dispatch
+    """
     case_blocks = []  # type: List[Stripped]
-
-    # fmt: off
-    concrete_classes = (
-        [cls]
-        if isinstance(cls, intermediate.ConcreteClass)
-        else []
-    ) + list(cls.concrete_descendants)
-    # fmt: on
-
-    interface_name = cpp_naming.interface_name(cls.name)
 
     for concrete_cls in concrete_classes:
         model_type_enum = cpp_naming.enum_name(Identifier("Model_type"))
         model_type_literal = cpp_naming.enum_literal_name(concrete_cls.name)
 
-        if concrete_cls is not cls:
+        if concrete_cls is not concrete_self:
             serialize_cls_as_element = cpp_naming.function_name(
                 Identifier(f"serialize_{concrete_cls.name}_as_element")
             )
@@ -4564,10 +4596,6 @@ default:
 
     case_blocks_joined = "\n".join(case_blocks)
 
-    function_name = cpp_naming.function_name(
-        Identifier(f"serialize_{cls.name}_as_element")
-    )
-
     return Stripped(
         f"""\
 common::optional<xml_common::SerializationError> {function_name}(
@@ -4582,6 +4610,45 @@ common::optional<xml_common::SerializationError> {function_name}(
 {II}{indent_but_first_line(case_blocks_joined, II)}
 {I}}};
 }}"""
+    )
+
+
+@require(lambda cls: len(cls.concrete_descendants) > 0)
+def _generate_dispatching_serialize_cls_as_element(
+    cls: intermediate.ClassUnion,
+) -> Stripped:
+    """Generate the impl. for a dispatching serialization for an instance."""
+    # fmt: off
+    concrete_classes = (
+        [cls]
+        if isinstance(cls, intermediate.ConcreteClass)
+        else []
+    ) + list(cls.concrete_descendants)
+    # fmt: on
+
+    return _generate_dispatching_serialize_as_element(
+        function_name=cpp_naming.function_name(
+            Identifier(f"serialize_{cls.name}_as_element")
+        ),
+        interface_name=cpp_naming.interface_name(cls.name),
+        concrete_classes=concrete_classes,
+        concrete_self=cls if isinstance(cls, intermediate.ConcreteClass) else None,
+    )
+
+
+def _generate_write_class(symbol_table: intermediate.SymbolTable) -> Stripped:
+    """
+    Generate the impl. of the dispatch over every concrete class.
+
+    This is the dual of the reading side's ``ClassFromElement``: which element
+    an instance writes follows from its model type, so one dispatch answers for
+    the root of a document whatever class the caller hands over.
+    """
+    return _generate_dispatching_serialize_as_element(
+        function_name=Identifier("WriteClass"),
+        interface_name=Identifier("IClass"),
+        concrete_classes=symbol_table.concrete_classes,
+        concrete_self=None,
     )
 
 
@@ -4677,82 +4744,9 @@ def _generate_serialize_implementation(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the impl. of the public serialize function."""
-    case_blocks = []  # type: List[Stripped]
-
-    for cls in symbol_table.concrete_classes:
-        serialize_cls_as_sequence = cpp_naming.function_name(
-            Identifier(f"serialize_{cls.name}_as_sequence")
-        )
-
-        model_type_enum = cpp_naming.enum_name(Identifier("Model_type"))
-        model_type_literal = cpp_naming.enum_literal_name(cls.name)
-
-        xml_name = naming.xml_class_name(cls.name)
-
-        start_element_with_namespace_expr = Stripped(
-            f"""\
-(
-{I}"<{xml_name} "
-{I}"xmlns=\\"{symbol_table.meta_model.xml_namespace}\\">"
-)"""
-        )
-
-        start_element_wo_namespace_literal = cpp_common.string_literal(f"<{xml_name}>")
-
-        stop_element = cpp_common.string_literal(f"</{xml_name}>")
-
-        interface_name = cpp_naming.interface_name(cls.name)
-
-        case_blocks.append(
-            Stripped(
-                f"""\
-case types::{model_type_enum}::{model_type_literal}:
-{I}if (options.write_namespace) {{
-{II}os << {indent_but_first_line(start_element_with_namespace_expr, II)};
-{I}}} else {{
-{II}os << {start_element_wo_namespace_literal};
-{I}}}
-
-{I}error = xml_common::CheckOstreamState(os);
-{I}if (error.has_value()) {{
-{II}break;
-{I}}}
-
-{I}error = {serialize_cls_as_sequence}(
-{II}dynamic_cast<
-{III}const types::{interface_name}&
-{II}>(that),
-{II}writer
-{I});
-{I}if (error.has_value()) {{
-{II}break;
-{I}}}
-
-{I}os << {stop_element};
-
-{I}error = xml_common::CheckOstreamState(os);
-{I}if (error.has_value()) {{
-{II}break;
-{I}}}
-
-{I}break;"""
-            )
-        )
-
-    case_blocks.append(
-        Stripped(
-            f"""\
-default:
-{I}throw std::invalid_argument(
-{II}common::Concat(
-{III}"Invalid model type: ",
-{III}stringification::to_string(that.model_type())
-{II})
-{I});"""
-        )
+    namespace_attribute_literal = cpp_common.string_literal(
+        f' xmlns="{symbol_table.meta_model.xml_namespace}"'
     )
-
-    case_blocks_joined = "\n".join(case_blocks)
 
     return Stripped(
         f"""\
@@ -4770,26 +4764,21 @@ void Serialize(
 {II}}}
 {I}}}
 
+{I}// NOTE (mristin):
+{I}// The namespace is declared on the root element and on no other one, so we
+{I}// hand it to the writer instead of asking at every single element whether it
+{I}// is the root. The writer takes the attributes at the very first element and
+{I}// leaves nothing behind.
 {I}xml_common::SelfClosingWriter writer(
 {II}os,
-{II}options.prefix
+{II}options.write_namespace
+{III}? {namespace_attribute_literal}
+{III}: ""
 {I});
 
-{I}common::optional<xml_common::SerializationError> error;
-
-{I}// NOTE (mristin):
-{I}// Instead of using `Serialize*AsElement`, we write the root XML element
-{I}// in this functions so that we check for the XML namespace only once, namely
-{I}// here. Otherwise, we would have a condition check in <em>every</em> nested
-{I}// `Serialize*AsElement` which could cause a significant efficiency hit.
-
-{I}// NOTE (mristin):
-{I}// The dynamic casts are necessary due to virtual inheritance. Otherwise,
-{I}// we would have used static casts.
-
-{I}switch (that.model_type()) {{
-{II}{indent_but_first_line(case_blocks_joined, II)}
-{I}}}
+{I}common::optional<xml_common::SerializationError> error(
+{II}WriteClass(that, writer)
+{I});
 
 {I}if (error.has_value()) {{
 {II}throw SerializationException(
@@ -4971,7 +4960,7 @@ def _type_annotation_contains_list_of_atomic_non_class_values(
         ):
             # NOTE (mristin):
             # A JSON-able list item is wrapped in its own ``<v>`` element via
-            # ``DeserializeValueFromVElement``/``SerializeListOfVElements``,
+            # ``DeserializeValueFromVElement``/``WriteListOfValuesProperty``,
             # exactly like a primitive or an enumeration.
             return True
 
@@ -4981,7 +4970,7 @@ def _type_annotation_contains_list_of_atomic_non_class_values(
 
     elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
         # NOTE (mristin):
-        # Tuples never loop over ``SerializeListOfVElements``/
+        # Tuples never loop over ``WriteListOfValuesProperty``/
         # ``DeserializeValueFromVElement`` through a list-like generic function;
         # see :py:func:`_type_annotation_contains_tuple_with_atomic_non_class_item`
         # for the tuple-specific check.
@@ -5082,7 +5071,7 @@ def _type_annotation_contains_list_of_instances(
     elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
         # NOTE (mristin):
         # Tuple class items are de-serialized/serialized directly, one by one,
-        # without ever looping over ``SerializeListOfInstances``.
+        # without ever looping over ``WriteListOfInstancesProperty``.
         return False
 
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
@@ -5293,32 +5282,40 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
             Stripped("// endregion De-serialization"),
             Stripped("// region Serialization"),
             *_generate_serialization_exception_implementation(),
-            *_generate_serialize_primitives(),
+            *_generate_write_primitives(),
         ]
     )
 
     if intermediate.uses_json_types(symbol_table):
-        blocks.extend(_generate_serialize_json_to_xml_rpc_implementation())
+        blocks.extend(_generate_write_json_to_xml_rpc_implementation())
+
+    # NOTE (mristin):
+    # Mind the order of the framers. Every one of them calls the ones before
+    # it, and the calls are not dependent on the argument-dependent lookup, so
+    # a framer has to be declared before the one which uses it.
+
+    if len(symbol_table.concrete_classes) > 0:
+        blocks.append(_generate_write_element())
 
     if any(len(cls.properties) > 0 for cls in symbol_table.concrete_classes):
-        blocks.append(_generate_serialize_property_as_element())
-
-    if any(
-        _type_annotation_contains_list_of_atomic_non_class_values(prop.type_annotation)
-        for cls in symbol_table.concrete_classes
-        for prop in cls.properties
-    ):
-        blocks.append(_generate_serialize_list_of_v_elements())
+        blocks.extend(_generate_write_property())
 
     if any(
         _type_annotation_contains_list_of_instances(prop.type_annotation)
         for cls in symbol_table.concrete_classes
         for prop in cls.properties
     ):
-        blocks.append(_generate_serialize_list_of_instances())
+        blocks.extend(_generate_write_list_of_instances_property())
+
+    if any(
+        _type_annotation_contains_list_of_atomic_non_class_values(prop.type_annotation)
+        for cls in symbol_table.concrete_classes
+        for prop in cls.properties
+    ):
+        blocks.extend(_generate_write_list_of_values_property())
 
     for arity in intermediate.tuple_arities(symbol_table):
-        blocks.append(_generate_serialize_tuple_function(arity))
+        blocks.extend(_generate_write_tuple_property(arity))
 
     for enumeration in symbol_table.enumerations:
         blocks.append(_generate_serialize_enumeration(enumeration))
@@ -5353,6 +5350,8 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
                 named_union=named_union
             )
         )
+
+    blocks.append(_generate_write_class(symbol_table=symbol_table))
 
     blocks.append(_generate_serialize_implementation(symbol_table=symbol_table))
 

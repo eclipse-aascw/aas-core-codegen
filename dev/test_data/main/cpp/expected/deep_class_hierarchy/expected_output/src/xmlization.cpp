@@ -2474,7 +2474,7 @@ const iteration::Path& SerializationException::path() const noexcept {
 
 // endregion SerializationException
 
-common::optional<xml_common::SerializationError> SerializeBool(
+common::optional<xml_common::SerializationError> WriteBool(
   bool value,
   xml_common::SelfClosingWriter& writer
 ) {
@@ -2486,7 +2486,7 @@ common::optional<xml_common::SerializationError> SerializeBool(
   return common::nullopt;
 }
 
-common::optional<xml_common::SerializationError> SerializeInt64(
+common::optional<xml_common::SerializationError> WriteInt64(
   int64_t value,
   xml_common::SelfClosingWriter& writer
 ) {
@@ -2498,7 +2498,7 @@ common::optional<xml_common::SerializationError> SerializeInt64(
   return common::nullopt;
 }
 
-common::optional<xml_common::SerializationError> SerializeDouble(
+common::optional<xml_common::SerializationError> WriteDouble(
   double value,
   xml_common::SelfClosingWriter& writer
 ) {
@@ -2510,7 +2510,7 @@ common::optional<xml_common::SerializationError> SerializeDouble(
   return common::nullopt;
 }
 
-common::optional<xml_common::SerializationError> SerializeWstring(
+common::optional<xml_common::SerializationError> WriteWstring(
   const std::wstring& value,
   xml_common::SelfClosingWriter& writer
 ) {
@@ -2522,7 +2522,7 @@ common::optional<xml_common::SerializationError> SerializeWstring(
   return common::nullopt;
 }
 
-common::optional<xml_common::SerializationError> SerializeByteArray(
+common::optional<xml_common::SerializationError> WriteByteArray(
   const std::vector<std::uint8_t>& value,
   xml_common::SelfClosingWriter& writer
 ) {
@@ -2535,39 +2535,119 @@ common::optional<xml_common::SerializationError> SerializeByteArray(
 }
 
 /**
- * Serialize a property wrapped in its own named XML element.
+ * \brief Write \p value as an XML element named \p name.
+ *
+ * This is the only place where an element is framed. The element of a class,
+ * the `<v>` of a list item and the positional `<v1>`, `<v2>`, <i>etc.</i> of
+ * a tuple item differ only in the name and in the content, so all of them
+ * come through here.
+ *
+ * \param name of the XML element
+ * \param value to be written between the tags
+ * \param writer to write to
+ * \param write_content writes \p value between the tags
+ * \return an error, if any
  */
-template <typename T, typename SerializeT>
-common::optional<xml_common::SerializationError> SerializePropertyAsElement(
-  const std::string& name,
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteElement(
+  const char* name,
   const T& value,
   xml_common::SelfClosingWriter& writer,
-  iteration::Property property,
-  const SerializeT& serialize_value
+  const WriteT& write_content
 ) {
   writer.StartElement(name);
   if (writer.error().has_value()) {
     return writer.move_error();
   }
 
-  common::optional<xml_common::SerializationError> error = serialize_value(value, writer);
+  common::optional<xml_common::SerializationError> error(
+    write_content(value, writer)
+  );
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(property)
-    );
     return error;
   }
 
   writer.StopElement(name);
   if (writer.error().has_value()) {
-    error = writer.move_error();
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(property)
-    );
-    return error;
+    return writer.move_error();
   }
 
   return common::nullopt;
+}
+
+/**
+ * \brief Write \p value as the XML element of \p property.
+ *
+ * This is \ref WriteElement plus the one thing which a property knows and
+ * nothing beneath it does -- which property of the instance it is -- so that
+ * the path of the error is built as the stack unwinds.
+ *
+ * \param name of the XML element
+ * \param value of the property
+ * \param writer to write to
+ * \param property which the element stands for, for the path of the error
+ * \param write_content writes \p value between the tags
+ * \return an error, if any
+ */
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteProperty(
+  const char* name,
+  const T& value,
+  xml_common::SelfClosingWriter& writer,
+  iteration::Property property,
+  const WriteT& write_content
+) {
+  common::optional<xml_common::SerializationError> error(
+    WriteElement(name, value, writer, write_content)
+  );
+
+  if (error.has_value()) {
+    error->path.segments.emplace_front(
+      common::make_unique<iteration::PropertySegment>(property)
+    );
+  }
+
+  return error;
+}
+
+/**
+ * \brief Write the instance behind \p value as the XML element of
+ * \p property.
+ *
+ * See the overload which takes the value itself for what is written and
+ * for the path of the error.
+ */
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteProperty(
+  const char* name,
+  const std::shared_ptr<T>& value,
+  xml_common::SelfClosingWriter& writer,
+  iteration::Property property,
+  const WriteT& write_content
+) {
+  return WriteProperty(name, *value, writer, property, write_content);
+}
+
+/**
+ * \brief Write \p value as the XML element of \p property, or nothing at
+ * all if the property has not been given.
+ *
+ * See the overload which takes the value itself for what is written and
+ * for the path of the error.
+ */
+template <typename T, typename WriteT>
+common::optional<xml_common::SerializationError> WriteProperty(
+  const char* name,
+  const common::optional<T>& value,
+  xml_common::SelfClosingWriter& writer,
+  iteration::Property property,
+  const WriteT& write_content
+) {
+  if (!value.has_value()) {
+    return common::nullopt;
+  }
+
+  return WriteProperty(name, *value, writer, property, write_content);
 }
 
 /**
@@ -2813,31 +2893,26 @@ common::optional<xml_common::SerializationError> SerializeBranchAsSequence(
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "identifier",
     that.identifier(),
     writer,
     iteration::Property::kIdentifier,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "description",
     that.description(),
     writer,
     iteration::Property::kDescription,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -2858,36 +2933,12 @@ common::optional<xml_common::SerializationError> SerializeConcreteBranchAsElemen
   const types::IBranch& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "branch"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeBranchAsSequence(
+  return WriteElement(
+    "branch",
     that,
-    writer
+    writer,
+    SerializeBranchAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "branch"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeBranchAsElement(
@@ -2950,42 +3001,37 @@ common::optional<xml_common::SerializationError> SerializeLeafAsSequence(
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "identifier",
     that.identifier(),
     writer,
     iteration::Property::kIdentifier,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "description",
     that.description(),
     writer,
     iteration::Property::kDescription,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "value",
     that.value(),
     writer,
     iteration::Property::kValue,
-    SerializeInt64
+    WriteInt64
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -3006,36 +3052,12 @@ common::optional<xml_common::SerializationError> SerializeConcreteLeafAsElement(
   const types::ILeaf& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "leaf"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeLeafAsSequence(
+  return WriteElement(
+    "leaf",
     that,
-    writer
+    writer,
+    SerializeLeafAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "leaf"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeLeafAsElement(
@@ -3091,53 +3113,48 @@ common::optional<xml_common::SerializationError> SerializeBlossomAsSequence(
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "identifier",
     that.identifier(),
     writer,
     iteration::Property::kIdentifier,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "description",
     that.description(),
     writer,
     iteration::Property::kDescription,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "value",
     that.value(),
     writer,
     iteration::Property::kValue,
-    SerializeInt64
+    WriteInt64
   );
   if (error.has_value()) {
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "details",
     that.details(),
     writer,
     iteration::Property::kDetails,
-    SerializeWstring
+    WriteWstring
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -3147,36 +3164,12 @@ common::optional<xml_common::SerializationError> SerializeBlossomAsElement(
   const types::IBlossom& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "blossom"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeBlossomAsSequence(
+  return WriteElement(
+    "blossom",
     that,
-    writer
+    writer,
+    SerializeBlossomAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "blossom"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeBlossomPtrAsElement(
@@ -3201,9 +3194,9 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "someChoice",
-    *(that.some_choice()),
+    that.some_choice(),
     writer,
     iteration::Property::kSomeChoice,
     SerializeNodeAsElement
@@ -3212,20 +3205,15 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "somethingWithoutChoice",
-    *(that.something_without_choice()),
+    that.something_without_choice(),
     writer,
     iteration::Property::kSomethingWithoutChoice,
     SerializeBranchAsElement
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -3235,36 +3223,12 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsElement(
   const types::ISomething& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "something"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeSomethingAsSequence(
+  return WriteElement(
+    "something",
     that,
-    writer
+    writer,
+    SerializeSomethingAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "something"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeSomethingPtrAsElement(
@@ -3289,9 +3253,9 @@ common::optional<xml_common::SerializationError> SerializeContainerAsSequence(
 ) {
   common::optional<xml_common::SerializationError> error;
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "node",
-    *(that.node()),
+    that.node(),
     writer,
     iteration::Property::kNode,
     SerializeNodeAsElement
@@ -3300,20 +3264,15 @@ common::optional<xml_common::SerializationError> SerializeContainerAsSequence(
     return error;
   }
 
-  error = SerializePropertyAsElement(
+  error = WriteProperty(
     "something",
-    *(that.something()),
+    that.something(),
     writer,
     iteration::Property::kSomething,
     SerializeSomethingAsSequence
   );
   if (error.has_value()) {
     return error;
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
   }
 
   return common::nullopt;
@@ -3323,36 +3282,12 @@ common::optional<xml_common::SerializationError> SerializeContainerAsElement(
   const types::IContainer& that,
   xml_common::SelfClosingWriter& writer
 ) {
-  common::optional<xml_common::SerializationError> error;
-
-  writer.StartElement(
-    "container"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  error = SerializeContainerAsSequence(
+  return WriteElement(
+    "container",
     that,
-    writer
+    writer,
+    SerializeContainerAsSequence
   );
-  if (error.has_value()) {
-    return error;
-  }
-
-  writer.StopElement(
-    "container"
-  );
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  writer.Finish();
-  if (writer.error().has_value()) {
-    return writer.move_error();
-  }
-
-  return common::nullopt;
 }
 
 common::optional<xml_common::SerializationError> SerializeContainerPtrAsElement(
@@ -3360,6 +3295,60 @@ common::optional<xml_common::SerializationError> SerializeContainerPtrAsElement(
   xml_common::SelfClosingWriter& writer
 ) {
   return SerializeContainerAsElement(*that, writer);
+}
+
+common::optional<xml_common::SerializationError> WriteClass(
+  const types::IClass& that,
+  xml_common::SelfClosingWriter& writer
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kBranch:
+      return SerializeBranchAsElement(
+        dynamic_cast<
+          const types::IBranch&
+        >(that),
+        writer
+      );
+    case types::ModelType::kLeaf:
+      return SerializeLeafAsElement(
+        dynamic_cast<
+          const types::ILeaf&
+        >(that),
+        writer
+      );
+    case types::ModelType::kBlossom:
+      return SerializeBlossomAsElement(
+        dynamic_cast<
+          const types::IBlossom&
+        >(that),
+        writer
+      );
+    case types::ModelType::kSomething:
+      return SerializeSomethingAsElement(
+        dynamic_cast<
+          const types::ISomething&
+        >(that),
+        writer
+      );
+    case types::ModelType::kContainer:
+      return SerializeContainerAsElement(
+        dynamic_cast<
+          const types::IContainer&
+        >(that),
+        writer
+      );
+    default:
+      throw std::invalid_argument(
+        common::Concat(
+          "Invalid model type: ",
+          stringification::to_string(that.model_type())
+        )
+      );
+  };
 }
 
 void Serialize(
@@ -3376,197 +3365,21 @@ void Serialize(
     }
   }
 
+  // NOTE (mristin):
+  // The namespace is declared on the root element and on no other one, so we
+  // hand it to the writer instead of asking at every single element whether it
+  // is the root. The writer takes the attributes at the very first element and
+  // leaves nothing behind.
   xml_common::SelfClosingWriter writer(
     os,
-    options.prefix
+    options.write_namespace
+      ? " xmlns=\"https://dummy.com\""
+      : ""
   );
 
-  common::optional<xml_common::SerializationError> error;
-
-  // NOTE (mristin):
-  // Instead of using `Serialize*AsElement`, we write the root XML element
-  // in this functions so that we check for the XML namespace only once, namely
-  // here. Otherwise, we would have a condition check in <em>every</em> nested
-  // `Serialize*AsElement` which could cause a significant efficiency hit.
-
-  // NOTE (mristin):
-  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
-  // we would have used static casts.
-
-  switch (that.model_type()) {
-    case types::ModelType::kBranch:
-      if (options.write_namespace) {
-        os << (
-          "<branch "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<branch>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeBranchAsSequence(
-        dynamic_cast<
-          const types::IBranch&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</branch>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kLeaf:
-      if (options.write_namespace) {
-        os << (
-          "<leaf "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<leaf>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeLeafAsSequence(
-        dynamic_cast<
-          const types::ILeaf&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</leaf>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kBlossom:
-      if (options.write_namespace) {
-        os << (
-          "<blossom "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<blossom>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeBlossomAsSequence(
-        dynamic_cast<
-          const types::IBlossom&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</blossom>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kSomething:
-      if (options.write_namespace) {
-        os << (
-          "<something "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<something>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeSomethingAsSequence(
-        dynamic_cast<
-          const types::ISomething&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</something>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    case types::ModelType::kContainer:
-      if (options.write_namespace) {
-        os << (
-          "<container "
-          "xmlns=\"https://dummy.com\">"
-        );
-      } else {
-        os << "<container>";
-      }
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      error = SerializeContainerAsSequence(
-        dynamic_cast<
-          const types::IContainer&
-        >(that),
-        writer
-      );
-      if (error.has_value()) {
-        break;
-      }
-
-      os << "</container>";
-
-      error = xml_common::CheckOstreamState(os);
-      if (error.has_value()) {
-        break;
-      }
-
-      break;
-    default:
-      throw std::invalid_argument(
-        common::Concat(
-          "Invalid model type: ",
-          stringification::to_string(that.model_type())
-        )
-      );
-  }
+  common::optional<xml_common::SerializationError> error(
+    WriteClass(that, writer)
+  );
 
   if (error.has_value()) {
     throw SerializationException(
