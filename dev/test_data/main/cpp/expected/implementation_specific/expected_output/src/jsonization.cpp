@@ -2014,29 +2014,150 @@ nlohmann::json SerializeListWithInfallible(
   return serialized;
 }
 
+/**
+ * Serialize the given list of instances to a JSON array where item
+ * serialization might fail.
+ *
+ * The items are pointers, which we dereference for the item serializer.
+ */
+template<typename T, typename FallibleSerializeItemT>
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
-> SerializeIClass(
+> SerializeListOfInstancesWithFallible(
+  const std::vector<std::shared_ptr<T> >& list,
+  FallibleSerializeItemT&& fallible_serialize_item
+) {
+  nlohmann::json serialized = nlohmann::json::array();
+
+  serialized.get_ptr<nlohmann::json::array_t*>()->reserve(
+    list.size()
+  );
+
+  size_t index = 0;
+
+  for (const std::shared_ptr<T>& item : list) {
+    common::optional<nlohmann::json> json_item;
+    common::optional<SerializationError> error;
+
+    std::tie(
+      json_item,
+      error
+    ) = fallible_serialize_item(*item);
+
+    if (error.has_value()) {
+      error->path.segments.emplace_front(
+        common::make_unique<iteration::IndexSegment>(
+          index
+        )
+      );
+
+      return std::make_pair<
+        common::optional<nlohmann::json>,
+        common::optional<SerializationError>
+      >(
+        common::nullopt,
+        std::move(error)
+      );
+    }
+
+    serialized.emplace_back(
+      std::move(*json_item)
+    );
+
+    ++index;
+  }
+
+  return std::make_pair(
+    std::move(serialized),
+    common::nullopt
+  );
+}
+
+/**
+ * Serialize the given list of instances to a JSON array where item
+ * serialization can not fail.
+ *
+ * The items are pointers, which we dereference for the item serializer.
+ */
+template<typename T, typename InfallibleSerializeItemT>
+nlohmann::json SerializeListOfInstancesWithInfallible(
+  const std::vector<std::shared_ptr<T> >& list,
+  InfallibleSerializeItemT&& infallible_serialize_item
+) {
+  nlohmann::json serialized = nlohmann::json::array();
+
+  serialized.get_ptr<nlohmann::json::array_t*>()->reserve(
+    list.size()
+  );
+
+  for (const std::shared_ptr<T>& item : list) {
+    serialized.emplace_back(
+      infallible_serialize_item(*item)
+    );
+  }
+
+  return serialized;
+}
+
+/**
+ * Serialize the literal \p that of an enumeration to a JSON value.
+ *
+ * \param that literal to be serialized
+ * \return the JSON value
+ */
+template <typename EnumT>
+nlohmann::json SerializeEnumeration(
+  const EnumT& that
+) {
+  return stringification::to_string(that);
+}
+
+/**
+ * \brief Serialize \p that instance to a JSON value, dispatching on its
+ * model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeIClass(
   const types::IClass& that
 );
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClassPtr(
-  const std::shared_ptr<types::IClass>& that
+/**
+ * \brief Serialize \p that instance of types::IBox to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeBox(
+  const types::IBox& that
 );
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeBox(
+/**
+ * \brief Serialize \p that instance of types::IBag to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeBag(
+  const types::IBag& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IContainer to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeContainer(
+  const types::IContainer& that
+);
+
+nlohmann::json SerializeBox(
   const types::IBox& that
 ) {
   nlohmann::json result = nlohmann::json::object();
-
-  common::optional<SerializationError> error;
 
   result["label"] = SerializeWstring(
     that.label()
@@ -2045,27 +2166,18 @@ std::pair<
   const common::optional<types::Color>& maybe_color(
     that.color()
   );
-  if (that.color().has_value()) {
-    result["color"] = stringification::to_string(
+  if (maybe_color.has_value()) {
+    result["color"] = SerializeEnumeration(
       *maybe_color
     );
   }
 
   result["modelType"] = "Box";
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeBag(
+nlohmann::json SerializeBag(
   const types::IBag& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -2081,71 +2193,28 @@ std::pair<
 
   result["modelType"] = "Bag";
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeContainer(
+nlohmann::json SerializeContainer(
   const types::IContainer& that
 ) {
   nlohmann::json result = nlohmann::json::object();
-
-  common::optional<SerializationError> error;
 
   result["names"] = SerializeListWithInfallible(
     that.names(),
     SerializeWstring
   );
 
-  common::optional<nlohmann::json> json_items;
-  std::tie(
-    json_items,
-    error
-  ) = SerializeListWithFallible(
+  result["items"] = SerializeListOfInstancesWithInfallible(
     that.items(),
-    SerializeIClassPtr
-  );
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<iteration::PropertySegment>(
-        iteration::Property::kItems
-      )
-    );
-
-    return std::make_pair<
-      common::optional<nlohmann::json>,
-      common::optional<SerializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  result["items"] = std::move(
-    json_items.value()
+    SerializeIClass
   );
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClass(
+nlohmann::json SerializeIClass(
   const types::IClass& that
 ) {
   switch (that.model_type()) {
@@ -2176,34 +2245,10 @@ std::pair<
   };
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClassPtr(
-  const std::shared_ptr<types::IClass>& that
-) {
-  return SerializeIClass(*that);
-}
-
 nlohmann::json Serialize(
   const types::IClass& that
 ) {
-  common::optional<nlohmann::json> result;
-  common::optional<SerializationError> error;
-
-  std::tie(
-    result,
-    error
-  ) = SerializeIClass(that);
-
-  if (error.has_value()) {
-    throw SerializationException(
-      std::move(error->cause),
-      std::move(error->path)
-    );
-  }
-
-  return std::move(*result);
+  return SerializeIClass(that);
 }
 
 // endregion Serialization

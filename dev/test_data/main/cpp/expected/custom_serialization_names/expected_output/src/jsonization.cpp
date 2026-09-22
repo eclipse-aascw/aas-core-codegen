@@ -1208,24 +1208,28 @@ nlohmann::json SerializeListWithInfallible(
   return serialized;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClass(
+/**
+ * \brief Serialize \p that instance to a JSON value, dispatching on its
+ * model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeIClass(
   const types::IClass& that
 );
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClassPtr(
-  const std::shared_ptr<types::IClass>& that
+/**
+ * \brief Serialize \p that instance of types::IQueryCondition to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeQueryCondition(
+  const types::IQueryCondition& that
 );
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeQueryCondition(
+nlohmann::json SerializeQueryCondition(
   const types::IQueryCondition& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -1233,7 +1237,7 @@ std::pair<
   const common::optional<std::wstring>& maybe_eq(
     that.eq()
   );
-  if (that.eq().has_value()) {
+  if (maybe_eq.has_value()) {
     result["$eq"] = SerializeWstring(
       *maybe_eq
     );
@@ -1242,25 +1246,16 @@ std::pair<
   const common::optional<std::wstring>& maybe_not_eq(
     that.not_eQ()
   );
-  if (that.not_eQ().has_value()) {
+  if (maybe_not_eq.has_value()) {
     result["$ne"] = SerializeWstring(
       *maybe_not_eq
     );
   }
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClass(
+nlohmann::json SerializeIClass(
   const types::IClass& that
 ) {
   switch (that.model_type()) {
@@ -1283,34 +1278,10 @@ std::pair<
   };
 }
 
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeIClassPtr(
-  const std::shared_ptr<types::IClass>& that
-) {
-  return SerializeIClass(*that);
-}
-
 nlohmann::json Serialize(
   const types::IClass& that
 ) {
-  common::optional<nlohmann::json> result;
-  common::optional<SerializationError> error;
-
-  std::tie(
-    result,
-    error
-  ) = SerializeIClass(that);
-
-  if (error.has_value()) {
-    throw SerializationException(
-      std::move(error->cause),
-      std::move(error->path)
-    );
-  }
-
-  return std::move(*result);
+  return SerializeIClass(that);
 }
 
 // endregion Serialization
