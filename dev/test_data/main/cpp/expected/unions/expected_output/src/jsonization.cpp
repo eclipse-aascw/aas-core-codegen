@@ -516,6 +516,56 @@ std::pair<
 }
 
 /**
+ * \brief Give out a failed de-serialization with \p cause as its message.
+ *
+ * \tparam T type of the value which could not be de-serialized
+ * \param cause human-readable description of the failure
+ * \return no value, and the error
+ */
+template <typename T>
+std::pair<
+  common::optional<T>,
+  common::optional<DeserializationError>
+> NoInstanceAndDeserializationErrorWithCause(
+  std::wstring cause
+) {
+  return std::make_pair<
+    common::optional<T>,
+    common::optional<DeserializationError>
+  >(
+    common::nullopt,
+    common::make_optional<DeserializationError>(
+      std::move(cause)
+    )
+  );
+}
+
+/**
+ * \brief Give out a failed de-serialization with \p error.
+ *
+ * \tparam T type of the value which could not be de-serialized
+ * \param error of the de-serialization
+ * \return no value, and the error
+ */
+template <typename T>
+std::pair<
+  common::optional<T>,
+  common::optional<DeserializationError>
+> NoInstanceAndDeserializationError(
+  DeserializationError error
+) {
+  return std::make_pair<
+    common::optional<T>,
+    common::optional<DeserializationError>
+  >(
+    common::nullopt,
+    common::make_optional<DeserializationError>(
+      std::move(error)
+    )
+  );
+}
+
+/**
  * Map JSON \c modelType strings to model types.
  */
 const std::unordered_map<
@@ -616,6 +666,13 @@ std::pair<
   );
 }
 
+/**
+ * \brief De-serialize a list of items from \p json.
+ *
+ * \param json value expected to be an array
+ * \param deserialize_item de-serializes an item
+ * \return the list, or an error, if any
+ */
 template <typename T, typename DeserializeItemT>
 std::pair<
   common::optional<std::vector<T> >,
@@ -681,6 +738,33 @@ std::pair<
   return std::make_pair(
     list,
     common::nullopt
+  );
+}
+
+/**
+ * \brief De-serialize a list of instances from \p json.
+ *
+ * \param json value expected to be an array
+ * \param additional_properties handed over to \p deserialize_item
+ * \param deserialize_item de-serializes an item
+ * \return the list, or an error, if any
+ */
+template <typename T, typename DeserializeItemT>
+std::pair<
+  common::optional<std::vector<T> >,
+  common::optional<DeserializationError>
+> DeserializeList(
+  const nlohmann::json& json,
+  bool additional_properties,
+  DeserializeItemT&& deserialize_item
+) {
+  return DeserializeList<T>(
+    json,
+    [&additional_properties, &deserialize_item](
+      const nlohmann::json& item
+    ) {
+      return deserialize_item(item, additional_properties);
+    }
   );
 }
 
@@ -850,14 +934,460 @@ std::pair<
   );
 }
 
+namespace properties {
+
+enum class OfStructuralFirst : std::uint32_t {
+  kUniqueToFirst
+};  // enum class OfStructuralFirst
+
+enum class OfStructuralSecond : std::uint32_t {
+  kUniqueToSecond
+};  // enum class OfStructuralSecond
+
+enum class OfMixedAbstractDescendantOne : std::uint32_t {
+  kUniqueToAbstractDescendantOne
+};  // enum class OfMixedAbstractDescendantOne
+
+enum class OfMixedAbstractDescendantTwo : std::uint32_t {
+  kUniqueToAbstractDescendantTwo
+};  // enum class OfMixedAbstractDescendantTwo
+
+enum class OfMixedConcreteWithDescendants : std::uint32_t {
+  kSomeBaseProperty,
+  kModelType
+};  // enum class OfMixedConcreteWithDescendants
+
+enum class OfMixedConcreteWithDescendantsChild : std::uint32_t {
+  kSomeBaseProperty,
+  kSomeChildProperty,
+  kModelType
+};  // enum class OfMixedConcreteWithDescendantsChild
+
+enum class OfMixedConcreteLeaf : std::uint32_t {
+  kUniqueToConcreteLeaf
+};  // enum class OfMixedConcreteLeaf
+
+enum class OfModelTypedFirst : std::uint32_t {
+  kSomeProperty,
+  kModelType
+};  // enum class OfModelTypedFirst
+
+enum class OfModelTypedSecond : std::uint32_t {
+  kSomeProperty,
+  kModelType
+};  // enum class OfModelTypedSecond
+
+enum class OfSomething : std::uint32_t {
+  kStructuralProperty,
+  kMixedProperty,
+  kModelTypedProperty,
+  kListStructuralProperty,
+  kListMixedProperty,
+  kListModelTypedProperty,
+  kTupleProperty,
+  kOptionalStructuralProperty,
+  kOptionalMixedProperty,
+  kOptionalModelTypedProperty
+};  // enum class OfSomething
+
+const std::unordered_map<
+  std::string,
+  OfStructuralFirst
+> kMapOfStructuralFirst = {
+  {
+    "uniqueToFirst",
+    OfStructuralFirst::kUniqueToFirst
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfStructuralSecond
+> kMapOfStructuralSecond = {
+  {
+    "uniqueToSecond",
+    OfStructuralSecond::kUniqueToSecond
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfMixedAbstractDescendantOne
+> kMapOfMixedAbstractDescendantOne = {
+  {
+    "uniqueToAbstractDescendantOne",
+    OfMixedAbstractDescendantOne::kUniqueToAbstractDescendantOne
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfMixedAbstractDescendantTwo
+> kMapOfMixedAbstractDescendantTwo = {
+  {
+    "uniqueToAbstractDescendantTwo",
+    OfMixedAbstractDescendantTwo::kUniqueToAbstractDescendantTwo
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfMixedConcreteWithDescendants
+> kMapOfMixedConcreteWithDescendants = {
+  {
+    "someBaseProperty",
+    OfMixedConcreteWithDescendants::kSomeBaseProperty
+  },
+  {
+    "modelType",
+    OfMixedConcreteWithDescendants::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfMixedConcreteWithDescendantsChild
+> kMapOfMixedConcreteWithDescendantsChild = {
+  {
+    "someBaseProperty",
+    OfMixedConcreteWithDescendantsChild::kSomeBaseProperty
+  },
+  {
+    "someChildProperty",
+    OfMixedConcreteWithDescendantsChild::kSomeChildProperty
+  },
+  {
+    "modelType",
+    OfMixedConcreteWithDescendantsChild::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfMixedConcreteLeaf
+> kMapOfMixedConcreteLeaf = {
+  {
+    "uniqueToConcreteLeaf",
+    OfMixedConcreteLeaf::kUniqueToConcreteLeaf
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfModelTypedFirst
+> kMapOfModelTypedFirst = {
+  {
+    "someProperty",
+    OfModelTypedFirst::kSomeProperty
+  },
+  {
+    "modelType",
+    OfModelTypedFirst::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfModelTypedSecond
+> kMapOfModelTypedSecond = {
+  {
+    "someProperty",
+    OfModelTypedSecond::kSomeProperty
+  },
+  {
+    "modelType",
+    OfModelTypedSecond::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfSomething
+> kMapOfSomething = {
+  {
+    "structuralProperty",
+    OfSomething::kStructuralProperty
+  },
+  {
+    "mixedProperty",
+    OfSomething::kMixedProperty
+  },
+  {
+    "modelTypedProperty",
+    OfSomething::kModelTypedProperty
+  },
+  {
+    "listStructuralProperty",
+    OfSomething::kListStructuralProperty
+  },
+  {
+    "listMixedProperty",
+    OfSomething::kListMixedProperty
+  },
+  {
+    "listModelTypedProperty",
+    OfSomething::kListModelTypedProperty
+  },
+  {
+    "tupleProperty",
+    OfSomething::kTupleProperty
+  },
+  {
+    "optionalStructuralProperty",
+    OfSomething::kOptionalStructuralProperty
+  },
+  {
+    "optionalMixedProperty",
+    OfSomething::kOptionalMixedProperty
+  },
+  {
+    "optionalModelTypedProperty",
+    OfSomething::kOptionalModelTypedProperty
+  }
+};
+
+}  // namespace properties
+
 /**
- * \brief Deserialize concretely an instance
- * of types::IStructuralFirst.
+ * \brief Create the exception to be thrown on an unexpected property literal.
+ *
+ * Every ``switch`` over the properties of a class covers all the literals of
+ * its enumeration, so we can only get here if the value has been corrupted.
+ * We report that as a logic error, and not as a de-serialization error, since
+ * it does not originate in the input.
+ *
+ * \param enum_name name of the property enumeration, for the message
+ * \param property the unexpected literal
+ * \return the exception to be thrown
+ */
+template <typename EnumT>
+std::logic_error UnexpectedPropertyLiteralError(
+  const char* enum_name,
+  EnumT property
+) {
+  return std::logic_error(
+    common::Concat(
+      "Unexpected properties literal of ",
+      enum_name,
+      ": ",
+      std::to_string(
+        static_cast<std::uint32_t>(property)
+      )
+    )
+  );
+}
+
+/**
+ * \brief Parse the properties of an instance from \p json.
+ *
+ * This function factors out everything which the property loop of a class does
+ * not say about the class it belongs to: walking the keys, looking the property
+ * up, refusing or accepting an unknown one and marking the property on
+ * the error path. The class itself supplies only \p on_property, which
+ * dispatches on the property and assigns the local variables that its
+ * constructor is finally called with.
+ *
+ * NOTE (mristin):
+ * We walk the keys which are actually there, instead of asking for each
+ * property of the class whether it is there. An instance carries only a few of
+ * the many properties which a class declares, and nlohmann's object is
+ * a ``std::map``, so asking costs a tree walk per property -- twice over, as
+ * the value then has to be fetched. Walking also detects an unknown key on
+ * the way, which is why there is no separate pass for that.
+ *
+ * NOTE (mristin):
+ * We take \p map_of_properties in, instead of letting \p on_property work on
+ * the JSON name of the property, because we want the class to dispatch with
+ * a hard-wired ``switch`` whose branches assign the local variables of
+ * the caller.
+ *
+ * A ``switch`` needs an integral constant, and C++ can not switch on a string,
+ * so the name has to be translated into a literal of the property enumeration
+ * first. We do that here rather than in the class so that the translation, and
+ * the error reported when the name matches no property at all, are written
+ * once instead of once per class.
+ *
+ * \param json object whose properties are to be parsed
+ * \param map_of_properties maps the JSON name of a property to its literal
+ * \param additional_properties if not set, refuse a key which matches
+ * no property
+ * \param on_property parses the value of the recognized property
+ * \return the error, if the parsing failed
+ */
+template <typename EnumT, typename OnPropertyT>
+common::optional<DeserializationError> ParseProperties(
+  const nlohmann::json& json,
+  const std::unordered_map<std::string, EnumT>& map_of_properties,
+  bool additional_properties,
+  const OnPropertyT& on_property
+) {
+  #ifdef DEBUG
+  if (!json.is_object()) {
+    throw std::logic_error(
+      "Unexpected non-object in ParseProperties. "
+      "ParseProperties expects the caller to have checked that."
+    );
+  }
+  #endif
+
+  for (const auto& key_val : json.items()) {
+    auto it(
+      map_of_properties.find(key_val.key())
+    );
+
+    if (it == map_of_properties.end()) {
+      if (additional_properties) {
+        continue;
+      }
+
+      return DeserializationError(
+        common::Concat(
+          L"Unexpected additional property: ",
+          common::Utf8ToWstring(key_val.key())
+        )
+      );
+    }
+
+    common::optional<DeserializationError> error(
+      on_property(it->second, key_val.value())
+    );
+
+    if (error.has_value()) {
+      error->path.segments.emplace_front(
+        common::make_unique<PropertySegment>(
+          common::Utf8ToWstring(key_val.key())
+        )
+      );
+
+      return error;
+    }
+  }
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Check that \p json is a JSON object.
+ *
+ * \param json value to be checked
+ * \return the error, if \p json is anything else
+ */
+common::optional<DeserializationError> CheckJsonObject(
+  const nlohmann::json& json
+) {
+  if (!json.is_object()) {
+    return DeserializationError(
+      common::Concat(
+        L"Expected an object, but got: ",
+        common::Utf8ToWstring(json.type_name())
+      )
+    );
+  }
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Check that \p json is an object whose model type is \p expected.
+ *
+ * The model type is compared as the string which came on the wire. That refuses
+ * a value of the wrong type just as well as parsing it would, and costs neither
+ * a conversion to a wide string nor the allocation which goes with it.
+ *
+ * \param json value expected to be an object carrying a model type
+ * \param expected model type of the class
+ * \return the error, if \p json does not bear \p expected
+ */
+common::optional<DeserializationError> CheckModelType(
+  const nlohmann::json& json,
+  const char* expected
+) {
+  const std::string* model_type;
+  common::optional<DeserializationError> error;
+
+  std::tie(
+    model_type,
+    error
+  ) = GetModelTypeFrom(json);
+
+  if (error.has_value()) {
+    return error;
+  }
+
+  if (*model_type != expected) {
+    return DeserializationError(
+      common::Concat(
+        L"Expected model type '",
+        common::Utf8ToWstring(expected),
+        L"', but got: ",
+        common::Utf8ToWstring(*model_type)
+      )
+    );
+  }
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Assign the value parsed to \p target, or give out the error of the parse.
+ *
+ * We deliberately take the *result* of a parse instead of the JSON value and
+ * the function which parses it. The item parsers of a tuple vary both in number
+ * and in type, so no signature taking the parser could serve every parse;
+ * taking the result lets this single function serve all of them.
+ *
+ * \param target variable to be assigned the value parsed
+ * \param parsed result of the parse
+ * \return the error, if the parse failed
+ */
+template <typename T>
+common::optional<DeserializationError> ParseInto(
+  common::optional<T>& target,
+  std::pair<
+    common::optional<T>,
+    common::optional<DeserializationError>
+  >&& parsed
+) {
+  if (parsed.second.has_value()) {
+    return std::move(parsed.second);
+  }
+
+  target = std::move(parsed.first);
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Parse the properties of an instance of types::IStructuralFirst.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IStructuralFirst>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfStructuralFirst(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IStructuralFirst.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -870,13 +1400,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IStructuralSecond.
+ * \brief Parse the properties of an instance of types::IStructuralSecond.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IStructuralSecond>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfStructuralSecond(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IStructuralSecond.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -908,13 +1461,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IMixedAbstractDescendantOne.
+ * \brief Parse the properties of an instance of types::IMixedAbstractDescendantOne.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IMixedAbstractDescendantOne>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfMixedAbstractDescendantOne(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IMixedAbstractDescendantOne.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -931,13 +1511,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IMixedAbstractDescendantTwo.
+ * \brief Parse the properties of an instance of types::IMixedAbstractDescendantTwo.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IMixedAbstractDescendantTwo>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfMixedAbstractDescendantTwo(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IMixedAbstractDescendantTwo.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -954,20 +1561,22 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IMixedConcreteWithDescendants.
+ * \brief Parse the properties of an instance of types::IMixedConcreteWithDescendants.
  *
- * \param json value to be de-serialized
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
     std::shared_ptr<types::IMixedConcreteWithDescendants>
   >,
   common::optional<DeserializationError>
-> ConcretelyDeserializeMixedConcreteWithDescendants(
+> ParsePropertiesOfMixedConcreteWithDescendants(
   const nlohmann::json& json,
   bool additional_properties
 );
@@ -992,13 +1601,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IMixedConcreteWithDescendantsChild.
+ * \brief Parse the properties of an instance of types::IMixedConcreteWithDescendantsChild.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IMixedConcreteWithDescendantsChild>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfMixedConcreteWithDescendantsChild(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IMixedConcreteWithDescendantsChild.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1015,13 +1651,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IMixedConcreteLeaf.
+ * \brief Parse the properties of an instance of types::IMixedConcreteLeaf.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IMixedConcreteLeaf>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfMixedConcreteLeaf(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IMixedConcreteLeaf.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -1034,13 +1693,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IModelTypedFirst.
+ * \brief Parse the properties of an instance of types::IModelTypedFirst.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IModelTypedFirst>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfModelTypedFirst(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IModelTypedFirst.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -1053,13 +1735,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IModelTypedSecond.
+ * \brief Parse the properties of an instance of types::IModelTypedSecond.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IModelTypedSecond>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfModelTypedSecond(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IModelTypedSecond.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -1072,13 +1777,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ISomething.
+ * \brief Parse the properties of an instance of types::ISomething.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::ISomething>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfSomething(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ISomething.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -1141,110 +1869,57 @@ std::pair<
   bool additional_properties
 );
 
-std::set<std::string> kPropertiesInStructuralFirst = {
-  "uniqueToFirst"
-};
-
 std::pair<
   common::optional<
     std::shared_ptr<types::IStructuralFirst>
   >,
   common::optional<DeserializationError>
-> DeserializeStructuralFirst(
+> ParsePropertiesOfStructuralFirst(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IStructuralFirst> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInStructuralFirst.find(key_val.key())
-      );
-      if (it == kPropertiesInStructuralFirst.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IStructuralFirst> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("uniqueToFirst")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IStructuralFirst> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property uniqueToFirst is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_unique_to_first;
 
-  // endregion Initialization
-
-  // region De-serialize uniqueToFirst
-
-  std::tie(
-    the_unique_to_first,
-    error
-  ) = DeserializeWstring(
-    json["uniqueToFirst"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfStructuralFirst,
+      additional_properties,
+      [&](
+        properties::OfStructuralFirst property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfStructuralFirst::kUniqueToFirst:
+            return ParseInto(
+              the_unique_to_first,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfStructuralFirst",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"uniqueToFirst"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IStructuralFirst> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IStructuralFirst>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize uniqueToFirst
+  if (!the_unique_to_first.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IStructuralFirst>
+    >(
+      L"The required property uniqueToFirst is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -1261,110 +1936,81 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInStructuralSecond = {
-  "uniqueToSecond"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IStructuralFirst>
+  >,
+  common::optional<DeserializationError>
+> DeserializeStructuralFirst(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IStructuralFirst>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfStructuralFirst(json, additional_properties);
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IStructuralSecond>
   >,
   common::optional<DeserializationError>
-> DeserializeStructuralSecond(
+> ParsePropertiesOfStructuralSecond(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IStructuralSecond> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInStructuralSecond.find(key_val.key())
-      );
-      if (it == kPropertiesInStructuralSecond.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IStructuralSecond> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("uniqueToSecond")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IStructuralSecond> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property uniqueToSecond is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_unique_to_second;
 
-  // endregion Initialization
-
-  // region De-serialize uniqueToSecond
-
-  std::tie(
-    the_unique_to_second,
-    error
-  ) = DeserializeWstring(
-    json["uniqueToSecond"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfStructuralSecond,
+      additional_properties,
+      [&](
+        properties::OfStructuralSecond property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfStructuralSecond::kUniqueToSecond:
+            return ParseInto(
+              the_unique_to_second,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfStructuralSecond",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"uniqueToSecond"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IStructuralSecond> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IStructuralSecond>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize uniqueToSecond
+  if (!the_unique_to_second.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IStructuralSecond>
+    >(
+      L"The required property uniqueToSecond is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -1379,6 +2025,30 @@ std::pair<
     ),
     common::nullopt
   );
+}
+
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IStructuralSecond>
+  >,
+  common::optional<DeserializationError>
+> DeserializeStructuralSecond(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IStructuralSecond>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfStructuralSecond(json, additional_properties);
 }
 
 std::pair<
@@ -1399,12 +2069,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedAbstractMember> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IMixedAbstractMember>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -1413,55 +2081,38 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedAbstractMember> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IMixedAbstractMember>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kMixedAbstractDescendantOne:
-      return DeserializeMixedAbstractDescendantOne<
+      return ParsePropertiesOfMixedAbstractDescendantOne<
         types::IMixedAbstractMember
       >(json, additional_properties);
     case types::ModelType::kMixedAbstractDescendantTwo:
-      return DeserializeMixedAbstractDescendantTwo<
+      return ParsePropertiesOfMixedAbstractDescendantTwo<
         types::IMixedAbstractMember
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IMixedAbstractMember "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IMixedAbstractMember> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IMixedAbstractMember>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IMixedAbstractMember "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
-
-std::set<std::string> kPropertiesInMixedAbstractDescendantOne = {
-  "uniqueToAbstractDescendantOne"
-};
 
 template <
   typename T,
@@ -1472,101 +2123,52 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeMixedAbstractDescendantOne(
+> ParsePropertiesOfMixedAbstractDescendantOne(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInMixedAbstractDescendantOne.find(key_val.key())
-      );
-      if (it == kPropertiesInMixedAbstractDescendantOne.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("uniqueToAbstractDescendantOne")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property uniqueToAbstractDescendantOne is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_unique_to_abstract_descendant_one;
 
-  // endregion Initialization
-
-  // region De-serialize uniqueToAbstractDescendantOne
-
-  std::tie(
-    the_unique_to_abstract_descendant_one,
-    error
-  ) = DeserializeWstring(
-    json["uniqueToAbstractDescendantOne"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfMixedAbstractDescendantOne,
+      additional_properties,
+      [&](
+        properties::OfMixedAbstractDescendantOne property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfMixedAbstractDescendantOne::kUniqueToAbstractDescendantOne:
+            return ParseInto(
+              the_unique_to_abstract_descendant_one,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfMixedAbstractDescendantOne",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"uniqueToAbstractDescendantOne"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize uniqueToAbstractDescendantOne
+  if (!the_unique_to_abstract_descendant_one.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
+    >(
+      L"The required property uniqueToAbstractDescendantOne is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -1583,9 +2185,36 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInMixedAbstractDescendantTwo = {
-  "uniqueToAbstractDescendantTwo"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IMixedAbstractDescendantOne>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeMixedAbstractDescendantOne(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfMixedAbstractDescendantOne<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -1596,101 +2225,52 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeMixedAbstractDescendantTwo(
+> ParsePropertiesOfMixedAbstractDescendantTwo(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInMixedAbstractDescendantTwo.find(key_val.key())
-      );
-      if (it == kPropertiesInMixedAbstractDescendantTwo.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("uniqueToAbstractDescendantTwo")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property uniqueToAbstractDescendantTwo is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_unique_to_abstract_descendant_two;
 
-  // endregion Initialization
-
-  // region De-serialize uniqueToAbstractDescendantTwo
-
-  std::tie(
-    the_unique_to_abstract_descendant_two,
-    error
-  ) = DeserializeWstring(
-    json["uniqueToAbstractDescendantTwo"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfMixedAbstractDescendantTwo,
+      additional_properties,
+      [&](
+        properties::OfMixedAbstractDescendantTwo property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfMixedAbstractDescendantTwo::kUniqueToAbstractDescendantTwo:
+            return ParseInto(
+              the_unique_to_abstract_descendant_two,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfMixedAbstractDescendantTwo",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"uniqueToAbstractDescendantTwo"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize uniqueToAbstractDescendantTwo
+  if (!the_unique_to_abstract_descendant_two.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
+    >(
+      L"The required property uniqueToAbstractDescendantTwo is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -1707,175 +2287,93 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInMixedConcreteWithDescendants = {
-  "someBaseProperty",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IMixedAbstractDescendantTwo>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeMixedAbstractDescendantTwo(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfMixedAbstractDescendantTwo<T>(
+    json,
+    additional_properties
+  );
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IMixedConcreteWithDescendants>
   >,
   common::optional<DeserializationError>
-> ConcretelyDeserializeMixedConcreteWithDescendants(
+> ParsePropertiesOfMixedConcreteWithDescendants(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedConcreteWithDescendants> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInMixedConcreteWithDescendants.find(key_val.key())
-      );
-      if (it == kPropertiesInMixedConcreteWithDescendants.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IMixedConcreteWithDescendants> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("someBaseProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedConcreteWithDescendants> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property someBaseProperty is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedConcreteWithDescendants> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_some_base_property;
 
-  // endregion Initialization
-
-  // region De-serialize someBaseProperty
-
-  std::tie(
-    the_some_base_property,
-    error
-  ) = DeserializeWstring(
-    json["someBaseProperty"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfMixedConcreteWithDescendants,
+      additional_properties,
+      [&](
+        properties::OfMixedConcreteWithDescendants property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfMixedConcreteWithDescendants::kSomeBaseProperty:
+            return ParseInto(
+              the_some_base_property,
+              DeserializeWstring(value)
+            );
+          case properties::OfMixedConcreteWithDescendants::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfMixedConcreteWithDescendants",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"someBaseProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedConcreteWithDescendants> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IMixedConcreteWithDescendants>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize someBaseProperty
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedConcreteWithDescendants> >,
-      common::optional<DeserializationError>
+  if (!the_some_base_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IMixedConcreteWithDescendants>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property someBaseProperty is missing"
     );
   }
-
-  if (*model_type != L"MixedConcreteWithDescendants") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'MixedConcreteWithDescendants', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedConcreteWithDescendants> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -1910,12 +2408,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedConcreteWithDescendants> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IMixedConcreteWithDescendants>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -1924,55 +2420,36 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedConcreteWithDescendants> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IMixedConcreteWithDescendants>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kMixedConcreteWithDescendants:
-      return ConcretelyDeserializeMixedConcreteWithDescendants(json, additional_properties);
+      return ParsePropertiesOfMixedConcreteWithDescendants(json, additional_properties);
     case types::ModelType::kMixedConcreteWithDescendantsChild:
-      return DeserializeMixedConcreteWithDescendantsChild<
+      return ParsePropertiesOfMixedConcreteWithDescendantsChild<
         types::IMixedConcreteWithDescendants
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IMixedConcreteWithDescendants "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IMixedConcreteWithDescendants> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IMixedConcreteWithDescendants>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IMixedConcreteWithDescendants "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
-
-std::set<std::string> kPropertiesInMixedConcreteWithDescendantsChild = {
-  "someBaseProperty",
-  "someChildProperty",
-  "modelType"
-};
 
 template <
   typename T,
@@ -1983,206 +2460,72 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeMixedConcreteWithDescendantsChild(
+> ParsePropertiesOfMixedConcreteWithDescendantsChild(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInMixedConcreteWithDescendantsChild.find(key_val.key())
-      );
-      if (it == kPropertiesInMixedConcreteWithDescendantsChild.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("someBaseProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property someBaseProperty is missing"
-      )
-    );
-  }
-
-  if (!json.contains("someChildProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property someChildProperty is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_some_base_property;
 
   common::optional<std::wstring> the_some_child_property;
 
-  // endregion Initialization
-
-  // region De-serialize someBaseProperty
-
-  std::tie(
-    the_some_base_property,
-    error
-  ) = DeserializeWstring(
-    json["someBaseProperty"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfMixedConcreteWithDescendantsChild,
+      additional_properties,
+      [&](
+        properties::OfMixedConcreteWithDescendantsChild property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfMixedConcreteWithDescendantsChild::kSomeBaseProperty:
+            return ParseInto(
+              the_some_base_property,
+              DeserializeWstring(value)
+            );
+          case properties::OfMixedConcreteWithDescendantsChild::kSomeChildProperty:
+            return ParseInto(
+              the_some_child_property,
+              DeserializeWstring(value)
+            );
+          case properties::OfMixedConcreteWithDescendantsChild::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfMixedConcreteWithDescendantsChild",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"someBaseProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize someBaseProperty
-
-  // region De-serialize someChildProperty
-
-  std::tie(
-    the_some_child_property,
-    error
-  ) = DeserializeWstring(
-    json["someChildProperty"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"someChildProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_some_base_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property someBaseProperty is missing"
     );
   }
 
-  // endregion De-serialize someChildProperty
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_some_child_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property someChildProperty is missing"
     );
   }
-
-  if (*model_type != L"MixedConcreteWithDescendantsChild") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'MixedConcreteWithDescendantsChild', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -2200,110 +2543,91 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInMixedConcreteLeaf = {
-  "uniqueToConcreteLeaf"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IMixedConcreteWithDescendantsChild>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeMixedConcreteWithDescendantsChild(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "MixedConcreteWithDescendantsChild"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfMixedConcreteWithDescendantsChild<T>(
+    json,
+    additional_properties
+  );
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IMixedConcreteLeaf>
   >,
   common::optional<DeserializationError>
-> DeserializeMixedConcreteLeaf(
+> ParsePropertiesOfMixedConcreteLeaf(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedConcreteLeaf> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInMixedConcreteLeaf.find(key_val.key())
-      );
-      if (it == kPropertiesInMixedConcreteLeaf.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IMixedConcreteLeaf> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("uniqueToConcreteLeaf")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedConcreteLeaf> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property uniqueToConcreteLeaf is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_unique_to_concrete_leaf;
 
-  // endregion Initialization
-
-  // region De-serialize uniqueToConcreteLeaf
-
-  std::tie(
-    the_unique_to_concrete_leaf,
-    error
-  ) = DeserializeWstring(
-    json["uniqueToConcreteLeaf"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfMixedConcreteLeaf,
+      additional_properties,
+      [&](
+        properties::OfMixedConcreteLeaf property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfMixedConcreteLeaf::kUniqueToConcreteLeaf:
+            return ParseInto(
+              the_unique_to_concrete_leaf,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfMixedConcreteLeaf",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"uniqueToConcreteLeaf"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IMixedConcreteLeaf> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IMixedConcreteLeaf>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize uniqueToConcreteLeaf
+  if (!the_unique_to_concrete_leaf.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IMixedConcreteLeaf>
+    >(
+      L"The required property uniqueToConcreteLeaf is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -2320,175 +2644,86 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInModelTypedFirst = {
-  "someProperty",
-  "modelType"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IMixedConcreteLeaf>
+  >,
+  common::optional<DeserializationError>
+> DeserializeMixedConcreteLeaf(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IMixedConcreteLeaf>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfMixedConcreteLeaf(json, additional_properties);
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IModelTypedFirst>
   >,
   common::optional<DeserializationError>
-> DeserializeModelTypedFirst(
+> ParsePropertiesOfModelTypedFirst(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedFirst> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInModelTypedFirst.find(key_val.key())
-      );
-      if (it == kPropertiesInModelTypedFirst.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IModelTypedFirst> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("someProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedFirst> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property someProperty is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedFirst> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_some_property;
 
-  // endregion Initialization
-
-  // region De-serialize someProperty
-
-  std::tie(
-    the_some_property,
-    error
-  ) = DeserializeWstring(
-    json["someProperty"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfModelTypedFirst,
+      additional_properties,
+      [&](
+        properties::OfModelTypedFirst property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfModelTypedFirst::kSomeProperty:
+            return ParseInto(
+              the_some_property,
+              DeserializeWstring(value)
+            );
+          case properties::OfModelTypedFirst::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfModelTypedFirst",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"someProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedFirst> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IModelTypedFirst>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize someProperty
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedFirst> >,
-      common::optional<DeserializationError>
+  if (!the_some_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IModelTypedFirst>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property someProperty is missing"
     );
   }
-
-  if (*model_type != L"ModelTypedFirst") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'ModelTypedFirst', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedFirst> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -2505,175 +2740,89 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInModelTypedSecond = {
-  "someProperty",
-  "modelType"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IModelTypedFirst>
+  >,
+  common::optional<DeserializationError>
+> DeserializeModelTypedFirst(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "ModelTypedFirst"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IModelTypedFirst>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfModelTypedFirst(json, additional_properties);
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IModelTypedSecond>
   >,
   common::optional<DeserializationError>
-> DeserializeModelTypedSecond(
+> ParsePropertiesOfModelTypedSecond(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedSecond> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInModelTypedSecond.find(key_val.key())
-      );
-      if (it == kPropertiesInModelTypedSecond.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IModelTypedSecond> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("someProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedSecond> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property someProperty is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedSecond> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_some_property;
 
-  // endregion Initialization
-
-  // region De-serialize someProperty
-
-  std::tie(
-    the_some_property,
-    error
-  ) = DeserializeWstring(
-    json["someProperty"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfModelTypedSecond,
+      additional_properties,
+      [&](
+        properties::OfModelTypedSecond property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfModelTypedSecond::kSomeProperty:
+            return ParseInto(
+              the_some_property,
+              DeserializeWstring(value)
+            );
+          case properties::OfModelTypedSecond::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfModelTypedSecond",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"someProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedSecond> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IModelTypedSecond>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize someProperty
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedSecond> >,
-      common::optional<DeserializationError>
+  if (!the_some_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IModelTypedSecond>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property someProperty is missing"
     );
   }
-
-  if (*model_type != L"ModelTypedSecond") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'ModelTypedSecond', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IModelTypedSecond> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -2690,161 +2839,42 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInSomething = {
-  "structuralProperty",
-  "mixedProperty",
-  "modelTypedProperty",
-  "listStructuralProperty",
-  "listMixedProperty",
-  "listModelTypedProperty",
-  "tupleProperty",
-  "optionalStructuralProperty",
-  "optionalMixedProperty",
-  "optionalModelTypedProperty"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IModelTypedSecond>
+  >,
+  common::optional<DeserializationError>
+> DeserializeModelTypedSecond(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "ModelTypedSecond"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IModelTypedSecond>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfModelTypedSecond(json, additional_properties);
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::ISomething>
   >,
   common::optional<DeserializationError>
-> DeserializeSomething(
+> ParsePropertiesOfSomething(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInSomething.find(key_val.key())
-      );
-      if (it == kPropertiesInSomething.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::ISomething> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("structuralProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property structuralProperty is missing"
-      )
-    );
-  }
-
-  if (!json.contains("mixedProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property mixedProperty is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelTypedProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelTypedProperty is missing"
-      )
-    );
-  }
-
-  if (!json.contains("listStructuralProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property listStructuralProperty is missing"
-      )
-    );
-  }
-
-  if (!json.contains("listMixedProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property listMixedProperty is missing"
-      )
-    );
-  }
-
-  if (!json.contains("listModelTypedProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property listModelTypedProperty is missing"
-      )
-    );
-  }
-
-  if (!json.contains("tupleProperty")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property tupleProperty is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<types::StructuralUnion> the_structural_property;
 
   common::optional<types::MixedUnion> the_mixed_property;
@@ -2871,311 +2901,190 @@ std::pair<
 
   common::optional<types::ModelTypedUnion> the_optional_model_typed_property;
 
-  // endregion Initialization
-
-  // region De-serialize structuralProperty
-
-  std::tie(
-    the_structural_property,
-    error
-  ) = DeserializeStructuralUnion(
-    json["structuralProperty"],
-    additional_properties
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfSomething,
+      additional_properties,
+      [&](
+        properties::OfSomething property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfSomething::kStructuralProperty:
+            return ParseInto(
+              the_structural_property,
+              DeserializeStructuralUnion(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfSomething::kMixedProperty:
+            return ParseInto(
+              the_mixed_property,
+              DeserializeMixedUnion(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfSomething::kModelTypedProperty:
+            return ParseInto(
+              the_model_typed_property,
+              DeserializeModelTypedUnion(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfSomething::kListStructuralProperty:
+            return ParseInto(
+              the_list_structural_property,
+              DeserializeList<
+                types::StructuralUnion
+              >(
+                value,
+                additional_properties,
+                DeserializeStructuralUnion
+              )
+            );
+          case properties::OfSomething::kListMixedProperty:
+            return ParseInto(
+              the_list_mixed_property,
+              DeserializeList<
+                types::MixedUnion
+              >(
+                value,
+                additional_properties,
+                DeserializeMixedUnion
+              )
+            );
+          case properties::OfSomething::kListModelTypedProperty:
+            return ParseInto(
+              the_list_model_typed_property,
+              DeserializeList<
+                types::ModelTypedUnion
+              >(
+                value,
+                additional_properties,
+                DeserializeModelTypedUnion
+              )
+            );
+          case properties::OfSomething::kTupleProperty:
+            return ParseInto(
+              the_tuple_property,
+              DeserializeTuple3<
+                types::StructuralUnion,
+                types::MixedUnion,
+                types::ModelTypedUnion
+              >(
+                value,
+                [&additional_properties](const nlohmann::json& a_json) {
+                  return DeserializeStructuralUnion(a_json, additional_properties);
+                },
+                [&additional_properties](const nlohmann::json& a_json) {
+                  return DeserializeMixedUnion(a_json, additional_properties);
+                },
+                [&additional_properties](const nlohmann::json& a_json) {
+                  return DeserializeModelTypedUnion(a_json, additional_properties);
+                }
+              )
+            );
+          case properties::OfSomething::kOptionalStructuralProperty:
+            return ParseInto(
+              the_optional_structural_property,
+              DeserializeStructuralUnion(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfSomething::kOptionalMixedProperty:
+            return ParseInto(
+              the_optional_mixed_property,
+              DeserializeMixedUnion(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfSomething::kOptionalModelTypedProperty:
+            return ParseInto(
+              the_optional_model_typed_property,
+              DeserializeModelTypedUnion(
+                value,
+                additional_properties
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfSomething",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"structuralProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::ISomething>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize structuralProperty
-
-  // region De-serialize mixedProperty
-
-  std::tie(
-    the_mixed_property,
-    error
-  ) = DeserializeMixedUnion(
-    json["mixedProperty"],
-    additional_properties
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"mixedProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
+  if (!the_structural_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ISomething>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property structuralProperty is missing"
     );
   }
 
-  // endregion De-serialize mixedProperty
-
-  // region De-serialize modelTypedProperty
-
-  std::tie(
-    the_model_typed_property,
-    error
-  ) = DeserializeModelTypedUnion(
-    json["modelTypedProperty"],
-    additional_properties
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelTypedProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
+  if (!the_mixed_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ISomething>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property mixedProperty is missing"
     );
   }
 
-  // endregion De-serialize modelTypedProperty
-
-  // region De-serialize listStructuralProperty
-
-  std::tie(
-    the_list_structural_property,
-    error
-  ) = DeserializeList<types::StructuralUnion>(
-    json["listStructuralProperty"],
-    [&additional_properties](const nlohmann::json& a_json) {
-      return DeserializeStructuralUnion(a_json, additional_properties);
-    }
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"listStructuralProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
+  if (!the_model_typed_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ISomething>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property modelTypedProperty is missing"
     );
   }
 
-  // endregion De-serialize listStructuralProperty
-
-  // region De-serialize listMixedProperty
-
-  std::tie(
-    the_list_mixed_property,
-    error
-  ) = DeserializeList<types::MixedUnion>(
-    json["listMixedProperty"],
-    [&additional_properties](const nlohmann::json& a_json) {
-      return DeserializeMixedUnion(a_json, additional_properties);
-    }
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"listMixedProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
+  if (!the_list_structural_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ISomething>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property listStructuralProperty is missing"
     );
   }
 
-  // endregion De-serialize listMixedProperty
-
-  // region De-serialize listModelTypedProperty
-
-  std::tie(
-    the_list_model_typed_property,
-    error
-  ) = DeserializeList<types::ModelTypedUnion>(
-    json["listModelTypedProperty"],
-    [&additional_properties](const nlohmann::json& a_json) {
-      return DeserializeModelTypedUnion(a_json, additional_properties);
-    }
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"listModelTypedProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
+  if (!the_list_mixed_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ISomething>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property listMixedProperty is missing"
     );
   }
 
-  // endregion De-serialize listModelTypedProperty
-
-  // region De-serialize tupleProperty
-
-  std::tie(
-    the_tuple_property,
-    error
-  ) = DeserializeTuple3<
-    types::StructuralUnion,
-    types::MixedUnion,
-    types::ModelTypedUnion
-  >(
-    json["tupleProperty"],
-    [&additional_properties](const nlohmann::json& a_json) {
-      return DeserializeStructuralUnion(a_json, additional_properties);
-    },
-    [&additional_properties](const nlohmann::json& a_json) {
-      return DeserializeMixedUnion(a_json, additional_properties);
-    },
-    [&additional_properties](const nlohmann::json& a_json) {
-      return DeserializeModelTypedUnion(a_json, additional_properties);
-    }
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"tupleProperty"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISomething> >,
-      common::optional<DeserializationError>
+  if (!the_list_model_typed_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ISomething>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property listModelTypedProperty is missing"
     );
   }
 
-  // endregion De-serialize tupleProperty
-
-  // region De-serialize optionalStructuralProperty
-
-  if (json.contains("optionalStructuralProperty")) {
-    std::tie(
-      the_optional_structural_property,
-      error
-    ) = DeserializeStructuralUnion(
-      json["optionalStructuralProperty"],
-      additional_properties
+  if (!the_tuple_property.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ISomething>
+    >(
+      L"The required property tupleProperty is missing"
     );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"optionalStructuralProperty"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::ISomething> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
   }
-
-  // endregion De-serialize optionalStructuralProperty
-
-  // region De-serialize optionalMixedProperty
-
-  if (json.contains("optionalMixedProperty")) {
-    std::tie(
-      the_optional_mixed_property,
-      error
-    ) = DeserializeMixedUnion(
-      json["optionalMixedProperty"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"optionalMixedProperty"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::ISomething> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize optionalMixedProperty
-
-  // region De-serialize optionalModelTypedProperty
-
-  if (json.contains("optionalModelTypedProperty")) {
-    std::tie(
-      the_optional_model_typed_property,
-      error
-    ) = DeserializeModelTypedUnion(
-      json["optionalModelTypedProperty"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"optionalModelTypedProperty"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::ISomething> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize optionalModelTypedProperty
 
   return std::make_pair(
     common::make_optional<
@@ -3202,32 +3111,51 @@ std::pair<
 }
 
 std::pair<
+  common::optional<
+    std::shared_ptr<types::ISomething>
+  >,
+  common::optional<DeserializationError>
+> DeserializeSomething(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::ISomething>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfSomething(json, additional_properties);
+}
+
+std::pair<
   common::optional<types::StructuralUnion>,
   common::optional<DeserializationError>
 > DeserializeStructuralUnion(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
+  common::optional<DeserializationError> not_an_object(
+    CheckJsonObject(json)
+  );
 
-    return std::make_pair<
-      common::optional<types::StructuralUnion>,
-      common::optional<DeserializationError>
+  if (not_an_object.has_value()) {
+    return NoInstanceAndDeserializationError<
+      types::StructuralUnion
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
+      std::move(*not_an_object)
     );
   }
 
   if (json.contains("uniqueToFirst")) {
     return WrapDeserializedAsVariant<types::StructuralUnion>(
-      DeserializeStructuralFirst(
+      ParsePropertiesOfStructuralFirst(
         json,
         additional_properties
       )
@@ -3236,7 +3164,7 @@ std::pair<
 
   if (json.contains("uniqueToSecond")) {
     return WrapDeserializedAsVariant<types::StructuralUnion>(
-      DeserializeStructuralSecond(
+      ParsePropertiesOfStructuralSecond(
         json,
         additional_properties
       )
@@ -3268,20 +3196,15 @@ std::pair<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
+  common::optional<DeserializationError> not_an_object(
+    CheckJsonObject(json)
+  );
 
-    return std::make_pair<
-      common::optional<types::MixedUnion>,
-      common::optional<DeserializationError>
+  if (not_an_object.has_value()) {
+    return NoInstanceAndDeserializationError<
+      types::MixedUnion
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
+      std::move(*not_an_object)
     );
   }
 
@@ -3328,7 +3251,7 @@ std::pair<
     switch (*model_type) {
       case types::ModelType::kMixedConcreteWithDescendantsChild: {
         return WrapDeserializedAsVariant<types::MixedUnion>(
-          DeserializeMixedConcreteWithDescendantsChild<
+          ParsePropertiesOfMixedConcreteWithDescendantsChild<
             types::IMixedConcreteWithDescendantsChild
           >(
             json,
@@ -3338,7 +3261,7 @@ std::pair<
       }
       case types::ModelType::kMixedConcreteWithDescendants: {
         return WrapDeserializedAsVariant<types::MixedUnion>(
-          ConcretelyDeserializeMixedConcreteWithDescendants(
+          ParsePropertiesOfMixedConcreteWithDescendants(
             json,
             additional_properties
           )
@@ -3367,7 +3290,7 @@ std::pair<
 
   if (json.contains("uniqueToAbstractDescendantOne")) {
     return WrapDeserializedAsVariant<types::MixedUnion>(
-      DeserializeMixedAbstractDescendantOne<
+      ParsePropertiesOfMixedAbstractDescendantOne<
         types::IMixedAbstractDescendantOne
       >(
         json,
@@ -3378,7 +3301,7 @@ std::pair<
 
   if (json.contains("uniqueToAbstractDescendantTwo")) {
     return WrapDeserializedAsVariant<types::MixedUnion>(
-      DeserializeMixedAbstractDescendantTwo<
+      ParsePropertiesOfMixedAbstractDescendantTwo<
         types::IMixedAbstractDescendantTwo
       >(
         json,
@@ -3389,7 +3312,7 @@ std::pair<
 
   if (json.contains("uniqueToConcreteLeaf")) {
     return WrapDeserializedAsVariant<types::MixedUnion>(
-      DeserializeMixedConcreteLeaf(
+      ParsePropertiesOfMixedConcreteLeaf(
         json,
         additional_properties
       )
@@ -3421,20 +3344,15 @@ std::pair<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
+  common::optional<DeserializationError> not_an_object(
+    CheckJsonObject(json)
+  );
 
-    return std::make_pair<
-      common::optional<types::ModelTypedUnion>,
-      common::optional<DeserializationError>
+  if (not_an_object.has_value()) {
+    return NoInstanceAndDeserializationError<
+      types::ModelTypedUnion
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
+      std::move(*not_an_object)
     );
   }
 
@@ -3481,7 +3399,7 @@ std::pair<
     switch (*model_type) {
       case types::ModelType::kModelTypedFirst: {
         return WrapDeserializedAsVariant<types::ModelTypedUnion>(
-          DeserializeModelTypedFirst(
+          ParsePropertiesOfModelTypedFirst(
             json,
             additional_properties
           )
@@ -3489,7 +3407,7 @@ std::pair<
       }
       case types::ModelType::kModelTypedSecond: {
         return WrapDeserializedAsVariant<types::ModelTypedUnion>(
-          DeserializeModelTypedSecond(
+          ParsePropertiesOfModelTypedSecond(
             json,
             additional_properties
           )
@@ -3534,26 +3452,31 @@ std::pair<
   );
 }
 
+/**
+ * \brief De-serialize \p json and render the outcome as an expected value.
+ *
+ * \param json value to be de-serialized
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \param deserialize de-serializes the value
+ * \return the de-serialized value, or the error
+ */
+template <typename T, typename DeserializeT>
 common::expected<
-  std::shared_ptr<types::IStructuralFirst>,
+  T,
   DeserializationError
-> StructuralFirstFrom(
+> DeserializeFrom(
   const nlohmann::json& json,
-  bool additional_properties
+  bool additional_properties,
+  const DeserializeT& deserialize
 ) {
-  common::optional<
-    std::shared_ptr<types::IStructuralFirst>
-  > instance;
-
+  common::optional<T> instance;
   common::optional<DeserializationError> error;
 
   std::tie(
     instance,
     error
-  ) = DeserializeStructuralFirst(
-    json,
-    additional_properties
-  );
+  ) = deserialize(json, additional_properties);
 
   if (instance.has_value()) {
     return std::move(*instance);
@@ -3564,8 +3487,25 @@ common::expected<
       "Unexpected null error when null instance."
     );
   }
+
   return common::make_unexpected(
     std::move(*error)
+  );
+}
+
+common::expected<
+  std::shared_ptr<types::IStructuralFirst>,
+  DeserializationError
+> StructuralFirstFrom(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  return DeserializeFrom<
+    std::shared_ptr<types::IStructuralFirst>
+  >(
+    json,
+    additional_properties,
+    DeserializeStructuralFirst
   );
 }
 
@@ -3576,31 +3516,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IStructuralSecond>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeStructuralSecond(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeStructuralSecond
   );
 }
 
@@ -3611,31 +3532,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IMixedAbstractMember>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeMixedAbstractMember(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeMixedAbstractMember
   );
 }
 
@@ -3646,33 +3548,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IMixedAbstractDescendantOne>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeMixedAbstractDescendantOne<
-    types::IMixedAbstractDescendantOne
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeMixedAbstractDescendantOne<
+      types::IMixedAbstractDescendantOne
+    >
   );
 }
 
@@ -3683,33 +3566,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IMixedAbstractDescendantTwo>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeMixedAbstractDescendantTwo<
-    types::IMixedAbstractDescendantTwo
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeMixedAbstractDescendantTwo<
+      types::IMixedAbstractDescendantTwo
+    >
   );
 }
 
@@ -3720,31 +3584,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IMixedConcreteWithDescendants>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeMixedConcreteWithDescendants(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeMixedConcreteWithDescendants
   );
 }
 
@@ -3755,33 +3600,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IMixedConcreteWithDescendantsChild>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeMixedConcreteWithDescendantsChild<
-    types::IMixedConcreteWithDescendantsChild
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeMixedConcreteWithDescendantsChild<
+      types::IMixedConcreteWithDescendantsChild
+    >
   );
 }
 
@@ -3792,31 +3618,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IMixedConcreteLeaf>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeMixedConcreteLeaf(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeMixedConcreteLeaf
   );
 }
 
@@ -3827,31 +3634,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IModelTypedFirst>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeModelTypedFirst(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeModelTypedFirst
   );
 }
 
@@ -3862,31 +3650,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IModelTypedSecond>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeModelTypedSecond(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeModelTypedSecond
   );
 }
 
@@ -3897,31 +3666,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ISomething>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeSomething(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeSomething
   );
 }
 
@@ -3932,31 +3682,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     types::StructuralUnion
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeStructuralUnion(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeStructuralUnion
   );
 }
 
@@ -3967,31 +3698,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     types::MixedUnion
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeMixedUnion(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeMixedUnion
   );
 }
 
@@ -4002,31 +3714,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     types::ModelTypedUnion
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeModelTypedUnion(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeModelTypedUnion
   );
 }
 

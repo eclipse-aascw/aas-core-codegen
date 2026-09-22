@@ -517,6 +517,56 @@ std::pair<
 }
 
 /**
+ * \brief Give out a failed de-serialization with \p cause as its message.
+ *
+ * \tparam T type of the value which could not be de-serialized
+ * \param cause human-readable description of the failure
+ * \return no value, and the error
+ */
+template <typename T>
+std::pair<
+  common::optional<T>,
+  common::optional<DeserializationError>
+> NoInstanceAndDeserializationErrorWithCause(
+  std::wstring cause
+) {
+  return std::make_pair<
+    common::optional<T>,
+    common::optional<DeserializationError>
+  >(
+    common::nullopt,
+    common::make_optional<DeserializationError>(
+      std::move(cause)
+    )
+  );
+}
+
+/**
+ * \brief Give out a failed de-serialization with \p error.
+ *
+ * \tparam T type of the value which could not be de-serialized
+ * \param error of the de-serialization
+ * \return no value, and the error
+ */
+template <typename T>
+std::pair<
+  common::optional<T>,
+  common::optional<DeserializationError>
+> NoInstanceAndDeserializationError(
+  DeserializationError error
+) {
+  return std::make_pair<
+    common::optional<T>,
+    common::optional<DeserializationError>
+  >(
+    common::nullopt,
+    common::make_optional<DeserializationError>(
+      std::move(error)
+    )
+  );
+}
+
+/**
  * Map JSON \c modelType strings to model types.
  */
 const std::unordered_map<
@@ -688,6 +738,13 @@ common::optional<types::ModelType> ModelTypeFromModelTypeString(
   return it->second;
 }
 
+/**
+ * \brief De-serialize a list of items from \p json.
+ *
+ * \param json value expected to be an array
+ * \param deserialize_item de-serializes an item
+ * \return the list, or an error, if any
+ */
 template <typename T, typename DeserializeItemT>
 std::pair<
   common::optional<std::vector<T> >,
@@ -756,11 +813,53 @@ std::pair<
   );
 }
 
+/**
+ * \brief De-serialize a list of instances from \p json.
+ *
+ * \param json value expected to be an array
+ * \param additional_properties handed over to \p deserialize_item
+ * \param deserialize_item de-serializes an item
+ * \return the list, or an error, if any
+ */
+template <typename T, typename DeserializeItemT>
 std::pair<
-  common::optional<types::ModellingKind>,
+  common::optional<std::vector<T> >,
   common::optional<DeserializationError>
-> DeserializeModellingKind(
-  const nlohmann::json& json
+> DeserializeList(
+  const nlohmann::json& json,
+  bool additional_properties,
+  DeserializeItemT&& deserialize_item
+) {
+  return DeserializeList<T>(
+    json,
+    [&additional_properties, &deserialize_item](
+      const nlohmann::json& item
+    ) {
+      return deserialize_item(item, additional_properties);
+    }
+  );
+}
+
+/**
+ * \brief De-serialize a literal of an enumeration from \p json.
+ *
+ * \p from_wstring is a template argument taken by reference, so the call is
+ * statically bound and nothing is paid for the genericity.
+ *
+ * \tparam EnumT enumeration to be de-serialized
+ * \param json value expected to be the text of a literal
+ * \param from_wstring maps the text to a literal, if it is one
+ * \param enum_name name of the enumeration, for the message
+ * \return the literal, or an error, if any
+ */
+template <typename EnumT, typename FromWstringT>
+std::pair<
+  common::optional<EnumT>,
+  common::optional<DeserializationError>
+> DeserializeEnumeration(
+  const nlohmann::json& json,
+  const FromWstringT& from_wstring,
+  const wchar_t* enum_name
 ) {
   common::optional<std::wstring> text;
   common::optional<DeserializationError> error;
@@ -768,52 +867,46 @@ std::pair<
   std::tie(
     text,
     error
-  ) = DeserializeWstring(
-    json
-  );
+  ) = DeserializeWstring(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<types::ModellingKind>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
+    return NoInstanceAndDeserializationError<EnumT>(
+      std::move(*error)
     );
   }
 
-  common::optional<
-    types::ModellingKind
-  > literal = std::move(
-    wstringification::ModellingKindFromWstring(
-      *text
-    )
+  common::optional<EnumT> literal(
+    from_wstring(*text)
   );
 
   if (!literal.has_value()) {
-    std::wstring message = common::Concat(
-      L"Invalid literal for ModellingKind: ",
-      *text
-    );
-
-    return std::make_pair<
-      common::optional<types::ModellingKind>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+    return NoInstanceAndDeserializationErrorWithCause<EnumT>(
+      common::Concat(
+        L"Invalid literal for ",
+        enum_name,
+        L": ",
+        *text
       )
     );
   }
 
-  return std::make_pair<
-    common::optional<types::ModellingKind>,
-    common::optional<DeserializationError>
-    >(
-      std::move(literal),
-      common::nullopt
-    );
+  return std::make_pair(
+    std::move(literal),
+    common::nullopt
+  );
+}
+
+std::pair<
+  common::optional<types::ModellingKind>,
+  common::optional<DeserializationError>
+> DeserializeModellingKind(
+  const nlohmann::json& json
+) {
+  return DeserializeEnumeration<types::ModellingKind>(
+    json,
+    wstringification::ModellingKindFromWstring,
+    L"ModellingKind"
+  );
 }
 
 std::pair<
@@ -822,58 +915,11 @@ std::pair<
 > DeserializeQualifierKind(
   const nlohmann::json& json
 ) {
-  common::optional<std::wstring> text;
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    text,
-    error
-  ) = DeserializeWstring(
-    json
+  return DeserializeEnumeration<types::QualifierKind>(
+    json,
+    wstringification::QualifierKindFromWstring,
+    L"QualifierKind"
   );
-
-  if (error.has_value()) {
-    return std::make_pair<
-      common::optional<types::QualifierKind>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  common::optional<
-    types::QualifierKind
-  > literal = std::move(
-    wstringification::QualifierKindFromWstring(
-      *text
-    )
-  );
-
-  if (!literal.has_value()) {
-    std::wstring message = common::Concat(
-      L"Invalid literal for QualifierKind: ",
-      *text
-    );
-
-    return std::make_pair<
-      common::optional<types::QualifierKind>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  return std::make_pair<
-    common::optional<types::QualifierKind>,
-    common::optional<DeserializationError>
-    >(
-      std::move(literal),
-      common::nullopt
-    );
 }
 
 std::pair<
@@ -882,58 +928,11 @@ std::pair<
 > DeserializeAssetKind(
   const nlohmann::json& json
 ) {
-  common::optional<std::wstring> text;
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    text,
-    error
-  ) = DeserializeWstring(
-    json
+  return DeserializeEnumeration<types::AssetKind>(
+    json,
+    wstringification::AssetKindFromWstring,
+    L"AssetKind"
   );
-
-  if (error.has_value()) {
-    return std::make_pair<
-      common::optional<types::AssetKind>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  common::optional<
-    types::AssetKind
-  > literal = std::move(
-    wstringification::AssetKindFromWstring(
-      *text
-    )
-  );
-
-  if (!literal.has_value()) {
-    std::wstring message = common::Concat(
-      L"Invalid literal for AssetKind: ",
-      *text
-    );
-
-    return std::make_pair<
-      common::optional<types::AssetKind>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  return std::make_pair<
-    common::optional<types::AssetKind>,
-    common::optional<DeserializationError>
-    >(
-      std::move(literal),
-      common::nullopt
-    );
 }
 
 std::pair<
@@ -942,58 +941,11 @@ std::pair<
 > DeserializeAasSubmodelElements(
   const nlohmann::json& json
 ) {
-  common::optional<std::wstring> text;
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    text,
-    error
-  ) = DeserializeWstring(
-    json
+  return DeserializeEnumeration<types::AasSubmodelElements>(
+    json,
+    wstringification::AasSubmodelElementsFromWstring,
+    L"AasSubmodelElements"
   );
-
-  if (error.has_value()) {
-    return std::make_pair<
-      common::optional<types::AasSubmodelElements>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  common::optional<
-    types::AasSubmodelElements
-  > literal = std::move(
-    wstringification::AasSubmodelElementsFromWstring(
-      *text
-    )
-  );
-
-  if (!literal.has_value()) {
-    std::wstring message = common::Concat(
-      L"Invalid literal for AasSubmodelElements: ",
-      *text
-    );
-
-    return std::make_pair<
-      common::optional<types::AasSubmodelElements>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  return std::make_pair<
-    common::optional<types::AasSubmodelElements>,
-    common::optional<DeserializationError>
-    >(
-      std::move(literal),
-      common::nullopt
-    );
 }
 
 std::pair<
@@ -1002,58 +954,11 @@ std::pair<
 > DeserializeEntityType(
   const nlohmann::json& json
 ) {
-  common::optional<std::wstring> text;
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    text,
-    error
-  ) = DeserializeWstring(
-    json
+  return DeserializeEnumeration<types::EntityType>(
+    json,
+    wstringification::EntityTypeFromWstring,
+    L"EntityType"
   );
-
-  if (error.has_value()) {
-    return std::make_pair<
-      common::optional<types::EntityType>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  common::optional<
-    types::EntityType
-  > literal = std::move(
-    wstringification::EntityTypeFromWstring(
-      *text
-    )
-  );
-
-  if (!literal.has_value()) {
-    std::wstring message = common::Concat(
-      L"Invalid literal for EntityType: ",
-      *text
-    );
-
-    return std::make_pair<
-      common::optional<types::EntityType>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  return std::make_pair<
-    common::optional<types::EntityType>,
-    common::optional<DeserializationError>
-    >(
-      std::move(literal),
-      common::nullopt
-    );
 }
 
 std::pair<
@@ -1062,58 +967,11 @@ std::pair<
 > DeserializeDirection(
   const nlohmann::json& json
 ) {
-  common::optional<std::wstring> text;
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    text,
-    error
-  ) = DeserializeWstring(
-    json
+  return DeserializeEnumeration<types::Direction>(
+    json,
+    wstringification::DirectionFromWstring,
+    L"Direction"
   );
-
-  if (error.has_value()) {
-    return std::make_pair<
-      common::optional<types::Direction>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  common::optional<
-    types::Direction
-  > literal = std::move(
-    wstringification::DirectionFromWstring(
-      *text
-    )
-  );
-
-  if (!literal.has_value()) {
-    std::wstring message = common::Concat(
-      L"Invalid literal for Direction: ",
-      *text
-    );
-
-    return std::make_pair<
-      common::optional<types::Direction>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  return std::make_pair<
-    common::optional<types::Direction>,
-    common::optional<DeserializationError>
-    >(
-      std::move(literal),
-      common::nullopt
-    );
 }
 
 std::pair<
@@ -1122,58 +980,11 @@ std::pair<
 > DeserializeStateOfEvent(
   const nlohmann::json& json
 ) {
-  common::optional<std::wstring> text;
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    text,
-    error
-  ) = DeserializeWstring(
-    json
+  return DeserializeEnumeration<types::StateOfEvent>(
+    json,
+    wstringification::StateOfEventFromWstring,
+    L"StateOfEvent"
   );
-
-  if (error.has_value()) {
-    return std::make_pair<
-      common::optional<types::StateOfEvent>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  common::optional<
-    types::StateOfEvent
-  > literal = std::move(
-    wstringification::StateOfEventFromWstring(
-      *text
-    )
-  );
-
-  if (!literal.has_value()) {
-    std::wstring message = common::Concat(
-      L"Invalid literal for StateOfEvent: ",
-      *text
-    );
-
-    return std::make_pair<
-      common::optional<types::StateOfEvent>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  return std::make_pair<
-    common::optional<types::StateOfEvent>,
-    common::optional<DeserializationError>
-    >(
-      std::move(literal),
-      common::nullopt
-    );
 }
 
 std::pair<
@@ -1182,58 +993,11 @@ std::pair<
 > DeserializeReferenceTypes(
   const nlohmann::json& json
 ) {
-  common::optional<std::wstring> text;
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    text,
-    error
-  ) = DeserializeWstring(
-    json
+  return DeserializeEnumeration<types::ReferenceTypes>(
+    json,
+    wstringification::ReferenceTypesFromWstring,
+    L"ReferenceTypes"
   );
-
-  if (error.has_value()) {
-    return std::make_pair<
-      common::optional<types::ReferenceTypes>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  common::optional<
-    types::ReferenceTypes
-  > literal = std::move(
-    wstringification::ReferenceTypesFromWstring(
-      *text
-    )
-  );
-
-  if (!literal.has_value()) {
-    std::wstring message = common::Concat(
-      L"Invalid literal for ReferenceTypes: ",
-      *text
-    );
-
-    return std::make_pair<
-      common::optional<types::ReferenceTypes>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  return std::make_pair<
-    common::optional<types::ReferenceTypes>,
-    common::optional<DeserializationError>
-    >(
-      std::move(literal),
-      common::nullopt
-    );
 }
 
 std::pair<
@@ -1242,58 +1006,11 @@ std::pair<
 > DeserializeKeyTypes(
   const nlohmann::json& json
 ) {
-  common::optional<std::wstring> text;
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    text,
-    error
-  ) = DeserializeWstring(
-    json
+  return DeserializeEnumeration<types::KeyTypes>(
+    json,
+    wstringification::KeyTypesFromWstring,
+    L"KeyTypes"
   );
-
-  if (error.has_value()) {
-    return std::make_pair<
-      common::optional<types::KeyTypes>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  common::optional<
-    types::KeyTypes
-  > literal = std::move(
-    wstringification::KeyTypesFromWstring(
-      *text
-    )
-  );
-
-  if (!literal.has_value()) {
-    std::wstring message = common::Concat(
-      L"Invalid literal for KeyTypes: ",
-      *text
-    );
-
-    return std::make_pair<
-      common::optional<types::KeyTypes>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  return std::make_pair<
-    common::optional<types::KeyTypes>,
-    common::optional<DeserializationError>
-    >(
-      std::move(literal),
-      common::nullopt
-    );
 }
 
 std::pair<
@@ -1302,58 +1019,11 @@ std::pair<
 > DeserializeDataTypeDefXsd(
   const nlohmann::json& json
 ) {
-  common::optional<std::wstring> text;
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    text,
-    error
-  ) = DeserializeWstring(
-    json
+  return DeserializeEnumeration<types::DataTypeDefXsd>(
+    json,
+    wstringification::DataTypeDefXsdFromWstring,
+    L"DataTypeDefXsd"
   );
-
-  if (error.has_value()) {
-    return std::make_pair<
-      common::optional<types::DataTypeDefXsd>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  common::optional<
-    types::DataTypeDefXsd
-  > literal = std::move(
-    wstringification::DataTypeDefXsdFromWstring(
-      *text
-    )
-  );
-
-  if (!literal.has_value()) {
-    std::wstring message = common::Concat(
-      L"Invalid literal for DataTypeDefXsd: ",
-      *text
-    );
-
-    return std::make_pair<
-      common::optional<types::DataTypeDefXsd>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  return std::make_pair<
-    common::optional<types::DataTypeDefXsd>,
-    common::optional<DeserializationError>
-    >(
-      std::move(literal),
-      common::nullopt
-    );
 }
 
 std::pair<
@@ -1362,58 +1032,2036 @@ std::pair<
 > DeserializeDataTypeIec61360(
   const nlohmann::json& json
 ) {
-  common::optional<std::wstring> text;
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    text,
-    error
-  ) = DeserializeWstring(
-    json
+  return DeserializeEnumeration<types::DataTypeIec61360>(
+    json,
+    wstringification::DataTypeIec61360FromWstring,
+    L"DataTypeIec61360"
   );
+}
 
-  if (error.has_value()) {
-    return std::make_pair<
-      common::optional<types::DataTypeIec61360>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
+namespace properties {
+
+enum class OfExtension : std::uint32_t {
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kName,
+  kValueType,
+  kValue,
+  kRefersTo
+};  // enum class OfExtension
+
+enum class OfAdministrativeInformation : std::uint32_t {
+  kEmbeddedDataSpecifications,
+  kVersion,
+  kRevision,
+  kCreator,
+  kTemplateId
+};  // enum class OfAdministrativeInformation
+
+enum class OfQualifier : std::uint32_t {
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kKind,
+  kType,
+  kValueType,
+  kValue,
+  kValueId
+};  // enum class OfQualifier
+
+enum class OfAssetAdministrationShell : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kAdministration,
+  kId,
+  kEmbeddedDataSpecifications,
+  kDerivedFrom,
+  kAssetInformation,
+  kSubmodels,
+  kModelType
+};  // enum class OfAssetAdministrationShell
+
+enum class OfAssetInformation : std::uint32_t {
+  kAssetKind,
+  kGlobalAssetId,
+  kSpecificAssetIds,
+  kAssetType,
+  kDefaultThumbnail
+};  // enum class OfAssetInformation
+
+enum class OfResource : std::uint32_t {
+  kPath,
+  kContentType
+};  // enum class OfResource
+
+enum class OfSpecificAssetId : std::uint32_t {
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kName,
+  kValue,
+  kExternalSubjectId
+};  // enum class OfSpecificAssetId
+
+enum class OfSubmodel : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kAdministration,
+  kId,
+  kKind,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kSubmodelElements,
+  kModelType
+};  // enum class OfSubmodel
+
+enum class OfRelationshipElement : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kFirst,
+  kSecond,
+  kModelType
+};  // enum class OfRelationshipElement
+
+enum class OfSubmodelElementList : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kOrderRelevant,
+  kSemanticIdListElement,
+  kTypeValueListElement,
+  kValueTypeListElement,
+  kValue,
+  kModelType
+};  // enum class OfSubmodelElementList
+
+enum class OfSubmodelElementCollection : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kValue,
+  kModelType
+};  // enum class OfSubmodelElementCollection
+
+enum class OfProperty : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kValueType,
+  kValue,
+  kValueId,
+  kModelType
+};  // enum class OfProperty
+
+enum class OfMultiLanguageProperty : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kValue,
+  kValueId,
+  kModelType
+};  // enum class OfMultiLanguageProperty
+
+enum class OfRange : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kValueType,
+  kMin,
+  kMax,
+  kModelType
+};  // enum class OfRange
+
+enum class OfReferenceElement : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kValue,
+  kModelType
+};  // enum class OfReferenceElement
+
+enum class OfBlob : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kValue,
+  kContentType,
+  kModelType
+};  // enum class OfBlob
+
+enum class OfFile : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kValue,
+  kContentType,
+  kModelType
+};  // enum class OfFile
+
+enum class OfAnnotatedRelationshipElement : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kFirst,
+  kSecond,
+  kAnnotations,
+  kModelType
+};  // enum class OfAnnotatedRelationshipElement
+
+enum class OfEntity : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kStatements,
+  kEntityType,
+  kGlobalAssetId,
+  kSpecificAssetIds,
+  kModelType
+};  // enum class OfEntity
+
+enum class OfEventPayload : std::uint32_t {
+  kSource,
+  kSourceSemanticId,
+  kObservableReference,
+  kObservableSemanticId,
+  kTopic,
+  kSubjectId,
+  kTimeStamp,
+  kPayload
+};  // enum class OfEventPayload
+
+enum class OfBasicEventElement : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kObserved,
+  kDirection,
+  kState,
+  kMessageTopic,
+  kMessageBroker,
+  kLastUpdate,
+  kMinInterval,
+  kMaxInterval,
+  kModelType
+};  // enum class OfBasicEventElement
+
+enum class OfOperation : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kInputVariables,
+  kOutputVariables,
+  kInoutputVariables,
+  kModelType
+};  // enum class OfOperation
+
+enum class OfOperationVariable : std::uint32_t {
+  kValue
+};  // enum class OfOperationVariable
+
+enum class OfCapability : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kSemanticId,
+  kSupplementalSemanticIds,
+  kQualifiers,
+  kEmbeddedDataSpecifications,
+  kModelType
+};  // enum class OfCapability
+
+enum class OfConceptDescription : std::uint32_t {
+  kExtensions,
+  kCategory,
+  kIdShort,
+  kDisplayName,
+  kDescription,
+  kAdministration,
+  kId,
+  kEmbeddedDataSpecifications,
+  kIsCaseOf,
+  kModelType
+};  // enum class OfConceptDescription
+
+enum class OfReference : std::uint32_t {
+  kType,
+  kReferredSemanticId,
+  kKeys
+};  // enum class OfReference
+
+enum class OfKey : std::uint32_t {
+  kType,
+  kValue
+};  // enum class OfKey
+
+enum class OfLangStringNameType : std::uint32_t {
+  kLanguage,
+  kText
+};  // enum class OfLangStringNameType
+
+enum class OfLangStringTextType : std::uint32_t {
+  kLanguage,
+  kText
+};  // enum class OfLangStringTextType
+
+enum class OfEnvironment : std::uint32_t {
+  kAssetAdministrationShells,
+  kSubmodels,
+  kConceptDescriptions
+};  // enum class OfEnvironment
+
+enum class OfEmbeddedDataSpecification : std::uint32_t {
+  kDataSpecification,
+  kDataSpecificationContent
+};  // enum class OfEmbeddedDataSpecification
+
+enum class OfLevelType : std::uint32_t {
+  kMin,
+  kNom,
+  kTyp,
+  kMax
+};  // enum class OfLevelType
+
+enum class OfValueReferencePair : std::uint32_t {
+  kValue,
+  kValueId
+};  // enum class OfValueReferencePair
+
+enum class OfValueList : std::uint32_t {
+  kValueReferencePairs
+};  // enum class OfValueList
+
+enum class OfLangStringPreferredNameTypeIec61360 : std::uint32_t {
+  kLanguage,
+  kText
+};  // enum class OfLangStringPreferredNameTypeIec61360
+
+enum class OfLangStringShortNameTypeIec61360 : std::uint32_t {
+  kLanguage,
+  kText
+};  // enum class OfLangStringShortNameTypeIec61360
+
+enum class OfLangStringDefinitionTypeIec61360 : std::uint32_t {
+  kLanguage,
+  kText
+};  // enum class OfLangStringDefinitionTypeIec61360
+
+enum class OfDataSpecificationIec61360 : std::uint32_t {
+  kPreferredName,
+  kShortName,
+  kUnit,
+  kUnitId,
+  kSourceOfDefinition,
+  kSymbol,
+  kDataType,
+  kDefinition,
+  kValueFormat,
+  kValueList,
+  kValue,
+  kLevelType,
+  kModelType
+};  // enum class OfDataSpecificationIec61360
+
+const std::unordered_map<
+  std::string,
+  OfExtension
+> kMapOfExtension = {
+  {
+    "semanticId",
+    OfExtension::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfExtension::kSupplementalSemanticIds
+  },
+  {
+    "name",
+    OfExtension::kName
+  },
+  {
+    "valueType",
+    OfExtension::kValueType
+  },
+  {
+    "value",
+    OfExtension::kValue
+  },
+  {
+    "refersTo",
+    OfExtension::kRefersTo
   }
+};
 
-  common::optional<
-    types::DataTypeIec61360
-  > literal = std::move(
-    wstringification::DataTypeIec61360FromWstring(
-      *text
+const std::unordered_map<
+  std::string,
+  OfAdministrativeInformation
+> kMapOfAdministrativeInformation = {
+  {
+    "embeddedDataSpecifications",
+    OfAdministrativeInformation::kEmbeddedDataSpecifications
+  },
+  {
+    "version",
+    OfAdministrativeInformation::kVersion
+  },
+  {
+    "revision",
+    OfAdministrativeInformation::kRevision
+  },
+  {
+    "creator",
+    OfAdministrativeInformation::kCreator
+  },
+  {
+    "templateId",
+    OfAdministrativeInformation::kTemplateId
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfQualifier
+> kMapOfQualifier = {
+  {
+    "semanticId",
+    OfQualifier::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfQualifier::kSupplementalSemanticIds
+  },
+  {
+    "kind",
+    OfQualifier::kKind
+  },
+  {
+    "type",
+    OfQualifier::kType
+  },
+  {
+    "valueType",
+    OfQualifier::kValueType
+  },
+  {
+    "value",
+    OfQualifier::kValue
+  },
+  {
+    "valueId",
+    OfQualifier::kValueId
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfAssetAdministrationShell
+> kMapOfAssetAdministrationShell = {
+  {
+    "extensions",
+    OfAssetAdministrationShell::kExtensions
+  },
+  {
+    "category",
+    OfAssetAdministrationShell::kCategory
+  },
+  {
+    "idShort",
+    OfAssetAdministrationShell::kIdShort
+  },
+  {
+    "displayName",
+    OfAssetAdministrationShell::kDisplayName
+  },
+  {
+    "description",
+    OfAssetAdministrationShell::kDescription
+  },
+  {
+    "administration",
+    OfAssetAdministrationShell::kAdministration
+  },
+  {
+    "id",
+    OfAssetAdministrationShell::kId
+  },
+  {
+    "embeddedDataSpecifications",
+    OfAssetAdministrationShell::kEmbeddedDataSpecifications
+  },
+  {
+    "derivedFrom",
+    OfAssetAdministrationShell::kDerivedFrom
+  },
+  {
+    "assetInformation",
+    OfAssetAdministrationShell::kAssetInformation
+  },
+  {
+    "submodels",
+    OfAssetAdministrationShell::kSubmodels
+  },
+  {
+    "modelType",
+    OfAssetAdministrationShell::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfAssetInformation
+> kMapOfAssetInformation = {
+  {
+    "assetKind",
+    OfAssetInformation::kAssetKind
+  },
+  {
+    "globalAssetId",
+    OfAssetInformation::kGlobalAssetId
+  },
+  {
+    "specificAssetIds",
+    OfAssetInformation::kSpecificAssetIds
+  },
+  {
+    "assetType",
+    OfAssetInformation::kAssetType
+  },
+  {
+    "defaultThumbnail",
+    OfAssetInformation::kDefaultThumbnail
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfResource
+> kMapOfResource = {
+  {
+    "path",
+    OfResource::kPath
+  },
+  {
+    "contentType",
+    OfResource::kContentType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfSpecificAssetId
+> kMapOfSpecificAssetId = {
+  {
+    "semanticId",
+    OfSpecificAssetId::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfSpecificAssetId::kSupplementalSemanticIds
+  },
+  {
+    "name",
+    OfSpecificAssetId::kName
+  },
+  {
+    "value",
+    OfSpecificAssetId::kValue
+  },
+  {
+    "externalSubjectId",
+    OfSpecificAssetId::kExternalSubjectId
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfSubmodel
+> kMapOfSubmodel = {
+  {
+    "extensions",
+    OfSubmodel::kExtensions
+  },
+  {
+    "category",
+    OfSubmodel::kCategory
+  },
+  {
+    "idShort",
+    OfSubmodel::kIdShort
+  },
+  {
+    "displayName",
+    OfSubmodel::kDisplayName
+  },
+  {
+    "description",
+    OfSubmodel::kDescription
+  },
+  {
+    "administration",
+    OfSubmodel::kAdministration
+  },
+  {
+    "id",
+    OfSubmodel::kId
+  },
+  {
+    "kind",
+    OfSubmodel::kKind
+  },
+  {
+    "semanticId",
+    OfSubmodel::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfSubmodel::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfSubmodel::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfSubmodel::kEmbeddedDataSpecifications
+  },
+  {
+    "submodelElements",
+    OfSubmodel::kSubmodelElements
+  },
+  {
+    "modelType",
+    OfSubmodel::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfRelationshipElement
+> kMapOfRelationshipElement = {
+  {
+    "extensions",
+    OfRelationshipElement::kExtensions
+  },
+  {
+    "category",
+    OfRelationshipElement::kCategory
+  },
+  {
+    "idShort",
+    OfRelationshipElement::kIdShort
+  },
+  {
+    "displayName",
+    OfRelationshipElement::kDisplayName
+  },
+  {
+    "description",
+    OfRelationshipElement::kDescription
+  },
+  {
+    "semanticId",
+    OfRelationshipElement::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfRelationshipElement::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfRelationshipElement::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfRelationshipElement::kEmbeddedDataSpecifications
+  },
+  {
+    "first",
+    OfRelationshipElement::kFirst
+  },
+  {
+    "second",
+    OfRelationshipElement::kSecond
+  },
+  {
+    "modelType",
+    OfRelationshipElement::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfSubmodelElementList
+> kMapOfSubmodelElementList = {
+  {
+    "extensions",
+    OfSubmodelElementList::kExtensions
+  },
+  {
+    "category",
+    OfSubmodelElementList::kCategory
+  },
+  {
+    "idShort",
+    OfSubmodelElementList::kIdShort
+  },
+  {
+    "displayName",
+    OfSubmodelElementList::kDisplayName
+  },
+  {
+    "description",
+    OfSubmodelElementList::kDescription
+  },
+  {
+    "semanticId",
+    OfSubmodelElementList::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfSubmodelElementList::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfSubmodelElementList::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfSubmodelElementList::kEmbeddedDataSpecifications
+  },
+  {
+    "orderRelevant",
+    OfSubmodelElementList::kOrderRelevant
+  },
+  {
+    "semanticIdListElement",
+    OfSubmodelElementList::kSemanticIdListElement
+  },
+  {
+    "typeValueListElement",
+    OfSubmodelElementList::kTypeValueListElement
+  },
+  {
+    "valueTypeListElement",
+    OfSubmodelElementList::kValueTypeListElement
+  },
+  {
+    "value",
+    OfSubmodelElementList::kValue
+  },
+  {
+    "modelType",
+    OfSubmodelElementList::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfSubmodelElementCollection
+> kMapOfSubmodelElementCollection = {
+  {
+    "extensions",
+    OfSubmodelElementCollection::kExtensions
+  },
+  {
+    "category",
+    OfSubmodelElementCollection::kCategory
+  },
+  {
+    "idShort",
+    OfSubmodelElementCollection::kIdShort
+  },
+  {
+    "displayName",
+    OfSubmodelElementCollection::kDisplayName
+  },
+  {
+    "description",
+    OfSubmodelElementCollection::kDescription
+  },
+  {
+    "semanticId",
+    OfSubmodelElementCollection::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfSubmodelElementCollection::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfSubmodelElementCollection::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfSubmodelElementCollection::kEmbeddedDataSpecifications
+  },
+  {
+    "value",
+    OfSubmodelElementCollection::kValue
+  },
+  {
+    "modelType",
+    OfSubmodelElementCollection::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfProperty
+> kMapOfProperty = {
+  {
+    "extensions",
+    OfProperty::kExtensions
+  },
+  {
+    "category",
+    OfProperty::kCategory
+  },
+  {
+    "idShort",
+    OfProperty::kIdShort
+  },
+  {
+    "displayName",
+    OfProperty::kDisplayName
+  },
+  {
+    "description",
+    OfProperty::kDescription
+  },
+  {
+    "semanticId",
+    OfProperty::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfProperty::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfProperty::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfProperty::kEmbeddedDataSpecifications
+  },
+  {
+    "valueType",
+    OfProperty::kValueType
+  },
+  {
+    "value",
+    OfProperty::kValue
+  },
+  {
+    "valueId",
+    OfProperty::kValueId
+  },
+  {
+    "modelType",
+    OfProperty::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfMultiLanguageProperty
+> kMapOfMultiLanguageProperty = {
+  {
+    "extensions",
+    OfMultiLanguageProperty::kExtensions
+  },
+  {
+    "category",
+    OfMultiLanguageProperty::kCategory
+  },
+  {
+    "idShort",
+    OfMultiLanguageProperty::kIdShort
+  },
+  {
+    "displayName",
+    OfMultiLanguageProperty::kDisplayName
+  },
+  {
+    "description",
+    OfMultiLanguageProperty::kDescription
+  },
+  {
+    "semanticId",
+    OfMultiLanguageProperty::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfMultiLanguageProperty::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfMultiLanguageProperty::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfMultiLanguageProperty::kEmbeddedDataSpecifications
+  },
+  {
+    "value",
+    OfMultiLanguageProperty::kValue
+  },
+  {
+    "valueId",
+    OfMultiLanguageProperty::kValueId
+  },
+  {
+    "modelType",
+    OfMultiLanguageProperty::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfRange
+> kMapOfRange = {
+  {
+    "extensions",
+    OfRange::kExtensions
+  },
+  {
+    "category",
+    OfRange::kCategory
+  },
+  {
+    "idShort",
+    OfRange::kIdShort
+  },
+  {
+    "displayName",
+    OfRange::kDisplayName
+  },
+  {
+    "description",
+    OfRange::kDescription
+  },
+  {
+    "semanticId",
+    OfRange::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfRange::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfRange::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfRange::kEmbeddedDataSpecifications
+  },
+  {
+    "valueType",
+    OfRange::kValueType
+  },
+  {
+    "min",
+    OfRange::kMin
+  },
+  {
+    "max",
+    OfRange::kMax
+  },
+  {
+    "modelType",
+    OfRange::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfReferenceElement
+> kMapOfReferenceElement = {
+  {
+    "extensions",
+    OfReferenceElement::kExtensions
+  },
+  {
+    "category",
+    OfReferenceElement::kCategory
+  },
+  {
+    "idShort",
+    OfReferenceElement::kIdShort
+  },
+  {
+    "displayName",
+    OfReferenceElement::kDisplayName
+  },
+  {
+    "description",
+    OfReferenceElement::kDescription
+  },
+  {
+    "semanticId",
+    OfReferenceElement::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfReferenceElement::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfReferenceElement::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfReferenceElement::kEmbeddedDataSpecifications
+  },
+  {
+    "value",
+    OfReferenceElement::kValue
+  },
+  {
+    "modelType",
+    OfReferenceElement::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfBlob
+> kMapOfBlob = {
+  {
+    "extensions",
+    OfBlob::kExtensions
+  },
+  {
+    "category",
+    OfBlob::kCategory
+  },
+  {
+    "idShort",
+    OfBlob::kIdShort
+  },
+  {
+    "displayName",
+    OfBlob::kDisplayName
+  },
+  {
+    "description",
+    OfBlob::kDescription
+  },
+  {
+    "semanticId",
+    OfBlob::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfBlob::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfBlob::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfBlob::kEmbeddedDataSpecifications
+  },
+  {
+    "value",
+    OfBlob::kValue
+  },
+  {
+    "contentType",
+    OfBlob::kContentType
+  },
+  {
+    "modelType",
+    OfBlob::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfFile
+> kMapOfFile = {
+  {
+    "extensions",
+    OfFile::kExtensions
+  },
+  {
+    "category",
+    OfFile::kCategory
+  },
+  {
+    "idShort",
+    OfFile::kIdShort
+  },
+  {
+    "displayName",
+    OfFile::kDisplayName
+  },
+  {
+    "description",
+    OfFile::kDescription
+  },
+  {
+    "semanticId",
+    OfFile::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfFile::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfFile::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfFile::kEmbeddedDataSpecifications
+  },
+  {
+    "value",
+    OfFile::kValue
+  },
+  {
+    "contentType",
+    OfFile::kContentType
+  },
+  {
+    "modelType",
+    OfFile::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfAnnotatedRelationshipElement
+> kMapOfAnnotatedRelationshipElement = {
+  {
+    "extensions",
+    OfAnnotatedRelationshipElement::kExtensions
+  },
+  {
+    "category",
+    OfAnnotatedRelationshipElement::kCategory
+  },
+  {
+    "idShort",
+    OfAnnotatedRelationshipElement::kIdShort
+  },
+  {
+    "displayName",
+    OfAnnotatedRelationshipElement::kDisplayName
+  },
+  {
+    "description",
+    OfAnnotatedRelationshipElement::kDescription
+  },
+  {
+    "semanticId",
+    OfAnnotatedRelationshipElement::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfAnnotatedRelationshipElement::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfAnnotatedRelationshipElement::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfAnnotatedRelationshipElement::kEmbeddedDataSpecifications
+  },
+  {
+    "first",
+    OfAnnotatedRelationshipElement::kFirst
+  },
+  {
+    "second",
+    OfAnnotatedRelationshipElement::kSecond
+  },
+  {
+    "annotations",
+    OfAnnotatedRelationshipElement::kAnnotations
+  },
+  {
+    "modelType",
+    OfAnnotatedRelationshipElement::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfEntity
+> kMapOfEntity = {
+  {
+    "extensions",
+    OfEntity::kExtensions
+  },
+  {
+    "category",
+    OfEntity::kCategory
+  },
+  {
+    "idShort",
+    OfEntity::kIdShort
+  },
+  {
+    "displayName",
+    OfEntity::kDisplayName
+  },
+  {
+    "description",
+    OfEntity::kDescription
+  },
+  {
+    "semanticId",
+    OfEntity::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfEntity::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfEntity::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfEntity::kEmbeddedDataSpecifications
+  },
+  {
+    "statements",
+    OfEntity::kStatements
+  },
+  {
+    "entityType",
+    OfEntity::kEntityType
+  },
+  {
+    "globalAssetId",
+    OfEntity::kGlobalAssetId
+  },
+  {
+    "specificAssetIds",
+    OfEntity::kSpecificAssetIds
+  },
+  {
+    "modelType",
+    OfEntity::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfEventPayload
+> kMapOfEventPayload = {
+  {
+    "source",
+    OfEventPayload::kSource
+  },
+  {
+    "sourceSemanticId",
+    OfEventPayload::kSourceSemanticId
+  },
+  {
+    "observableReference",
+    OfEventPayload::kObservableReference
+  },
+  {
+    "observableSemanticId",
+    OfEventPayload::kObservableSemanticId
+  },
+  {
+    "topic",
+    OfEventPayload::kTopic
+  },
+  {
+    "subjectId",
+    OfEventPayload::kSubjectId
+  },
+  {
+    "timeStamp",
+    OfEventPayload::kTimeStamp
+  },
+  {
+    "payload",
+    OfEventPayload::kPayload
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfBasicEventElement
+> kMapOfBasicEventElement = {
+  {
+    "extensions",
+    OfBasicEventElement::kExtensions
+  },
+  {
+    "category",
+    OfBasicEventElement::kCategory
+  },
+  {
+    "idShort",
+    OfBasicEventElement::kIdShort
+  },
+  {
+    "displayName",
+    OfBasicEventElement::kDisplayName
+  },
+  {
+    "description",
+    OfBasicEventElement::kDescription
+  },
+  {
+    "semanticId",
+    OfBasicEventElement::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfBasicEventElement::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfBasicEventElement::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfBasicEventElement::kEmbeddedDataSpecifications
+  },
+  {
+    "observed",
+    OfBasicEventElement::kObserved
+  },
+  {
+    "direction",
+    OfBasicEventElement::kDirection
+  },
+  {
+    "state",
+    OfBasicEventElement::kState
+  },
+  {
+    "messageTopic",
+    OfBasicEventElement::kMessageTopic
+  },
+  {
+    "messageBroker",
+    OfBasicEventElement::kMessageBroker
+  },
+  {
+    "lastUpdate",
+    OfBasicEventElement::kLastUpdate
+  },
+  {
+    "minInterval",
+    OfBasicEventElement::kMinInterval
+  },
+  {
+    "maxInterval",
+    OfBasicEventElement::kMaxInterval
+  },
+  {
+    "modelType",
+    OfBasicEventElement::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfOperation
+> kMapOfOperation = {
+  {
+    "extensions",
+    OfOperation::kExtensions
+  },
+  {
+    "category",
+    OfOperation::kCategory
+  },
+  {
+    "idShort",
+    OfOperation::kIdShort
+  },
+  {
+    "displayName",
+    OfOperation::kDisplayName
+  },
+  {
+    "description",
+    OfOperation::kDescription
+  },
+  {
+    "semanticId",
+    OfOperation::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfOperation::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfOperation::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfOperation::kEmbeddedDataSpecifications
+  },
+  {
+    "inputVariables",
+    OfOperation::kInputVariables
+  },
+  {
+    "outputVariables",
+    OfOperation::kOutputVariables
+  },
+  {
+    "inoutputVariables",
+    OfOperation::kInoutputVariables
+  },
+  {
+    "modelType",
+    OfOperation::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfOperationVariable
+> kMapOfOperationVariable = {
+  {
+    "value",
+    OfOperationVariable::kValue
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfCapability
+> kMapOfCapability = {
+  {
+    "extensions",
+    OfCapability::kExtensions
+  },
+  {
+    "category",
+    OfCapability::kCategory
+  },
+  {
+    "idShort",
+    OfCapability::kIdShort
+  },
+  {
+    "displayName",
+    OfCapability::kDisplayName
+  },
+  {
+    "description",
+    OfCapability::kDescription
+  },
+  {
+    "semanticId",
+    OfCapability::kSemanticId
+  },
+  {
+    "supplementalSemanticIds",
+    OfCapability::kSupplementalSemanticIds
+  },
+  {
+    "qualifiers",
+    OfCapability::kQualifiers
+  },
+  {
+    "embeddedDataSpecifications",
+    OfCapability::kEmbeddedDataSpecifications
+  },
+  {
+    "modelType",
+    OfCapability::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfConceptDescription
+> kMapOfConceptDescription = {
+  {
+    "extensions",
+    OfConceptDescription::kExtensions
+  },
+  {
+    "category",
+    OfConceptDescription::kCategory
+  },
+  {
+    "idShort",
+    OfConceptDescription::kIdShort
+  },
+  {
+    "displayName",
+    OfConceptDescription::kDisplayName
+  },
+  {
+    "description",
+    OfConceptDescription::kDescription
+  },
+  {
+    "administration",
+    OfConceptDescription::kAdministration
+  },
+  {
+    "id",
+    OfConceptDescription::kId
+  },
+  {
+    "embeddedDataSpecifications",
+    OfConceptDescription::kEmbeddedDataSpecifications
+  },
+  {
+    "isCaseOf",
+    OfConceptDescription::kIsCaseOf
+  },
+  {
+    "modelType",
+    OfConceptDescription::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfReference
+> kMapOfReference = {
+  {
+    "type",
+    OfReference::kType
+  },
+  {
+    "referredSemanticId",
+    OfReference::kReferredSemanticId
+  },
+  {
+    "keys",
+    OfReference::kKeys
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfKey
+> kMapOfKey = {
+  {
+    "type",
+    OfKey::kType
+  },
+  {
+    "value",
+    OfKey::kValue
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfLangStringNameType
+> kMapOfLangStringNameType = {
+  {
+    "language",
+    OfLangStringNameType::kLanguage
+  },
+  {
+    "text",
+    OfLangStringNameType::kText
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfLangStringTextType
+> kMapOfLangStringTextType = {
+  {
+    "language",
+    OfLangStringTextType::kLanguage
+  },
+  {
+    "text",
+    OfLangStringTextType::kText
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfEnvironment
+> kMapOfEnvironment = {
+  {
+    "assetAdministrationShells",
+    OfEnvironment::kAssetAdministrationShells
+  },
+  {
+    "submodels",
+    OfEnvironment::kSubmodels
+  },
+  {
+    "conceptDescriptions",
+    OfEnvironment::kConceptDescriptions
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfEmbeddedDataSpecification
+> kMapOfEmbeddedDataSpecification = {
+  {
+    "dataSpecification",
+    OfEmbeddedDataSpecification::kDataSpecification
+  },
+  {
+    "dataSpecificationContent",
+    OfEmbeddedDataSpecification::kDataSpecificationContent
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfLevelType
+> kMapOfLevelType = {
+  {
+    "min",
+    OfLevelType::kMin
+  },
+  {
+    "nom",
+    OfLevelType::kNom
+  },
+  {
+    "typ",
+    OfLevelType::kTyp
+  },
+  {
+    "max",
+    OfLevelType::kMax
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfValueReferencePair
+> kMapOfValueReferencePair = {
+  {
+    "value",
+    OfValueReferencePair::kValue
+  },
+  {
+    "valueId",
+    OfValueReferencePair::kValueId
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfValueList
+> kMapOfValueList = {
+  {
+    "valueReferencePairs",
+    OfValueList::kValueReferencePairs
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfLangStringPreferredNameTypeIec61360
+> kMapOfLangStringPreferredNameTypeIec61360 = {
+  {
+    "language",
+    OfLangStringPreferredNameTypeIec61360::kLanguage
+  },
+  {
+    "text",
+    OfLangStringPreferredNameTypeIec61360::kText
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfLangStringShortNameTypeIec61360
+> kMapOfLangStringShortNameTypeIec61360 = {
+  {
+    "language",
+    OfLangStringShortNameTypeIec61360::kLanguage
+  },
+  {
+    "text",
+    OfLangStringShortNameTypeIec61360::kText
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfLangStringDefinitionTypeIec61360
+> kMapOfLangStringDefinitionTypeIec61360 = {
+  {
+    "language",
+    OfLangStringDefinitionTypeIec61360::kLanguage
+  },
+  {
+    "text",
+    OfLangStringDefinitionTypeIec61360::kText
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfDataSpecificationIec61360
+> kMapOfDataSpecificationIec61360 = {
+  {
+    "preferredName",
+    OfDataSpecificationIec61360::kPreferredName
+  },
+  {
+    "shortName",
+    OfDataSpecificationIec61360::kShortName
+  },
+  {
+    "unit",
+    OfDataSpecificationIec61360::kUnit
+  },
+  {
+    "unitId",
+    OfDataSpecificationIec61360::kUnitId
+  },
+  {
+    "sourceOfDefinition",
+    OfDataSpecificationIec61360::kSourceOfDefinition
+  },
+  {
+    "symbol",
+    OfDataSpecificationIec61360::kSymbol
+  },
+  {
+    "dataType",
+    OfDataSpecificationIec61360::kDataType
+  },
+  {
+    "definition",
+    OfDataSpecificationIec61360::kDefinition
+  },
+  {
+    "valueFormat",
+    OfDataSpecificationIec61360::kValueFormat
+  },
+  {
+    "valueList",
+    OfDataSpecificationIec61360::kValueList
+  },
+  {
+    "value",
+    OfDataSpecificationIec61360::kValue
+  },
+  {
+    "levelType",
+    OfDataSpecificationIec61360::kLevelType
+  },
+  {
+    "modelType",
+    OfDataSpecificationIec61360::kModelType
+  }
+};
+
+}  // namespace properties
+
+/**
+ * \brief Create the exception to be thrown on an unexpected property literal.
+ *
+ * Every ``switch`` over the properties of a class covers all the literals of
+ * its enumeration, so we can only get here if the value has been corrupted.
+ * We report that as a logic error, and not as a de-serialization error, since
+ * it does not originate in the input.
+ *
+ * \param enum_name name of the property enumeration, for the message
+ * \param property the unexpected literal
+ * \return the exception to be thrown
+ */
+template <typename EnumT>
+std::logic_error UnexpectedPropertyLiteralError(
+  const char* enum_name,
+  EnumT property
+) {
+  return std::logic_error(
+    common::Concat(
+      "Unexpected properties literal of ",
+      enum_name,
+      ": ",
+      std::to_string(
+        static_cast<std::uint32_t>(property)
+      )
     )
   );
+}
 
-  if (!literal.has_value()) {
-    std::wstring message = common::Concat(
-      L"Invalid literal for DataTypeIec61360: ",
-      *text
+/**
+ * \brief Parse the properties of an instance from \p json.
+ *
+ * This function factors out everything which the property loop of a class does
+ * not say about the class it belongs to: walking the keys, looking the property
+ * up, refusing or accepting an unknown one and marking the property on
+ * the error path. The class itself supplies only \p on_property, which
+ * dispatches on the property and assigns the local variables that its
+ * constructor is finally called with.
+ *
+ * NOTE (mristin):
+ * We walk the keys which are actually there, instead of asking for each
+ * property of the class whether it is there. An instance carries only a few of
+ * the many properties which a class declares, and nlohmann's object is
+ * a ``std::map``, so asking costs a tree walk per property -- twice over, as
+ * the value then has to be fetched. Walking also detects an unknown key on
+ * the way, which is why there is no separate pass for that.
+ *
+ * NOTE (mristin):
+ * We take \p map_of_properties in, instead of letting \p on_property work on
+ * the JSON name of the property, because we want the class to dispatch with
+ * a hard-wired ``switch`` whose branches assign the local variables of
+ * the caller.
+ *
+ * A ``switch`` needs an integral constant, and C++ can not switch on a string,
+ * so the name has to be translated into a literal of the property enumeration
+ * first. We do that here rather than in the class so that the translation, and
+ * the error reported when the name matches no property at all, are written
+ * once instead of once per class.
+ *
+ * \param json object whose properties are to be parsed
+ * \param map_of_properties maps the JSON name of a property to its literal
+ * \param additional_properties if not set, refuse a key which matches
+ * no property
+ * \param on_property parses the value of the recognized property
+ * \return the error, if the parsing failed
+ */
+template <typename EnumT, typename OnPropertyT>
+common::optional<DeserializationError> ParseProperties(
+  const nlohmann::json& json,
+  const std::unordered_map<std::string, EnumT>& map_of_properties,
+  bool additional_properties,
+  const OnPropertyT& on_property
+) {
+  #ifdef DEBUG
+  if (!json.is_object()) {
+    throw std::logic_error(
+      "Unexpected non-object in ParseProperties. "
+      "ParseProperties expects the caller to have checked that."
+    );
+  }
+  #endif
+
+  for (const auto& key_val : json.items()) {
+    auto it(
+      map_of_properties.find(key_val.key())
     );
 
-    return std::make_pair<
-      common::optional<types::DataTypeIec61360>,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+    if (it == map_of_properties.end()) {
+      if (additional_properties) {
+        continue;
+      }
+
+      return DeserializationError(
+        common::Concat(
+          L"Unexpected additional property: ",
+          common::Utf8ToWstring(key_val.key())
+        )
+      );
+    }
+
+    common::optional<DeserializationError> error(
+      on_property(it->second, key_val.value())
+    );
+
+    if (error.has_value()) {
+      error->path.segments.emplace_front(
+        common::make_unique<PropertySegment>(
+          common::Utf8ToWstring(key_val.key())
+        )
+      );
+
+      return error;
+    }
+  }
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Check that \p json is a JSON object.
+ *
+ * \param json value to be checked
+ * \return the error, if \p json is anything else
+ */
+common::optional<DeserializationError> CheckJsonObject(
+  const nlohmann::json& json
+) {
+  if (!json.is_object()) {
+    return DeserializationError(
+      common::Concat(
+        L"Expected an object, but got: ",
+        common::Utf8ToWstring(json.type_name())
       )
     );
   }
 
-  return std::make_pair<
-    common::optional<types::DataTypeIec61360>,
-    common::optional<DeserializationError>
-    >(
-      std::move(literal),
-      common::nullopt
+  return common::nullopt;
+}
+
+/**
+ * \brief Check that \p json is an object whose model type is \p expected.
+ *
+ * The model type is compared as the string which came on the wire. That refuses
+ * a value of the wrong type just as well as parsing it would, and costs neither
+ * a conversion to a wide string nor the allocation which goes with it.
+ *
+ * \param json value expected to be an object carrying a model type
+ * \param expected model type of the class
+ * \return the error, if \p json does not bear \p expected
+ */
+common::optional<DeserializationError> CheckModelType(
+  const nlohmann::json& json,
+  const char* expected
+) {
+  const std::string* model_type;
+  common::optional<DeserializationError> error;
+
+  std::tie(
+    model_type,
+    error
+  ) = GetModelTypeFrom(json);
+
+  if (error.has_value()) {
+    return error;
+  }
+
+  if (*model_type != expected) {
+    return DeserializationError(
+      common::Concat(
+        L"Expected model type '",
+        common::Utf8ToWstring(expected),
+        L"', but got: ",
+        common::Utf8ToWstring(*model_type)
+      )
     );
+  }
+
+  return common::nullopt;
+}
+
+/**
+ * \brief Assign the value parsed to \p target, or give out the error of the parse.
+ *
+ * We deliberately take the *result* of a parse instead of the JSON value and
+ * the function which parses it. The item parsers of a tuple vary both in number
+ * and in type, so no signature taking the parser could serve every parse;
+ * taking the result lets this single function serve all of them.
+ *
+ * \param target variable to be assigned the value parsed
+ * \param parsed result of the parse
+ * \return the error, if the parse failed
+ */
+template <typename T>
+common::optional<DeserializationError> ParseInto(
+  common::optional<T>& target,
+  std::pair<
+    common::optional<T>,
+    common::optional<DeserializationError>
+  >&& parsed
+) {
+  if (parsed.second.has_value()) {
+    return std::move(parsed.second);
+  }
+
+  target = std::move(parsed.first);
+
+  return common::nullopt;
 }
 
 /**
@@ -1436,13 +3084,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IExtension.
+ * \brief Parse the properties of an instance of types::IExtension.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IExtension>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfExtension(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IExtension.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1554,13 +3229,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IAdministrativeInformation.
+ * \brief Parse the properties of an instance of types::IAdministrativeInformation.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IAdministrativeInformation>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfAdministrativeInformation(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IAdministrativeInformation.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1596,13 +3298,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IQualifier.
+ * \brief Parse the properties of an instance of types::IQualifier.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IQualifier>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfQualifier(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IQualifier.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1619,13 +3348,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IAssetAdministrationShell.
+ * \brief Parse the properties of an instance of types::IAssetAdministrationShell.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IAssetAdministrationShell>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfAssetAdministrationShell(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IAssetAdministrationShell.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1642,13 +3398,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IAssetInformation.
+ * \brief Parse the properties of an instance of types::IAssetInformation.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IAssetInformation>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfAssetInformation(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IAssetInformation.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -1661,13 +3440,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IResource.
+ * \brief Parse the properties of an instance of types::IResource.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IResource>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfResource(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IResource.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -1680,13 +3482,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ISpecificAssetId.
+ * \brief Parse the properties of an instance of types::ISpecificAssetId.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ISpecificAssetId>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfSpecificAssetId(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ISpecificAssetId.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1703,13 +3532,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ISubmodel.
+ * \brief Parse the properties of an instance of types::ISubmodel.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ISubmodel>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfSubmodel(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ISubmodel.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1745,13 +3601,15 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IRelationshipElement.
+ * \brief Parse the properties of an instance of types::IRelationshipElement.
  *
- * \param json value to be de-serialized
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1762,7 +3620,7 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> ConcretelyDeserializeRelationshipElement(
+> ParsePropertiesOfRelationshipElement(
   const nlohmann::json& json,
   bool additional_properties
 );
@@ -1787,13 +3645,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ISubmodelElementList.
+ * \brief Parse the properties of an instance of types::ISubmodelElementList.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ISubmodelElementList>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfSubmodelElementList(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ISubmodelElementList.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1810,13 +3695,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ISubmodelElementCollection.
+ * \brief Parse the properties of an instance of types::ISubmodelElementCollection.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ISubmodelElementCollection>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfSubmodelElementCollection(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ISubmodelElementCollection.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1852,13 +3764,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IProperty.
+ * \brief Parse the properties of an instance of types::IProperty.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IProperty>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfProperty(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IProperty.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1875,13 +3814,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IMultiLanguageProperty.
+ * \brief Parse the properties of an instance of types::IMultiLanguageProperty.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IMultiLanguageProperty>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfMultiLanguageProperty(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IMultiLanguageProperty.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1898,13 +3864,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IRange.
+ * \brief Parse the properties of an instance of types::IRange.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IRange>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfRange(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IRange.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1921,13 +3914,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IReferenceElement.
+ * \brief Parse the properties of an instance of types::IReferenceElement.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IReferenceElement>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfReferenceElement(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IReferenceElement.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1944,13 +3964,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IBlob.
+ * \brief Parse the properties of an instance of types::IBlob.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IBlob>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfBlob(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IBlob.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1967,13 +4014,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IFile.
+ * \brief Parse the properties of an instance of types::IFile.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IFile>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfFile(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IFile.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -1990,13 +4064,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IAnnotatedRelationshipElement.
+ * \brief Parse the properties of an instance of types::IAnnotatedRelationshipElement.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IAnnotatedRelationshipElement>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfAnnotatedRelationshipElement(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IAnnotatedRelationshipElement.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2013,13 +4114,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IEntity.
+ * \brief Parse the properties of an instance of types::IEntity.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IEntity>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfEntity(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IEntity.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2036,13 +4164,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IEventPayload.
+ * \brief Parse the properties of an instance of types::IEventPayload.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IEventPayload>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfEventPayload(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IEventPayload.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -2074,13 +4225,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IBasicEventElement.
+ * \brief Parse the properties of an instance of types::IBasicEventElement.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IBasicEventElement>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfBasicEventElement(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IBasicEventElement.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2097,13 +4275,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IOperation.
+ * \brief Parse the properties of an instance of types::IOperation.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IOperation>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfOperation(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IOperation.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2120,13 +4325,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IOperationVariable.
+ * \brief Parse the properties of an instance of types::IOperationVariable.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IOperationVariable>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfOperationVariable(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IOperationVariable.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -2139,13 +4367,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ICapability.
+ * \brief Parse the properties of an instance of types::ICapability.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ICapability>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfCapability(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ICapability.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2162,13 +4417,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IConceptDescription.
+ * \brief Parse the properties of an instance of types::IConceptDescription.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IConceptDescription>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfConceptDescription(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IConceptDescription.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2185,13 +4467,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IReference.
+ * \brief Parse the properties of an instance of types::IReference.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IReference>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfReference(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IReference.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -2204,13 +4509,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IKey.
+ * \brief Parse the properties of an instance of types::IKey.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IKey>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfKey(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IKey.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -2242,13 +4570,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ILangStringNameType.
+ * \brief Parse the properties of an instance of types::ILangStringNameType.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILangStringNameType>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfLangStringNameType(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ILangStringNameType.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2265,13 +4620,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ILangStringTextType.
+ * \brief Parse the properties of an instance of types::ILangStringTextType.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILangStringTextType>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfLangStringTextType(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ILangStringTextType.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2288,13 +4670,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IEnvironment.
+ * \brief Parse the properties of an instance of types::IEnvironment.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IEnvironment>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfEnvironment(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IEnvironment.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -2326,13 +4731,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IEmbeddedDataSpecification.
+ * \brief Parse the properties of an instance of types::IEmbeddedDataSpecification.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IEmbeddedDataSpecification>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfEmbeddedDataSpecification(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IEmbeddedDataSpecification.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -2345,13 +4773,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ILevelType.
+ * \brief Parse the properties of an instance of types::ILevelType.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::ILevelType>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfLevelType(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ILevelType.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -2364,13 +4815,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IValueReferencePair.
+ * \brief Parse the properties of an instance of types::IValueReferencePair.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IValueReferencePair>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfValueReferencePair(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IValueReferencePair.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -2383,13 +4857,36 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IValueList.
+ * \brief Parse the properties of an instance of types::IValueList.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IValueList>
+  >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfValueList(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IValueList.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 std::pair<
   common::optional<
@@ -2402,13 +4899,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ILangStringPreferredNameTypeIec61360.
+ * \brief Parse the properties of an instance of types::ILangStringPreferredNameTypeIec61360.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILangStringPreferredNameTypeIec61360>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfLangStringPreferredNameTypeIec61360(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ILangStringPreferredNameTypeIec61360.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2425,13 +4949,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ILangStringShortNameTypeIec61360.
+ * \brief Parse the properties of an instance of types::ILangStringShortNameTypeIec61360.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILangStringShortNameTypeIec61360>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfLangStringShortNameTypeIec61360(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ILangStringShortNameTypeIec61360.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2448,13 +4999,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::ILangStringDefinitionTypeIec61360.
+ * \brief Parse the properties of an instance of types::ILangStringDefinitionTypeIec61360.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILangStringDefinitionTypeIec61360>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfLangStringDefinitionTypeIec61360(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ILangStringDefinitionTypeIec61360.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2471,13 +5049,40 @@ std::pair<
 );
 
 /**
- * \brief Deserialize concretely an instance
- * of types::IDataSpecificationIec61360.
+ * \brief Parse the properties of an instance of types::IDataSpecificationIec61360.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IDataSpecificationIec61360>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfDataSpecificationIec61360(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IDataSpecificationIec61360.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
  *
  * \param json value to be de-serialized
  * \param additional_properties if not set, check that \p json contains
  * no additional properties
- * \return the deserialized instance, or an error, if any
+ * \return the de-serialized instance, or an error, if any
  */
 template <
   typename T,
@@ -2511,12 +5116,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IHasSemantics> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IHasSemantics>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -2525,124 +5128,102 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IHasSemantics> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IHasSemantics>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kRelationshipElement:
-      return ConcretelyDeserializeRelationshipElement<
+      return ParsePropertiesOfRelationshipElement<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kAnnotatedRelationshipElement:
-      return DeserializeAnnotatedRelationshipElement<
+      return ParsePropertiesOfAnnotatedRelationshipElement<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kBasicEventElement:
-      return DeserializeBasicEventElement<
+      return ParsePropertiesOfBasicEventElement<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kBlob:
-      return DeserializeBlob<
+      return ParsePropertiesOfBlob<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kCapability:
-      return DeserializeCapability<
+      return ParsePropertiesOfCapability<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kEntity:
-      return DeserializeEntity<
+      return ParsePropertiesOfEntity<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kExtension:
-      return DeserializeExtension<
+      return ParsePropertiesOfExtension<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kFile:
-      return DeserializeFile<
+      return ParsePropertiesOfFile<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kMultiLanguageProperty:
-      return DeserializeMultiLanguageProperty<
+      return ParsePropertiesOfMultiLanguageProperty<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kOperation:
-      return DeserializeOperation<
+      return ParsePropertiesOfOperation<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kProperty:
-      return DeserializeProperty<
+      return ParsePropertiesOfProperty<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kQualifier:
-      return DeserializeQualifier<
+      return ParsePropertiesOfQualifier<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kRange:
-      return DeserializeRange<
+      return ParsePropertiesOfRange<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kReferenceElement:
-      return DeserializeReferenceElement<
+      return ParsePropertiesOfReferenceElement<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kSpecificAssetId:
-      return DeserializeSpecificAssetId<
+      return ParsePropertiesOfSpecificAssetId<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kSubmodel:
-      return DeserializeSubmodel<
+      return ParsePropertiesOfSubmodel<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementCollection:
-      return DeserializeSubmodelElementCollection<
+      return ParsePropertiesOfSubmodelElementCollection<
         types::IHasSemantics
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementList:
-      return DeserializeSubmodelElementList<
+      return ParsePropertiesOfSubmodelElementList<
         types::IHasSemantics
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IHasSemantics "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IHasSemantics> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IHasSemantics>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IHasSemantics "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
-
-std::set<std::string> kPropertiesInExtension = {
-  "semanticId",
-  "supplementalSemanticIds",
-  "name",
-  "valueType",
-  "value",
-  "refersTo"
-};
 
 template <
   typename T,
@@ -2653,71 +5234,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeExtension(
+> ParsePropertiesOfExtension(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInExtension.find(key_val.key())
-      );
-      if (it == kPropertiesInExtension.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("name")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property name is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::shared_ptr<types::IReference>
   > the_semantic_id;
@@ -2740,186 +5260,86 @@ std::pair<
     >
   > the_refers_to;
 
-  // endregion Initialization
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfExtension,
+      additional_properties,
+      [&](
+        properties::OfExtension property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfExtension::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfExtension::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfExtension::kName:
+            return ParseInto(
+              the_name,
+              DeserializeWstring(value)
+            );
+          case properties::OfExtension::kValueType:
+            return ParseInto(
+              the_value_type,
+              DeserializeDataTypeDefXsd(value)
+            );
+          case properties::OfExtension::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeWstring(value)
+            );
+          case properties::OfExtension::kRefersTo:
+            return ParseInto(
+              the_refers_to,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfExtension",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize name
-
-  std::tie(
-    the_name,
-    error
-  ) = DeserializeWstring(
-    json["name"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"name"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize name
-
-  // region De-serialize valueType
-
-  if (json.contains("valueType")) {
-    std::tie(
-      the_value_type,
-      error
-    ) = DeserializeDataTypeDefXsd(
-      json["valueType"]
+  if (!the_name.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
+    >(
+      L"The required property name is missing"
     );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"valueType"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
   }
-
-  // endregion De-serialize valueType
-
-  // region De-serialize value
-
-  if (json.contains("value")) {
-    std::tie(
-      the_value,
-      error
-    ) = DeserializeWstring(
-      json["value"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"value"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize value
-
-  // region De-serialize refersTo
-
-  if (json.contains("refersTo")) {
-    std::tie(
-      the_refers_to,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["refersTo"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"refersTo"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize refersTo
 
   return std::make_pair(
     common::make_optional<
@@ -2941,6 +5361,37 @@ std::pair<
   );
 }
 
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IExtension>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeExtension(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfExtension<T>(
+    json,
+    additional_properties
+  );
+}
+
 std::pair<
   common::optional<
     std::shared_ptr<types::IHasExtensions>
@@ -2959,12 +5410,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IHasExtensions> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IHasExtensions>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -2973,109 +5422,96 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IHasExtensions> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IHasExtensions>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kRelationshipElement:
-      return ConcretelyDeserializeRelationshipElement<
+      return ParsePropertiesOfRelationshipElement<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kAnnotatedRelationshipElement:
-      return DeserializeAnnotatedRelationshipElement<
+      return ParsePropertiesOfAnnotatedRelationshipElement<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kAssetAdministrationShell:
-      return DeserializeAssetAdministrationShell<
+      return ParsePropertiesOfAssetAdministrationShell<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kBasicEventElement:
-      return DeserializeBasicEventElement<
+      return ParsePropertiesOfBasicEventElement<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kBlob:
-      return DeserializeBlob<
+      return ParsePropertiesOfBlob<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kCapability:
-      return DeserializeCapability<
+      return ParsePropertiesOfCapability<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kConceptDescription:
-      return DeserializeConceptDescription<
+      return ParsePropertiesOfConceptDescription<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kEntity:
-      return DeserializeEntity<
+      return ParsePropertiesOfEntity<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kFile:
-      return DeserializeFile<
+      return ParsePropertiesOfFile<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kMultiLanguageProperty:
-      return DeserializeMultiLanguageProperty<
+      return ParsePropertiesOfMultiLanguageProperty<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kOperation:
-      return DeserializeOperation<
+      return ParsePropertiesOfOperation<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kProperty:
-      return DeserializeProperty<
+      return ParsePropertiesOfProperty<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kRange:
-      return DeserializeRange<
+      return ParsePropertiesOfRange<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kReferenceElement:
-      return DeserializeReferenceElement<
+      return ParsePropertiesOfReferenceElement<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kSubmodel:
-      return DeserializeSubmodel<
+      return ParsePropertiesOfSubmodel<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementCollection:
-      return DeserializeSubmodelElementCollection<
+      return ParsePropertiesOfSubmodelElementCollection<
         types::IHasExtensions
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementList:
-      return DeserializeSubmodelElementList<
+      return ParsePropertiesOfSubmodelElementList<
         types::IHasExtensions
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IHasExtensions "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IHasExtensions> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IHasExtensions>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IHasExtensions "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
 
@@ -3097,12 +5533,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IReferable> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IReferable>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -3111,109 +5545,96 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IReferable> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IReferable>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kRelationshipElement:
-      return ConcretelyDeserializeRelationshipElement<
+      return ParsePropertiesOfRelationshipElement<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kAnnotatedRelationshipElement:
-      return DeserializeAnnotatedRelationshipElement<
+      return ParsePropertiesOfAnnotatedRelationshipElement<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kAssetAdministrationShell:
-      return DeserializeAssetAdministrationShell<
+      return ParsePropertiesOfAssetAdministrationShell<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kBasicEventElement:
-      return DeserializeBasicEventElement<
+      return ParsePropertiesOfBasicEventElement<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kBlob:
-      return DeserializeBlob<
+      return ParsePropertiesOfBlob<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kCapability:
-      return DeserializeCapability<
+      return ParsePropertiesOfCapability<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kConceptDescription:
-      return DeserializeConceptDescription<
+      return ParsePropertiesOfConceptDescription<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kEntity:
-      return DeserializeEntity<
+      return ParsePropertiesOfEntity<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kFile:
-      return DeserializeFile<
+      return ParsePropertiesOfFile<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kMultiLanguageProperty:
-      return DeserializeMultiLanguageProperty<
+      return ParsePropertiesOfMultiLanguageProperty<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kOperation:
-      return DeserializeOperation<
+      return ParsePropertiesOfOperation<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kProperty:
-      return DeserializeProperty<
+      return ParsePropertiesOfProperty<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kRange:
-      return DeserializeRange<
+      return ParsePropertiesOfRange<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kReferenceElement:
-      return DeserializeReferenceElement<
+      return ParsePropertiesOfReferenceElement<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kSubmodel:
-      return DeserializeSubmodel<
+      return ParsePropertiesOfSubmodel<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementCollection:
-      return DeserializeSubmodelElementCollection<
+      return ParsePropertiesOfSubmodelElementCollection<
         types::IReferable
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementList:
-      return DeserializeSubmodelElementList<
+      return ParsePropertiesOfSubmodelElementList<
         types::IReferable
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IReferable "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IReferable> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IReferable>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IReferable "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
 
@@ -3235,12 +5656,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IIdentifiable> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IIdentifiable>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -3249,53 +5668,40 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IIdentifiable> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IIdentifiable>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kAssetAdministrationShell:
-      return DeserializeAssetAdministrationShell<
+      return ParsePropertiesOfAssetAdministrationShell<
         types::IIdentifiable
       >(json, additional_properties);
     case types::ModelType::kConceptDescription:
-      return DeserializeConceptDescription<
+      return ParsePropertiesOfConceptDescription<
         types::IIdentifiable
       >(json, additional_properties);
     case types::ModelType::kSubmodel:
-      return DeserializeSubmodel<
+      return ParsePropertiesOfSubmodel<
         types::IIdentifiable
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IIdentifiable "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IIdentifiable> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IIdentifiable>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IIdentifiable "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
 
@@ -3317,12 +5723,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IHasKind> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IHasKind>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -3331,45 +5735,32 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IHasKind> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IHasKind>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kSubmodel:
-      return DeserializeSubmodel<
+      return ParsePropertiesOfSubmodel<
         types::IHasKind
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IHasKind "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IHasKind> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IHasKind>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IHasKind "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
 
@@ -3391,12 +5782,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IHasDataSpecification> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IHasDataSpecification>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -3405,123 +5794,102 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IHasDataSpecification> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IHasDataSpecification>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kAdministrativeInformation:
-      return DeserializeAdministrativeInformation<
+      return ParsePropertiesOfAdministrativeInformation<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kRelationshipElement:
-      return ConcretelyDeserializeRelationshipElement<
+      return ParsePropertiesOfRelationshipElement<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kAnnotatedRelationshipElement:
-      return DeserializeAnnotatedRelationshipElement<
+      return ParsePropertiesOfAnnotatedRelationshipElement<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kAssetAdministrationShell:
-      return DeserializeAssetAdministrationShell<
+      return ParsePropertiesOfAssetAdministrationShell<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kBasicEventElement:
-      return DeserializeBasicEventElement<
+      return ParsePropertiesOfBasicEventElement<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kBlob:
-      return DeserializeBlob<
+      return ParsePropertiesOfBlob<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kCapability:
-      return DeserializeCapability<
+      return ParsePropertiesOfCapability<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kConceptDescription:
-      return DeserializeConceptDescription<
+      return ParsePropertiesOfConceptDescription<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kEntity:
-      return DeserializeEntity<
+      return ParsePropertiesOfEntity<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kFile:
-      return DeserializeFile<
+      return ParsePropertiesOfFile<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kMultiLanguageProperty:
-      return DeserializeMultiLanguageProperty<
+      return ParsePropertiesOfMultiLanguageProperty<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kOperation:
-      return DeserializeOperation<
+      return ParsePropertiesOfOperation<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kProperty:
-      return DeserializeProperty<
+      return ParsePropertiesOfProperty<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kRange:
-      return DeserializeRange<
+      return ParsePropertiesOfRange<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kReferenceElement:
-      return DeserializeReferenceElement<
+      return ParsePropertiesOfReferenceElement<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kSubmodel:
-      return DeserializeSubmodel<
+      return ParsePropertiesOfSubmodel<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementCollection:
-      return DeserializeSubmodelElementCollection<
+      return ParsePropertiesOfSubmodelElementCollection<
         types::IHasDataSpecification
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementList:
-      return DeserializeSubmodelElementList<
+      return ParsePropertiesOfSubmodelElementList<
         types::IHasDataSpecification
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IHasDataSpecification "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IHasDataSpecification> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IHasDataSpecification>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IHasDataSpecification "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
-
-std::set<std::string> kPropertiesInAdministrativeInformation = {
-  "embeddedDataSpecifications",
-  "version",
-  "revision",
-  "creator",
-  "templateId"
-};
 
 template <
   typename T,
@@ -3532,55 +5900,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeAdministrativeInformation(
+> ParsePropertiesOfAdministrativeInformation(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInAdministrativeInformation.find(key_val.key())
-      );
-      if (it == kPropertiesInAdministrativeInformation.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IEmbeddedDataSpecification>
@@ -3597,156 +5920,67 @@ std::pair<
 
   common::optional<std::wstring> the_template_id;
 
-  // endregion Initialization
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfAdministrativeInformation,
+      additional_properties,
+      [&](
+        properties::OfAdministrativeInformation property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfAdministrativeInformation::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfAdministrativeInformation::kVersion:
+            return ParseInto(
+              the_version,
+              DeserializeWstring(value)
+            );
+          case properties::OfAdministrativeInformation::kRevision:
+            return ParseInto(
+              the_revision,
+              DeserializeWstring(value)
+            );
+          case properties::OfAdministrativeInformation::kCreator:
+            return ParseInto(
+              the_creator,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfAdministrativeInformation::kTemplateId:
+            return ParseInto(
+              the_template_id,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfAdministrativeInformation",
+              property
+            );
+        }
       }
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
     );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
   }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize version
-
-  if (json.contains("version")) {
-    std::tie(
-      the_version,
-      error
-    ) = DeserializeWstring(
-      json["version"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"version"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize version
-
-  // region De-serialize revision
-
-  if (json.contains("revision")) {
-    std::tie(
-      the_revision,
-      error
-    ) = DeserializeWstring(
-      json["revision"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"revision"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize revision
-
-  // region De-serialize creator
-
-  if (json.contains("creator")) {
-    std::tie(
-      the_creator,
-      error
-    ) = DeserializeReference(
-      json["creator"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"creator"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize creator
-
-  // region De-serialize templateId
-
-  if (json.contains("templateId")) {
-    std::tie(
-      the_template_id,
-      error
-    ) = DeserializeWstring(
-      json["templateId"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"templateId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize templateId
 
   return std::make_pair(
     common::make_optional<
@@ -3764,6 +5998,37 @@ std::pair<
       )
     ),
     common::nullopt
+  );
+}
+
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IAdministrativeInformation>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeAdministrativeInformation(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfAdministrativeInformation<T>(
+    json,
+    additional_properties
   );
 }
 
@@ -3785,12 +6050,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IQualifiable> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IQualifiable>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -3799,113 +6062,90 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IQualifiable> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IQualifiable>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kRelationshipElement:
-      return ConcretelyDeserializeRelationshipElement<
+      return ParsePropertiesOfRelationshipElement<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kAnnotatedRelationshipElement:
-      return DeserializeAnnotatedRelationshipElement<
+      return ParsePropertiesOfAnnotatedRelationshipElement<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kBasicEventElement:
-      return DeserializeBasicEventElement<
+      return ParsePropertiesOfBasicEventElement<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kBlob:
-      return DeserializeBlob<
+      return ParsePropertiesOfBlob<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kCapability:
-      return DeserializeCapability<
+      return ParsePropertiesOfCapability<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kEntity:
-      return DeserializeEntity<
+      return ParsePropertiesOfEntity<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kFile:
-      return DeserializeFile<
+      return ParsePropertiesOfFile<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kMultiLanguageProperty:
-      return DeserializeMultiLanguageProperty<
+      return ParsePropertiesOfMultiLanguageProperty<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kOperation:
-      return DeserializeOperation<
+      return ParsePropertiesOfOperation<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kProperty:
-      return DeserializeProperty<
+      return ParsePropertiesOfProperty<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kRange:
-      return DeserializeRange<
+      return ParsePropertiesOfRange<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kReferenceElement:
-      return DeserializeReferenceElement<
+      return ParsePropertiesOfReferenceElement<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kSubmodel:
-      return DeserializeSubmodel<
+      return ParsePropertiesOfSubmodel<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementCollection:
-      return DeserializeSubmodelElementCollection<
+      return ParsePropertiesOfSubmodelElementCollection<
         types::IQualifiable
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementList:
-      return DeserializeSubmodelElementList<
+      return ParsePropertiesOfSubmodelElementList<
         types::IQualifiable
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IQualifiable "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IQualifiable> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IQualifiable>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IQualifiable "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
-
-std::set<std::string> kPropertiesInQualifier = {
-  "semanticId",
-  "supplementalSemanticIds",
-  "kind",
-  "type",
-  "valueType",
-  "value",
-  "valueId"
-};
 
 template <
   typename T,
@@ -3916,83 +6156,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeQualifier(
+> ParsePropertiesOfQualifier(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInQualifier.find(key_val.key())
-      );
-      if (it == kPropertiesInQualifier.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("type")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property type is missing"
-      )
-    );
-  }
-
-  if (!json.contains("valueType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property valueType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::shared_ptr<types::IReference>
   > the_semantic_id;
@@ -4015,211 +6182,96 @@ std::pair<
     std::shared_ptr<types::IReference>
   > the_value_id;
 
-  // endregion Initialization
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfQualifier,
+      additional_properties,
+      [&](
+        properties::OfQualifier property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfQualifier::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfQualifier::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfQualifier::kKind:
+            return ParseInto(
+              the_kind,
+              DeserializeQualifierKind(value)
+            );
+          case properties::OfQualifier::kType:
+            return ParseInto(
+              the_type,
+              DeserializeWstring(value)
+            );
+          case properties::OfQualifier::kValueType:
+            return ParseInto(
+              the_value_type,
+              DeserializeDataTypeDefXsd(value)
+            );
+          case properties::OfQualifier::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeWstring(value)
+            );
+          case properties::OfQualifier::kValueId:
+            return ParseInto(
+              the_value_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfQualifier",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize kind
-
-  if (json.contains("kind")) {
-    std::tie(
-      the_kind,
-      error
-    ) = DeserializeQualifierKind(
-      json["kind"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"kind"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize kind
-
-  // region De-serialize type
-
-  std::tie(
-    the_type,
-    error
-  ) = DeserializeWstring(
-    json["type"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"type"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize type
-
-  // region De-serialize valueType
-
-  std::tie(
-    the_value_type,
-    error
-  ) = DeserializeDataTypeDefXsd(
-    json["valueType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"valueType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_type.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property type is missing"
     );
   }
 
-  // endregion De-serialize valueType
-
-  // region De-serialize value
-
-  if (json.contains("value")) {
-    std::tie(
-      the_value,
-      error
-    ) = DeserializeWstring(
-      json["value"]
+  if (!the_value_type.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
+    >(
+      L"The required property valueType is missing"
     );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"value"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
   }
-
-  // endregion De-serialize value
-
-  // region De-serialize valueId
-
-  if (json.contains("valueId")) {
-    std::tie(
-      the_value_id,
-      error
-    ) = DeserializeReference(
-      json["valueId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"valueId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize valueId
 
   return std::make_pair(
     common::make_optional<
@@ -4242,20 +6294,36 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInAssetAdministrationShell = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "administration",
-  "id",
-  "embeddedDataSpecifications",
-  "derivedFrom",
-  "assetInformation",
-  "submodels",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IQualifier>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeQualifier(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfQualifier<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -4266,95 +6334,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeAssetAdministrationShell(
+> ParsePropertiesOfAssetAdministrationShell(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInAssetAdministrationShell.find(key_val.key())
-      );
-      if (it == kPropertiesInAssetAdministrationShell.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("id")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property id is missing"
-      )
-    );
-  }
-
-  if (!json.contains("assetInformation")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property assetInformation is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -4401,400 +6384,156 @@ std::pair<
     >
   > the_submodels;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfAssetAdministrationShell,
+      additional_properties,
+      [&](
+        properties::OfAssetAdministrationShell property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfAssetAdministrationShell::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfAssetAdministrationShell::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfAssetAdministrationShell::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfAssetAdministrationShell::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfAssetAdministrationShell::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfAssetAdministrationShell::kAdministration:
+            return ParseInto(
+              the_administration,
+              DeserializeAdministrativeInformation<
+                types::IAdministrativeInformation
+              >(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfAssetAdministrationShell::kId:
+            return ParseInto(
+              the_id,
+              DeserializeWstring(value)
+            );
+          case properties::OfAssetAdministrationShell::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfAssetAdministrationShell::kDerivedFrom:
+            return ParseInto(
+              the_derived_from,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfAssetAdministrationShell::kAssetInformation:
+            return ParseInto(
+              the_asset_information,
+              DeserializeAssetInformation(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfAssetAdministrationShell::kSubmodels:
+            return ParseInto(
+              the_submodels,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfAssetAdministrationShell::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfAssetAdministrationShell",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize administration
-
-  if (json.contains("administration")) {
-    std::tie(
-      the_administration,
-      error
-    ) = DeserializeAdministrativeInformation<
-      types::IAdministrativeInformation
-    >(
-      json["administration"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"administration"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize administration
-
-  // region De-serialize id
-
-  std::tie(
-    the_id,
-    error
-  ) = DeserializeWstring(
-    json["id"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"id"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize id
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize derivedFrom
-
-  if (json.contains("derivedFrom")) {
-    std::tie(
-      the_derived_from,
-      error
-    ) = DeserializeReference(
-      json["derivedFrom"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"derivedFrom"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize derivedFrom
-
-  // region De-serialize assetInformation
-
-  std::tie(
-    the_asset_information,
-    error
-  ) = DeserializeAssetInformation(
-    json["assetInformation"],
-    additional_properties
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"assetInformation"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_id.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property id is missing"
     );
   }
 
-  // endregion De-serialize assetInformation
-
-  // region De-serialize submodels
-
-  if (json.contains("submodels")) {
-    std::tie(
-      the_submodels,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["submodels"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"submodels"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize submodels
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_asset_information.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property assetInformation is missing"
     );
   }
-
-  if (*model_type != L"AssetAdministrationShell") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'AssetAdministrationShell', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -4821,84 +6560,49 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInAssetInformation = {
-  "assetKind",
-  "globalAssetId",
-  "specificAssetIds",
-  "assetType",
-  "defaultThumbnail"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IAssetAdministrationShell>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeAssetAdministrationShell(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "AssetAdministrationShell"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfAssetAdministrationShell<T>(
+    json,
+    additional_properties
+  );
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IAssetInformation>
   >,
   common::optional<DeserializationError>
-> DeserializeAssetInformation(
+> ParsePropertiesOfAssetInformation(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IAssetInformation> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInAssetInformation.find(key_val.key())
-      );
-      if (it == kPropertiesInAssetInformation.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IAssetInformation> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("assetKind")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IAssetInformation> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property assetKind is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<types::AssetKind> the_asset_kind;
 
   common::optional<std::wstring> the_global_asset_id;
@@ -4915,156 +6619,77 @@ std::pair<
     std::shared_ptr<types::IResource>
   > the_default_thumbnail;
 
-  // endregion Initialization
-
-  // region De-serialize assetKind
-
-  std::tie(
-    the_asset_kind,
-    error
-  ) = DeserializeAssetKind(
-    json["assetKind"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfAssetInformation,
+      additional_properties,
+      [&](
+        properties::OfAssetInformation property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfAssetInformation::kAssetKind:
+            return ParseInto(
+              the_asset_kind,
+              DeserializeAssetKind(value)
+            );
+          case properties::OfAssetInformation::kGlobalAssetId:
+            return ParseInto(
+              the_global_asset_id,
+              DeserializeWstring(value)
+            );
+          case properties::OfAssetInformation::kSpecificAssetIds:
+            return ParseInto(
+              the_specific_asset_ids,
+              DeserializeList<
+                std::shared_ptr<types::ISpecificAssetId>
+              >(
+                value,
+                additional_properties,
+                DeserializeSpecificAssetId<
+                  types::ISpecificAssetId
+                >
+              )
+            );
+          case properties::OfAssetInformation::kAssetType:
+            return ParseInto(
+              the_asset_type,
+              DeserializeWstring(value)
+            );
+          case properties::OfAssetInformation::kDefaultThumbnail:
+            return ParseInto(
+              the_default_thumbnail,
+              DeserializeResource(
+                value,
+                additional_properties
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfAssetInformation",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"assetKind"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IAssetInformation> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IAssetInformation>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize assetKind
-
-  // region De-serialize globalAssetId
-
-  if (json.contains("globalAssetId")) {
-    std::tie(
-      the_global_asset_id,
-      error
-    ) = DeserializeWstring(
-      json["globalAssetId"]
+  if (!the_asset_kind.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IAssetInformation>
+    >(
+      L"The required property assetKind is missing"
     );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"globalAssetId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IAssetInformation> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
   }
-
-  // endregion De-serialize globalAssetId
-
-  // region De-serialize specificAssetIds
-
-  if (json.contains("specificAssetIds")) {
-    std::tie(
-      the_specific_asset_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ISpecificAssetId>>(
-      json["specificAssetIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeSpecificAssetId<
-        types::ISpecificAssetId
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"specificAssetIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IAssetInformation> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize specificAssetIds
-
-  // region De-serialize assetType
-
-  if (json.contains("assetType")) {
-    std::tie(
-      the_asset_type,
-      error
-    ) = DeserializeWstring(
-      json["assetType"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"assetType"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IAssetInformation> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize assetType
-
-  // region De-serialize defaultThumbnail
-
-  if (json.contains("defaultThumbnail")) {
-    std::tie(
-      the_default_thumbnail,
-      error
-    ) = DeserializeResource(
-      json["defaultThumbnail"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"defaultThumbnail"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IAssetInformation> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize defaultThumbnail
 
   return std::make_pair(
     common::make_optional<
@@ -5085,142 +6710,88 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInResource = {
-  "path",
-  "contentType"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IAssetInformation>
+  >,
+  common::optional<DeserializationError>
+> DeserializeAssetInformation(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IAssetInformation>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfAssetInformation(json, additional_properties);
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IResource>
   >,
   common::optional<DeserializationError>
-> DeserializeResource(
+> ParsePropertiesOfResource(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IResource> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInResource.find(key_val.key())
-      );
-      if (it == kPropertiesInResource.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IResource> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("path")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IResource> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property path is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_path;
 
   common::optional<std::wstring> the_content_type;
 
-  // endregion Initialization
-
-  // region De-serialize path
-
-  std::tie(
-    the_path,
-    error
-  ) = DeserializeWstring(
-    json["path"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfResource,
+      additional_properties,
+      [&](
+        properties::OfResource property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfResource::kPath:
+            return ParseInto(
+              the_path,
+              DeserializeWstring(value)
+            );
+          case properties::OfResource::kContentType:
+            return ParseInto(
+              the_content_type,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfResource",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"path"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IResource> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IResource>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize path
-
-  // region De-serialize contentType
-
-  if (json.contains("contentType")) {
-    std::tie(
-      the_content_type,
-      error
-    ) = DeserializeWstring(
-      json["contentType"]
+  if (!the_path.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IResource>
+    >(
+      L"The required property path is missing"
     );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"contentType"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IResource> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
   }
-
-  // endregion De-serialize contentType
 
   return std::make_pair(
     common::make_optional<
@@ -5238,13 +6809,29 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInSpecificAssetId = {
-  "semanticId",
-  "supplementalSemanticIds",
-  "name",
-  "value",
-  "externalSubjectId"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IResource>
+  >,
+  common::optional<DeserializationError>
+> DeserializeResource(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IResource>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfResource(json, additional_properties);
+}
 
 template <
   typename T,
@@ -5255,83 +6842,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeSpecificAssetId(
+> ParsePropertiesOfSpecificAssetId(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInSpecificAssetId.find(key_val.key())
-      );
-      if (it == kPropertiesInSpecificAssetId.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("name")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property name is missing"
-      )
-    );
-  }
-
-  if (!json.contains("value")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property value is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::shared_ptr<types::IReference>
   > the_semantic_id;
@@ -5350,153 +6864,86 @@ std::pair<
     std::shared_ptr<types::IReference>
   > the_external_subject_id;
 
-  // endregion Initialization
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfSpecificAssetId,
+      additional_properties,
+      [&](
+        properties::OfSpecificAssetId property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfSpecificAssetId::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfSpecificAssetId::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfSpecificAssetId::kName:
+            return ParseInto(
+              the_name,
+              DeserializeWstring(value)
+            );
+          case properties::OfSpecificAssetId::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeWstring(value)
+            );
+          case properties::OfSpecificAssetId::kExternalSubjectId:
+            return ParseInto(
+              the_external_subject_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfSpecificAssetId",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize name
-
-  std::tie(
-    the_name,
-    error
-  ) = DeserializeWstring(
-    json["name"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"name"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize name
-
-  // region De-serialize value
-
-  std::tie(
-    the_value,
-    error
-  ) = DeserializeWstring(
-    json["value"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"value"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_name.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property name is missing"
     );
   }
 
-  // endregion De-serialize value
-
-  // region De-serialize externalSubjectId
-
-  if (json.contains("externalSubjectId")) {
-    std::tie(
-      the_external_subject_id,
-      error
-    ) = DeserializeReference(
-      json["externalSubjectId"],
-      additional_properties
+  if (!the_value.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
+    >(
+      L"The required property value is missing"
     );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"externalSubjectId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
   }
-
-  // endregion De-serialize externalSubjectId
 
   return std::make_pair(
     common::make_optional<
@@ -5517,22 +6964,36 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInSubmodel = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "administration",
-  "id",
-  "kind",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "submodelElements",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ISpecificAssetId>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeSpecificAssetId(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfSpecificAssetId<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -5543,83 +7004,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeSubmodel(
+> ParsePropertiesOfSubmodel(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInSubmodel.find(key_val.key())
-      );
-      if (it == kPropertiesInSubmodel.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("id")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property id is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -5678,467 +7066,169 @@ std::pair<
     >
   > the_submodel_elements;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfSubmodel,
+      additional_properties,
+      [&](
+        properties::OfSubmodel property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfSubmodel::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfSubmodel::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfSubmodel::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfSubmodel::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfSubmodel::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfSubmodel::kAdministration:
+            return ParseInto(
+              the_administration,
+              DeserializeAdministrativeInformation<
+                types::IAdministrativeInformation
+              >(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfSubmodel::kId:
+            return ParseInto(
+              the_id,
+              DeserializeWstring(value)
+            );
+          case properties::OfSubmodel::kKind:
+            return ParseInto(
+              the_kind,
+              DeserializeModellingKind(value)
+            );
+          case properties::OfSubmodel::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfSubmodel::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfSubmodel::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfSubmodel::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfSubmodel::kSubmodelElements:
+            return ParseInto(
+              the_submodel_elements,
+              DeserializeList<
+                std::shared_ptr<types::ISubmodelElement>
+              >(
+                value,
+                additional_properties,
+                DeserializeSubmodelElement
+              )
+            );
+          case properties::OfSubmodel::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfSubmodel",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize administration
-
-  if (json.contains("administration")) {
-    std::tie(
-      the_administration,
-      error
-    ) = DeserializeAdministrativeInformation<
-      types::IAdministrativeInformation
-    >(
-      json["administration"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"administration"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize administration
-
-  // region De-serialize id
-
-  std::tie(
-    the_id,
-    error
-  ) = DeserializeWstring(
-    json["id"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"id"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize id
-
-  // region De-serialize kind
-
-  if (json.contains("kind")) {
-    std::tie(
-      the_kind,
-      error
-    ) = DeserializeModellingKind(
-      json["kind"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"kind"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize kind
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize submodelElements
-
-  if (json.contains("submodelElements")) {
-    std::tie(
-      the_submodel_elements,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ISubmodelElement>>(
-      json["submodelElements"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeSubmodelElement(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"submodelElements"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize submodelElements
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_id.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property id is missing"
     );
   }
-
-  if (*model_type != L"Submodel") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'Submodel', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -6167,6 +7257,40 @@ std::pair<
   );
 }
 
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ISubmodel>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeSubmodel(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "Submodel"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfSubmodel<T>(
+    json,
+    additional_properties
+  );
+}
+
 std::pair<
   common::optional<
     std::shared_ptr<types::ISubmodelElement>
@@ -6185,12 +7309,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISubmodelElement> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::ISubmodelElement>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -6199,114 +7321,86 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ISubmodelElement> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ISubmodelElement>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kRelationshipElement:
-      return ConcretelyDeserializeRelationshipElement<
+      return ParsePropertiesOfRelationshipElement<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kAnnotatedRelationshipElement:
-      return DeserializeAnnotatedRelationshipElement<
+      return ParsePropertiesOfAnnotatedRelationshipElement<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kBasicEventElement:
-      return DeserializeBasicEventElement<
+      return ParsePropertiesOfBasicEventElement<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kBlob:
-      return DeserializeBlob<
+      return ParsePropertiesOfBlob<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kCapability:
-      return DeserializeCapability<
+      return ParsePropertiesOfCapability<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kEntity:
-      return DeserializeEntity<
+      return ParsePropertiesOfEntity<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kFile:
-      return DeserializeFile<
+      return ParsePropertiesOfFile<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kMultiLanguageProperty:
-      return DeserializeMultiLanguageProperty<
+      return ParsePropertiesOfMultiLanguageProperty<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kOperation:
-      return DeserializeOperation<
+      return ParsePropertiesOfOperation<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kProperty:
-      return DeserializeProperty<
+      return ParsePropertiesOfProperty<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kRange:
-      return DeserializeRange<
+      return ParsePropertiesOfRange<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kReferenceElement:
-      return DeserializeReferenceElement<
+      return ParsePropertiesOfReferenceElement<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementCollection:
-      return DeserializeSubmodelElementCollection<
+      return ParsePropertiesOfSubmodelElementCollection<
         types::ISubmodelElement
       >(json, additional_properties);
     case types::ModelType::kSubmodelElementList:
-      return DeserializeSubmodelElementList<
+      return ParsePropertiesOfSubmodelElementList<
         types::ISubmodelElement
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::ISubmodelElement "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::ISubmodelElement> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::ISubmodelElement>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::ISubmodelElement "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
-
-std::set<std::string> kPropertiesInRelationshipElement = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "first",
-  "second",
-  "modelType"
-};
 
 template <
   typename T,
@@ -6317,95 +7411,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> ConcretelyDeserializeRelationshipElement(
+> ParsePropertiesOfRelationshipElement(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInRelationshipElement.find(key_val.key())
-      );
-      if (it == kPropertiesInRelationshipElement.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("first")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property first is missing"
-      )
-    );
-  }
-
-  if (!json.contains("second")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property second is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -6454,403 +7463,162 @@ std::pair<
 
   common::optional<std::shared_ptr<types::IReference> > the_second;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfRelationshipElement,
+      additional_properties,
+      [&](
+        properties::OfRelationshipElement property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfRelationshipElement::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfRelationshipElement::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfRelationshipElement::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfRelationshipElement::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfRelationshipElement::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfRelationshipElement::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfRelationshipElement::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfRelationshipElement::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfRelationshipElement::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfRelationshipElement::kFirst:
+            return ParseInto(
+              the_first,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfRelationshipElement::kSecond:
+            return ParseInto(
+              the_second,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfRelationshipElement::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfRelationshipElement",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize first
-
-  std::tie(
-    the_first,
-    error
-  ) = DeserializeReference(
-    json["first"],
-    additional_properties
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"first"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize first
-
-  // region De-serialize second
-
-  std::tie(
-    the_second,
-    error
-  ) = DeserializeReference(
-    json["second"],
-    additional_properties
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"second"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_first.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property first is missing"
     );
   }
 
-  // endregion De-serialize second
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_second.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property second is missing"
     );
   }
-
-  if (*model_type != L"RelationshipElement") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'RelationshipElement', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -6895,12 +7663,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IRelationshipElement> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IRelationshipElement>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -6909,69 +7675,38 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IRelationshipElement> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IRelationshipElement>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kRelationshipElement:
-      return ConcretelyDeserializeRelationshipElement<
+      return ParsePropertiesOfRelationshipElement<
         types::IRelationshipElement
       >(json, additional_properties);
     case types::ModelType::kAnnotatedRelationshipElement:
-      return DeserializeAnnotatedRelationshipElement<
+      return ParsePropertiesOfAnnotatedRelationshipElement<
         types::IRelationshipElement
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IRelationshipElement "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IRelationshipElement> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IRelationshipElement>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IRelationshipElement "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
-
-std::set<std::string> kPropertiesInSubmodelElementList = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "orderRelevant",
-  "semanticIdListElement",
-  "typeValueListElement",
-  "valueTypeListElement",
-  "value",
-  "modelType"
-};
 
 template <
   typename T,
@@ -6982,83 +7717,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeSubmodelElementList(
+> ParsePropertiesOfSubmodelElementList(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInSubmodelElementList.find(key_val.key())
-      );
-      if (it == kPropertiesInSubmodelElementList.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("typeValueListElement")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property typeValueListElement is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -7119,494 +7781,172 @@ std::pair<
     >
   > the_value;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfSubmodelElementList,
+      additional_properties,
+      [&](
+        properties::OfSubmodelElementList property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfSubmodelElementList::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfSubmodelElementList::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfSubmodelElementList::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfSubmodelElementList::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfSubmodelElementList::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfSubmodelElementList::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfSubmodelElementList::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfSubmodelElementList::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfSubmodelElementList::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfSubmodelElementList::kOrderRelevant:
+            return ParseInto(
+              the_order_relevant,
+              DeserializeBool(value)
+            );
+          case properties::OfSubmodelElementList::kSemanticIdListElement:
+            return ParseInto(
+              the_semantic_id_list_element,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfSubmodelElementList::kTypeValueListElement:
+            return ParseInto(
+              the_type_value_list_element,
+              DeserializeAasSubmodelElements(value)
+            );
+          case properties::OfSubmodelElementList::kValueTypeListElement:
+            return ParseInto(
+              the_value_type_list_element,
+              DeserializeDataTypeDefXsd(value)
+            );
+          case properties::OfSubmodelElementList::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeList<
+                std::shared_ptr<types::ISubmodelElement>
+              >(
+                value,
+                additional_properties,
+                DeserializeSubmodelElement
+              )
+            );
+          case properties::OfSubmodelElementList::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfSubmodelElementList",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize orderRelevant
-
-  if (json.contains("orderRelevant")) {
-    std::tie(
-      the_order_relevant,
-      error
-    ) = DeserializeBool(
-      json["orderRelevant"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"orderRelevant"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize orderRelevant
-
-  // region De-serialize semanticIdListElement
-
-  if (json.contains("semanticIdListElement")) {
-    std::tie(
-      the_semantic_id_list_element,
-      error
-    ) = DeserializeReference(
-      json["semanticIdListElement"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticIdListElement"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticIdListElement
-
-  // region De-serialize typeValueListElement
-
-  std::tie(
-    the_type_value_list_element,
-    error
-  ) = DeserializeAasSubmodelElements(
-    json["typeValueListElement"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"typeValueListElement"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize typeValueListElement
-
-  // region De-serialize valueTypeListElement
-
-  if (json.contains("valueTypeListElement")) {
-    std::tie(
-      the_value_type_list_element,
-      error
-    ) = DeserializeDataTypeDefXsd(
-      json["valueTypeListElement"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"valueTypeListElement"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize valueTypeListElement
-
-  // region De-serialize value
-
-  if (json.contains("value")) {
-    std::tie(
-      the_value,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ISubmodelElement>>(
-      json["value"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeSubmodelElement(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"value"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize value
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_type_value_list_element.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property typeValueListElement is missing"
     );
   }
-
-  if (*model_type != L"SubmodelElementList") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'SubmodelElementList', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -7636,19 +7976,39 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInSubmodelElementCollection = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "value",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ISubmodelElementList>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeSubmodelElementList(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "SubmodelElementList"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfSubmodelElementList<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -7659,71 +8019,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeSubmodelElementCollection(
+> ParsePropertiesOfSubmodelElementCollection(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInSubmodelElementCollection.find(key_val.key())
-      );
-      if (it == kPropertiesInSubmodelElementCollection.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -7774,379 +8073,141 @@ std::pair<
     >
   > the_value;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfSubmodelElementCollection,
+      additional_properties,
+      [&](
+        properties::OfSubmodelElementCollection property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfSubmodelElementCollection::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfSubmodelElementCollection::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfSubmodelElementCollection::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfSubmodelElementCollection::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfSubmodelElementCollection::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfSubmodelElementCollection::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfSubmodelElementCollection::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfSubmodelElementCollection::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfSubmodelElementCollection::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfSubmodelElementCollection::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeList<
+                std::shared_ptr<types::ISubmodelElement>
+              >(
+                value,
+                additional_properties,
+                DeserializeSubmodelElement
+              )
+            );
+          case properties::OfSubmodelElementCollection::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfSubmodelElementCollection",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize value
-
-  if (json.contains("value")) {
-    std::tie(
-      the_value,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ISubmodelElement>>(
-      json["value"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeSubmodelElement(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"value"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize value
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
-
-  if (*model_type != L"SubmodelElementCollection") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'SubmodelElementCollection', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -8172,6 +8233,40 @@ std::pair<
   );
 }
 
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ISubmodelElementCollection>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeSubmodelElementCollection(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "SubmodelElementCollection"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfSubmodelElementCollection<T>(
+    json,
+    additional_properties
+  );
+}
+
 std::pair<
   common::optional<
     std::shared_ptr<types::IDataElement>
@@ -8190,12 +8285,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IDataElement> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IDataElement>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -8204,83 +8297,54 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IDataElement> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IDataElement>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kBlob:
-      return DeserializeBlob<
+      return ParsePropertiesOfBlob<
         types::IDataElement
       >(json, additional_properties);
     case types::ModelType::kFile:
-      return DeserializeFile<
+      return ParsePropertiesOfFile<
         types::IDataElement
       >(json, additional_properties);
     case types::ModelType::kMultiLanguageProperty:
-      return DeserializeMultiLanguageProperty<
+      return ParsePropertiesOfMultiLanguageProperty<
         types::IDataElement
       >(json, additional_properties);
     case types::ModelType::kProperty:
-      return DeserializeProperty<
+      return ParsePropertiesOfProperty<
         types::IDataElement
       >(json, additional_properties);
     case types::ModelType::kRange:
-      return DeserializeRange<
+      return ParsePropertiesOfRange<
         types::IDataElement
       >(json, additional_properties);
     case types::ModelType::kReferenceElement:
-      return DeserializeReferenceElement<
+      return ParsePropertiesOfReferenceElement<
         types::IDataElement
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IDataElement "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IDataElement> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IDataElement>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IDataElement "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
-
-std::set<std::string> kPropertiesInProperty = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "valueType",
-  "value",
-  "valueId",
-  "modelType"
-};
 
 template <
   typename T,
@@ -8291,83 +8355,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeProperty(
+> ParsePropertiesOfProperty(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInProperty.find(key_val.key())
-      );
-      if (it == kPropertiesInProperty.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("valueType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property valueType is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -8420,433 +8411,156 @@ std::pair<
     std::shared_ptr<types::IReference>
   > the_value_id;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfProperty,
+      additional_properties,
+      [&](
+        properties::OfProperty property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfProperty::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfProperty::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfProperty::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfProperty::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfProperty::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfProperty::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfProperty::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfProperty::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfProperty::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfProperty::kValueType:
+            return ParseInto(
+              the_value_type,
+              DeserializeDataTypeDefXsd(value)
+            );
+          case properties::OfProperty::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeWstring(value)
+            );
+          case properties::OfProperty::kValueId:
+            return ParseInto(
+              the_value_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfProperty::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfProperty",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize valueType
-
-  std::tie(
-    the_value_type,
-    error
-  ) = DeserializeDataTypeDefXsd(
-    json["valueType"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"valueType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize valueType
-
-  // region De-serialize value
-
-  if (json.contains("value")) {
-    std::tie(
-      the_value,
-      error
-    ) = DeserializeWstring(
-      json["value"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"value"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize value
-
-  // region De-serialize valueId
-
-  if (json.contains("valueId")) {
-    std::tie(
-      the_value_id,
-      error
-    ) = DeserializeReference(
-      json["valueId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"valueId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize valueId
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_value_type.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property valueType is missing"
     );
   }
-
-  if (*model_type != L"Property") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'Property', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -8874,20 +8588,39 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInMultiLanguageProperty = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "value",
-  "valueId",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IProperty>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeProperty(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "Property"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfProperty<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -8898,71 +8631,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeMultiLanguageProperty(
+> ParsePropertiesOfMultiLanguageProperty(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInMultiLanguageProperty.find(key_val.key())
-      );
-      if (it == kPropertiesInMultiLanguageProperty.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -9017,411 +8689,151 @@ std::pair<
     std::shared_ptr<types::IReference>
   > the_value_id;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfMultiLanguageProperty,
+      additional_properties,
+      [&](
+        properties::OfMultiLanguageProperty property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfMultiLanguageProperty::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfMultiLanguageProperty::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfMultiLanguageProperty::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfMultiLanguageProperty::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfMultiLanguageProperty::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfMultiLanguageProperty::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfMultiLanguageProperty::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfMultiLanguageProperty::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfMultiLanguageProperty::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfMultiLanguageProperty::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfMultiLanguageProperty::kValueId:
+            return ParseInto(
+              the_value_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfMultiLanguageProperty::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfMultiLanguageProperty",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize value
-
-  if (json.contains("value")) {
-    std::tie(
-      the_value,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["value"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"value"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize value
-
-  // region De-serialize valueId
-
-  if (json.contains("valueId")) {
-    std::tie(
-      the_value_id,
-      error
-    ) = DeserializeReference(
-      json["valueId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"valueId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize valueId
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
-
-  if (*model_type != L"MultiLanguageProperty") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'MultiLanguageProperty', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -9448,21 +8860,39 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInRange = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "valueType",
-  "min",
-  "max",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IMultiLanguageProperty>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeMultiLanguageProperty(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "MultiLanguageProperty"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfMultiLanguageProperty<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -9473,83 +8903,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeRange(
+> ParsePropertiesOfRange(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInRange.find(key_val.key())
-      );
-      if (it == kPropertiesInRange.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("valueType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property valueType is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -9600,432 +8957,153 @@ std::pair<
 
   common::optional<std::wstring> the_max;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfRange,
+      additional_properties,
+      [&](
+        properties::OfRange property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfRange::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfRange::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfRange::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfRange::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfRange::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfRange::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfRange::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfRange::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfRange::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfRange::kValueType:
+            return ParseInto(
+              the_value_type,
+              DeserializeDataTypeDefXsd(value)
+            );
+          case properties::OfRange::kMin:
+            return ParseInto(
+              the_min,
+              DeserializeWstring(value)
+            );
+          case properties::OfRange::kMax:
+            return ParseInto(
+              the_max,
+              DeserializeWstring(value)
+            );
+          case properties::OfRange::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfRange",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize valueType
-
-  std::tie(
-    the_value_type,
-    error
-  ) = DeserializeDataTypeDefXsd(
-    json["valueType"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"valueType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize valueType
-
-  // region De-serialize min
-
-  if (json.contains("min")) {
-    std::tie(
-      the_min,
-      error
-    ) = DeserializeWstring(
-      json["min"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"min"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize min
-
-  // region De-serialize max
-
-  if (json.contains("max")) {
-    std::tie(
-      the_max,
-      error
-    ) = DeserializeWstring(
-      json["max"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"max"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize max
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_value_type.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property valueType is missing"
     );
   }
-
-  if (*model_type != L"Range") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'Range', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -10053,19 +9131,39 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInReferenceElement = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "value",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IRange>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeRange(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "Range"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfRange<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -10076,71 +9174,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeReferenceElement(
+> ParsePropertiesOfReferenceElement(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInReferenceElement.find(key_val.key())
-      );
-      if (it == kPropertiesInReferenceElement.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -10189,377 +9226,138 @@ std::pair<
     std::shared_ptr<types::IReference>
   > the_value;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfReferenceElement,
+      additional_properties,
+      [&](
+        properties::OfReferenceElement property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfReferenceElement::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfReferenceElement::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfReferenceElement::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfReferenceElement::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfReferenceElement::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfReferenceElement::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfReferenceElement::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfReferenceElement::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfReferenceElement::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfReferenceElement::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfReferenceElement::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfReferenceElement",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize value
-
-  if (json.contains("value")) {
-    std::tie(
-      the_value,
-      error
-    ) = DeserializeReference(
-      json["value"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"value"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize value
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
-
-  if (*model_type != L"ReferenceElement") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'ReferenceElement', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -10585,20 +9383,39 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInBlob = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "value",
-  "contentType",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IReferenceElement>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeReferenceElement(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "ReferenceElement"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfReferenceElement<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -10609,83 +9426,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeBlob(
+> ParsePropertiesOfBlob(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInBlob.find(key_val.key())
-      );
-      if (it == kPropertiesInBlob.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("contentType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property contentType is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -10736,403 +9480,148 @@ std::pair<
 
   common::optional<std::wstring> the_content_type;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfBlob,
+      additional_properties,
+      [&](
+        properties::OfBlob property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfBlob::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfBlob::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfBlob::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfBlob::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfBlob::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfBlob::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfBlob::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfBlob::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfBlob::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfBlob::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeByteArray(value)
+            );
+          case properties::OfBlob::kContentType:
+            return ParseInto(
+              the_content_type,
+              DeserializeWstring(value)
+            );
+          case properties::OfBlob::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfBlob",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize value
-
-  if (json.contains("value")) {
-    std::tie(
-      the_value,
-      error
-    ) = DeserializeByteArray(
-      json["value"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"value"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize value
-
-  // region De-serialize contentType
-
-  std::tie(
-    the_content_type,
-    error
-  ) = DeserializeWstring(
-    json["contentType"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"contentType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize contentType
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_content_type.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property contentType is missing"
     );
   }
-
-  if (*model_type != L"Blob") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'Blob', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -11159,20 +9648,39 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInFile = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "value",
-  "contentType",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IBlob>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeBlob(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "Blob"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfBlob<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -11183,83 +9691,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeFile(
+> ParsePropertiesOfFile(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInFile.find(key_val.key())
-      );
-      if (it == kPropertiesInFile.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("contentType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property contentType is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -11308,403 +9743,148 @@ std::pair<
 
   common::optional<std::wstring> the_content_type;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfFile,
+      additional_properties,
+      [&](
+        properties::OfFile property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfFile::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfFile::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfFile::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfFile::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfFile::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfFile::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfFile::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfFile::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfFile::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfFile::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeWstring(value)
+            );
+          case properties::OfFile::kContentType:
+            return ParseInto(
+              the_content_type,
+              DeserializeWstring(value)
+            );
+          case properties::OfFile::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfFile",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize value
-
-  if (json.contains("value")) {
-    std::tie(
-      the_value,
-      error
-    ) = DeserializeWstring(
-      json["value"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"value"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize value
-
-  // region De-serialize contentType
-
-  std::tie(
-    the_content_type,
-    error
-  ) = DeserializeWstring(
-    json["contentType"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"contentType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize contentType
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_content_type.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property contentType is missing"
     );
   }
-
-  if (*model_type != L"File") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'File', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -11731,21 +9911,39 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInAnnotatedRelationshipElement = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "first",
-  "second",
-  "annotations",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IFile>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeFile(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "File"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfFile<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -11756,95 +9954,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeAnnotatedRelationshipElement(
+> ParsePropertiesOfAnnotatedRelationshipElement(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInAnnotatedRelationshipElement.find(key_val.key())
-      );
-      if (it == kPropertiesInAnnotatedRelationshipElement.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("first")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property first is missing"
-      )
-    );
-  }
-
-  if (!json.contains("second")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property second is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -11899,435 +10012,173 @@ std::pair<
     >
   > the_annotations;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfAnnotatedRelationshipElement,
+      additional_properties,
+      [&](
+        properties::OfAnnotatedRelationshipElement property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfAnnotatedRelationshipElement::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfAnnotatedRelationshipElement::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfAnnotatedRelationshipElement::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfAnnotatedRelationshipElement::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfAnnotatedRelationshipElement::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfAnnotatedRelationshipElement::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfAnnotatedRelationshipElement::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfAnnotatedRelationshipElement::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfAnnotatedRelationshipElement::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfAnnotatedRelationshipElement::kFirst:
+            return ParseInto(
+              the_first,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfAnnotatedRelationshipElement::kSecond:
+            return ParseInto(
+              the_second,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfAnnotatedRelationshipElement::kAnnotations:
+            return ParseInto(
+              the_annotations,
+              DeserializeList<
+                std::shared_ptr<types::IDataElement>
+              >(
+                value,
+                additional_properties,
+                DeserializeDataElement
+              )
+            );
+          case properties::OfAnnotatedRelationshipElement::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfAnnotatedRelationshipElement",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize first
-
-  std::tie(
-    the_first,
-    error
-  ) = DeserializeReference(
-    json["first"],
-    additional_properties
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"first"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize first
-
-  // region De-serialize second
-
-  std::tie(
-    the_second,
-    error
-  ) = DeserializeReference(
-    json["second"],
-    additional_properties
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"second"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_first.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property first is missing"
     );
   }
 
-  // endregion De-serialize second
-
-  // region De-serialize annotations
-
-  if (json.contains("annotations")) {
-    std::tie(
-      the_annotations,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IDataElement>>(
-      json["annotations"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeDataElement(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"annotations"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize annotations
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_second.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property second is missing"
     );
   }
-
-  if (*model_type != L"AnnotatedRelationshipElement") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'AnnotatedRelationshipElement', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -12355,22 +10206,39 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInEntity = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "statements",
-  "entityType",
-  "globalAssetId",
-  "specificAssetIds",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IAnnotatedRelationshipElement>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeAnnotatedRelationshipElement(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "AnnotatedRelationshipElement"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfAnnotatedRelationshipElement<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -12381,83 +10249,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeEntity(
+> ParsePropertiesOfEntity(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInEntity.find(key_val.key())
-      );
-      if (it == kPropertiesInEntity.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("entityType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property entityType is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -12518,469 +10313,172 @@ std::pair<
     >
   > the_specific_asset_ids;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfEntity,
+      additional_properties,
+      [&](
+        properties::OfEntity property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfEntity::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfEntity::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfEntity::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfEntity::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfEntity::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfEntity::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfEntity::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfEntity::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfEntity::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfEntity::kStatements:
+            return ParseInto(
+              the_statements,
+              DeserializeList<
+                std::shared_ptr<types::ISubmodelElement>
+              >(
+                value,
+                additional_properties,
+                DeserializeSubmodelElement
+              )
+            );
+          case properties::OfEntity::kEntityType:
+            return ParseInto(
+              the_entity_type,
+              DeserializeEntityType(value)
+            );
+          case properties::OfEntity::kGlobalAssetId:
+            return ParseInto(
+              the_global_asset_id,
+              DeserializeWstring(value)
+            );
+          case properties::OfEntity::kSpecificAssetIds:
+            return ParseInto(
+              the_specific_asset_ids,
+              DeserializeList<
+                std::shared_ptr<types::ISpecificAssetId>
+              >(
+                value,
+                additional_properties,
+                DeserializeSpecificAssetId<
+                  types::ISpecificAssetId
+                >
+              )
+            );
+          case properties::OfEntity::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfEntity",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize statements
-
-  if (json.contains("statements")) {
-    std::tie(
-      the_statements,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ISubmodelElement>>(
-      json["statements"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeSubmodelElement(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"statements"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize statements
-
-  // region De-serialize entityType
-
-  std::tie(
-    the_entity_type,
-    error
-  ) = DeserializeEntityType(
-    json["entityType"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"entityType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize entityType
-
-  // region De-serialize globalAssetId
-
-  if (json.contains("globalAssetId")) {
-    std::tie(
-      the_global_asset_id,
-      error
-    ) = DeserializeWstring(
-      json["globalAssetId"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"globalAssetId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize globalAssetId
-
-  // region De-serialize specificAssetIds
-
-  if (json.contains("specificAssetIds")) {
-    std::tie(
-      the_specific_asset_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ISpecificAssetId>>(
-      json["specificAssetIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeSpecificAssetId<
-        types::ISpecificAssetId
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"specificAssetIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize specificAssetIds
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_entity_type.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property entityType is missing"
     );
   }
-
-  if (*model_type != L"Entity") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'Entity', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -13009,111 +10507,49 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInEventPayload = {
-  "source",
-  "sourceSemanticId",
-  "observableReference",
-  "observableSemanticId",
-  "topic",
-  "subjectId",
-  "timeStamp",
-  "payload"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IEntity>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeEntity(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "Entity"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfEntity<T>(
+    json,
+    additional_properties
+  );
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IEventPayload>
   >,
   common::optional<DeserializationError>
-> DeserializeEventPayload(
+> ParsePropertiesOfEventPayload(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEventPayload> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInEventPayload.find(key_val.key())
-      );
-      if (it == kPropertiesInEventPayload.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IEventPayload> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("source")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEventPayload> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property source is missing"
-      )
-    );
-  }
-
-  if (!json.contains("observableReference")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEventPayload> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property observableReference is missing"
-      )
-    );
-  }
-
-  if (!json.contains("timeStamp")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEventPayload> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property timeStamp is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::shared_ptr<types::IReference> > the_source;
 
   common::optional<
@@ -13138,238 +10574,112 @@ std::pair<
     std::vector<std::uint8_t>
   > the_payload;
 
-  // endregion Initialization
-
-  // region De-serialize source
-
-  std::tie(
-    the_source,
-    error
-  ) = DeserializeReference(
-    json["source"],
-    additional_properties
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfEventPayload,
+      additional_properties,
+      [&](
+        properties::OfEventPayload property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfEventPayload::kSource:
+            return ParseInto(
+              the_source,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfEventPayload::kSourceSemanticId:
+            return ParseInto(
+              the_source_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfEventPayload::kObservableReference:
+            return ParseInto(
+              the_observable_reference,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfEventPayload::kObservableSemanticId:
+            return ParseInto(
+              the_observable_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfEventPayload::kTopic:
+            return ParseInto(
+              the_topic,
+              DeserializeWstring(value)
+            );
+          case properties::OfEventPayload::kSubjectId:
+            return ParseInto(
+              the_subject_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfEventPayload::kTimeStamp:
+            return ParseInto(
+              the_time_stamp,
+              DeserializeWstring(value)
+            );
+          case properties::OfEventPayload::kPayload:
+            return ParseInto(
+              the_payload,
+              DeserializeByteArray(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfEventPayload",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"source"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEventPayload> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IEventPayload>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize source
-
-  // region De-serialize sourceSemanticId
-
-  if (json.contains("sourceSemanticId")) {
-    std::tie(
-      the_source_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["sourceSemanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"sourceSemanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IEventPayload> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize sourceSemanticId
-
-  // region De-serialize observableReference
-
-  std::tie(
-    the_observable_reference,
-    error
-  ) = DeserializeReference(
-    json["observableReference"],
-    additional_properties
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"observableReference"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEventPayload> >,
-      common::optional<DeserializationError>
+  if (!the_source.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IEventPayload>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property source is missing"
     );
   }
 
-  // endregion De-serialize observableReference
-
-  // region De-serialize observableSemanticId
-
-  if (json.contains("observableSemanticId")) {
-    std::tie(
-      the_observable_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["observableSemanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"observableSemanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IEventPayload> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize observableSemanticId
-
-  // region De-serialize topic
-
-  if (json.contains("topic")) {
-    std::tie(
-      the_topic,
-      error
-    ) = DeserializeWstring(
-      json["topic"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"topic"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IEventPayload> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize topic
-
-  // region De-serialize subjectId
-
-  if (json.contains("subjectId")) {
-    std::tie(
-      the_subject_id,
-      error
-    ) = DeserializeReference(
-      json["subjectId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"subjectId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IEventPayload> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize subjectId
-
-  // region De-serialize timeStamp
-
-  std::tie(
-    the_time_stamp,
-    error
-  ) = DeserializeWstring(
-    json["timeStamp"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"timeStamp"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEventPayload> >,
-      common::optional<DeserializationError>
+  if (!the_observable_reference.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IEventPayload>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property observableReference is missing"
     );
   }
 
-  // endregion De-serialize timeStamp
-
-  // region De-serialize payload
-
-  if (json.contains("payload")) {
-    std::tie(
-      the_payload,
-      error
-    ) = DeserializeByteArray(
-      json["payload"]
+  if (!the_time_stamp.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IEventPayload>
+    >(
+      L"The required property timeStamp is missing"
     );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"payload"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IEventPayload> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
   }
-
-  // endregion De-serialize payload
 
   return std::make_pair(
     common::make_optional<
@@ -13395,6 +10705,30 @@ std::pair<
 
 std::pair<
   common::optional<
+    std::shared_ptr<types::IEventPayload>
+  >,
+  common::optional<DeserializationError>
+> DeserializeEventPayload(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IEventPayload>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfEventPayload(json, additional_properties);
+}
+
+std::pair<
+  common::optional<
     std::shared_ptr<types::IEventElement>
   >,
   common::optional<DeserializationError>
@@ -13411,12 +10745,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEventElement> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IEventElement>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -13425,68 +10757,34 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEventElement> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IEventElement>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kBasicEventElement:
-      return DeserializeBasicEventElement<
+      return ParsePropertiesOfBasicEventElement<
         types::IEventElement
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IEventElement "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IEventElement> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IEventElement>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IEventElement "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
-
-std::set<std::string> kPropertiesInBasicEventElement = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "observed",
-  "direction",
-  "state",
-  "messageTopic",
-  "messageBroker",
-  "lastUpdate",
-  "minInterval",
-  "maxInterval",
-  "modelType"
-};
 
 template <
   typename T,
@@ -13497,107 +10795,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeBasicEventElement(
+> ParsePropertiesOfBasicEventElement(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInBasicEventElement.find(key_val.key())
-      );
-      if (it == kPropertiesInBasicEventElement.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("observed")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property observed is missing"
-      )
-    );
-  }
-
-  if (!json.contains("direction")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property direction is missing"
-      )
-    );
-  }
-
-  if (!json.contains("state")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property state is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -13660,575 +10861,200 @@ std::pair<
 
   common::optional<std::wstring> the_max_interval;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfBasicEventElement,
+      additional_properties,
+      [&](
+        properties::OfBasicEventElement property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfBasicEventElement::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfBasicEventElement::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfBasicEventElement::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfBasicEventElement::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfBasicEventElement::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfBasicEventElement::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfBasicEventElement::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfBasicEventElement::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfBasicEventElement::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfBasicEventElement::kObserved:
+            return ParseInto(
+              the_observed,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfBasicEventElement::kDirection:
+            return ParseInto(
+              the_direction,
+              DeserializeDirection(value)
+            );
+          case properties::OfBasicEventElement::kState:
+            return ParseInto(
+              the_state,
+              DeserializeStateOfEvent(value)
+            );
+          case properties::OfBasicEventElement::kMessageTopic:
+            return ParseInto(
+              the_message_topic,
+              DeserializeWstring(value)
+            );
+          case properties::OfBasicEventElement::kMessageBroker:
+            return ParseInto(
+              the_message_broker,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfBasicEventElement::kLastUpdate:
+            return ParseInto(
+              the_last_update,
+              DeserializeWstring(value)
+            );
+          case properties::OfBasicEventElement::kMinInterval:
+            return ParseInto(
+              the_min_interval,
+              DeserializeWstring(value)
+            );
+          case properties::OfBasicEventElement::kMaxInterval:
+            return ParseInto(
+              the_max_interval,
+              DeserializeWstring(value)
+            );
+          case properties::OfBasicEventElement::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfBasicEventElement",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize observed
-
-  std::tie(
-    the_observed,
-    error
-  ) = DeserializeReference(
-    json["observed"],
-    additional_properties
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"observed"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize observed
-
-  // region De-serialize direction
-
-  std::tie(
-    the_direction,
-    error
-  ) = DeserializeDirection(
-    json["direction"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"direction"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_observed.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property observed is missing"
     );
   }
 
-  // endregion De-serialize direction
-
-  // region De-serialize state
-
-  std::tie(
-    the_state,
-    error
-  ) = DeserializeStateOfEvent(
-    json["state"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"state"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_direction.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property direction is missing"
     );
   }
 
-  // endregion De-serialize state
-
-  // region De-serialize messageTopic
-
-  if (json.contains("messageTopic")) {
-    std::tie(
-      the_message_topic,
-      error
-    ) = DeserializeWstring(
-      json["messageTopic"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"messageTopic"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize messageTopic
-
-  // region De-serialize messageBroker
-
-  if (json.contains("messageBroker")) {
-    std::tie(
-      the_message_broker,
-      error
-    ) = DeserializeReference(
-      json["messageBroker"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"messageBroker"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize messageBroker
-
-  // region De-serialize lastUpdate
-
-  if (json.contains("lastUpdate")) {
-    std::tie(
-      the_last_update,
-      error
-    ) = DeserializeWstring(
-      json["lastUpdate"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"lastUpdate"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize lastUpdate
-
-  // region De-serialize minInterval
-
-  if (json.contains("minInterval")) {
-    std::tie(
-      the_min_interval,
-      error
-    ) = DeserializeWstring(
-      json["minInterval"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"minInterval"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize minInterval
-
-  // region De-serialize maxInterval
-
-  if (json.contains("maxInterval")) {
-    std::tie(
-      the_max_interval,
-      error
-    ) = DeserializeWstring(
-      json["maxInterval"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"maxInterval"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize maxInterval
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_state.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property state is missing"
     );
   }
-
-  if (*model_type != L"BasicEventElement") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'BasicEventElement', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -14261,21 +11087,39 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInOperation = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "inputVariables",
-  "outputVariables",
-  "inoutputVariables",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IBasicEventElement>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeBasicEventElement(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "BasicEventElement"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfBasicEventElement<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -14286,71 +11130,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeOperation(
+> ParsePropertiesOfOperation(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInOperation.find(key_val.key())
-      );
-      if (it == kPropertiesInOperation.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -14413,443 +11196,163 @@ std::pair<
     >
   > the_inoutput_variables;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfOperation,
+      additional_properties,
+      [&](
+        properties::OfOperation property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfOperation::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfOperation::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfOperation::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfOperation::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfOperation::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfOperation::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfOperation::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfOperation::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfOperation::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfOperation::kInputVariables:
+            return ParseInto(
+              the_input_variables,
+              DeserializeList<
+                std::shared_ptr<types::IOperationVariable>
+              >(
+                value,
+                additional_properties,
+                DeserializeOperationVariable
+              )
+            );
+          case properties::OfOperation::kOutputVariables:
+            return ParseInto(
+              the_output_variables,
+              DeserializeList<
+                std::shared_ptr<types::IOperationVariable>
+              >(
+                value,
+                additional_properties,
+                DeserializeOperationVariable
+              )
+            );
+          case properties::OfOperation::kInoutputVariables:
+            return ParseInto(
+              the_inoutput_variables,
+              DeserializeList<
+                std::shared_ptr<types::IOperationVariable>
+              >(
+                value,
+                additional_properties,
+                DeserializeOperationVariable
+              )
+            );
+          case properties::OfOperation::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfOperation",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize inputVariables
-
-  if (json.contains("inputVariables")) {
-    std::tie(
-      the_input_variables,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IOperationVariable>>(
-      json["inputVariables"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeOperationVariable(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"inputVariables"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize inputVariables
-
-  // region De-serialize outputVariables
-
-  if (json.contains("outputVariables")) {
-    std::tie(
-      the_output_variables,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IOperationVariable>>(
-      json["outputVariables"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeOperationVariable(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"outputVariables"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize outputVariables
-
-  // region De-serialize inoutputVariables
-
-  if (json.contains("inoutputVariables")) {
-    std::tie(
-      the_inoutput_variables,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IOperationVariable>>(
-      json["inoutputVariables"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeOperationVariable(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"inoutputVariables"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize inoutputVariables
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
-
-  if (*model_type != L"Operation") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'Operation', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -14877,111 +11380,94 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInOperationVariable = {
-  "value"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IOperation>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeOperation(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "Operation"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfOperation<T>(
+    json,
+    additional_properties
+  );
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IOperationVariable>
   >,
   common::optional<DeserializationError>
-> DeserializeOperationVariable(
+> ParsePropertiesOfOperationVariable(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IOperationVariable> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInOperationVariable.find(key_val.key())
-      );
-      if (it == kPropertiesInOperationVariable.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IOperationVariable> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("value")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IOperationVariable> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property value is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::shared_ptr<types::ISubmodelElement> > the_value;
 
-  // endregion Initialization
-
-  // region De-serialize value
-
-  std::tie(
-    the_value,
-    error
-  ) = DeserializeSubmodelElement(
-    json["value"],
-    additional_properties
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfOperationVariable,
+      additional_properties,
+      [&](
+        properties::OfOperationVariable property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfOperationVariable::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeSubmodelElement(
+                value,
+                additional_properties
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfOperationVariable",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"value"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IOperationVariable> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IOperationVariable>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize value
+  if (!the_value.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IOperationVariable>
+    >(
+      L"The required property value is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -14998,18 +11484,29 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInCapability = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "semanticId",
-  "supplementalSemanticIds",
-  "qualifiers",
-  "embeddedDataSpecifications",
-  "modelType"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IOperationVariable>
+  >,
+  common::optional<DeserializationError>
+> DeserializeOperationVariable(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IOperationVariable>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfOperationVariable(json, additional_properties);
+}
 
 template <
   typename T,
@@ -15020,71 +11517,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeCapability(
+> ParsePropertiesOfCapability(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInCapability.find(key_val.key())
-      );
-      if (it == kPropertiesInCapability.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -15129,347 +11565,130 @@ std::pair<
     >
   > the_embedded_data_specifications;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfCapability,
+      additional_properties,
+      [&](
+        properties::OfCapability property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfCapability::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfCapability::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfCapability::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfCapability::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfCapability::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfCapability::kSemanticId:
+            return ParseInto(
+              the_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfCapability::kSupplementalSemanticIds:
+            return ParseInto(
+              the_supplemental_semantic_ids,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfCapability::kQualifiers:
+            return ParseInto(
+              the_qualifiers,
+              DeserializeList<
+                std::shared_ptr<types::IQualifier>
+              >(
+                value,
+                additional_properties,
+                DeserializeQualifier<
+                  types::IQualifier
+                >
+              )
+            );
+          case properties::OfCapability::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfCapability::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfCapability",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize semanticId
-
-  if (json.contains("semanticId")) {
-    std::tie(
-      the_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["semanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"semanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize semanticId
-
-  // region De-serialize supplementalSemanticIds
-
-  if (json.contains("supplementalSemanticIds")) {
-    std::tie(
-      the_supplemental_semantic_ids,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["supplementalSemanticIds"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"supplementalSemanticIds"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize supplementalSemanticIds
-
-  // region De-serialize qualifiers
-
-  if (json.contains("qualifiers")) {
-    std::tie(
-      the_qualifiers,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IQualifier>>(
-      json["qualifiers"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeQualifier<
-        types::IQualifier
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"qualifiers"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize qualifiers
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
-
-  if (*model_type != L"Capability") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'Capability', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -15494,18 +11713,39 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInConceptDescription = {
-  "extensions",
-  "category",
-  "idShort",
-  "displayName",
-  "description",
-  "administration",
-  "id",
-  "embeddedDataSpecifications",
-  "isCaseOf",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ICapability>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeCapability(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "Capability"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfCapability<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -15516,83 +11756,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeConceptDescription(
+> ParsePropertiesOfConceptDescription(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInConceptDescription.find(key_val.key())
-      );
-      if (it == kPropertiesInConceptDescription.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("id")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property id is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IExtension>
@@ -15633,342 +11800,132 @@ std::pair<
     >
   > the_is_case_of;
 
-  // endregion Initialization
-
-  // region De-serialize extensions
-
-  if (json.contains("extensions")) {
-    std::tie(
-      the_extensions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IExtension>>(
-      json["extensions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeExtension<
-        types::IExtension
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfConceptDescription,
+      additional_properties,
+      [&](
+        properties::OfConceptDescription property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfConceptDescription::kExtensions:
+            return ParseInto(
+              the_extensions,
+              DeserializeList<
+                std::shared_ptr<types::IExtension>
+              >(
+                value,
+                additional_properties,
+                DeserializeExtension<
+                  types::IExtension
+                >
+              )
+            );
+          case properties::OfConceptDescription::kCategory:
+            return ParseInto(
+              the_category,
+              DeserializeWstring(value)
+            );
+          case properties::OfConceptDescription::kIdShort:
+            return ParseInto(
+              the_id_short,
+              DeserializeWstring(value)
+            );
+          case properties::OfConceptDescription::kDisplayName:
+            return ParseInto(
+              the_display_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringNameType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringNameType<
+                  types::ILangStringNameType
+                >
+              )
+            );
+          case properties::OfConceptDescription::kDescription:
+            return ParseInto(
+              the_description,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringTextType>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringTextType<
+                  types::ILangStringTextType
+                >
+              )
+            );
+          case properties::OfConceptDescription::kAdministration:
+            return ParseInto(
+              the_administration,
+              DeserializeAdministrativeInformation<
+                types::IAdministrativeInformation
+              >(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfConceptDescription::kId:
+            return ParseInto(
+              the_id,
+              DeserializeWstring(value)
+            );
+          case properties::OfConceptDescription::kEmbeddedDataSpecifications:
+            return ParseInto(
+              the_embedded_data_specifications,
+              DeserializeList<
+                std::shared_ptr<types::IEmbeddedDataSpecification>
+              >(
+                value,
+                additional_properties,
+                DeserializeEmbeddedDataSpecification
+              )
+            );
+          case properties::OfConceptDescription::kIsCaseOf:
+            return ParseInto(
+              the_is_case_of,
+              DeserializeList<
+                std::shared_ptr<types::IReference>
+              >(
+                value,
+                additional_properties,
+                DeserializeReference
+              )
+            );
+          case properties::OfConceptDescription::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfConceptDescription",
+              property
+            );
+        }
       }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"extensions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize extensions
-
-  // region De-serialize category
-
-  if (json.contains("category")) {
-    std::tie(
-      the_category,
-      error
-    ) = DeserializeWstring(
-      json["category"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"category"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize category
-
-  // region De-serialize idShort
-
-  if (json.contains("idShort")) {
-    std::tie(
-      the_id_short,
-      error
-    ) = DeserializeWstring(
-      json["idShort"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"idShort"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize idShort
-
-  // region De-serialize displayName
-
-  if (json.contains("displayName")) {
-    std::tie(
-      the_display_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringNameType>>(
-      json["displayName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringNameType<
-        types::ILangStringNameType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"displayName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize displayName
-
-  // region De-serialize description
-
-  if (json.contains("description")) {
-    std::tie(
-      the_description,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringTextType>>(
-      json["description"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringTextType<
-        types::ILangStringTextType
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"description"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize description
-
-  // region De-serialize administration
-
-  if (json.contains("administration")) {
-    std::tie(
-      the_administration,
-      error
-    ) = DeserializeAdministrativeInformation<
-      types::IAdministrativeInformation
-    >(
-      json["administration"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"administration"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize administration
-
-  // region De-serialize id
-
-  std::tie(
-    the_id,
-    error
-  ) = DeserializeWstring(
-    json["id"]
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"id"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize id
-
-  // region De-serialize embeddedDataSpecifications
-
-  if (json.contains("embeddedDataSpecifications")) {
-    std::tie(
-      the_embedded_data_specifications,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IEmbeddedDataSpecification>>(
-      json["embeddedDataSpecifications"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeEmbeddedDataSpecification(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"embeddedDataSpecifications"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize embeddedDataSpecifications
-
-  // region De-serialize isCaseOf
-
-  if (json.contains("isCaseOf")) {
-    std::tie(
-      the_is_case_of,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IReference>>(
-      json["isCaseOf"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeReference(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"isCaseOf"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize isCaseOf
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_id.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property id is missing"
     );
   }
-
-  if (*model_type != L"ConceptDescription") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'ConceptDescription', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -15993,94 +11950,49 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInReference = {
-  "type",
-  "referredSemanticId",
-  "keys"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IConceptDescription>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeConceptDescription(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "ConceptDescription"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfConceptDescription<T>(
+    json,
+    additional_properties
+  );
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IReference>
   >,
   common::optional<DeserializationError>
-> DeserializeReference(
+> ParsePropertiesOfReference(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IReference> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInReference.find(key_val.key())
-      );
-      if (it == kPropertiesInReference.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IReference> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("type")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IReference> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property type is missing"
-      )
-    );
-  }
-
-  if (!json.contains("keys")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IReference> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property keys is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<types::ReferenceTypes> the_type;
 
   common::optional<
@@ -16093,94 +12005,73 @@ std::pair<
     >
   > the_keys;
 
-  // endregion Initialization
-
-  // region De-serialize type
-
-  std::tie(
-    the_type,
-    error
-  ) = DeserializeReferenceTypes(
-    json["type"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfReference,
+      additional_properties,
+      [&](
+        properties::OfReference property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfReference::kType:
+            return ParseInto(
+              the_type,
+              DeserializeReferenceTypes(value)
+            );
+          case properties::OfReference::kReferredSemanticId:
+            return ParseInto(
+              the_referred_semantic_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfReference::kKeys:
+            return ParseInto(
+              the_keys,
+              DeserializeList<
+                std::shared_ptr<types::IKey>
+              >(
+                value,
+                additional_properties,
+                DeserializeKey
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfReference",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"type"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IReference> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IReference>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize type
-
-  // region De-serialize referredSemanticId
-
-  if (json.contains("referredSemanticId")) {
-    std::tie(
-      the_referred_semantic_id,
-      error
-    ) = DeserializeReference(
-      json["referredSemanticId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"referredSemanticId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IReference> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize referredSemanticId
-
-  // region De-serialize keys
-
-  std::tie(
-    the_keys,
-    error
-  ) = DeserializeList<std::shared_ptr<types::IKey>>(
-    json["keys"],
-    [&additional_properties](const nlohmann::json& a_json) {
-      return DeserializeKey(a_json, additional_properties);
-    }
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"keys"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IReference> >,
-      common::optional<DeserializationError>
+  if (!the_type.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IReference>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property type is missing"
     );
   }
 
-  // endregion De-serialize keys
+  if (!the_keys.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IReference>
+    >(
+      L"The required property keys is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -16199,152 +12090,96 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInKey = {
-  "type",
-  "value"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IReference>
+  >,
+  common::optional<DeserializationError>
+> DeserializeReference(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IReference>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfReference(json, additional_properties);
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IKey>
   >,
   common::optional<DeserializationError>
-> DeserializeKey(
+> ParsePropertiesOfKey(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IKey> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInKey.find(key_val.key())
-      );
-      if (it == kPropertiesInKey.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IKey> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("type")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IKey> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property type is missing"
-      )
-    );
-  }
-
-  if (!json.contains("value")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IKey> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property value is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<types::KeyTypes> the_type;
 
   common::optional<std::wstring> the_value;
 
-  // endregion Initialization
-
-  // region De-serialize type
-
-  std::tie(
-    the_type,
-    error
-  ) = DeserializeKeyTypes(
-    json["type"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfKey,
+      additional_properties,
+      [&](
+        properties::OfKey property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfKey::kType:
+            return ParseInto(
+              the_type,
+              DeserializeKeyTypes(value)
+            );
+          case properties::OfKey::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfKey",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"type"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IKey> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IKey>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize type
-
-  // region De-serialize value
-
-  std::tie(
-    the_value,
-    error
-  ) = DeserializeWstring(
-    json["value"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"value"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IKey> >,
-      common::optional<DeserializationError>
+  if (!the_type.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IKey>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property type is missing"
     );
   }
 
-  // endregion De-serialize value
+  if (!the_value.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IKey>
+    >(
+      L"The required property value is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -16360,6 +12195,30 @@ std::pair<
     ),
     common::nullopt
   );
+}
+
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IKey>
+  >,
+  common::optional<DeserializationError>
+> DeserializeKey(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IKey>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfKey(json, additional_properties);
 }
 
 std::pair<
@@ -16380,12 +12239,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IAbstractLangString> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IAbstractLangString>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -16394,68 +12251,50 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IAbstractLangString> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IAbstractLangString>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kLangStringDefinitionTypeIec61360:
-      return DeserializeLangStringDefinitionTypeIec61360<
+      return ParsePropertiesOfLangStringDefinitionTypeIec61360<
         types::IAbstractLangString
       >(json, additional_properties);
     case types::ModelType::kLangStringNameType:
-      return DeserializeLangStringNameType<
+      return ParsePropertiesOfLangStringNameType<
         types::IAbstractLangString
       >(json, additional_properties);
     case types::ModelType::kLangStringPreferredNameTypeIec61360:
-      return DeserializeLangStringPreferredNameTypeIec61360<
+      return ParsePropertiesOfLangStringPreferredNameTypeIec61360<
         types::IAbstractLangString
       >(json, additional_properties);
     case types::ModelType::kLangStringShortNameTypeIec61360:
-      return DeserializeLangStringShortNameTypeIec61360<
+      return ParsePropertiesOfLangStringShortNameTypeIec61360<
         types::IAbstractLangString
       >(json, additional_properties);
     case types::ModelType::kLangStringTextType:
-      return DeserializeLangStringTextType<
+      return ParsePropertiesOfLangStringTextType<
         types::IAbstractLangString
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IAbstractLangString "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IAbstractLangString> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IAbstractLangString>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IAbstractLangString "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
-
-std::set<std::string> kPropertiesInLangStringNameType = {
-  "language",
-  "text"
-};
 
 template <
   typename T,
@@ -16466,142 +12305,67 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeLangStringNameType(
+> ParsePropertiesOfLangStringNameType(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInLangStringNameType.find(key_val.key())
-      );
-      if (it == kPropertiesInLangStringNameType.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("language")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property language is missing"
-      )
-    );
-  }
-
-  if (!json.contains("text")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property text is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_language;
 
   common::optional<std::wstring> the_text;
 
-  // endregion Initialization
-
-  // region De-serialize language
-
-  std::tie(
-    the_language,
-    error
-  ) = DeserializeWstring(
-    json["language"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfLangStringNameType,
+      additional_properties,
+      [&](
+        properties::OfLangStringNameType property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfLangStringNameType::kLanguage:
+            return ParseInto(
+              the_language,
+              DeserializeWstring(value)
+            );
+          case properties::OfLangStringNameType::kText:
+            return ParseInto(
+              the_text,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfLangStringNameType",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"language"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize language
-
-  // region De-serialize text
-
-  std::tie(
-    the_text,
-    error
-  ) = DeserializeWstring(
-    json["text"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"text"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_language.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property language is missing"
     );
   }
 
-  // endregion De-serialize text
+  if (!the_text.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
+    >(
+      L"The required property text is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -16619,10 +12383,36 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInLangStringTextType = {
-  "language",
-  "text"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILangStringNameType>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeLangStringNameType(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfLangStringNameType<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -16633,142 +12423,67 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeLangStringTextType(
+> ParsePropertiesOfLangStringTextType(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInLangStringTextType.find(key_val.key())
-      );
-      if (it == kPropertiesInLangStringTextType.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("language")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property language is missing"
-      )
-    );
-  }
-
-  if (!json.contains("text")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property text is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_language;
 
   common::optional<std::wstring> the_text;
 
-  // endregion Initialization
-
-  // region De-serialize language
-
-  std::tie(
-    the_language,
-    error
-  ) = DeserializeWstring(
-    json["language"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfLangStringTextType,
+      additional_properties,
+      [&](
+        properties::OfLangStringTextType property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfLangStringTextType::kLanguage:
+            return ParseInto(
+              the_language,
+              DeserializeWstring(value)
+            );
+          case properties::OfLangStringTextType::kText:
+            return ParseInto(
+              the_text,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfLangStringTextType",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"language"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize language
-
-  // region De-serialize text
-
-  std::tie(
-    the_text,
-    error
-  ) = DeserializeWstring(
-    json["text"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"text"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_language.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property language is missing"
     );
   }
 
-  // endregion De-serialize text
+  if (!the_text.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
+    >(
+      L"The required property text is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -16786,66 +12501,46 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInEnvironment = {
-  "assetAdministrationShells",
-  "submodels",
-  "conceptDescriptions"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILangStringTextType>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeLangStringTextType(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfLangStringTextType<T>(
+    json,
+    additional_properties
+  );
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IEnvironment>
   >,
   common::optional<DeserializationError>
-> DeserializeEnvironment(
+> ParsePropertiesOfEnvironment(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEnvironment> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInEnvironment.find(key_val.key())
-      );
-      if (it == kPropertiesInEnvironment.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IEnvironment> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IAssetAdministrationShell>
@@ -16864,109 +12559,72 @@ std::pair<
     >
   > the_concept_descriptions;
 
-  // endregion Initialization
-
-  // region De-serialize assetAdministrationShells
-
-  if (json.contains("assetAdministrationShells")) {
-    std::tie(
-      the_asset_administration_shells,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IAssetAdministrationShell>>(
-      json["assetAdministrationShells"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeAssetAdministrationShell<
-        types::IAssetAdministrationShell
-      >(a_json, additional_properties);
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfEnvironment,
+      additional_properties,
+      [&](
+        properties::OfEnvironment property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfEnvironment::kAssetAdministrationShells:
+            return ParseInto(
+              the_asset_administration_shells,
+              DeserializeList<
+                std::shared_ptr<types::IAssetAdministrationShell>
+              >(
+                value,
+                additional_properties,
+                DeserializeAssetAdministrationShell<
+                  types::IAssetAdministrationShell
+                >
+              )
+            );
+          case properties::OfEnvironment::kSubmodels:
+            return ParseInto(
+              the_submodels,
+              DeserializeList<
+                std::shared_ptr<types::ISubmodel>
+              >(
+                value,
+                additional_properties,
+                DeserializeSubmodel<
+                  types::ISubmodel
+                >
+              )
+            );
+          case properties::OfEnvironment::kConceptDescriptions:
+            return ParseInto(
+              the_concept_descriptions,
+              DeserializeList<
+                std::shared_ptr<types::IConceptDescription>
+              >(
+                value,
+                additional_properties,
+                DeserializeConceptDescription<
+                  types::IConceptDescription
+                >
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfEnvironment",
+              property
+            );
+        }
       }
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IEnvironment>
+    >(
+      std::move(*error)
     );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"assetAdministrationShells"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IEnvironment> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
   }
-
-  // endregion De-serialize assetAdministrationShells
-
-  // region De-serialize submodels
-
-  if (json.contains("submodels")) {
-    std::tie(
-      the_submodels,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ISubmodel>>(
-      json["submodels"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeSubmodel<
-        types::ISubmodel
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"submodels"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IEnvironment> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize submodels
-
-  // region De-serialize conceptDescriptions
-
-  if (json.contains("conceptDescriptions")) {
-    std::tie(
-      the_concept_descriptions,
-      error
-    ) = DeserializeList<std::shared_ptr<types::IConceptDescription>>(
-      json["conceptDescriptions"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeConceptDescription<
-        types::IConceptDescription
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"conceptDescriptions"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IEnvironment> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize conceptDescriptions
 
   return std::make_pair(
     common::make_optional<
@@ -16987,6 +12645,30 @@ std::pair<
 
 std::pair<
   common::optional<
+    std::shared_ptr<types::IEnvironment>
+  >,
+  common::optional<DeserializationError>
+> DeserializeEnvironment(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IEnvironment>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfEnvironment(json, additional_properties);
+}
+
+std::pair<
+  common::optional<
     std::shared_ptr<types::IDataSpecificationContent>
   >,
   common::optional<DeserializationError>
@@ -17003,12 +12685,10 @@ std::pair<
   ) = GetModelTypeFrom(json);
 
   if (error.has_value()) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IDataSpecificationContent> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IDataSpecificationContent>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
@@ -17017,196 +12697,107 @@ std::pair<
   );
 
   if (!model_type.has_value()) {
-    std::wstring message = common::Concat(
-      L"The model type does not correspond to any known class: ",
-      common::Utf8ToWstring(*model_type_str)
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IDataSpecificationContent> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IDataSpecificationContent>
     >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
       )
     );
   }
 
   switch (*model_type) {
     case types::ModelType::kDataSpecificationIec61360:
-      return DeserializeDataSpecificationIec61360<
+      return ParsePropertiesOfDataSpecificationIec61360<
         types::IDataSpecificationContent
       >(json, additional_properties);
-    default: {
-      std::wstring message = common::Concat(
-        L"The dispatch to the JSON de-serialization of "
-        L"types::IDataSpecificationContent "
-        L"is not defined for model type: ",
-        common::Utf8ToWstring(*model_type_str)
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<types::IDataSpecificationContent> >,
-        common::optional<DeserializationError>
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::IDataSpecificationContent>
       >(
-        common::nullopt,
-        common::make_optional<DeserializationError>(
-          message
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::IDataSpecificationContent "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
         )
       );
-    }
   }
 }
-
-std::set<std::string> kPropertiesInEmbeddedDataSpecification = {
-  "dataSpecification",
-  "dataSpecificationContent"
-};
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IEmbeddedDataSpecification>
   >,
   common::optional<DeserializationError>
-> DeserializeEmbeddedDataSpecification(
+> ParsePropertiesOfEmbeddedDataSpecification(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEmbeddedDataSpecification> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInEmbeddedDataSpecification.find(key_val.key())
-      );
-      if (it == kPropertiesInEmbeddedDataSpecification.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IEmbeddedDataSpecification> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("dataSpecification")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEmbeddedDataSpecification> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property dataSpecification is missing"
-      )
-    );
-  }
-
-  if (!json.contains("dataSpecificationContent")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEmbeddedDataSpecification> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property dataSpecificationContent is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::shared_ptr<types::IReference> > the_data_specification;
 
   common::optional<std::shared_ptr<types::IDataSpecificationContent> > the_data_specification_content;
 
-  // endregion Initialization
-
-  // region De-serialize dataSpecification
-
-  std::tie(
-    the_data_specification,
-    error
-  ) = DeserializeReference(
-    json["dataSpecification"],
-    additional_properties
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfEmbeddedDataSpecification,
+      additional_properties,
+      [&](
+        properties::OfEmbeddedDataSpecification property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfEmbeddedDataSpecification::kDataSpecification:
+            return ParseInto(
+              the_data_specification,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfEmbeddedDataSpecification::kDataSpecificationContent:
+            return ParseInto(
+              the_data_specification_content,
+              DeserializeDataSpecificationContent(
+                value,
+                additional_properties
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfEmbeddedDataSpecification",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"dataSpecification"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEmbeddedDataSpecification> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IEmbeddedDataSpecification>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize dataSpecification
-
-  // region De-serialize dataSpecificationContent
-
-  std::tie(
-    the_data_specification_content,
-    error
-  ) = DeserializeDataSpecificationContent(
-    json["dataSpecificationContent"],
-    additional_properties
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"dataSpecificationContent"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IEmbeddedDataSpecification> >,
-      common::optional<DeserializationError>
+  if (!the_data_specification.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IEmbeddedDataSpecification>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property dataSpecification is missing"
     );
   }
 
-  // endregion De-serialize dataSpecificationContent
+  if (!the_data_specification_content.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IEmbeddedDataSpecification>
+    >(
+      L"The required property dataSpecificationContent is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -17224,119 +12815,39 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInLevelType = {
-  "min",
-  "nom",
-  "typ",
-  "max"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IEmbeddedDataSpecification>
+  >,
+  common::optional<DeserializationError>
+> DeserializeEmbeddedDataSpecification(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IEmbeddedDataSpecification>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfEmbeddedDataSpecification(json, additional_properties);
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::ILevelType>
   >,
   common::optional<DeserializationError>
-> DeserializeLevelType(
+> ParsePropertiesOfLevelType(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ILevelType> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInLevelType.find(key_val.key())
-      );
-      if (it == kPropertiesInLevelType.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::ILevelType> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("min")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ILevelType> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property min is missing"
-      )
-    );
-  }
-
-  if (!json.contains("nom")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ILevelType> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property nom is missing"
-      )
-    );
-  }
-
-  if (!json.contains("typ")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ILevelType> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property typ is missing"
-      )
-    );
-  }
-
-  if (!json.contains("max")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ILevelType> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property max is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<bool> the_min;
 
   common::optional<bool> the_nom;
@@ -17345,115 +12856,85 @@ std::pair<
 
   common::optional<bool> the_max;
 
-  // endregion Initialization
-
-  // region De-serialize min
-
-  std::tie(
-    the_min,
-    error
-  ) = DeserializeBool(
-    json["min"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfLevelType,
+      additional_properties,
+      [&](
+        properties::OfLevelType property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfLevelType::kMin:
+            return ParseInto(
+              the_min,
+              DeserializeBool(value)
+            );
+          case properties::OfLevelType::kNom:
+            return ParseInto(
+              the_nom,
+              DeserializeBool(value)
+            );
+          case properties::OfLevelType::kTyp:
+            return ParseInto(
+              the_typ,
+              DeserializeBool(value)
+            );
+          case properties::OfLevelType::kMax:
+            return ParseInto(
+              the_max,
+              DeserializeBool(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfLevelType",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"min"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ILevelType> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::ILevelType>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize min
-
-  // region De-serialize nom
-
-  std::tie(
-    the_nom,
-    error
-  ) = DeserializeBool(
-    json["nom"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"nom"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ILevelType> >,
-      common::optional<DeserializationError>
+  if (!the_min.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ILevelType>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property min is missing"
     );
   }
 
-  // endregion De-serialize nom
-
-  // region De-serialize typ
-
-  std::tie(
-    the_typ,
-    error
-  ) = DeserializeBool(
-    json["typ"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"typ"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ILevelType> >,
-      common::optional<DeserializationError>
+  if (!the_nom.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ILevelType>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property nom is missing"
     );
   }
 
-  // endregion De-serialize typ
-
-  // region De-serialize max
-
-  std::tie(
-    the_max,
-    error
-  ) = DeserializeBool(
-    json["max"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"max"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::ILevelType> >,
-      common::optional<DeserializationError>
+  if (!the_typ.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ILevelType>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property typ is missing"
     );
   }
 
-  // endregion De-serialize max
+  if (!the_max.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::ILevelType>
+    >(
+      L"The required property max is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -17473,153 +12954,99 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInValueReferencePair = {
-  "value",
-  "valueId"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::ILevelType>
+  >,
+  common::optional<DeserializationError>
+> DeserializeLevelType(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::ILevelType>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfLevelType(json, additional_properties);
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IValueReferencePair>
   >,
   common::optional<DeserializationError>
-> DeserializeValueReferencePair(
+> ParsePropertiesOfValueReferencePair(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IValueReferencePair> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInValueReferencePair.find(key_val.key())
-      );
-      if (it == kPropertiesInValueReferencePair.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IValueReferencePair> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("value")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IValueReferencePair> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property value is missing"
-      )
-    );
-  }
-
-  if (!json.contains("valueId")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IValueReferencePair> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property valueId is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_value;
 
   common::optional<std::shared_ptr<types::IReference> > the_value_id;
 
-  // endregion Initialization
-
-  // region De-serialize value
-
-  std::tie(
-    the_value,
-    error
-  ) = DeserializeWstring(
-    json["value"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfValueReferencePair,
+      additional_properties,
+      [&](
+        properties::OfValueReferencePair property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfValueReferencePair::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeWstring(value)
+            );
+          case properties::OfValueReferencePair::kValueId:
+            return ParseInto(
+              the_value_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfValueReferencePair",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"value"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IValueReferencePair> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IValueReferencePair>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize value
-
-  // region De-serialize valueId
-
-  std::tie(
-    the_value_id,
-    error
-  ) = DeserializeReference(
-    json["valueId"],
-    additional_properties
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"valueId"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IValueReferencePair> >,
-      common::optional<DeserializationError>
+  if (!the_value.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IValueReferencePair>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property value is missing"
     );
   }
 
-  // endregion De-serialize valueId
+  if (!the_value_id.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IValueReferencePair>
+    >(
+      L"The required property valueId is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -17637,117 +13064,91 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInValueList = {
-  "valueReferencePairs"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IValueReferencePair>
+  >,
+  common::optional<DeserializationError>
+> DeserializeValueReferencePair(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IValueReferencePair>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfValueReferencePair(json, additional_properties);
+}
 
 std::pair<
   common::optional<
     std::shared_ptr<types::IValueList>
   >,
   common::optional<DeserializationError>
-> DeserializeValueList(
+> ParsePropertiesOfValueList(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IValueList> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInValueList.find(key_val.key())
-      );
-      if (it == kPropertiesInValueList.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<types::IValueList> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("valueReferencePairs")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IValueList> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property valueReferencePairs is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::IValueReferencePair>
     >
   > the_value_reference_pairs;
 
-  // endregion Initialization
-
-  // region De-serialize valueReferencePairs
-
-  std::tie(
-    the_value_reference_pairs,
-    error
-  ) = DeserializeList<std::shared_ptr<types::IValueReferencePair>>(
-    json["valueReferencePairs"],
-    [&additional_properties](const nlohmann::json& a_json) {
-      return DeserializeValueReferencePair(a_json, additional_properties);
-    }
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfValueList,
+      additional_properties,
+      [&](
+        properties::OfValueList property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfValueList::kValueReferencePairs:
+            return ParseInto(
+              the_value_reference_pairs,
+              DeserializeList<
+                std::shared_ptr<types::IValueReferencePair>
+              >(
+                value,
+                additional_properties,
+                DeserializeValueReferencePair
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfValueList",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"valueReferencePairs"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<types::IValueList> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IValueList>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize valueReferencePairs
+  if (!the_value_reference_pairs.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::IValueList>
+    >(
+      L"The required property valueReferencePairs is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -17764,10 +13165,29 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInLangStringPreferredNameTypeIec61360 = {
-  "language",
-  "text"
-};
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IValueList>
+  >,
+  common::optional<DeserializationError>
+> DeserializeValueList(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::IValueList>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfValueList(json, additional_properties);
+}
 
 template <
   typename T,
@@ -17778,142 +13198,67 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeLangStringPreferredNameTypeIec61360(
+> ParsePropertiesOfLangStringPreferredNameTypeIec61360(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInLangStringPreferredNameTypeIec61360.find(key_val.key())
-      );
-      if (it == kPropertiesInLangStringPreferredNameTypeIec61360.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("language")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property language is missing"
-      )
-    );
-  }
-
-  if (!json.contains("text")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property text is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_language;
 
   common::optional<std::wstring> the_text;
 
-  // endregion Initialization
-
-  // region De-serialize language
-
-  std::tie(
-    the_language,
-    error
-  ) = DeserializeWstring(
-    json["language"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfLangStringPreferredNameTypeIec61360,
+      additional_properties,
+      [&](
+        properties::OfLangStringPreferredNameTypeIec61360 property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfLangStringPreferredNameTypeIec61360::kLanguage:
+            return ParseInto(
+              the_language,
+              DeserializeWstring(value)
+            );
+          case properties::OfLangStringPreferredNameTypeIec61360::kText:
+            return ParseInto(
+              the_text,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfLangStringPreferredNameTypeIec61360",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"language"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize language
-
-  // region De-serialize text
-
-  std::tie(
-    the_text,
-    error
-  ) = DeserializeWstring(
-    json["text"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"text"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_language.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property language is missing"
     );
   }
 
-  // endregion De-serialize text
+  if (!the_text.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
+    >(
+      L"The required property text is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -17931,10 +13276,36 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInLangStringShortNameTypeIec61360 = {
-  "language",
-  "text"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILangStringPreferredNameTypeIec61360>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeLangStringPreferredNameTypeIec61360(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfLangStringPreferredNameTypeIec61360<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -17945,142 +13316,67 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeLangStringShortNameTypeIec61360(
+> ParsePropertiesOfLangStringShortNameTypeIec61360(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInLangStringShortNameTypeIec61360.find(key_val.key())
-      );
-      if (it == kPropertiesInLangStringShortNameTypeIec61360.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("language")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property language is missing"
-      )
-    );
-  }
-
-  if (!json.contains("text")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property text is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_language;
 
   common::optional<std::wstring> the_text;
 
-  // endregion Initialization
-
-  // region De-serialize language
-
-  std::tie(
-    the_language,
-    error
-  ) = DeserializeWstring(
-    json["language"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfLangStringShortNameTypeIec61360,
+      additional_properties,
+      [&](
+        properties::OfLangStringShortNameTypeIec61360 property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfLangStringShortNameTypeIec61360::kLanguage:
+            return ParseInto(
+              the_language,
+              DeserializeWstring(value)
+            );
+          case properties::OfLangStringShortNameTypeIec61360::kText:
+            return ParseInto(
+              the_text,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfLangStringShortNameTypeIec61360",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"language"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize language
-
-  // region De-serialize text
-
-  std::tie(
-    the_text,
-    error
-  ) = DeserializeWstring(
-    json["text"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"text"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_language.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property language is missing"
     );
   }
 
-  // endregion De-serialize text
+  if (!the_text.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
+    >(
+      L"The required property text is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -18098,10 +13394,36 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInLangStringDefinitionTypeIec61360 = {
-  "language",
-  "text"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILangStringShortNameTypeIec61360>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeLangStringShortNameTypeIec61360(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfLangStringShortNameTypeIec61360<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -18112,142 +13434,67 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeLangStringDefinitionTypeIec61360(
+> ParsePropertiesOfLangStringDefinitionTypeIec61360(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInLangStringDefinitionTypeIec61360.find(key_val.key())
-      );
-      if (it == kPropertiesInLangStringDefinitionTypeIec61360.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("language")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property language is missing"
-      )
-    );
-  }
-
-  if (!json.contains("text")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property text is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<std::wstring> the_language;
 
   common::optional<std::wstring> the_text;
 
-  // endregion Initialization
-
-  // region De-serialize language
-
-  std::tie(
-    the_language,
-    error
-  ) = DeserializeWstring(
-    json["language"]
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfLangStringDefinitionTypeIec61360,
+      additional_properties,
+      [&](
+        properties::OfLangStringDefinitionTypeIec61360 property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfLangStringDefinitionTypeIec61360::kLanguage:
+            return ParseInto(
+              the_language,
+              DeserializeWstring(value)
+            );
+          case properties::OfLangStringDefinitionTypeIec61360::kText:
+            return ParseInto(
+              the_text,
+              DeserializeWstring(value)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfLangStringDefinitionTypeIec61360",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"language"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize language
-
-  // region De-serialize text
-
-  std::tie(
-    the_text,
-    error
-  ) = DeserializeWstring(
-    json["text"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"text"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_language.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property language is missing"
     );
   }
 
-  // endregion De-serialize text
+  if (!the_text.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
+    >(
+      L"The required property text is missing"
+    );
+  }
 
   return std::make_pair(
     common::make_optional<
@@ -18265,21 +13512,36 @@ std::pair<
   );
 }
 
-std::set<std::string> kPropertiesInDataSpecificationIec61360 = {
-  "preferredName",
-  "shortName",
-  "unit",
-  "unitId",
-  "sourceOfDefinition",
-  "symbol",
-  "dataType",
-  "definition",
-  "valueFormat",
-  "valueList",
-  "value",
-  "levelType",
-  "modelType"
-};
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILangStringDefinitionTypeIec61360>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeLangStringDefinitionTypeIec61360(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckJsonObject(json)
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfLangStringDefinitionTypeIec61360<T>(
+    json,
+    additional_properties
+  );
+}
 
 template <
   typename T,
@@ -18290,83 +13552,10 @@ template <
 std::pair<
   common::optional<std::shared_ptr<T> >,
   common::optional<DeserializationError>
-> DeserializeDataSpecificationIec61360(
+> ParsePropertiesOfDataSpecificationIec61360(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  if (!json.is_object()) {
-    std::wstring message = common::Concat(
-      L"Expected an object, but got: ",
-      common::Utf8ToWstring(json.type_name())
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        message
-      )
-    );
-  }
-
-  if (!additional_properties) {
-    for (const auto& key_val : json.items()) {
-      auto it(
-        kPropertiesInDataSpecificationIec61360.find(key_val.key())
-      );
-      if (it == kPropertiesInDataSpecificationIec61360.end()) {
-        std::wstring message = common::Concat(
-          L"Unexpected additional property: ",
-          common::Utf8ToWstring(key_val.key())
-        );
-
-        return std::make_pair<
-          common::optional<std::shared_ptr<T> >,
-          common::optional<DeserializationError>
-        >(
-          common::nullopt,
-          common::make_optional<DeserializationError>(
-            message
-          )
-        );
-      }
-    }
-  }
-
-  // region Check required properties
-
-  if (!json.contains("preferredName")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property preferredName is missing"
-      )
-    );
-  }
-
-  if (!json.contains("modelType")) {
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      common::make_optional<DeserializationError>(
-        L"The required property modelType is missing"
-      )
-    );
-  }
-
-  // endregion Check required properties
-
-  // region Initialization
-
-  common::optional<DeserializationError> error;
-
   common::optional<
     std::vector<
       std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>
@@ -18409,423 +13598,139 @@ std::pair<
     std::shared_ptr<types::ILevelType>
   > the_level_type;
 
-  // endregion Initialization
-
-  // region De-serialize preferredName
-
-  std::tie(
-    the_preferred_name,
-    error
-  ) = DeserializeList<std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>>(
-    json["preferredName"],
-    [&additional_properties](const nlohmann::json& a_json) {
-      return DeserializeLangStringPreferredNameTypeIec61360<
-      types::ILangStringPreferredNameTypeIec61360
-    >(a_json, additional_properties);
-    }
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfDataSpecificationIec61360,
+      additional_properties,
+      [&](
+        properties::OfDataSpecificationIec61360 property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfDataSpecificationIec61360::kPreferredName:
+            return ParseInto(
+              the_preferred_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringPreferredNameTypeIec61360<
+                  types::ILangStringPreferredNameTypeIec61360
+                >
+              )
+            );
+          case properties::OfDataSpecificationIec61360::kShortName:
+            return ParseInto(
+              the_short_name,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringShortNameTypeIec61360>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringShortNameTypeIec61360<
+                  types::ILangStringShortNameTypeIec61360
+                >
+              )
+            );
+          case properties::OfDataSpecificationIec61360::kUnit:
+            return ParseInto(
+              the_unit,
+              DeserializeWstring(value)
+            );
+          case properties::OfDataSpecificationIec61360::kUnitId:
+            return ParseInto(
+              the_unit_id,
+              DeserializeReference(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfDataSpecificationIec61360::kSourceOfDefinition:
+            return ParseInto(
+              the_source_of_definition,
+              DeserializeWstring(value)
+            );
+          case properties::OfDataSpecificationIec61360::kSymbol:
+            return ParseInto(
+              the_symbol,
+              DeserializeWstring(value)
+            );
+          case properties::OfDataSpecificationIec61360::kDataType:
+            return ParseInto(
+              the_data_type,
+              DeserializeDataTypeIec61360(value)
+            );
+          case properties::OfDataSpecificationIec61360::kDefinition:
+            return ParseInto(
+              the_definition,
+              DeserializeList<
+                std::shared_ptr<types::ILangStringDefinitionTypeIec61360>
+              >(
+                value,
+                additional_properties,
+                DeserializeLangStringDefinitionTypeIec61360<
+                  types::ILangStringDefinitionTypeIec61360
+                >
+              )
+            );
+          case properties::OfDataSpecificationIec61360::kValueFormat:
+            return ParseInto(
+              the_value_format,
+              DeserializeWstring(value)
+            );
+          case properties::OfDataSpecificationIec61360::kValueList:
+            return ParseInto(
+              the_value_list,
+              DeserializeValueList(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfDataSpecificationIec61360::kValue:
+            return ParseInto(
+              the_value,
+              DeserializeWstring(value)
+            );
+          case properties::OfDataSpecificationIec61360::kLevelType:
+            return ParseInto(
+              the_level_type,
+              DeserializeLevelType(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfDataSpecificationIec61360::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfDataSpecificationIec61360",
+              property
+            );
+        }
+      }
+    )
   );
 
   if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"preferredName"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      std::move(*error)
     );
   }
 
-  // endregion De-serialize preferredName
-
-  // region De-serialize shortName
-
-  if (json.contains("shortName")) {
-    std::tie(
-      the_short_name,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringShortNameTypeIec61360>>(
-      json["shortName"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringShortNameTypeIec61360<
-        types::ILangStringShortNameTypeIec61360
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"shortName"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize shortName
-
-  // region De-serialize unit
-
-  if (json.contains("unit")) {
-    std::tie(
-      the_unit,
-      error
-    ) = DeserializeWstring(
-      json["unit"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"unit"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize unit
-
-  // region De-serialize unitId
-
-  if (json.contains("unitId")) {
-    std::tie(
-      the_unit_id,
-      error
-    ) = DeserializeReference(
-      json["unitId"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"unitId"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize unitId
-
-  // region De-serialize sourceOfDefinition
-
-  if (json.contains("sourceOfDefinition")) {
-    std::tie(
-      the_source_of_definition,
-      error
-    ) = DeserializeWstring(
-      json["sourceOfDefinition"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"sourceOfDefinition"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize sourceOfDefinition
-
-  // region De-serialize symbol
-
-  if (json.contains("symbol")) {
-    std::tie(
-      the_symbol,
-      error
-    ) = DeserializeWstring(
-      json["symbol"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"symbol"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize symbol
-
-  // region De-serialize dataType
-
-  if (json.contains("dataType")) {
-    std::tie(
-      the_data_type,
-      error
-    ) = DeserializeDataTypeIec61360(
-      json["dataType"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"dataType"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize dataType
-
-  // region De-serialize definition
-
-  if (json.contains("definition")) {
-    std::tie(
-      the_definition,
-      error
-    ) = DeserializeList<std::shared_ptr<types::ILangStringDefinitionTypeIec61360>>(
-      json["definition"],
-      [&additional_properties](const nlohmann::json& a_json) {
-        return DeserializeLangStringDefinitionTypeIec61360<
-        types::ILangStringDefinitionTypeIec61360
-      >(a_json, additional_properties);
-      }
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"definition"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize definition
-
-  // region De-serialize valueFormat
-
-  if (json.contains("valueFormat")) {
-    std::tie(
-      the_value_format,
-      error
-    ) = DeserializeWstring(
-      json["valueFormat"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"valueFormat"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize valueFormat
-
-  // region De-serialize valueList
-
-  if (json.contains("valueList")) {
-    std::tie(
-      the_value_list,
-      error
-    ) = DeserializeValueList(
-      json["valueList"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"valueList"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize valueList
-
-  // region De-serialize value
-
-  if (json.contains("value")) {
-    std::tie(
-      the_value,
-      error
-    ) = DeserializeWstring(
-      json["value"]
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"value"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize value
-
-  // region De-serialize levelType
-
-  if (json.contains("levelType")) {
-    std::tie(
-      the_level_type,
-      error
-    ) = DeserializeLevelType(
-      json["levelType"],
-      additional_properties
-    );
-
-    if (error.has_value()) {
-      error->path.segments.emplace_front(
-        common::make_unique<PropertySegment>(
-          L"levelType"
-        )
-      );
-
-      return std::make_pair<
-        common::optional<std::shared_ptr<T> >,
-        common::optional<DeserializationError>
-      >(
-        common::nullopt,
-        std::move(error)
-      );
-    }
-  }
-
-  // endregion De-serialize levelType
-
-  // region Check model type
-  // This check is intended only for verification, not for dispatch.
-
-  common::optional<
-    std::wstring
-  > model_type;
-
-  std::tie(
-    model_type,
-    error
-  ) = DeserializeWstring(
-    json["modelType"]
-  );
-
-  if (error.has_value()) {
-    error->path.segments.emplace_front(
-      common::make_unique<PropertySegment>(
-        L"modelType"
-      )
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
+  if (!the_preferred_name.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<T>
     >(
-      common::nullopt,
-      std::move(error)
+      L"The required property preferredName is missing"
     );
   }
-
-  if (*model_type != L"DataSpecificationIec61360") {
-    std::wstring message = common::Concat(
-      L"Expected model type 'DataSpecificationIec61360', "
-      L"but got: ",
-      *model_type
-    );
-
-    error = common::make_optional<DeserializationError>(
-      message
-    );
-
-    return std::make_pair<
-      common::optional<std::shared_ptr<T> >,
-      common::optional<DeserializationError>
-    >(
-      common::nullopt,
-      std::move(error)
-    );
-  }
-
-  // endregion Check model type
 
   return std::make_pair(
     common::make_optional<
@@ -18853,26 +13758,65 @@ std::pair<
   );
 }
 
-common::expected<
-  std::shared_ptr<types::IHasSemantics>,
-  DeserializationError
-> HasSemanticsFrom(
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IDataSpecificationIec61360>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeDataSpecificationIec61360(
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
-    std::shared_ptr<types::IHasSemantics>
-  > instance;
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "DataSpecificationIec61360"
+    )
+  );
 
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfDataSpecificationIec61360<T>(
+    json,
+    additional_properties
+  );
+}
+
+/**
+ * \brief De-serialize \p json and render the outcome as an expected value.
+ *
+ * \param json value to be de-serialized
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \param deserialize de-serializes the value
+ * \return the de-serialized value, or the error
+ */
+template <typename T, typename DeserializeT>
+common::expected<
+  T,
+  DeserializationError
+> DeserializeFrom(
+  const nlohmann::json& json,
+  bool additional_properties,
+  const DeserializeT& deserialize
+) {
+  common::optional<T> instance;
   common::optional<DeserializationError> error;
 
   std::tie(
     instance,
     error
-  ) = DeserializeHasSemantics(
-    json,
-    additional_properties
-  );
+  ) = deserialize(json, additional_properties);
 
   if (instance.has_value()) {
     return std::move(*instance);
@@ -18883,8 +13827,25 @@ common::expected<
       "Unexpected null error when null instance."
     );
   }
+
   return common::make_unexpected(
     std::move(*error)
+  );
+}
+
+common::expected<
+  std::shared_ptr<types::IHasSemantics>,
+  DeserializationError
+> HasSemanticsFrom(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  return DeserializeFrom<
+    std::shared_ptr<types::IHasSemantics>
+  >(
+    json,
+    additional_properties,
+    DeserializeHasSemantics
   );
 }
 
@@ -18895,33 +13856,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IExtension>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeExtension<
-    types::IExtension
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeExtension<
+      types::IExtension
+    >
   );
 }
 
@@ -18932,31 +13874,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IHasExtensions>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeHasExtensions(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeHasExtensions
   );
 }
 
@@ -18967,31 +13890,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IReferable>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeReferable(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeReferable
   );
 }
 
@@ -19002,31 +13906,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IIdentifiable>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeIdentifiable(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeIdentifiable
   );
 }
 
@@ -19037,31 +13922,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IHasKind>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeHasKind(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeHasKind
   );
 }
 
@@ -19072,31 +13938,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IHasDataSpecification>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeHasDataSpecification(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeHasDataSpecification
   );
 }
 
@@ -19107,33 +13954,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IAdministrativeInformation>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeAdministrativeInformation<
-    types::IAdministrativeInformation
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeAdministrativeInformation<
+      types::IAdministrativeInformation
+    >
   );
 }
 
@@ -19144,31 +13972,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IQualifiable>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeQualifiable(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeQualifiable
   );
 }
 
@@ -19179,33 +13988,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IQualifier>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeQualifier<
-    types::IQualifier
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeQualifier<
+      types::IQualifier
+    >
   );
 }
 
@@ -19216,33 +14006,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IAssetAdministrationShell>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeAssetAdministrationShell<
-    types::IAssetAdministrationShell
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeAssetAdministrationShell<
+      types::IAssetAdministrationShell
+    >
   );
 }
 
@@ -19253,31 +14024,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IAssetInformation>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeAssetInformation(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeAssetInformation
   );
 }
 
@@ -19288,31 +14040,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IResource>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeResource(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeResource
   );
 }
 
@@ -19323,33 +14056,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ISpecificAssetId>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeSpecificAssetId<
-    types::ISpecificAssetId
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeSpecificAssetId<
+      types::ISpecificAssetId
+    >
   );
 }
 
@@ -19360,33 +14074,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ISubmodel>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeSubmodel<
-    types::ISubmodel
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeSubmodel<
+      types::ISubmodel
+    >
   );
 }
 
@@ -19397,31 +14092,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ISubmodelElement>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeSubmodelElement(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeSubmodelElement
   );
 }
 
@@ -19432,31 +14108,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IRelationshipElement>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeRelationshipElement(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeRelationshipElement
   );
 }
 
@@ -19467,33 +14124,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ISubmodelElementList>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeSubmodelElementList<
-    types::ISubmodelElementList
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeSubmodelElementList<
+      types::ISubmodelElementList
+    >
   );
 }
 
@@ -19504,33 +14142,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ISubmodelElementCollection>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeSubmodelElementCollection<
-    types::ISubmodelElementCollection
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeSubmodelElementCollection<
+      types::ISubmodelElementCollection
+    >
   );
 }
 
@@ -19541,31 +14160,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IDataElement>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeDataElement(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeDataElement
   );
 }
 
@@ -19576,33 +14176,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IProperty>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeProperty<
-    types::IProperty
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeProperty<
+      types::IProperty
+    >
   );
 }
 
@@ -19613,33 +14194,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IMultiLanguageProperty>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeMultiLanguageProperty<
-    types::IMultiLanguageProperty
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeMultiLanguageProperty<
+      types::IMultiLanguageProperty
+    >
   );
 }
 
@@ -19650,33 +14212,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IRange>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeRange<
-    types::IRange
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeRange<
+      types::IRange
+    >
   );
 }
 
@@ -19687,33 +14230,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IReferenceElement>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeReferenceElement<
-    types::IReferenceElement
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeReferenceElement<
+      types::IReferenceElement
+    >
   );
 }
 
@@ -19724,33 +14248,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IBlob>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeBlob<
-    types::IBlob
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeBlob<
+      types::IBlob
+    >
   );
 }
 
@@ -19761,33 +14266,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IFile>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeFile<
-    types::IFile
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeFile<
+      types::IFile
+    >
   );
 }
 
@@ -19798,33 +14284,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IAnnotatedRelationshipElement>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeAnnotatedRelationshipElement<
-    types::IAnnotatedRelationshipElement
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeAnnotatedRelationshipElement<
+      types::IAnnotatedRelationshipElement
+    >
   );
 }
 
@@ -19835,33 +14302,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IEntity>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeEntity<
-    types::IEntity
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeEntity<
+      types::IEntity
+    >
   );
 }
 
@@ -19872,31 +14320,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IEventPayload>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeEventPayload(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeEventPayload
   );
 }
 
@@ -19907,31 +14336,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IEventElement>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeEventElement(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeEventElement
   );
 }
 
@@ -19942,33 +14352,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IBasicEventElement>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeBasicEventElement<
-    types::IBasicEventElement
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeBasicEventElement<
+      types::IBasicEventElement
+    >
   );
 }
 
@@ -19979,33 +14370,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IOperation>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeOperation<
-    types::IOperation
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeOperation<
+      types::IOperation
+    >
   );
 }
 
@@ -20016,31 +14388,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IOperationVariable>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeOperationVariable(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeOperationVariable
   );
 }
 
@@ -20051,33 +14404,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ICapability>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeCapability<
-    types::ICapability
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeCapability<
+      types::ICapability
+    >
   );
 }
 
@@ -20088,33 +14422,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IConceptDescription>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeConceptDescription<
-    types::IConceptDescription
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeConceptDescription<
+      types::IConceptDescription
+    >
   );
 }
 
@@ -20125,31 +14440,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IReference>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeReference(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeReference
   );
 }
 
@@ -20160,31 +14456,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IKey>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeKey(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeKey
   );
 }
 
@@ -20195,31 +14472,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IAbstractLangString>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeAbstractLangString(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeAbstractLangString
   );
 }
 
@@ -20230,33 +14488,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ILangStringNameType>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeLangStringNameType<
-    types::ILangStringNameType
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeLangStringNameType<
+      types::ILangStringNameType
+    >
   );
 }
 
@@ -20267,33 +14506,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ILangStringTextType>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeLangStringTextType<
-    types::ILangStringTextType
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeLangStringTextType<
+      types::ILangStringTextType
+    >
   );
 }
 
@@ -20304,31 +14524,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IEnvironment>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeEnvironment(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeEnvironment
   );
 }
 
@@ -20339,31 +14540,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IDataSpecificationContent>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeDataSpecificationContent(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeDataSpecificationContent
   );
 }
 
@@ -20374,31 +14556,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IEmbeddedDataSpecification>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeEmbeddedDataSpecification(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeEmbeddedDataSpecification
   );
 }
 
@@ -20409,31 +14572,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ILevelType>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeLevelType(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeLevelType
   );
 }
 
@@ -20444,31 +14588,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IValueReferencePair>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeValueReferencePair(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeValueReferencePair
   );
 }
 
@@ -20479,31 +14604,12 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IValueList>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeValueList(
+  >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeValueList
   );
 }
 
@@ -20514,33 +14620,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeLangStringPreferredNameTypeIec61360<
-    types::ILangStringPreferredNameTypeIec61360
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeLangStringPreferredNameTypeIec61360<
+      types::ILangStringPreferredNameTypeIec61360
+    >
   );
 }
 
@@ -20551,33 +14638,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ILangStringShortNameTypeIec61360>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeLangStringShortNameTypeIec61360<
-    types::ILangStringShortNameTypeIec61360
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeLangStringShortNameTypeIec61360<
+      types::ILangStringShortNameTypeIec61360
+    >
   );
 }
 
@@ -20588,33 +14656,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::ILangStringDefinitionTypeIec61360>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeLangStringDefinitionTypeIec61360<
-    types::ILangStringDefinitionTypeIec61360
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeLangStringDefinitionTypeIec61360<
+      types::ILangStringDefinitionTypeIec61360
+    >
   );
 }
 
@@ -20625,33 +14674,14 @@ common::expected<
   const nlohmann::json& json,
   bool additional_properties
 ) {
-  common::optional<
+  return DeserializeFrom<
     std::shared_ptr<types::IDataSpecificationIec61360>
-  > instance;
-
-  common::optional<DeserializationError> error;
-
-  std::tie(
-    instance,
-    error
-  ) = DeserializeDataSpecificationIec61360<
-    types::IDataSpecificationIec61360
   >(
     json,
-    additional_properties
-  );
-
-  if (instance.has_value()) {
-    return std::move(*instance);
-  }
-
-  if (!error.has_value()) {
-    throw std::logic_error(
-      "Unexpected null error when null instance."
-    );
-  }
-  return common::make_unexpected(
-    std::move(*error)
+    additional_properties,
+    DeserializeDataSpecificationIec61360<
+      types::IDataSpecificationIec61360
+    >
   );
 }
 

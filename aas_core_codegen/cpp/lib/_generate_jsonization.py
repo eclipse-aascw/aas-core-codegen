@@ -2,7 +2,7 @@
 
 import io
 import itertools
-from typing import List, Optional, Iterable, Final, Mapping, Union, Literal
+from typing import List, Optional, Iterable, Final, Mapping, Tuple, Union, Literal
 
 from icontract import ensure, require
 
@@ -22,6 +22,9 @@ from aas_core_codegen.cpp.common import (
     INDENT5 as IIIII,
     INDENT6 as IIIIII,
 )
+
+
+_MODEL_TYPE_LITERAL = "kModelType"
 
 
 def _generate_deserialization_definitions(
@@ -1169,6 +1172,13 @@ def _generate_deserialize_list() -> Stripped:
     """Generate a generic list deserialization function."""
     return Stripped(
         f"""\
+/**
+ * \\brief De-serialize a list of items from \\p json.
+ *
+ * \\param json value expected to be an array
+ * \\param deserialize_item de-serializes an item
+ * \\return the list, or an error, if any
+ */
 template <typename T, typename DeserializeItemT>
 std::pair<
 {I}common::optional<std::vector<T> >,
@@ -1234,6 +1244,45 @@ std::pair<
 {I}return std::make_pair(
 {II}list,
 {II}common::nullopt
+{I});
+}}"""
+    )
+
+
+def _generate_deserialize_list_of_instances() -> Stripped:
+    """
+    Generate the list de-serialization whose items are given the options.
+
+    An instance and a named union are de-serialized with
+    ``additional_properties`` handed down to them, everything else without, so
+    the two differ in the arity of the item parser and not in anything else.
+    """
+    return Stripped(
+        f"""\
+/**
+ * \\brief De-serialize a list of instances from \\p json.
+ *
+ * \\param json value expected to be an array
+ * \\param additional_properties handed over to \\p deserialize_item
+ * \\param deserialize_item de-serializes an item
+ * \\return the list, or an error, if any
+ */
+template <typename T, typename DeserializeItemT>
+std::pair<
+{I}common::optional<std::vector<T> >,
+{I}common::optional<DeserializationError>
+> DeserializeList(
+{I}const nlohmann::json& json,
+{I}bool additional_properties,
+{I}DeserializeItemT&& deserialize_item
+) {{
+{I}return DeserializeList<T>(
+{II}json,
+{II}[&additional_properties, &deserialize_item](
+{III}const nlohmann::json& item
+{II}) {{
+{III}return deserialize_item(item, additional_properties);
+{II}}}
 {I});
 }}"""
     )
@@ -1569,118 +1618,12 @@ std::pair<
 > {function_name}(
 {I}const nlohmann::json& json
 ) {{
-{I}common::optional<std::wstring> text;
-{I}common::optional<DeserializationError> error;
-
-{I}std::tie(
-{II}text,
-{II}error
-{I}) = DeserializeWstring(
-{II}json
+{I}return DeserializeEnumeration<types::{enum_name}>(
+{II}json,
+{II}wstringification::{from_wstring},
+{II}L"{enum_name}"
 {I});
-
-{I}if (error.has_value()) {{
-{II}return std::make_pair<
-{III}common::optional<types::{enum_name}>,
-{III}common::optional<DeserializationError>
-{II}>(
-{III}common::nullopt,
-{III}std::move(error)
-{II});
-{I}}}
-
-{I}common::optional<
-{II}types::{enum_name}
-{I}> literal = std::move(
-{II}wstringification::{from_wstring}(
-{III}*text
-{II})
-{I});
-
-{I}if (!literal.has_value()) {{
-{II}std::wstring message = common::Concat(
-{III}L"Invalid literal for {enum_name}: ",
-{III}*text
-{II});
-
-{II}return std::make_pair<
-{III}common::optional<types::{enum_name}>,
-{III}common::optional<DeserializationError>
-{II}>(
-{III}common::nullopt,
-{III}common::make_optional<DeserializationError>(
-{IIII}message
-{III})
-{II});
-{I}}}
-
-{I}return std::make_pair<
-{II}common::optional<types::{enum_name}>,
-{II}common::optional<DeserializationError>
-{II}>(
-{III}std::move(literal),
-{III}common::nullopt
-{II});
 }}"""
-    )
-
-
-def _generate_concretely_deserialize_definition(
-    cls: intermediate.ClassUnion,
-) -> Stripped:
-    """Generate the definition of the concrete ``Deserialize*`` functions."""
-    interface_name = cpp_naming.interface_name(cls.name)
-
-    if len(cls.concrete_descendants) == 0:
-        function_name = cpp_naming.function_name(Identifier(f"deserialize_{cls.name}"))
-    else:
-        function_name = cpp_naming.function_name(
-            Identifier(f"concretely_deserialize_{cls.name}")
-        )
-
-    if len(cls.ancestors) > 0:
-        # NOTE (mristin):
-        # We have to introduce the template so that we do not have to
-        # unnecessarily upcast the instance to ancestor classes.
-        prefix = Stripped(
-            f"""\
-template <
-{I}typename T,
-{I}typename std::enable_if<
-{II}std::is_base_of<T, types::{interface_name}>::value
-{I}>::type* = nullptr
->
-std::pair<
-{I}common::optional<std::shared_ptr<T> >,
-{I}common::optional<DeserializationError>
->"""
-        )
-    else:
-        prefix = Stripped(
-            f"""\
-std::pair<
-{I}common::optional<
-{II}std::shared_ptr<types::{interface_name}>
-{I}>,
-{I}common::optional<DeserializationError>
->"""
-        )
-
-    return Stripped(
-        f"""\
-/**
- * \\brief Deserialize concretely an instance
- * of types::{interface_name}.
- *
- * \\param json value to be de-serialized
- * \\param additional_properties if not set, check that \\p json contains
- * no additional properties
- * \\return the deserialized instance, or an error, if any
- */
-{prefix} {function_name}(
-{I}const nlohmann::json& json,
-{I}bool additional_properties
-);"""
     )
 
 
@@ -1746,159 +1689,6 @@ std::pair<
     )
 
 
-def _generate_deserialize_primitive_property(
-    prop: intermediate.Property, ok_type: Stripped
-) -> Stripped:
-    """
-    Generate the snippet to de-serialize the primitive property.
-
-    We assume that the check whether the property is set is performed elsewhere.
-
-    The ``ok_type`` denotes the type of the deserialized instance, *not* the property.
-    We have to distinguish between cases where we directly create an upcast pointer to
-    an ancestor class, and cases where there are no ancestor classes.
-    """
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-    primitive_type = intermediate.try_primitive_type(type_anno)
-
-    assert (
-        primitive_type is not None
-    ), f"Primitive property expected, got for {prop.name!r}: {prop.type_annotation}"
-
-    deserialize_primitive = _PRIMITIVE_TYPE_TO_DESERIALIZE[primitive_type]
-
-    json_prop_name = prop.json_name
-
-    var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
-
-    return Stripped(
-        f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {deserialize_primitive}(
-{I}json[{cpp_common.string_literal(json_prop_name)}]
-);
-
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<PropertySegment>(
-{III}{cpp_common.wstring_literal(json_prop_name)}
-{II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<std::shared_ptr<{ok_type}> >,
-{II}common::optional<DeserializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}"""
-    )
-
-
-def _generate_deserialize_json_property(
-    prop: intermediate.Property,
-    type_anno: intermediate.TypeAnnotationUnion,
-    ok_type: Stripped,
-) -> Stripped:
-    """
-    Generate the snippet to de-serialize the JSON-able property.
-
-    We assume that the check whether the property is set is performed elsewhere.
-
-    The ``ok_type`` denotes the type of the deserialized instance, *not* the property.
-    We have to distinguish between cases where we directly create an upcast pointer to
-    an ancestor class, and cases where there are no ancestor classes.
-    """
-    deserialize_function = _json_deserialize_function_for(type_anno)
-
-    json_prop_name = prop.json_name
-
-    var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
-
-    return Stripped(
-        f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {deserialize_function}(
-{I}json[{cpp_common.string_literal(json_prop_name)}]
-);
-
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<PropertySegment>(
-{III}{cpp_common.wstring_literal(json_prop_name)}
-{II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<std::shared_ptr<{ok_type}> >,
-{II}common::optional<DeserializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}"""
-    )
-
-
-def _generate_deserialize_enumeration_property(
-    prop: intermediate.Property, ok_type: Stripped
-) -> Stripped:
-    """
-    Generate the snippet to de-serialize the enumeration property.
-
-    We assume that the check whether the property is set is performed elsewhere.
-
-    The ``ok_type`` denotes the type of the deserialized instance, *not* the property.
-    We have to distinguish between cases where we directly create an upcast pointer to
-    an ancestor class, and cases where there are no ancestor classes.
-    """
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.our_type, intermediate.Enumeration
-    )
-
-    enum = type_anno.our_type
-
-    deserialization_function = cpp_naming.function_name(
-        Identifier(f"deserialize_{enum.name}")
-    )
-
-    json_prop_name = prop.json_name
-
-    var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
-
-    return Stripped(
-        f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {deserialization_function}(
-{I}json[{cpp_common.string_literal(json_prop_name)}]
-);
-
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<PropertySegment>(
-{III}{cpp_common.wstring_literal(json_prop_name)}
-{II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<std::shared_ptr<{ok_type}> >,
-{II}common::optional<DeserializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}"""
-    )
-
-
 def _determine_deserialize_function_for_class(
     cls: intermediate.ClassUnion,
 ) -> Stripped:
@@ -1925,81 +1715,6 @@ def _determine_deserialize_function_for_class(
         deserialize_function = Stripped(deserialize_name)
 
     return deserialize_function
-
-
-def _generate_deserialize_instance_property(
-    prop: intermediate.Property, ok_type: Stripped
-) -> Stripped:
-    """
-    Generate the snippet to de-serialize the instance property.
-
-    We assume that the check whether the property is set is performed elsewhere.
-
-    The ``ok_type`` denotes the type of the deserialized instance, *not* the property.
-    We have to distinguish between cases where we directly create an upcast pointer to
-    an ancestor class, and cases where there are no ancestor classes.
-    """
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    deserialize_function: Stripped
-
-    if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-    ):
-        deserialize_function = _determine_deserialize_function_for_class(
-            cls=type_anno.our_type
-        )
-
-    elif isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.our_type, intermediate.NamedUnion
-    ):
-        # NOTE (mristin):
-        # A named union is not part of the class hierarchy, so there is no
-        # ancestor to upcast to -- the dispatching function is always called
-        # bare, without any template parameter.
-        deserialize_function = Stripped(
-            cpp_naming.function_name(
-                Identifier(f"Deserialize_{type_anno.our_type.name}")
-            )
-        )
-
-    else:
-        raise AssertionError(
-            f"NOTE (mristin): We expect only classes or named unions "
-            f"as the instance property type, but you specified {prop.type_annotation} "
-            f"in property {prop.name!r}. "
-            f"Please contact the developers if you need this feature."
-        )
-
-    var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
-    json_prop_name = prop.json_name
-
-    return Stripped(
-        f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {deserialize_function}(
-{I}json[{cpp_common.string_literal(json_prop_name)}],
-{I}additional_properties
-);
-
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<PropertySegment>(
-{III}{cpp_common.wstring_literal(json_prop_name)}
-{II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<std::shared_ptr<{ok_type}> >,
-{II}common::optional<DeserializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}"""
-    )
 
 
 def _deserialize_expr_for_atomic_item(
@@ -2075,186 +1790,622 @@ def _deserialize_expr_for_atomic_item(
     raise AssertionError("Should not have gotten here")
 
 
-def _generate_deserialize_list_property(
-    prop: intermediate.Property, ok_type: Stripped
-) -> Stripped:
-    """
-    Generate the snippet to de-serialize the list property.
-
-    We assume that the check whether the property is set is performed elsewhere.
-
-    The ``ok_type`` denotes the type of the deserialized instance, *not* the property.
-    We have to distinguish between cases where we directly create an upcast pointer to
-    an ancestor class, and cases where there are no ancestor classes.
-    """
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    assert isinstance(type_anno, intermediate.ListTypeAnnotation)
-
-    assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
-        "List items are restricted to atomic types (primitives, "
-        "constrained primitives, classes, enumerations and JSON-able values), "
-        "so no nested optionals, lists or tuples are expected here."
-    )
-
-    deserialize_item_expr = _deserialize_expr_for_atomic_item(type_anno.items)
-
-    var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
-    json_prop_name = prop.json_name
-
-    items_type = cpp_common.generate_type(
-        type_anno.items, types_namespace=cpp_common.TYPES_NAMESPACE
-    )
-
-    return Stripped(
-        f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = DeserializeList<{items_type}>(
-{I}json[{cpp_common.string_literal(json_prop_name)}],
-{I}{indent_but_first_line(deserialize_item_expr, I)}
-);
-
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<PropertySegment>(
-{III}{cpp_common.wstring_literal(json_prop_name)}
-{II})
-{I});
-
+def _generate_no_instance_and_error_factories() -> List[Stripped]:
+    """Generate the factories of a failed de-serialization."""
+    return [
+        Stripped(
+            f"""\
+/**
+ * \\brief Give out a failed de-serialization with \\p cause as its message.
+ *
+ * \\tparam T type of the value which could not be de-serialized
+ * \\param cause human-readable description of the failure
+ * \\return no value, and the error
+ */
+template <typename T>
+std::pair<
+{I}common::optional<T>,
+{I}common::optional<DeserializationError>
+> NoInstanceAndDeserializationErrorWithCause(
+{I}std::wstring cause
+) {{
 {I}return std::make_pair<
-{II}common::optional<std::shared_ptr<{ok_type}> >,
+{II}common::optional<T>,
 {II}common::optional<DeserializationError>
 {I}>(
 {II}common::nullopt,
-{II}std::move(error)
+{II}common::make_optional<DeserializationError>(
+{III}std::move(cause)
+{II})
 {I});
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * \\brief Give out a failed de-serialization with \\p error.
+ *
+ * \\tparam T type of the value which could not be de-serialized
+ * \\param error of the de-serialization
+ * \\return no value, and the error
+ */
+template <typename T>
+std::pair<
+{I}common::optional<T>,
+{I}common::optional<DeserializationError>
+> NoInstanceAndDeserializationError(
+{I}DeserializationError error
+) {{
+{I}return std::make_pair<
+{II}common::optional<T>,
+{II}common::optional<DeserializationError>
+{I}>(
+{II}common::nullopt,
+{II}common::make_optional<DeserializationError>(
+{III}std::move(error)
+{II})
+{I});
+}}"""
+        ),
+    ]
+
+
+def _generate_parse_into() -> Stripped:
+    """Generate the function to assign the result of a parse to a target variable."""
+    return Stripped(
+        f"""\
+/**
+ * \\brief Assign the value parsed to \\p target, or give out the error of the parse.
+ *
+ * We deliberately take the *result* of a parse instead of the JSON value and
+ * the function which parses it. The item parsers of a tuple vary both in number
+ * and in type, so no signature taking the parser could serve every parse;
+ * taking the result lets this single function serve all of them.
+ *
+ * \\param target variable to be assigned the value parsed
+ * \\param parsed result of the parse
+ * \\return the error, if the parse failed
+ */
+template <typename T>
+common::optional<DeserializationError> ParseInto(
+{I}common::optional<T>& target,
+{I}std::pair<
+{II}common::optional<T>,
+{II}common::optional<DeserializationError>
+{I}>&& parsed
+) {{
+{I}if (parsed.second.has_value()) {{
+{II}return std::move(parsed.second);
+{I}}}
+
+{I}target = std::move(parsed.first);
+
+{I}return common::nullopt;
 }}"""
     )
 
 
-def _generate_deserialize_tuple_property(
-    prop: intermediate.Property, ok_type: Stripped
-) -> Stripped:
+def _generate_parse_properties() -> Stripped:
+    """Generate the generic function to parse the properties of an instance."""
+    return Stripped(
+        f"""\
+/**
+ * \\brief Parse the properties of an instance from \\p json.
+ *
+ * This function factors out everything which the property loop of a class does
+ * not say about the class it belongs to: walking the keys, looking the property
+ * up, refusing or accepting an unknown one and marking the property on
+ * the error path. The class itself supplies only \\p on_property, which
+ * dispatches on the property and assigns the local variables that its
+ * constructor is finally called with.
+ *
+ * NOTE (mristin):
+ * We walk the keys which are actually there, instead of asking for each
+ * property of the class whether it is there. An instance carries only a few of
+ * the many properties which a class declares, and nlohmann's object is
+ * a ``std::map``, so asking costs a tree walk per property -- twice over, as
+ * the value then has to be fetched. Walking also detects an unknown key on
+ * the way, which is why there is no separate pass for that.
+ *
+ * NOTE (mristin):
+ * We take \\p map_of_properties in, instead of letting \\p on_property work on
+ * the JSON name of the property, because we want the class to dispatch with
+ * a hard-wired ``switch`` whose branches assign the local variables of
+ * the caller.
+ *
+ * A ``switch`` needs an integral constant, and C++ can not switch on a string,
+ * so the name has to be translated into a literal of the property enumeration
+ * first. We do that here rather than in the class so that the translation, and
+ * the error reported when the name matches no property at all, are written
+ * once instead of once per class.
+ *
+ * \\param json object whose properties are to be parsed
+ * \\param map_of_properties maps the JSON name of a property to its literal
+ * \\param additional_properties if not set, refuse a key which matches
+ * no property
+ * \\param on_property parses the value of the recognized property
+ * \\return the error, if the parsing failed
+ */
+template <typename EnumT, typename OnPropertyT>
+common::optional<DeserializationError> ParseProperties(
+{I}const nlohmann::json& json,
+{I}const std::unordered_map<std::string, EnumT>& map_of_properties,
+{I}bool additional_properties,
+{I}const OnPropertyT& on_property
+) {{
+{I}#ifdef DEBUG
+{I}if (!json.is_object()) {{
+{II}throw std::logic_error(
+{III}"Unexpected non-object in ParseProperties. "
+{III}"ParseProperties expects the caller to have checked that."
+{II});
+{I}}}
+{I}#endif
+
+{I}for (const auto& key_val : json.items()) {{
+{II}auto it(
+{III}map_of_properties.find(key_val.key())
+{II});
+
+{II}if (it == map_of_properties.end()) {{
+{III}if (additional_properties) {{
+{IIII}continue;
+{III}}}
+
+{III}return DeserializationError(
+{IIII}common::Concat(
+{IIIII}L"Unexpected additional property: ",
+{IIIII}common::Utf8ToWstring(key_val.key())
+{IIII})
+{III});
+{II}}}
+
+{II}common::optional<DeserializationError> error(
+{III}on_property(it->second, key_val.value())
+{II});
+
+{II}if (error.has_value()) {{
+{III}error->path.segments.emplace_front(
+{IIII}common::make_unique<PropertySegment>(
+{IIIII}common::Utf8ToWstring(key_val.key())
+{IIII})
+{III});
+
+{III}return error;
+{II}}}
+{I}}}
+
+{I}return common::nullopt;
+}}"""
+    )
+
+
+def _generate_check_model_type() -> Stripped:
+    """Generate the function verifying the model type of an instance."""
+    return Stripped(
+        f"""\
+/**
+ * \\brief Check that \\p json is an object whose model type is \\p expected.
+ *
+ * The model type is compared as the string which came on the wire. That refuses
+ * a value of the wrong type just as well as parsing it would, and costs neither
+ * a conversion to a wide string nor the allocation which goes with it.
+ *
+ * \\param json value expected to be an object carrying a model type
+ * \\param expected model type of the class
+ * \\return the error, if \\p json does not bear \\p expected
+ */
+common::optional<DeserializationError> CheckModelType(
+{I}const nlohmann::json& json,
+{I}const char* expected
+) {{
+{I}const std::string* model_type;
+{I}common::optional<DeserializationError> error;
+
+{I}std::tie(
+{II}model_type,
+{II}error
+{I}) = GetModelTypeFrom(json);
+
+{I}if (error.has_value()) {{
+{II}return error;
+{I}}}
+
+{I}if (*model_type != expected) {{
+{II}return DeserializationError(
+{III}common::Concat(
+{IIII}L"Expected model type '",
+{IIII}common::Utf8ToWstring(expected),
+{IIII}L"', but got: ",
+{IIII}common::Utf8ToWstring(*model_type)
+{III})
+{II});
+{I}}}
+
+{I}return common::nullopt;
+}}"""
+    )
+
+
+def _generate_check_json_object() -> Stripped:
+    """Generate the function checking that a JSON value is an object."""
+    return Stripped(
+        f"""\
+/**
+ * \\brief Check that \\p json is a JSON object.
+ *
+ * \\param json value to be checked
+ * \\return the error, if \\p json is anything else
+ */
+common::optional<DeserializationError> CheckJsonObject(
+{I}const nlohmann::json& json
+) {{
+{I}if (!json.is_object()) {{
+{II}return DeserializationError(
+{III}common::Concat(
+{IIII}L"Expected an object, but got: ",
+{IIII}common::Utf8ToWstring(json.type_name())
+{III})
+{II});
+{I}}}
+
+{I}return common::nullopt;
+}}"""
+    )
+
+
+def _generate_property_enums_and_maps(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
     """
-    Generate the snippet to de-serialize the tuple property.
+    Generate a property enumeration per class and its mapping from the JSON names.
 
-    We assume that the check whether the property is set is performed elsewhere.
-
-    The ``ok_type`` denotes the type of the deserialized instance, *not* the property.
-    We have to distinguish between cases where we directly create an upcast pointer to
-    an ancestor class, and cases where there are no ancestor classes.
-
-    The actual array/length checks, per-item de-serialization and error-path
-    bookkeeping are delegated to the generic ``DeserializeTupleN`` function
-    generated once for the tuple's arity by
-    :py:func:`_generate_deserialize_tuple_function`.
+    ``ParseProperties`` switches on a literal, and C++ can not switch on a string,
+    so the JSON name of a property has to be translated into one first.
     """
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
+    result = [
+        Stripped("namespace properties {"),
+    ]  # type: List[Stripped]
 
-    assert isinstance(type_anno, intermediate.TupleTypeAnnotation)
+    for cls in symbol_table.concrete_classes:
+        enum_name = cpp_naming.enum_name(Identifier(f"Of_{cls.name}"))
 
-    var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
-    json_prop_name = prop.json_name
-    json_prop_name_literal = cpp_common.string_literal(json_prop_name)
+        literals = [
+            cpp_naming.enum_literal_name(prop.name) for prop in cls.properties
+        ]  # type: List[str]
 
-    item_types = []  # type: List[Stripped]
-    item_exprs = []  # type: List[Stripped]
-
-    for item_type_anno in type_anno.items:
-        assert isinstance(item_type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
-            "Tuple items are restricted to atomic types (primitives, "
-            "constrained primitives, classes and enumerations) by "
-            "intermediate._translate._verify_only_simple_type_patterns, so no "
-            "nested optionals, lists or tuples are expected here."
-        )
-
-        item_types.append(
-            cpp_common.generate_type(
-                item_type_anno, types_namespace=cpp_common.TYPES_NAMESPACE
+        if cls.serialization.with_model_type:
+            assert all(prop.json_name != "modelType" for prop in cls.properties), (
+                f"Expected no property of {cls.name!r} to be serialized as "
+                f"'modelType', as the class carries the discriminator of that name, "
+                f"but at least one is"
             )
-        )
 
-        item_exprs.append(_deserialize_expr_for_atomic_item(item_type_anno))
+            literals.append(_MODEL_TYPE_LITERAL)
 
-    item_types_joined = ",\n".join(item_types)
-    item_exprs_joined = ",\n".join(item_exprs)
+        literals_joined = ",\n".join(literals)
 
-    function_name = f"DeserializeTuple{len(type_anno.items)}"
+        if len(literals) == 0:
+            result.append(
+                Stripped(
+                    f"""\
+enum class {enum_name} : std::uint32_t {{
+}};  // enum class {enum_name}"""
+                )
+            )
+        else:
+            result.append(
+                Stripped(
+                    f"""\
+enum class {enum_name} : std::uint32_t {{
+{I}{indent_but_first_line(literals_joined, I)}
+}};  // enum class {enum_name}"""
+                )
+            )
 
+    for cls in symbol_table.concrete_classes:
+        enum_name = cpp_naming.enum_name(Identifier(f"Of_{cls.name}"))
+
+        map_name = cpp_naming.constant_name(Identifier(f"map_of_{cls.name}"))
+
+        items = []  # type: List[Stripped]
+
+        for prop in cls.properties:
+            items.append(
+                Stripped(
+                    f"""\
+{{
+{I}{cpp_common.string_literal(prop.json_name)},
+{I}{enum_name}::{cpp_naming.enum_literal_name(prop.name)}
+}}"""
+                )
+            )
+
+        if cls.serialization.with_model_type:
+            items.append(
+                Stripped(
+                    f"""\
+{{
+{I}"modelType",
+{I}{enum_name}::{_MODEL_TYPE_LITERAL}
+}}"""
+                )
+            )
+
+        items_joined = ",\n".join(items)
+
+        if len(items) == 0:
+            result.append(
+                Stripped(
+                    f"""\
+const std::unordered_map<
+{I}std::string,
+{I}{enum_name}
+> {map_name};"""
+                )
+            )
+        else:
+            result.append(
+                Stripped(
+                    f"""\
+const std::unordered_map<
+{I}std::string,
+{I}{enum_name}
+> {map_name} = {{
+{I}{indent_but_first_line(items_joined, I)}
+}};"""
+                )
+            )
+
+    result.append(Stripped("}  // namespace properties"))
+
+    return result
+
+
+def _generate_unexpected_property_literal_error() -> Stripped:
+    """Generate the factory for the error thrown on an out-of-range literal."""
     return Stripped(
         f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {function_name}<
-{I}{indent_but_first_line(item_types_joined, I)}
->(
-{I}json[{json_prop_name_literal}],
-{I}{indent_but_first_line(item_exprs_joined, I)}
-);
-
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<PropertySegment>(
-{III}{cpp_common.wstring_literal(json_prop_name)}
+/**
+ * \\brief Create the exception to be thrown on an unexpected property literal.
+ *
+ * Every ``switch`` over the properties of a class covers all the literals of
+ * its enumeration, so we can only get here if the value has been corrupted.
+ * We report that as a logic error, and not as a de-serialization error, since
+ * it does not originate in the input.
+ *
+ * \\param enum_name name of the property enumeration, for the message
+ * \\param property the unexpected literal
+ * \\return the exception to be thrown
+ */
+template <typename EnumT>
+std::logic_error UnexpectedPropertyLiteralError(
+{I}const char* enum_name,
+{I}EnumT property
+) {{
+{I}return std::logic_error(
+{II}common::Concat(
+{III}"Unexpected properties literal of ",
+{III}enum_name,
+{III}": ",
+{III}std::to_string(
+{IIII}static_cast<std::uint32_t>(property)
+{III})
 {II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<std::shared_ptr<{ok_type}> >,
-{II}common::optional<DeserializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
 {I});
 }}"""
     )
 
 
-def _generate_deserialize_property(
-    prop: intermediate.Property, ok_type: Stripped
-) -> Stripped:
+def _json_parse_item_expr(
+    item_type_anno: intermediate.AtomicTypeAnnotation,
+) -> Tuple[Stripped, bool]:
     """
-    Generate the snippet to de-serialize the given property.
+    Determine the parser of an item of a list, and whether it takes the options.
 
-    The ``ok_type`` denotes the type of the deserialized value, *not* the property.
-    We have to distinguish between cases where we directly create an upcast pointer to
-    an ancestor class, and cases where there are no ancestor classes.
+    A class and a named union are parsed with ``additional_properties`` handed
+    down to them, everything else without, which is why ``DeserializeList`` has
+    an overload for each.
+    """
+    items_primitive_type = intermediate.try_primitive_type(item_type_anno)
+
+    if items_primitive_type is not None:
+        return _PRIMITIVE_TYPE_TO_DESERIALIZE[items_primitive_type], False
+
+    if isinstance(item_type_anno, intermediate.PrimitiveTypeAnnotation):
+        raise AssertionError("This case should have been handled before.")
+
+    elif isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+        if isinstance(item_type_anno.our_type, intermediate.Enumeration):
+            return (
+                Stripped(
+                    cpp_naming.function_name(
+                        Identifier(f"deserialize_{item_type_anno.our_type.name}")
+                    )
+                ),
+                False,
+            )
+
+        elif isinstance(item_type_anno.our_type, intermediate.ConstrainedPrimitive):
+            raise AssertionError("This case should have been handled before.")
+
+        elif isinstance(
+            item_type_anno.our_type,
+            (intermediate.AbstractClass, intermediate.ConcreteClass),
+        ):
+            return (
+                _determine_deserialize_function_for_class(cls=item_type_anno.our_type),
+                True,
+            )
+
+        elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union is not part of the class hierarchy, so there is no
+            # ancestor to upcast to -- the dispatching function is always called
+            # bare, without any template parameter.
+            return (
+                Stripped(
+                    cpp_naming.function_name(
+                        Identifier(f"Deserialize_{item_type_anno.our_type.name}")
+                    )
+                ),
+                True,
+            )
+
+        else:
+            # noinspection PyTypeChecker
+            assert_never(item_type_anno.our_type)
+
+    elif isinstance(
+        item_type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        return _json_deserialize_function_for(item_type_anno), False
+
+    else:
+        # noinspection PyTypeChecker
+        assert_never(item_type_anno)
+
+    raise AssertionError("Should not have gotten here")
+
+
+def _json_parse_expr(prop: intermediate.Property) -> Stripped:
+    """
+    Generate the expression parsing the value of the given property.
+
+    The expression evaluates to a pair of the optional value and the optional
+    error, which :py:func:`_generate_parse_properties_of_cls` hands over to
+    ``ParseInto``.
     """
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
-    code: Stripped
+    primitive_type = intermediate.try_primitive_type(type_anno)
+
+    if primitive_type is not None:
+        return Stripped(f"{_PRIMITIVE_TYPE_TO_DESERIALIZE[primitive_type]}(value)")
+
+    deserialize_function: Stripped
 
     if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
-        code = _generate_deserialize_primitive_property(prop=prop, ok_type=ok_type)
+        raise AssertionError("This case should have been handled before.")
 
     elif isinstance(type_anno, intermediate.OurTypeAnnotation):
         if isinstance(type_anno.our_type, intermediate.Enumeration):
-            code = _generate_deserialize_enumeration_property(
-                prop=prop, ok_type=ok_type
+            deserialize_function = cpp_naming.function_name(
+                Identifier(f"deserialize_{type_anno.our_type.name}")
             )
 
+            return Stripped(f"{deserialize_function}(value)")
+
         elif isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive):
-            code = _generate_deserialize_primitive_property(prop=prop, ok_type=ok_type)
+            raise AssertionError("This case should have been handled before.")
 
         elif isinstance(
             type_anno.our_type,
             (intermediate.AbstractClass, intermediate.ConcreteClass),
         ):
-            code = _generate_deserialize_instance_property(prop=prop, ok_type=ok_type)
+            deserialize_function = _determine_deserialize_function_for_class(
+                cls=type_anno.our_type
+            )
+
+            return Stripped(
+                f"""\
+{deserialize_function}(
+{I}value,
+{I}additional_properties
+)"""
+            )
 
         elif isinstance(type_anno.our_type, intermediate.NamedUnion):
-            code = _generate_deserialize_instance_property(prop=prop, ok_type=ok_type)
+            # NOTE (mristin):
+            # A named union is not part of the class hierarchy, so there is no
+            # ancestor to upcast to -- the dispatching function is always called
+            # bare, without any template parameter.
+            deserialize_function = cpp_naming.function_name(
+                Identifier(f"Deserialize_{type_anno.our_type.name}")
+            )
+
+            return Stripped(
+                f"""\
+{deserialize_function}(
+{I}value,
+{I}additional_properties
+)"""
+            )
 
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno.our_type)
+
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        code = _generate_deserialize_list_property(prop=prop, ok_type=ok_type)
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
+            "List items are restricted to atomic types (primitives, "
+            "constrained primitives, classes, enumerations and JSON-able values), "
+            "so no nested optionals, lists or tuples are expected here."
+        )
+
+        item_type = cpp_common.generate_type(
+            type_anno.items, types_namespace=cpp_common.TYPES_NAMESPACE
+        )
+
+        parse_item, takes_options = _json_parse_item_expr(type_anno.items)
+
+        arguments = [Stripped("value")]
+        if takes_options:
+            arguments.append(Stripped("additional_properties"))
+        arguments.append(parse_item)
+
+        arguments_joined = ",\n".join(arguments)
+
+        return Stripped(
+            f"""\
+DeserializeList<
+{I}{indent_but_first_line(item_type, I)}
+>(
+{I}{indent_but_first_line(arguments_joined, I)}
+)"""
+        )
+
     elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        code = _generate_deserialize_tuple_property(prop=prop, ok_type=ok_type)
+        item_types = []  # type: List[Stripped]
+        item_exprs = []  # type: List[Stripped]
+
+        for item_type_anno in type_anno.items:
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, "
+                "constrained primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so no "
+                "nested optionals, lists or tuples are expected here."
+            )
+
+            item_types.append(
+                cpp_common.generate_type(
+                    item_type_anno, types_namespace=cpp_common.TYPES_NAMESPACE
+                )
+            )
+            item_exprs.append(_deserialize_expr_for_atomic_item(item_type_anno))
+
+        item_types_joined = ",\n".join(item_types)
+        item_exprs_joined = ",\n".join(item_exprs)
+
+        function_name = f"DeserializeTuple{len(type_anno.items)}"
+
+        return Stripped(
+            f"""\
+{function_name}<
+{I}{indent_but_first_line(item_types_joined, I)}
+>(
+{I}value,
+{I}{indent_but_first_line(item_exprs_joined, I)}
+)"""
+        )
+
     elif isinstance(
         type_anno,
         (
@@ -2263,160 +2414,114 @@ def _generate_deserialize_property(
             intermediate.JsonObjectTypeAnnotation,
         ),
     ):
-        code = _generate_deserialize_json_property(
-            prop=prop, type_anno=type_anno, ok_type=ok_type
-        )
+        deserialize_function = _json_deserialize_function_for(type_anno)
+
+        return Stripped(f"{deserialize_function}(value)")
+
     else:
         # noinspection PyTypeChecker
         assert_never(type_anno)
 
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        json_prop_literal = cpp_common.string_literal(prop.json_name)
-
-        code = Stripped(
-            f"""\
-if (json.contains({json_prop_literal})) {{
-{I}{indent_but_first_line(code, I)}
-}}"""
-        )
-
-    return code
+    raise AssertionError("Should not have gotten here")
 
 
-def _generate_concretely_deserialize_implementation(
-    cls: intermediate.ConcreteClass,
-) -> Stripped:
+def _cls_template_prefix(cls: intermediate.ClassUnion, with_default: bool) -> Stripped:
     """
-    Generate the concrete deserialization for the class ``cls``.
+    Generate the signature prefix of a function de-serializing an instance of ``cls``.
 
-    It is assumed that the dispatch has been already effectuated to this generated
-    function, so no further dispatch should be performed.
+    A class with ancestors is de-serialized through a template, so that
+    a dispatcher can give out a pointer to the ancestor it was asked for without
+    an upcast. ``with_default`` tells whether the default of the SFINAE
+    parameter is spelled out, which it is in the declaration and not in
+    the definition.
     """
     interface_name = cpp_naming.interface_name(cls.name)
 
     if len(cls.ancestors) == 0:
-        # NOTE (mristin):
-        # We will not need to upcast this instance, so the return value type
-        # is simply the interface.
-        ok_type = Stripped(f"types::{interface_name}")
-    else:
-        # NOTE (mristin):
-        # We have to leave it open to upcast to an ancestor class, and hence
-        # we introduce a template parameter.
-        ok_type = Stripped("T")
+        return Stripped(
+            f"""\
+std::pair<
+{I}common::optional<
+{II}std::shared_ptr<types::{interface_name}>
+{I}>,
+{I}common::optional<DeserializationError>
+>"""
+        )
 
-    expected_properties = cpp_naming.constant_name(
-        Identifier(f"properties_in_{cls.name}")
+    default = " = nullptr" if with_default else ""
+
+    return Stripped(
+        f"""\
+template <
+{I}typename T,
+{I}typename std::enable_if<
+{II}std::is_base_of<T, types::{interface_name}>::value
+{I}>::type*{default}
+>
+std::pair<
+{I}common::optional<std::shared_ptr<T> >,
+{I}common::optional<DeserializationError>
+>"""
     )
 
-    blocks = [
-        Stripped(
-            f"""\
-if (!json.is_object()) {{
-{I}std::wstring message = common::Concat(
-{II}L"Expected an object, but got: ",
-{II}common::Utf8ToWstring(json.type_name())
-{I});
 
-{I}return std::make_pair<
-{II}common::optional<std::shared_ptr<{ok_type}> >,
-{II}common::optional<DeserializationError>
-{I}>(
-{II}common::nullopt,
-{II}common::make_optional<DeserializationError>(
-{III}message
-{II})
-{I});
-}}"""
-        ),
-        Stripped(
-            f"""\
-if (!additional_properties) {{
-{I}for (const auto& key_val : json.items()) {{
-{II}auto it(
-{III}{expected_properties}.find(key_val.key())
-{II});
-{II}if (it == {expected_properties}.end()) {{
-{III}std::wstring message = common::Concat(
-{IIII}L"Unexpected additional property: ",
-{IIII}common::Utf8ToWstring(key_val.key())
-{III});
+def _cls_ok_type(cls: intermediate.ClassUnion) -> Stripped:
+    """
+    Determine the type of the pointee given out for an instance of ``cls``.
 
-{III}return std::make_pair<
-{IIII}common::optional<std::shared_ptr<{ok_type}> >,
-{IIII}common::optional<DeserializationError>
-{III}>(
-{IIII}common::nullopt,
-{IIII}common::make_optional<DeserializationError>(
-{IIIII}message
-{IIII})
-{III});
-{II}}}
-{I}}}
-}}"""
-        ),
-    ]  # type: List[Stripped]
+    We have to distinguish between the cases where we directly create an upcast
+    pointer to an ancestor class, and the cases where there are no ancestors.
+    """
+    if len(cls.ancestors) == 0:
+        return Stripped(f"types::{cpp_naming.interface_name(cls.name)}")
 
-    class_name = cpp_naming.class_name(cls.name)
+    return Stripped("T")
 
-    if len(cls.properties) == 0:
-        blocks.append(
-            Stripped(
-                f"""\
-return std::make_pair(
-{I}common::make_optional<
-{II}std::shared_ptr<{ok_type}>
-{I}>(
-{II}// NOTE (mristin):
-{II}// We deliberately do not use std::make_shared here to avoid an unnecessary
-{II}// upcast.
-{II}new types::{class_name}()
-{I}),
-{I}common::nullopt
+
+def _generate_parse_properties_of_cls_definition(
+    cls: intermediate.ConcreteClass,
+) -> Stripped:
+    """Generate the def. of the function parsing the properties of ``cls``."""
+    interface_name = cpp_naming.interface_name(cls.name)
+
+    function_name = cpp_naming.function_name(
+        Identifier(f"parse_properties_of_{cls.name}")
+    )
+
+    return Stripped(
+        f"""\
+/**
+ * \\brief Parse the properties of an instance of types::{interface_name}.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \\param json object whose properties are to be parsed
+ * \\param additional_properties if not set, check that \\p json contains
+ * no additional properties
+ * \\return the de-serialized instance, or an error, if any
+ */
+{_cls_template_prefix(cls, with_default=True)} {function_name}(
+{I}const nlohmann::json& json,
+{I}bool additional_properties
 );"""
-            )
-        )
-    else:
-        json_names_of_required_properties = [
-            prop.json_name
-            for prop in cls.properties
-            if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
-        ]  # type: List[str]
+    )
 
-        if cls.serialization.with_model_type:
-            json_names_of_required_properties.append(
-                naming.json_property(Identifier("model_type"))
-            )
 
-        if len(json_names_of_required_properties) > 0:
-            blocks.append(Stripped("// region Check required properties"))
-            for json_prop_name in json_names_of_required_properties:
-                json_prop_name_literal = cpp_common.string_literal(json_prop_name)
-                blocks.append(
-                    Stripped(
-                        f"""\
-if (!json.contains({json_prop_name_literal})) {{
-{I}return std::make_pair<
-{II}common::optional<std::shared_ptr<{ok_type}> >,
-{II}common::optional<DeserializationError>
-{I}>(
-{II}common::nullopt,
-{II}common::make_optional<DeserializationError>(
-{III}L"The required property {json_prop_name} is missing"
-{II})
-{I});
-}}"""
-                    )
-                )
+def _generate_parse_properties_of_cls_implementation(
+    cls: intermediate.ConcreteClass,
+) -> Stripped:
+    """Generate the impl. of the function parsing the properties of ``cls``."""
+    class_name = cpp_naming.class_name(cls.name)
+    enum_name = cpp_naming.enum_name(Identifier(f"Of_{cls.name}"))
+    map_name = cpp_naming.constant_name(Identifier(f"map_of_{cls.name}"))
 
-            blocks.append(Stripped("// endregion Check required properties"))
+    ok_type = _cls_ok_type(cls)
 
-        # region Initialization
-        blocks.append(Stripped("// region Initialization"))
+    blocks = []  # type: List[Stripped]
 
-        if len(cls.properties) > 0:
-            blocks.append(Stripped("common::optional<DeserializationError> error;"))
-
+    # region The locals which the constructor is finally called with
+    if len(cls.properties) > 0:
         init_statements = []  # type: List[Stripped]
 
         for prop in cls.properties:
@@ -2436,137 +2541,162 @@ common::optional<
 {I}{indent_but_first_line(var_type, I)}
 >"""
                     )
+                elif var_type.endswith(">"):
+                    var_type = Stripped(f"common::optional<{var_type} >")
                 else:
-                    if var_type.endswith(">"):
-                        var_type = Stripped(f"common::optional<{var_type} >")
-                    else:
-                        var_type = Stripped(f"common::optional<{var_type}>")
+                    var_type = Stripped(f"common::optional<{var_type}>")
 
             init_statements.append(Stripped(f"{var_type} {var_name};"))
 
         blocks.append(Stripped("\n\n".join(init_statements)))
+    # endregion
 
-        blocks.append(Stripped("// endregion Initialization"))
-        # endregion
+    # region The property loop
+    case_blocks = []  # type: List[Stripped]
 
-        # region Deserialize properties
-        for prop in cls.properties:
-            json_prop_name = prop.json_name
-            blocks.append(Stripped(f"// region De-serialize {json_prop_name}"))
+    for prop in cls.properties:
+        literal_name = cpp_naming.enum_literal_name(prop.name)
+        var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
 
-            blocks.append(_generate_deserialize_property(prop=prop, ok_type=ok_type))
+        parse_expr = _json_parse_expr(prop)
 
-            blocks.append(Stripped(f"// endregion De-serialize {json_prop_name}"))
-        # endregion
-
-        if cls.serialization.with_model_type:
-            # NOTE (mristin):
-            # If the serialization requires a model type, we consequently check for it
-            # here. The model type thus obtained is *not* used for any dispatch. We only
-            # use this value for verification to make sure that the model type
-            # of the instances is consistent with the expected value for its concrete
-            # class. This will be performed even though the code might have had to parse
-            # model type before for the dispatch. We decided to double-check to cover
-            # the case where a dispatch is *unnecessary* (*e.g.*, the caller knows the
-            # expected runtime type), but the model type might still be invalid in the
-            # input. Hence, when the dispatch is *necessary*, the model type JSON
-            # property will be parsed twice, which is a cost we currently find
-            # acceptable.
-
-            blocks.append(
-                Stripped(
-                    """\
-// region Check model type
-// This check is intended only for verification, not for dispatch."""
-                )
+        case_blocks.append(
+            Stripped(
+                f"""\
+case properties::{enum_name}::{literal_name}:
+{I}return ParseInto(
+{II}{var_name},
+{II}{indent_but_first_line(parse_expr, II)}
+{I});"""
             )
+        )
 
-            model_type = naming.json_model_type(cls.name)
+    if cls.serialization.with_model_type:
+        case_blocks.append(
+            Stripped(
+                f"""\
+case properties::{enum_name}::{_MODEL_TYPE_LITERAL}:
+{I}// NOTE (mristin):
+{I}// The model type has been verified before the loop, so there is nothing
+{I}// left to do with it here.
+{I}return common::nullopt;"""
+            )
+        )
 
-            blocks.append(
-                Stripped(
-                    f"""\
-common::optional<
-{I}std::wstring
-> model_type;
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}throw UnexpectedPropertyLiteralError(
+{II}"properties::{enum_name}",
+{II}property
+{I});"""
+        )
+    )
 
-std::tie(
-{I}model_type,
-{I}error
-) = DeserializeWstring(
-{I}json["modelType"]
+    case_blocks_joined = "\n".join(case_blocks)
+
+    # NOTE (mristin):
+    # A class with no properties at all never looks at the value of the key,
+    # and only the discriminator can bring it here, so we leave the parameter
+    # unnamed rather than let it warn.
+    value_parameter = (
+        "const nlohmann::json& value"
+        if len(cls.properties) > 0
+        else "const nlohmann::json&"
+    )
+
+    blocks.append(
+        Stripped(
+            f"""\
+common::optional<DeserializationError> error(
+{I}ParseProperties(
+{II}json,
+{II}properties::{map_name},
+{II}additional_properties,
+{II}[&](
+{III}properties::{enum_name} property,
+{III}{value_parameter}
+{II}) -> common::optional<DeserializationError> {{
+{III}switch (property) {{
+{IIII}{indent_but_first_line(case_blocks_joined, IIII)}
+{III}}}
+{II}}}
+{I})
 );
 
 if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<PropertySegment>(
-{III}L"modelType"
-{II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<std::shared_ptr<{ok_type}> >,
-{II}common::optional<DeserializationError>
+{I}return NoInstanceAndDeserializationError<
+{II}std::shared_ptr<{ok_type}>
 {I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}
-
-if (*model_type != L"{model_type}") {{
-{I}std::wstring message = common::Concat(
-{II}L"Expected model type '{model_type}', "
-{II}L"but got: ",
-{II}*model_type
-{I});
-
-{I}error = common::make_optional<DeserializationError>(
-{II}message
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<std::shared_ptr<{ok_type}> >,
-{II}common::optional<DeserializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
+{II}std::move(*error)
 {I});
 }}"""
-                )
-            )
-
-            blocks.append(Stripped("// endregion Check model type"))
-
-        # region Pass arguments to the constructor
-        property_names = [prop.name for prop in cls.properties]
-        constructor_argument_names = [arg.name for arg in cls.constructor.arguments]
-
-        # fmt: off
-        assert (
-                set(prop.name for prop in cls.properties)
-                == set(arg.name for arg in cls.constructor.arguments)
-        ), (
-            f"Expected the properties to coincide with constructor arguments, "
-            f"but they do not for {cls.name!r}:"
-            f"{property_names=}, {constructor_argument_names=}"
         )
-        # fmt: on
+    )
+    # endregion
 
-        constructor_args = []  # type: List[Stripped]
-        for arg in cls.constructor.arguments:
-            prop = cls.properties_by_name[arg.name]
+    # region The required properties
+    for prop in cls.properties:
+        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+            continue
 
-            var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
-            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-                constructor_args.append(Stripped(f"std::move({var_name})"))
-            else:
-                constructor_args.append(Stripped(f"std::move(*{var_name})"))
-
-        constructor_args_joined = ",\n".join(constructor_args)
+        var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
 
         blocks.append(
             Stripped(
                 f"""\
+if (!{var_name}.has_value()) {{
+{I}return NoInstanceAndDeserializationErrorWithCause<
+{II}std::shared_ptr<{ok_type}>
+{I}>(
+{II}L"The required property {prop.json_name} is missing"
+{I});
+}}"""
+            )
+        )
+    # endregion
+
+    # region The construction
+    property_names = [prop.name for prop in cls.properties]
+    constructor_argument_names = [arg.name for arg in cls.constructor.arguments]
+
+    # fmt: off
+    assert (
+            set(prop.name for prop in cls.properties)
+            == set(arg.name for arg in cls.constructor.arguments)
+    ), (
+        f"Expected the properties to coincide with constructor arguments, "
+        f"but they do not for {cls.name!r}:"
+        f"{property_names=}, {constructor_argument_names=}"
+    )
+    # fmt: on
+
+    constructor_args = []  # type: List[Stripped]
+    for arg in cls.constructor.arguments:
+        prop = cls.properties_by_name[arg.name]
+
+        var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
+        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+            constructor_args.append(Stripped(f"std::move({var_name})"))
+        else:
+            constructor_args.append(Stripped(f"std::move(*{var_name})"))
+
+    constructor_args_joined = ",\n".join(constructor_args)
+
+    if len(constructor_args) == 0:
+        construction = Stripped(f"new types::{class_name}()")
+    else:
+        construction = Stripped(
+            f"""\
+new types::{class_name}(
+{I}{indent_but_first_line(constructor_args_joined, I)}
+)"""
+        )
+
+    blocks.append(
+        Stripped(
+            f"""\
 return std::make_pair(
 {I}common::make_optional<
 {II}std::shared_ptr<{ok_type}>
@@ -2574,78 +2704,226 @@ return std::make_pair(
 {II}// NOTE (mristin):
 {II}// We deliberately do not use std::make_shared here to avoid an unnecessary
 {II}// upcast.
-{II}new types::{class_name}(
-{III}{indent_but_first_line(constructor_args_joined, III)}
-{II})
+{II}{indent_but_first_line(construction, II)}
 {I}),
 {I}common::nullopt
 );"""
-            )
         )
-        # endregion
+    )
+    # endregion
+
+    function_name = cpp_naming.function_name(
+        Identifier(f"parse_properties_of_{cls.name}")
+    )
 
     body = "\n\n".join(blocks)
 
-    if len(cls.concrete_descendants) == 0:
-        function_name = cpp_naming.function_name(Identifier(f"deserialize_{cls.name}"))
-    else:
-        function_name = cpp_naming.function_name(
-            Identifier(f"concretely_deserialize_{cls.name}")
-        )
-
-    if len(cls.ancestors) > 0:
-        # NOTE (mristin):
-        # We have to introduce the template so that we do not have to
-        # unnecessarily upcast the instance to ancestor classes.
-        prefix = Stripped(
-            f"""\
-template <
-{I}typename T,
-{I}typename std::enable_if<
-{II}std::is_base_of<T, types::{interface_name}>::value
-{I}>::type*
->
-std::pair<
-{I}common::optional<std::shared_ptr<T> >,
-{I}common::optional<DeserializationError>
->"""
-        )
-    else:
-        prefix = Stripped(
-            f"""\
-std::pair<
-{I}common::optional<
-{II}std::shared_ptr<types::{interface_name}>
-{I}>,
-{I}common::optional<DeserializationError>
->"""
-        )
-
-    expected_properties_literals = [
-        f"{cpp_common.string_literal(prop.json_name)}" for prop in cls.properties
-    ]
-
-    if cls.serialization.with_model_type:
-        expected_properties_literals.append(cpp_common.string_literal("modelType"))
-
-    expected_properties_literals_joined = ",\n".join(expected_properties_literals)
-
-    expected_properties_definition = Stripped(
-        f"""\
-std::set<std::string> {expected_properties} = {{
-{I}{indent_but_first_line(expected_properties_literals_joined, I)}
-}};"""
-    )
-
     return Stripped(
         f"""\
-{expected_properties_definition}
-
-{prefix} {function_name}(
+{_cls_template_prefix(cls, with_default=False)} {function_name}(
 {I}const nlohmann::json& json,
 {I}bool additional_properties
 ) {{
 {I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+
+def _generate_deserialize_cls_definition(cls: intermediate.ConcreteClass) -> Stripped:
+    """Generate the def. of the checking, non-dispatching ``Deserialize*``."""
+    interface_name = cpp_naming.interface_name(cls.name)
+
+    function_name = cpp_naming.function_name(Identifier(f"deserialize_{cls.name}"))
+
+    return Stripped(
+        f"""\
+/**
+ * \\brief Deserialize \\p json to an instance of types::{interface_name}.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
+ *
+ * \\param json value to be de-serialized
+ * \\param additional_properties if not set, check that \\p json contains
+ * no additional properties
+ * \\return the de-serialized instance, or an error, if any
+ */
+{_cls_template_prefix(cls, with_default=True)} {function_name}(
+{I}const nlohmann::json& json,
+{I}bool additional_properties
+);"""
+    )
+
+
+def _generate_deserialize_cls_implementation(
+    cls: intermediate.ConcreteClass,
+) -> Stripped:
+    """Generate the impl. of the checking, non-dispatching ``Deserialize*``."""
+    function_name = cpp_naming.function_name(Identifier(f"deserialize_{cls.name}"))
+
+    parse_properties_name = cpp_naming.function_name(
+        Identifier(f"parse_properties_of_{cls.name}")
+    )
+
+    ok_type = _cls_ok_type(cls)
+
+    if cls.serialization.with_model_type:
+        # NOTE (mristin):
+        # ``CheckModelType`` establishes that the JSON value is an object as
+        # well, since it has to look the model type up in it.
+        check = Stripped(
+            f"""\
+common::optional<DeserializationError> error(
+{I}CheckModelType(
+{II}json,
+{II}{cpp_common.string_literal(naming.json_model_type(cls.name))}
+{I})
+);"""
+        )
+    else:
+        check = Stripped(
+            f"""\
+common::optional<DeserializationError> error(
+{I}CheckJsonObject(json)
+);"""
+        )
+
+    call = Stripped(f"{parse_properties_name}(json, additional_properties)")
+    if len(cls.ancestors) > 0:
+        call = Stripped(
+            f"""\
+{parse_properties_name}<T>(
+{I}json,
+{I}additional_properties
+)"""
+        )
+
+    return Stripped(
+        f"""\
+{_cls_template_prefix(cls, with_default=False)} {function_name}(
+{I}const nlohmann::json& json,
+{I}bool additional_properties
+) {{
+{I}{indent_but_first_line(check, I)}
+
+{I}if (error.has_value()) {{
+{II}return NoInstanceAndDeserializationError<
+{III}std::shared_ptr<{ok_type}>
+{II}>(
+{III}std::move(*error)
+{II});
+{I}}}
+
+{I}return {indent_but_first_line(call, I)};
+}}"""
+    )
+
+
+def _generate_deserialize_from() -> Stripped:
+    """Generate the generic function behind every public ``*From``."""
+    return Stripped(
+        f"""\
+/**
+ * \\brief De-serialize \\p json and render the outcome as an expected value.
+ *
+ * \\param json value to be de-serialized
+ * \\param additional_properties if not set, check that \\p json contains
+ * no additional properties
+ * \\param deserialize de-serializes the value
+ * \\return the de-serialized value, or the error
+ */
+template <typename T, typename DeserializeT>
+common::expected<
+{I}T,
+{I}DeserializationError
+> DeserializeFrom(
+{I}const nlohmann::json& json,
+{I}bool additional_properties,
+{I}const DeserializeT& deserialize
+) {{
+{I}common::optional<T> instance;
+{I}common::optional<DeserializationError> error;
+
+{I}std::tie(
+{II}instance,
+{II}error
+{I}) = deserialize(json, additional_properties);
+
+{I}if (instance.has_value()) {{
+{II}return std::move(*instance);
+{I}}}
+
+{I}if (!error.has_value()) {{
+{II}throw std::logic_error(
+{III}"Unexpected null error when null instance."
+{II});
+{I}}}
+
+{I}return common::make_unexpected(
+{II}std::move(*error)
+{I});
+}}"""
+    )
+
+
+def _generate_deserialize_enumeration_generic() -> Stripped:
+    """Generate the generic function to de-serialize an enumeration literal."""
+    return Stripped(
+        f"""\
+/**
+ * \\brief De-serialize a literal of an enumeration from \\p json.
+ *
+ * \\p from_wstring is a template argument taken by reference, so the call is
+ * statically bound and nothing is paid for the genericity.
+ *
+ * \\tparam EnumT enumeration to be de-serialized
+ * \\param json value expected to be the text of a literal
+ * \\param from_wstring maps the text to a literal, if it is one
+ * \\param enum_name name of the enumeration, for the message
+ * \\return the literal, or an error, if any
+ */
+template <typename EnumT, typename FromWstringT>
+std::pair<
+{I}common::optional<EnumT>,
+{I}common::optional<DeserializationError>
+> DeserializeEnumeration(
+{I}const nlohmann::json& json,
+{I}const FromWstringT& from_wstring,
+{I}const wchar_t* enum_name
+) {{
+{I}common::optional<std::wstring> text;
+{I}common::optional<DeserializationError> error;
+
+{I}std::tie(
+{II}text,
+{II}error
+{I}) = DeserializeWstring(json);
+
+{I}if (error.has_value()) {{
+{II}return NoInstanceAndDeserializationError<EnumT>(
+{III}std::move(*error)
+{II});
+{I}}}
+
+{I}common::optional<EnumT> literal(
+{II}from_wstring(*text)
+{I});
+
+{I}if (!literal.has_value()) {{
+{II}return NoInstanceAndDeserializationErrorWithCause<EnumT>(
+{III}common::Concat(
+{IIII}L"Invalid literal for ",
+{IIII}enum_name,
+{IIII}L": ",
+{IIII}*text
+{III})
+{II});
+{I}}}
+
+{I}return std::make_pair(
+{II}std::move(literal),
+{II}common::nullopt
+{I});
 }}"""
     )
 
@@ -2688,21 +2966,21 @@ def _generate_dispatch_deserialize_implementation(
     for target_cls in targets:
         literal_name = cpp_naming.enum_literal_name(target_cls.name)
 
-        if len(target_cls.concrete_descendants) > 0:
-            target_function = cpp_naming.function_name(
-                Identifier(f"concretely_deserialize_{target_cls.name}")
-            )
-        else:
-            target_function = cpp_naming.function_name(
-                Identifier(f"deserialize_{target_cls.name}")
-            )
+        # NOTE (mristin):
+        # We have read the model type in order to dispatch at all, and
+        # the ``case`` we are in is precisely the one it named, so we go
+        # straight to the property loop instead of through
+        # ``Deserialize{Cls}``, which would verify the model type a second
+        # time.
+        target_function = cpp_naming.function_name(
+            Identifier(f"parse_properties_of_{target_cls.name}")
+        )
 
         if len(target_cls.ancestors) > 0:
             # NOTE (mristin):
             # ``target_function`` is only templated if ``target_cls`` itself
-            # has ancestors (see ``_generate_concretely_deserialize_definition``)
-            # -- true for every proper descendant (which always has ``cls``
-            # among its ancestors), but *not* necessarily true when
+            # has ancestors -- true for every proper descendant (which always
+            # has ``cls`` among its ancestors), but *not* necessarily true when
             # ``target_cls`` is ``cls`` itself (a concrete-with-descendants
             # class dispatching itself, with no meta-model ancestors of its
             # own), so we must not add the template argument unconditionally.
@@ -2748,12 +3026,10 @@ std::pair<
 {I}) = GetModelTypeFrom(json);
 
 {I}if (error.has_value()) {{
-{II}return std::make_pair<
-{III}common::optional<std::shared_ptr<types::{interface_name}> >,
-{III}common::optional<DeserializationError>
+{II}return NoInstanceAndDeserializationError<
+{III}std::shared_ptr<types::{interface_name}>
 {II}>(
-{III}common::nullopt,
-{III}std::move(error)
+{III}std::move(*error)
 {II});
 {I}}}
 
@@ -2762,42 +3038,29 @@ std::pair<
 {I});
 
 {I}if (!model_type.has_value()) {{
-{II}std::wstring message = common::Concat(
-{III}L"The model type does not correspond to any known class: ",
-{III}common::Utf8ToWstring(*model_type_str)
-{II});
-
-{II}return std::make_pair<
-{III}common::optional<std::shared_ptr<types::{interface_name}> >,
-{III}common::optional<DeserializationError>
+{II}return NoInstanceAndDeserializationErrorWithCause<
+{III}std::shared_ptr<types::{interface_name}>
 {II}>(
-{III}common::nullopt,
-{III}common::make_optional<DeserializationError>(
-{IIII}message
+{III}common::Concat(
+{IIII}L"The model type does not correspond to any known class: ",
+{IIII}common::Utf8ToWstring(*model_type_str)
 {III})
 {II});
 {I}}}
 
 {I}switch (*model_type) {{
 {II}{indent_but_first_line(case_blocks_joined, II)}
-{II}default: {{
-{III}std::wstring message = common::Concat(
-{IIII}L"The dispatch to the JSON de-serialization of "
-{IIII}L"types::{interface_name} "
-{IIII}L"is not defined for model type: ",
-{IIII}common::Utf8ToWstring(*model_type_str)
-{III});
-
-{III}return std::make_pair<
-{IIII}common::optional<std::shared_ptr<types::{interface_name}> >,
-{IIII}common::optional<DeserializationError>
+{II}default:
+{III}return NoInstanceAndDeserializationErrorWithCause<
+{IIII}std::shared_ptr<types::{interface_name}>
 {III}>(
-{IIII}common::nullopt,
-{IIII}common::make_optional<DeserializationError>(
-{IIIII}message
+{IIII}common::Concat(
+{IIIII}L"The dispatch to the JSON de-serialization of "
+{IIIII}L"types::{interface_name} "
+{IIIII}L"is not defined for model type: ",
+{IIIII}common::Utf8ToWstring(*model_type_str)
 {IIII})
 {III});
-{II}}}
 {I}}}
 }}"""
         ),
@@ -2870,20 +3133,19 @@ def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
     """
     Generate the snippet to de-serialize a single implementer and wrap it.
 
-    The implementer is de-serialized through its own canonical entry point
-    (bypassing the union), and the resulting
-    ``pair<optional<shared_ptr<T>>, ...>`` is wrapped into the union's
-    ``std::variant`` in one call via
+    The resulting ``pair<optional<shared_ptr<T>>, ...>`` is wrapped into
+    the union's ``std::variant`` in one call via
     :py:func:`_generate_wrap_deserialized_as_variant_function`.
+
+    We go straight to the property loop. The union has checked that the JSON
+    value is an object, and it has either matched the model type of
+    the implementer or picked the implementer structurally, in which case
+    the implementer carries no model type at all -- so there is nothing left
+    for ``Deserialize{Cls}`` to check.
     """
-    if len(target_cls.concrete_descendants) > 0:
-        target_function = cpp_naming.function_name(
-            Identifier(f"concretely_deserialize_{target_cls.name}")
-        )
-    else:
-        target_function = cpp_naming.function_name(
-            Identifier(f"deserialize_{target_cls.name}")
-        )
+    target_function = cpp_naming.function_name(
+        Identifier(f"parse_properties_of_{target_cls.name}")
+    )
 
     target_interface_name = cpp_naming.interface_name(target_cls.name)
 
@@ -2944,20 +3206,15 @@ def _generate_dispatch_deserialize_implementation_for_named_union(
     body_blocks = [
         Stripped(
             f"""\
-if (!json.is_object()) {{
-{I}std::wstring message = common::Concat(
-{II}L"Expected an object, but got: ",
-{II}common::Utf8ToWstring(json.type_name())
-{I});
+common::optional<DeserializationError> not_an_object(
+{I}CheckJsonObject(json)
+);
 
-{I}return std::make_pair<
-{II}common::optional<types::{union_name}>,
-{II}common::optional<DeserializationError>
+if (not_an_object.has_value()) {{
+{I}return NoInstanceAndDeserializationError<
+{II}types::{union_name}
 {I}>(
-{II}common::nullopt,
-{II}common::make_optional<DeserializationError>(
-{III}message
-{II})
+{II}std::move(*not_an_object)
 {I});
 }}"""
         )
@@ -3138,31 +3395,12 @@ common::expected<
 {I}const nlohmann::json& json,
 {I}bool additional_properties
 ) {{
-{I}common::optional<
+{I}return DeserializeFrom<
 {II}{indent_but_first_line(value_type, II)}
-{I}> instance;
-
-{I}common::optional<DeserializationError> error;
-
-{I}std::tie(
-{II}instance,
-{II}error
-{I}) = {indent_but_first_line(deserialize_function, I)}(
+{I}>(
 {II}json,
-{II}additional_properties
-{I});
-
-{I}if (instance.has_value()) {{
-{II}return std::move(*instance);
-{I}}}
-
-{I}if (!error.has_value()) {{
-{II}throw std::logic_error(
-{III}"Unexpected null error when null instance."
-{II});
-{I}}}
-{I}return common::make_unexpected(
-{II}std::move(*error)
+{II}additional_properties,
+{II}{indent_but_first_line(deserialize_function, II)}
 {I});
 }}"""
     )
@@ -4727,6 +4965,7 @@ def generate_implementation(
         _generate_deserialize_str(),
         _generate_deserialize_bytearray(),
         _generate_get_model_type(),
+        *_generate_no_instance_and_error_factories(),
     ]
 
     if intermediate.uses_json_types(symbol_table):
@@ -4754,20 +4993,37 @@ def generate_implementation(
         for prop in cls.properties
     ):
         blocks.append(_generate_deserialize_list())
+        blocks.append(_generate_deserialize_list_of_instances())
 
     for arity in intermediate.tuple_arities(symbol_table):
         blocks.append(_generate_deserialize_tuple_function(arity))
 
+    if len(symbol_table.enumerations) > 0:
+        blocks.append(_generate_deserialize_enumeration_generic())
+
     for enumeration in symbol_table.enumerations:
         blocks.append(_generate_deserialize_enumeration(enumeration))
 
+    if len(symbol_table.concrete_classes) > 0:
+        blocks.extend(_generate_property_enums_and_maps(symbol_table=symbol_table))
+        blocks.append(_generate_unexpected_property_literal_error())
+        blocks.append(_generate_parse_properties())
+        blocks.append(_generate_check_json_object())
+
+        if any(
+            cls.serialization.with_model_type for cls in symbol_table.concrete_classes
+        ):
+            blocks.append(_generate_check_model_type())
+
+    if any(len(cls.properties) > 0 for cls in symbol_table.concrete_classes):
+        blocks.append(_generate_parse_into())
+
     for cls in symbol_table.classes:
         if isinstance(cls, intermediate.ConcreteClass):
-            blocks.append(
-                _generate_concretely_deserialize_definition(
-                    cls=cls,
-                )
-            )
+            blocks.append(_generate_parse_properties_of_cls_definition(cls=cls))
+
+            if len(cls.concrete_descendants) == 0:
+                blocks.append(_generate_deserialize_cls_definition(cls=cls))
 
         if len(cls.concrete_descendants) > 0:
             blocks.append(_generate_dispatch_deserialize_definition(cls=cls))
@@ -4781,7 +5037,10 @@ def generate_implementation(
 
     for cls in symbol_table.classes:
         if isinstance(cls, intermediate.ConcreteClass):
-            blocks.append(_generate_concretely_deserialize_implementation(cls=cls))
+            blocks.append(_generate_parse_properties_of_cls_implementation(cls=cls))
+
+            if len(cls.concrete_descendants) == 0:
+                blocks.append(_generate_deserialize_cls_implementation(cls=cls))
 
         if len(cls.concrete_descendants) > 0:
             deserialize_dispatch_blocks = _generate_dispatch_deserialize_implementation(
@@ -4795,6 +5054,8 @@ def generate_implementation(
                 named_union=named_union
             )
         )
+
+    blocks.append(_generate_deserialize_from())
 
     for cls in symbol_table.classes:
         blocks.append(_generate_deserialization_implementation(cls=cls))
