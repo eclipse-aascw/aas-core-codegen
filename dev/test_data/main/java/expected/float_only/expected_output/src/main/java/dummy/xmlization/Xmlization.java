@@ -606,13 +606,13 @@ public class Xmlization {
       }
     }
 
-    private static void writeListOf_stringified(
-      List<?> that,
+    private static void writeListOf_double(
+      List<? extends Double> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (Object item : that) {
-          writeAtV_stringified(item, writer);
+        for (Double item : that) {
+          writeAtV_double(item, writer);
           index++;
         }
       } catch (XmlCommon.SerializeFailure failure) {
@@ -622,14 +622,14 @@ public class Xmlization {
       }
     }
 
-    private static void writeTupleOf2_stringified_stringified(
-      Tuple2<?, ?> that,
+    private static void writeTupleOf2_stringified_double(
+      Tuple2<?, ? extends Double> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
         writeAtV1_stringified(that.item1(), writer);
         index = 1;
-        writeAtV2_stringified(that.item2(), writer);
+        writeAtV2_double(that.item2(), writer);
       } catch (XmlCommon.SerializeFailure failure) {
         failure.getError().prependSegment(
           new Reporting.IndexSegment(index));
@@ -637,8 +637,8 @@ public class Xmlization {
       }
     }
 
-    private static void writeAtV_stringified(
-      Object that,
+    private static void writeAtV_double(
+      Double that,
       XMLStreamWriter writer) {
       XmlCommon.writeElement(
         "v",
@@ -657,8 +657,8 @@ public class Xmlization {
         XmlCommon::writeStringifiedContent);
     }
 
-    private static void writeAtV2_stringified(
-      Object that,
+    private static void writeAtV2_double(
+      Double that,
       XMLStreamWriter writer) {
       XmlCommon.writeElement(
         "v2",
@@ -689,14 +689,14 @@ public class Xmlization {
         "getSomeFloats()",
         that.getSomeFloats(),
         writer,
-        _VisitorWithWriter::writeListOf_stringified);
+        _VisitorWithWriter::writeListOf_double);
 
       writeProperty(
         "somePair",
         "getSomePair()",
         that.getSomePair(),
         writer,
-        _VisitorWithWriter::writeTupleOf2_stringified_stringified);
+        _VisitorWithWriter::writeTupleOf2_stringified_double);
     }
 
     @Override

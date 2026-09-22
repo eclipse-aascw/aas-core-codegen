@@ -195,14 +195,19 @@ def _written_leaf_moniker(type_anno: intermediate.AtomicTypeAnnotation) -> str:
 
     This is the writing counterpart of
     :py:func:`aas_core_codegen.java.common.leaf_moniker`, which names a leaf by
-    its very type. Here all four scalars collapse onto ``stringified``, every
-    enumeration onto ``IEnum``, every class onto ``IClass`` and every named
-    union onto ``IUnion``, so that the writers of a list of any scalar, of any
-    enumeration, of any class or of any union are one apiece.
+    its very type. Here a boolean, an integer and a string collapse onto
+    ``stringified``, every enumeration onto ``IEnum``, every class onto
+    ``IClass`` and every named union onto ``IUnion``, so that the writers of
+    a list of any of them are one apiece.
+
+    A moniker names the writer, so two leaves may share one only if they are
+    written by the same one -- see :py:func:`_content_writer_for`. A double is
+    therefore its own, since it can not go through ``toString``, and so is
+    a byte array.
 
     ``IClass``, ``IEnum`` and ``IUnion`` are the fixed names of our own
-    interfaces and are never generated from the meta-model, and ``stringified``
-    and ``bytes`` are lower-case (see
+    interfaces and are never generated from the meta-model, and ``stringified``,
+    ``double`` and ``bytes`` are lower-case (see
     :py:attr:`aas_core_codegen.java.common.PRIMITIVE_TYPE_TO_MONIKER`), so none
     of them can be confused with the moniker of one of our types. None contains
     an underscore, as the moniker grammar requires (see
@@ -212,6 +217,14 @@ def _written_leaf_moniker(type_anno: intermediate.AtomicTypeAnnotation) -> str:
 
     if primitive_type is intermediate.PrimitiveType.BYTEARRAY:
         return "bytes"
+
+    # NOTE (mristin):
+    # A double is written by ``writeDoubleContent`` and not by
+    # ``writeStringifiedContent``, so it can not share the moniker of the leaves
+    # which are: the writer named after the moniker takes what that writer takes,
+    # and a ``ContentWriter<? super Double>`` does not serve an ``Object``.
+    if primitive_type is intermediate.PrimitiveType.FLOAT:
+        return java_common.PRIMITIVE_TYPE_TO_MONIKER[intermediate.PrimitiveType.FLOAT]
 
     if primitive_type is not None:
         return "stringified"
@@ -255,11 +268,19 @@ def _written_value_type(type_anno: intermediate.AtomicTypeAnnotation) -> Strippe
     Everything widens to what it is written through: a scalar to ``Object``,
     whose ``toString`` renders it, and an instance to the interface over which
     the writing dispatches, so that one writer serves them all.
+
+    A value widens only as far as its writer takes it. A double goes through
+    ``writeDoubleContent``, a ``ContentWriter<? super Double>``, so it stays
+    a ``Double``: widening it to ``Object`` would leave ``writeElement`` to
+    infer a ``T`` bounded below by both, and there is no such type.
     """
     primitive_type = intermediate.try_primitive_type(type_anno)
 
     if primitive_type is intermediate.PrimitiveType.BYTEARRAY:
         return Stripped("byte[]")
+
+    if primitive_type is intermediate.PrimitiveType.FLOAT:
+        return Stripped("Double")
 
     if primitive_type is not None:
         return Stripped("Object")
@@ -2435,20 +2456,22 @@ def _container_type(type_anno: intermediate.ContainerTypeAnnotation) -> Stripped
     # a ``Tuple2<IClass, IClass>``. Wherever the value type widens, the bound
     # has to be spelled out for the container to accept the list or the tuple
     # which a property actually holds. A byte array widens to nothing, so it
-    # needs none, and a scalar widens all the way up, which the unbounded
-    # wildcard already says.
+    # needs none, and what widens all the way up to ``Object`` needs none
+    # either, which the unbounded wildcard already says.
+    #
+    # We read all of that off :py:func:`_written_value_type`, which is the one
+    # place deciding how far a value widens, so that the bound here can not
+    # drift from the type the item writer takes.
     argument_types = []  # type: List[Stripped]
     for item_type_anno in _item_type_annotations(type_anno):
-        primitive_type = intermediate.try_primitive_type(item_type_anno)
+        written_value_type = _written_value_type(item_type_anno)
 
-        if primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+        if written_value_type == "byte[]":
             argument_types.append(Stripped("byte[]"))
-        elif primitive_type is not None:
+        elif written_value_type == "Object":
             argument_types.append(Stripped("?"))
         else:
-            argument_types.append(
-                Stripped(f"? extends {_written_value_type(item_type_anno)}")
-            )
+            argument_types.append(Stripped(f"? extends {written_value_type}"))
 
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
         return Stripped(f"List<{argument_types[0]}>")

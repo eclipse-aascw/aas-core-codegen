@@ -816,6 +816,22 @@ public class Xmlization {
       }
     }
 
+    private static void writeListOf_double(
+      List<? extends Double> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (Double item : that) {
+          writeAtV_double(item, writer);
+          index++;
+        }
+      } catch (XmlCommon.SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
     private static void writeListOf_bytes(
       List<byte[]> that,
       XMLStreamWriter writer) {
@@ -840,6 +856,16 @@ public class Xmlization {
         that,
         writer,
         XmlCommon::writeStringifiedContent);
+    }
+
+    private static void writeAtV_double(
+      Double that,
+      XMLStreamWriter writer) {
+      XmlCommon.writeElement(
+        "v",
+        that,
+        writer,
+        XmlCommon::writeDoubleContent);
     }
 
     private static void writeAtV_bytes(
@@ -874,7 +900,7 @@ public class Xmlization {
         "getSomeFloats()",
         that.getSomeFloats(),
         writer,
-        _VisitorWithWriter::writeListOf_stringified);
+        _VisitorWithWriter::writeListOf_double);
 
       writeProperty(
         "someStrings",
