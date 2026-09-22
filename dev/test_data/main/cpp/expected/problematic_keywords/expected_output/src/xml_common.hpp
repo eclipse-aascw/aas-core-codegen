@@ -520,9 +520,15 @@ common::optional<SerializationError> CheckOstreamState(
  */
 class SelfClosingWriter {
  public:
+  /**
+   * \param os to write to
+   * \param root_attributes attributes of the outermost element, written
+   * verbatim and each preceded by a space; the declaration of \ref kNamespace,
+   * or nothing at all
+   */
   SelfClosingWriter(
     std::ostream& os,
-    std::string prefix
+    const char* root_attributes
   );
 
   /**
@@ -611,31 +617,23 @@ class SelfClosingWriter {
 
  private:
   std::ostream& os_;
-  std::string prefix_;
   common::optional<SerializationError> error_;
   common::optional<std::string> pending_start_wo_text_;
 
   /**
-   * Prefix of the pending start element; empty for an element which resides
-   * in no namespace
+   * \brief Attributes of the outermost element, until it has been queued.
+   *
+   * The very first \ref StartElement takes them and leaves nothing behind, so
+   * that the namespace is declared on the root element and on no other.
    */
-  const char* pending_prefix_;
+  const char* root_attributes_;
 
   /**
-   * Attributes of the pending start element; the undeclaration of the default
-   * namespace for the outermost element which resides in no namespace, and
-   * nothing otherwise
+   * Attributes of the pending start element; the declaration of the namespace
+   * for the outermost element, its undeclaration for the outermost element
+   * which resides in no namespace, and nothing otherwise
    */
   const char* pending_attributes_;
-
-  /**
-   * Write the stop element with the given \p prefix, or shorten the pending
-   * start element to a self-closing one.
-   */
-  void StopElementWithPrefix(
-    const std::string& name,
-    const char* prefix
-  );
 
   /**
    * \brief Escape the given text to XML.

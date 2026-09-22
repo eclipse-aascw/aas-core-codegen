@@ -969,16 +969,6 @@ class SerializationException : public std::exception {
  *
  * We selected the defaults so that they can be used when you serialize to
  * a file.
- *
- * Usually, you want to write the namespace at the root element, and no
- * prefixes are written in the XML names. However, if you are embedding
- * the XML in a larger XML structure, you specify the namespace
- * aliases and then use them as XML name prefixes. The prefix usually ends
- * with a full colon (`:`).
- *
- * We can not imagine in what situation you would want to write both
- * the namespace <em>and</em> the prefix. Nevertheless, we allow for that
- * possibility and do not throw any exception if you specify the both.
  */
 struct WritingOptions {
   /**
@@ -991,11 +981,6 @@ struct WritingOptions {
    * set as the XML attribute `xmlns`.
    */
   bool write_namespace = true;
-
-  /**
-   * The prefix is prepended to the name of each XML element.
-   */
-   std::string prefix = "";
 };  // struct WritingOptions
 
 /**

@@ -1323,7 +1323,7 @@ common::optional<SerializationError> SerializeValueBodyTo(
 {II}// ``1``/``0``, which is also what ``DeserializeBooleanBodyFrom``
 {II}// requires.
 {II}writer.SerializeString(value.get<bool>() ? "1" : "0");
-{II}writer.StopElementInNoNamespace("boolean");
+{II}writer.StopElement("boolean");
 {I}}} else if (value.is_number()) {{
 {II}const double number = value.get<double>();
 
@@ -1346,7 +1346,7 @@ common::optional<SerializationError> SerializeValueBodyTo(
 {III}"double", undeclare_namespace
 {II});
 {II}writer.SerializeDouble(number);
-{II}writer.StopElementInNoNamespace("double");
+{II}writer.StopElement("double");
 {I}}} else if (value.is_string()) {{
 {II}writer.StartElementInNoNamespace(
 {III}"string", undeclare_namespace
@@ -1354,7 +1354,7 @@ common::optional<SerializationError> SerializeValueBodyTo(
 {II}writer.SerializeString(
 {III}*value.get_ptr<const std::string*>()
 {II});
-{II}writer.StopElementInNoNamespace("string");
+{II}writer.StopElement("string");
 {I}}} else if (value.is_array()) {{
 {II}writer.StartElementInNoNamespace(
 {III}"array", undeclare_namespace
@@ -1367,7 +1367,7 @@ common::optional<SerializationError> SerializeValueBodyTo(
 {III}return error;
 {II}}}
 
-{II}writer.StopElementInNoNamespace("array");
+{II}writer.StopElement("array");
 {I}}} else if (value.is_object()) {{
 {II}writer.StartElementInNoNamespace(
 {III}"struct", undeclare_namespace
@@ -1380,7 +1380,7 @@ common::optional<SerializationError> SerializeValueBodyTo(
 {III}return error;
 {II}}}
 
-{II}writer.StopElementInNoNamespace("struct");
+{II}writer.StopElement("struct");
 {I}}} else {{
 {II}// NOTE (mristin):
 {II}// This covers ``null``, a binary value and a discarded value -- none of
@@ -1435,11 +1435,11 @@ common::optional<SerializationError> SerializeArrayBodyTo(
 {III}return error;
 {II}}}
 
-{II}writer.StopElementInNoNamespace("value");
+{II}writer.StopElement("value");
 {II}++index;
 {I}}}
 
-{I}writer.StopElementInNoNamespace("data");
+{I}writer.StopElement("data");
 
 {I}return ConvertWriterError(writer);
 }}"""
@@ -1471,7 +1471,7 @@ common::optional<SerializationError> SerializeStructBodyTo(
 
 {II}writer.StartElementInNoNamespace("name", false);
 {II}writer.SerializeString(item.key());
-{II}writer.StopElementInNoNamespace("name");
+{II}writer.StopElement("name");
 
 {II}writer.StartElementInNoNamespace("value", false);
 
@@ -1487,9 +1487,9 @@ common::optional<SerializationError> SerializeStructBodyTo(
 {III}return error;
 {II}}}
 
-{II}writer.StopElementInNoNamespace("value");
+{II}writer.StopElement("value");
 
-{II}writer.StopElementInNoNamespace("member");
+{II}writer.StopElement("member");
 {I}}}
 
 {I}return ConvertWriterError(writer);

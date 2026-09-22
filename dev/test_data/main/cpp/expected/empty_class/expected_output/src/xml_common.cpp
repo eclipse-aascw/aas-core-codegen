@@ -1048,11 +1048,10 @@ common::optional<SerializationError> CheckOstreamState(
 
 SelfClosingWriter::SelfClosingWriter(
   std::ostream& os,
-  std::string prefix
+  const char* root_attributes
 ) :
   os_(os),
-  prefix_(std::move(prefix)),
-  pending_prefix_(""),
+  root_attributes_(root_attributes),
   pending_attributes_("") {
   // Intentionally empty.
 }
@@ -1074,19 +1073,17 @@ void SelfClosingWriter::StartElement(
   }
 
   pending_start_wo_text_ = std::move(name);
-  pending_prefix_ = prefix_.c_str();
-  pending_attributes_ = "";
+
+  // NOTE (mristin):
+  // The outermost element carries the attributes of the root, and every other
+  // element carries none. We take them here instead of asking whether this is
+  // the first element, since the assignment has to happen either way.
+  pending_attributes_ = root_attributes_;
+  root_attributes_ = "";
 }
 
 void SelfClosingWriter::StopElement(
   const std::string& name
-) {
-  StopElementWithPrefix(name, prefix_.c_str());
-}
-
-void SelfClosingWriter::StopElementWithPrefix(
-  const std::string& name,
-  const char* prefix
 ) {
   #ifdef DEBUG
   if (error_.has_value()) {
@@ -1117,10 +1114,9 @@ void SelfClosingWriter::StopElementWithPrefix(
     WriteStringWithoutEscapingNorFlushing(
       common::Concat(
         "<",
-        pending_prefix_,
         name,
         pending_attributes_,
-        " />"
+        "/>"
       )
     );
   } else {
@@ -1132,7 +1128,6 @@ void SelfClosingWriter::StopElementWithPrefix(
     WriteStringWithoutEscapingNorFlushing(
       common::Concat(
         "</",
-        prefix,
         name,
         ">"
       )
@@ -1580,7 +1575,6 @@ void SelfClosingWriter::WritePendingStartElementIfAvailable() {
   WriteStringWithoutEscapingNorFlushing(
     common::Concat(
       "<",
-      pending_prefix_,
       *pending_start_wo_text_,
       pending_attributes_,
       ">"
