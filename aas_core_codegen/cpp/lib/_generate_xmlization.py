@@ -776,36 +776,131 @@ common::optional<DeserializationError> SkipWhitespace(
     ]
 
 
-def _generate_deserialize_class_from_element_generic() -> Stripped:
-    """
-    Generate a generic function to de-serialize an instance of a class from an element.
-
-    The function factors out the common structure shared by all
-    the ``{Cls}FromElement`` functions -- reading the start element, looking up
-    the model type, dispatching to the concrete de-serialization and reading
-    the corresponding stop element -- so that the individual ``{Cls}FromElement``
-    functions only need to supply the dispatch specific to their interface.
-    """
-    model_type_from_element_name = cpp_naming.function_name(
-        Identifier("model_type_from_element_name")
-    )
-
+def _generate_unexpected_property_literal_error() -> Stripped:
+    """Generate the factory for the error thrown on an out-of-range literal."""
     return Stripped(
         f"""\
-template <typename T, typename DispatchT>
-std::pair<
-{I}common::optional<std::shared_ptr<T> >,
-{I}common::optional<DeserializationError>
-> DeserializeClassFromElement(
+/**
+ * \\brief Create the exception to be thrown on an unexpected property literal.
+ *
+ * Every ``switch`` over the properties of a class covers all the literals of
+ * its enumeration, so we can only get here if the value has been corrupted.
+ * We report that as a logic error, and not as a de-serialization error, since
+ * it does not originate in the input.
+ *
+ * \\param enum_name name of the property enumeration, for the message
+ * \\param property the unexpected literal
+ * \\return the exception to be thrown
+ */
+template <typename EnumT>
+std::logic_error UnexpectedPropertyLiteralError(
+{I}const char* enum_name,
+{I}EnumT property
+) {{
+{I}return std::logic_error(
+{II}common::Concat(
+{III}"Unexpected properties literal of ",
+{III}enum_name,
+{III}": ",
+{III}std::to_string(
+{IIII}static_cast<std::uint32_t>(property)
+{III})
+{II})
+{I});
+}}"""
+    )
+
+
+def _generate_read_into() -> Stripped:
+    """Generate the function to assign the result of a read to a target variable."""
+    return Stripped(
+        f"""\
+/**
+ * \\brief Assign the value read to \\p target, or return the error of the read.
+ *
+ * We deliberately take the *result* of a read instead of the reader and
+ * the function which reads. The item readers of a tuple vary both in number
+ * and in type, so no signature taking the reader could serve every read;
+ * taking the result lets this single function serve all of them.
+ *
+ * \\param target variable to be assigned the value read
+ * \\param read result of the read
+ * \\return the error, if the read failed
+ */
+template <typename T>
+common::optional<DeserializationError> ReadInto(
+{I}common::optional<T>& target,
+{I}std::pair<
+{II}common::optional<T>,
+{II}common::optional<DeserializationError>
+{I}>&& read
+) {{
+{I}if (read.second.has_value()) {{
+{II}return std::move(read.second);
+{I}}}
+
+{I}target = std::move(read.first);
+
+{I}return common::nullopt;
+}}"""
+    )
+
+
+def _generate_read_properties() -> Stripped:
+    """Generate the generic function to read the properties of an instance."""
+    return Stripped(
+        f"""\
+/**
+ * \\brief Read the properties of an instance as a sequence of XML elements.
+ *
+ * The cursor is expected to point at the content of the element which opens
+ * the instance. On success, the cursor points at the stop element closing it,
+ * which the caller is expected to consume.
+ *
+ * This function factors out everything which the property loop of a class does
+ * not say about the class it belongs to: skipping the whitespace, recognizing
+ * the end of the sequence, reading and consuming the start element, looking
+ * the property up, refusing a duplicate, marking the property on the error path
+ * and consuming the stop element. The class itself supplies only \\p on_property,
+ * which dispatches on the property and assigns the local variables that its
+ * constructor is finally called with.
+ *
+ * NOTE (mristin):
+ * We take \\p map_of_properties in, instead of letting \\p on_property work on
+ * the XML name of the property, because we want the class to dispatch with
+ * a hard-wired ``switch`` whose branches assign the local variables of
+ * the caller.
+ *
+ * A ``switch`` needs an integral constant, and C++ can not switch on a string,
+ * so the name has to be translated into a literal of the property enumeration
+ * first. We do that here rather than in the class so that the translation, and
+ * the error reported when the name matches no property at all, are written
+ * once instead of once per class.
+ *
+ * The alternative -- mapping the name directly to the code which reads
+ * the property -- would cost a type-erased, capturing callable per property,
+ * built anew on every single read, since the code has to assign the caller's
+ * variables. The ``switch`` costs a jump table.
+ *
+ * \\tparam kPropertyCount number of the properties of the class
+ * \\param reader to read from
+ * \\param map_of_properties maps the XML name of a property to its literal
+ * \\param interface_name name of the interface, for the messages
+ * \\param on_property reads the content of the recognized property
+ * \\return the error, if the reading failed
+ */
+template <std::size_t kPropertyCount, typename EnumT, typename OnPropertyT>
+common::optional<DeserializationError> ReadProperties(
 {I}xml_common::ReaderMergingText& reader,
-{I}const std::wstring& interface_name,
-{I}const DispatchT& dispatch
+{I}const std::unordered_map<std::string, EnumT>& map_of_properties,
+{I}const wchar_t* interface_name,
+{I}const OnPropertyT& on_property
 ) {{
 {I}#ifdef DEBUG
 {I}if (reader.node().kind() == xml_common::NodeKind::Error) {{
 {II}throw std::logic_error(
-{III}"Unexpected unhandled XML error in DeserializeClassFromElement. "
-{III}"DeserializeClassFromElement expects no reader error at entry."
+{III}"Unexpected unhandled XML error in ReadProperties. "
+{III}"ReadProperties expects no reader error at entry."
 {II});
 {I}}}
 {I}#endif
@@ -814,25 +909,237 @@ std::pair<
 
 {I}error = SkipBof(reader);
 {I}if (error.has_value()) {{
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(std::move(*error));
+{II}return error;
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// Whether a property has already occurred is a bookkeeping of this loop, and
+{I}// not of the property, so we track it here, indexed by the property literal,
+{I}// instead of asking every single target variable at every single case of
+{I}// the ``switch``.
+{I}//
+{I}// The bit set is sized to the class, so a class may have arbitrarily many
+{I}// properties, and it lives on the stack, so nothing is allocated for it on
+{I}// a read.
+{I}std::bitset<kPropertyCount> seen;
+
+{I}while (true) {{
+{II}error = SkipWhitespace(reader);
+{II}if (error.has_value()) {{
+{III}return error;
+{II}}}
+
+{II}if (reader.node().kind() == xml_common::NodeKind::Stop) {{
+{III}// NOTE (mristin):
+{III}// We reached a closing element of an instance, so we know that
+{III}// the sequence ended.
+{III}return common::nullopt;
+{II}}} else if (reader.node().kind() != xml_common::NodeKind::Start) {{
+{III}return DeserializationError(
+{IIII}common::Concat(
+{IIIII}L"Expected a start element opening a property of ",
+{IIIII}interface_name,
+{IIIII}L", but got ",
+{IIIII}xml_common::NodeToHumanReadableWstring(reader.node())
+{IIII})
+{III});
+{II}}}
+
+{II}const std::string name(
+{III}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+{IIII}const xml_common::StartNode&
+{III}>(reader.node()).name
+{II});
+
+{II}// NOTE (mristin):
+{II}// We consume the start element.
+{II}reader.Read();
+
+{II}if (reader.node().kind() == xml_common::NodeKind::Error) {{
+{III}error = DeserializationErrorFromReader(reader);
+
+{III}PrependElementSegmentToDeserializationError(
+{IIII}name,
+{IIII}*error
+{III});
+
+{III}return error;
+{II}}}
+
+{II}auto it = map_of_properties.find(name);
+{II}if (it == map_of_properties.end()) {{
+{III}return DeserializationError(
+{IIII}common::Concat(
+{IIIII}L"Expected a start element opening a property of ",
+{IIIII}interface_name,
+{IIIII}L", but got a start element "
+{IIIII}L"which does not correspond to any of its properties: <",
+{IIIII}common::Utf8ToWstring(name),
+{IIIII}L">"
+{IIII})
+{III});
+{II}}}
+
+{II}const EnumT property(it->second);
+
+{II}// NOTE (mristin):
+{II}// The literals of a property enumeration run from zero without a gap, and
+{II}// the map maps only to them, so the index is always in the range of
+{II}// the bit set. We check that only in debug builds, and index unchecked
+{II}// otherwise.
+{II}const std::size_t index(
+{III}static_cast<std::size_t>(property)
+{II});
+
+{II}#ifdef DEBUG
+{II}if (index >= kPropertyCount) {{
+{III}throw std::logic_error(
+{IIII}common::Concat(
+{IIIII}"Unexpected property index in ReadProperties: ",
+{IIIII}std::to_string(index),
+{IIIII}", but there are only ",
+{IIIII}std::to_string(kPropertyCount),
+{IIIII}" properties"
+{IIII})
+{III});
+{II}}}
+{II}#endif
+
+{II}// NOTE (mristin):
+{II}// An engaged bit can only have been set by an earlier turn of this loop, so
+{II}// it tells us that the property comes a second time. The check precedes
+{II}// the read, so the duplicate is refused without its content ever being
+{II}// looked at.
+{II}if (seen[index]) {{
+{III}error = DuplicatePropertyError(name);
+
+{III}PrependElementSegmentToDeserializationError(
+{IIII}name,
+{IIII}*error
+{III});
+
+{III}return error;
+{II}}}
+
+{II}seen[index] = true;
+
+{II}error = on_property(property);
+{II}if (error.has_value()) {{
+{III}PrependElementSegmentToDeserializationError(
+{IIII}name,
+{IIII}*error
+{III});
+
+{III}return error;
+{II}}}
+
+{II}error = SkipWhitespace(reader);
+{II}if (error.has_value()) {{
+{III}PrependElementSegmentToDeserializationError(
+{IIII}name,
+{IIII}*error
+{III});
+
+{III}return error;
+{II}}}
+
+{II}if (!xml_common::IsStopNodeWithName(reader.node(), name)) {{
+{III}error = DeserializationError(
+{IIII}common::Concat(
+{IIIII}L"Expected a stop element </",
+{IIIII}common::Utf8ToWstring(name),
+{IIIII}L"> closing the property of ",
+{IIIII}interface_name,
+{IIIII}L", but got ",
+{IIIII}xml_common::NodeToHumanReadableWstring(reader.node())
+{IIII})
+{III});
+
+{III}PrependElementSegmentToDeserializationError(
+{IIII}name,
+{IIII}*error
+{III});
+
+{III}return error;
+{II}}}
+
+{II}// NOTE (mristin):
+{II}// We consume the stop element.
+{II}reader.Read();
+
+{II}if (reader.node().kind() == xml_common::NodeKind::Error) {{
+{III}error = DeserializationErrorFromReader(reader);
+
+{III}PrependElementSegmentToDeserializationError(
+{IIII}name,
+{IIII}*error
+{III});
+
+{III}return error;
+{II}}}
+{I}}}
+}}"""
+    )
+
+
+def _generate_deserialize_from_element_generic() -> Stripped:
+    """
+    Generate a generic function to de-serialize a value from an XML element.
+
+    The function factors out the common structure shared by all
+    the ``{Cls}FromElement`` and ``{Union}FromElement`` functions -- reading
+    the start element, looking up the model type, dispatching to the concrete
+    de-serialization and reading the corresponding stop element -- so that
+    the individual functions only need to supply the dispatch specific to their
+    interface or union.
+
+    We deliberately make the function generic in the *value* type instead of in
+    the interface: a named union de-serializes into a ``std::variant``, and not
+    into a ``shared_ptr``-wrapped interface, but the framing around the value is
+    the very same, and every error factory it calls is already generic in
+    the value type.
+    """
+    model_type_from_element_name = cpp_naming.function_name(
+        Identifier("model_type_from_element_name")
+    )
+
+    return Stripped(
+        f"""\
+template <typename ValueT, typename DispatchT>
+std::pair<
+{I}common::optional<ValueT>,
+{I}common::optional<DeserializationError>
+> DeserializeFromElement(
+{I}xml_common::ReaderMergingText& reader,
+{I}const wchar_t* value_name,
+{I}const DispatchT& dispatch
+) {{
+{I}#ifdef DEBUG
+{I}if (reader.node().kind() == xml_common::NodeKind::Error) {{
+{II}throw std::logic_error(
+{III}"Unexpected unhandled XML error in DeserializeFromElement. "
+{III}"DeserializeFromElement expects no reader error at entry."
+{II});
+{I}}}
+{I}#endif
+
+{I}common::optional<DeserializationError> error;
+
+{I}error = SkipBof(reader);
+{I}if (error.has_value()) {{
+{II}return NoInstanceAndDeserializationError<ValueT>(std::move(*error));
 {I}}}
 
 {I}error = SkipWhitespace(reader);
 {I}if (error.has_value()) {{
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(std::move(*error));
+{II}return NoInstanceAndDeserializationError<ValueT>(std::move(*error));
 {I}}}
 
 {I}if (reader.node().kind() != xml_common::NodeKind::Start) {{
-{II}return NoInstanceAndDeserializationErrorWithCause<
-{III}std::shared_ptr<T>
-{II}>(
+{II}return NoInstanceAndDeserializationErrorWithCause<ValueT>(
 {III}common::Concat(
 {IIII}L"Expected a start element opening an instance of ",
-{IIII}interface_name,
+{IIII}value_name,
 {IIII}L", but got ",
 {IIII}xml_common::NodeToHumanReadableWstring(reader.node())
 {III})
@@ -849,13 +1156,11 @@ std::pair<
 {II}{model_type_from_element_name}(name)
 {I});
 {I}if (!model_type.has_value()) {{
-{II}return NoInstanceAndDeserializationErrorWithCause<
-{III}std::shared_ptr<T>
-{II}>(
+{II}return NoInstanceAndDeserializationErrorWithCause<ValueT>(
 {III}common::Concat(
-{III}L"Unexpected start element as its name does not correspond "
-{III}L"to any model type: ",
-{III}common::Utf8ToWstring(name)
+{IIII}L"Unexpected start element as its name does not correspond "
+{IIII}L"to any model type: ",
+{IIII}common::Utf8ToWstring(name)
 {III})
 {II});
 {I}}}
@@ -865,21 +1170,21 @@ std::pair<
 {I}reader.Read();
 
 {I}if (reader.node().kind() == xml_common::NodeKind::Error) {{
-{II}auto noInstanceAndError = NoInstanceAndDeserializationErrorFromReader<
-{III}std::shared_ptr<T>
+{II}auto no_instance_and_error = NoInstanceAndDeserializationErrorFromReader<
+{III}ValueT
 {II}>(
 {III}reader
 {II});
 
 {II}PrependElementSegmentToDeserializationError(
 {III}name,
-{III}*(noInstanceAndError.second)
+{III}*(no_instance_and_error.second)
 {II});
 
-{II}return noInstanceAndError;
+{II}return no_instance_and_error;
 {I}}}
 
-{I}common::optional<std::shared_ptr<T> > instance;
+{I}common::optional<ValueT> instance;
 {I}std::tie(
 {II}instance,
 {II}error
@@ -891,9 +1196,7 @@ std::pair<
 {III}*error
 {II});
 
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(std::move(*error));
+{II}return NoInstanceAndDeserializationError<ValueT>(std::move(*error));
 {I}}}
 
 {I}error = SkipWhitespace(reader);
@@ -903,9 +1206,7 @@ std::pair<
 {III}*error
 {II});
 
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(std::move(*error));
+{II}return NoInstanceAndDeserializationError<ValueT>(std::move(*error));
 {I}}}
 
 {I}if (!xml_common::IsStopNodeWithName(reader.node(), name)) {{
@@ -914,7 +1215,7 @@ std::pair<
 {IIII}L"Expected a stop element </",
 {IIII}common::Utf8ToWstring(name),
 {IIII}L"> closing an instance of ",
-{IIII}interface_name,
+{IIII}value_name,
 {IIII}L", but got ",
 {IIII}xml_common::NodeToHumanReadableWstring(reader.node())
 {III})
@@ -925,9 +1226,7 @@ std::pair<
 {III}*error
 {II});
 
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(std::move(*error));
+{II}return NoInstanceAndDeserializationError<ValueT>(std::move(*error));
 {I}}}
 
 {I}// NOTE (mristin):
@@ -941,13 +1240,70 @@ std::pair<
 {III}*error
 {II});
 
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(std::move(*error));
+{II}return NoInstanceAndDeserializationError<ValueT>(std::move(*error));
 {I}}}
 
 {I}return InstanceAndNoDeserializationError(
 {II}std::move(*instance)
+{I});
+}}"""
+    )
+
+
+def _generate_deserialize_sole_from_element() -> Stripped:
+    """
+    Generate the function to de-serialize a value whose element has a sole model type.
+
+    An interface with no concrete descendants of its own, and a concrete class
+    which nothing extends, can be opened by exactly one element. There is then
+    nothing to dispatch on, so we check the model type against the only one which
+    is admissible instead of generating a ``switch`` with a single case.
+
+    We take ``from_sequence`` as a plain function pointer, and not as a template
+    parameter the way the other combinators do, so that the dispatch lambda can
+    capture it by value -- a reference to a function cannot be captured by value,
+    and the pointer is what we would end up with anyway.
+    """
+    return Stripped(
+        f"""\
+template <typename ValueT>
+std::pair<
+{I}common::optional<ValueT>,
+{I}common::optional<DeserializationError>
+> DeserializeSoleFromElement(
+{I}xml_common::ReaderMergingText& reader,
+{I}const wchar_t* value_name,
+{I}types::ModelType expected_model_type,
+{I}std::pair<
+{II}common::optional<ValueT>,
+{II}common::optional<DeserializationError>
+{I}> (*from_sequence)(xml_common::ReaderMergingText&)
+) {{
+{I}return DeserializeFromElement<ValueT>(
+{II}reader,
+{II}value_name,
+{II}[value_name, expected_model_type, from_sequence](
+{III}xml_common::ReaderMergingText& a_reader,
+{III}types::ModelType a_model_type,
+{III}const std::string& a_name
+{II}) -> std::pair<
+{III}common::optional<ValueT>,
+{III}common::optional<DeserializationError>
+{II}> {{
+{III}if (a_model_type != expected_model_type) {{
+{IIII}return NoInstanceAndDeserializationErrorWithCause<ValueT>(
+{IIIII}common::Concat(
+{IIIIII}L"Impossible to de-serialize an instance of ",
+{IIIIII}value_name,
+{IIIIII}L" from <",
+{IIIIII}common::Utf8ToWstring(a_name),
+{IIIIII}L">"
+{IIIII})
+{IIII});
+{III}}}
+
+{III}return from_sequence(a_reader);
+{II}}}
 {I});
 }}"""
     )
@@ -964,13 +1320,57 @@ def _generate_class_from_element(
     We pass in the interface and function name instead of the class so that we can also
     generate the function for the most general ``IClass``.
     """
+    model_type_enum = cpp_naming.enum_name(Identifier("Model_type"))
+
+    value_type = Stripped(f"std::shared_ptr<types::{interface_name}>")
+
+    # NOTE (mristin):
+    # C++11 parses ``>>`` as two closing angle brackets, so ``optional<shared_ptr<X>>``
+    # would compile. We none the less separate them, as the rest of the generated
+    # code does, so that the whole file reads the same way.
+    value_type_in_optional = Stripped(f"common::optional<{value_type} >")
+
+    signature = Stripped(
+        f"""\
+std::pair<
+{I}common::optional<
+{II}{value_type}
+{I}>,
+{I}common::optional<DeserializationError>
+> {function_name}(
+{I}xml_common::ReaderMergingText& reader
+)"""
+    )
+
+    if len(concrete_classes) == 1:
+        cls = concrete_classes[0]
+
+        cls_from_sequence = cpp_naming.function_name(
+            Identifier(f"{cls.name}_from_sequence")
+        )
+
+        model_type_literal = cpp_naming.enum_literal_name(cls.name)
+
+        return Stripped(
+            f"""\
+{signature} {{
+{I}return DeserializeSoleFromElement<
+{II}{value_type}
+{I}>(
+{II}reader,
+{II}L"{interface_name}",
+{II}types::{model_type_enum}::{model_type_literal},
+{II}{cls_from_sequence}<types::{interface_name}>
+{I});
+}}"""
+        )
+
     case_blocks = []  # type: List[Stripped]
     for cls in concrete_classes:
         cls_from_sequence = cpp_naming.function_name(
             Identifier(f"{cls.name}_from_sequence")
         )
 
-        model_type_enum = cpp_naming.enum_name(Identifier("Model_type"))
         model_type_literal = cpp_naming.enum_literal_name(cls.name)
 
         case_blocks.append(
@@ -988,7 +1388,7 @@ case types::{model_type_enum}::{model_type_literal}:
             f"""\
 default:
 {I}return NoInstanceAndDeserializationErrorWithCause<
-{II}std::shared_ptr<types::{interface_name}>
+{II}{value_type}
 {I}>(
 {II}common::Concat(
 {III}L"Impossible to de-serialize an instance "
@@ -1002,21 +1402,12 @@ default:
 
     case_blocks_joined = "\n".join(case_blocks)
 
-    deserialize_class_from_element = cpp_naming.function_name(
-        Identifier("deserialize_class_from_element")
-    )
-
     return Stripped(
         f"""\
-std::pair<
-{I}common::optional<
-{II}std::shared_ptr<types::{interface_name}>
-{I}>,
-{I}common::optional<DeserializationError>
-> {function_name}(
-{I}xml_common::ReaderMergingText& reader
-) {{
-{I}return {deserialize_class_from_element}<types::{interface_name}>(
+{signature} {{
+{I}return DeserializeFromElement<
+{II}{value_type}
+{I}>(
 {II}reader,
 {II}L"{interface_name}",
 {II}[](
@@ -1024,175 +1415,13 @@ std::pair<
 {III}types::ModelType a_model_type,
 {III}const std::string& a_name
 {II}) -> std::pair<
-{III}common::optional<std::shared_ptr<types::{interface_name}> >,
+{III}{value_type_in_optional},
 {III}common::optional<DeserializationError>
 {II}> {{
 {III}switch (a_model_type) {{
 {IIII}{indent_but_first_line(case_blocks_joined, IIII)}
 {III}}}
 {II}}}
-{I});
-}}"""
-    )
-
-
-def _generate_deserialize_union_from_element_generic() -> Stripped:
-    """
-    Generate a generic function to de-serialize a named union from an element.
-
-    This mirrors :py:func:`_generate_deserialize_class_from_element_generic`,
-    but returns ``optional<VariantT>`` directly instead of
-    ``optional<shared_ptr<T>>`` -- a named union is a ``std::variant``, not
-    a polymorphic pointer, so there is no pointer to wrap. The dispatch
-    lambda supplied by the caller is responsible for constructing the right
-    variant alternative.
-    """
-    model_type_from_element_name = cpp_naming.function_name(
-        Identifier("model_type_from_element_name")
-    )
-
-    return Stripped(
-        f"""\
-template <typename VariantT, typename DispatchT>
-std::pair<
-{I}common::optional<VariantT>,
-{I}common::optional<DeserializationError>
-> DeserializeUnionFromElement(
-{I}xml_common::ReaderMergingText& reader,
-{I}const std::wstring& union_name,
-{I}const DispatchT& dispatch
-) {{
-{I}#ifdef DEBUG
-{I}if (reader.node().kind() == xml_common::NodeKind::Error) {{
-{II}throw std::logic_error(
-{III}"Unexpected unhandled XML error in DeserializeUnionFromElement. "
-{III}"DeserializeUnionFromElement expects no reader error at entry."
-{II});
-{I}}}
-{I}#endif
-
-{I}common::optional<DeserializationError> error;
-
-{I}error = SkipBof(reader);
-{I}if (error.has_value()) {{
-{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
-{I}}}
-
-{I}error = SkipWhitespace(reader);
-{I}if (error.has_value()) {{
-{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
-{I}}}
-
-{I}if (reader.node().kind() != xml_common::NodeKind::Start) {{
-{II}return NoInstanceAndDeserializationErrorWithCause<VariantT>(
-{III}common::Concat(
-{IIII}L"Expected a start element opening an instance of ",
-{IIII}union_name,
-{IIII}L", but got ",
-{IIII}xml_common::NodeToHumanReadableWstring(reader.node())
-{III})
-{II});
-{I}}}
-
-{I}const std::string name(
-{II}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-{III}const xml_common::StartNode&
-{II}>(reader.node()).name
-{I});
-
-{I}common::optional<types::ModelType> model_type(
-{II}{model_type_from_element_name}(name)
-{I});
-{I}if (!model_type.has_value()) {{
-{II}return NoInstanceAndDeserializationErrorWithCause<VariantT>(
-{III}common::Concat(
-{IIII}L"Unexpected start element as its name does not correspond "
-{IIII}L"to any model type: ",
-{IIII}common::Utf8ToWstring(name)
-{III})
-{II});
-{I}}}
-
-{I}// NOTE (mristin):
-{I}// We consume the start element.
-{I}reader.Read();
-
-{I}if (reader.node().kind() == xml_common::NodeKind::Error) {{
-{II}auto noInstanceAndError = NoInstanceAndDeserializationErrorFromReader<
-{III}VariantT
-{II}>(
-{III}reader
-{II});
-
-{II}PrependElementSegmentToDeserializationError(
-{III}name,
-{III}*(noInstanceAndError.second)
-{II});
-
-{II}return noInstanceAndError;
-{I}}}
-
-{I}common::optional<VariantT> instance;
-{I}std::tie(
-{II}instance,
-{II}error
-{I}) = dispatch(reader, *model_type, name);
-
-{I}if (error.has_value()) {{
-{II}PrependElementSegmentToDeserializationError(
-{III}name,
-{III}*error
-{II});
-
-{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
-{I}}}
-
-{I}error = SkipWhitespace(reader);
-{I}if (error.has_value()) {{
-{II}PrependElementSegmentToDeserializationError(
-{III}name,
-{III}*error
-{II});
-
-{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
-{I}}}
-
-{I}if (!xml_common::IsStopNodeWithName(reader.node(), name)) {{
-{II}error = DeserializationError(
-{III}common::Concat(
-{IIII}L"Expected a stop element </",
-{IIII}common::Utf8ToWstring(name),
-{IIII}L"> closing an instance of ",
-{IIII}union_name,
-{IIII}L", but got ",
-{IIII}xml_common::NodeToHumanReadableWstring(reader.node())
-{III})
-{II});
-
-{II}PrependElementSegmentToDeserializationError(
-{III}name,
-{III}*error
-{II});
-
-{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
-{I}}}
-
-{I}// NOTE (mristin):
-{I}// We consume the stop element.
-{I}reader.Read();
-{I}if (reader.node().kind() == xml_common::NodeKind::Error) {{
-{II}error = DeserializationErrorFromReader(reader);
-
-{II}PrependElementSegmentToDeserializationError(
-{III}name,
-{III}*error
-{II});
-
-{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
-{I}}}
-
-{I}return InstanceAndNoDeserializationError(
-{II}std::move(*instance)
 {I});
 }}"""
     )
@@ -1264,7 +1493,7 @@ def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
 
     The implementer's own properties are read directly through its
     ``*FromSequence`` function (no separate start/stop element -- the outer
-    ``DeserializeUnionFromElement`` already consumed those), and the
+    ``DeserializeFromElement`` already consumed those), and the
     resulting pair is wrapped into the union's ``std::variant`` in one call
     via :py:func:`_generate_wrap_deserialized_as_variant_function`.
     """
@@ -1347,7 +1576,7 @@ std::pair<
 > {function_name}(
 {I}xml_common::ReaderMergingText& reader
 ) {{
-{I}return DeserializeUnionFromElement<types::{union_name}>(
+{I}return DeserializeFromElement<types::{union_name}>(
 {II}reader,
 {II}L"{union_name}",
 {II}[](
@@ -2465,6 +2694,10 @@ def _generate_property_enums_from_strings(
     for cls in symbol_table.concrete_classes:
         enum_name = cpp_naming.enum_name(Identifier(f"Of_{cls.name}"))
 
+        # NOTE (mristin):
+        # We spell the values out, and keep them consecutive from zero, because
+        # ``ReadProperties`` indexes its bit set of the properties seen so far by
+        # the literal.
         literals = []  # type: List[Stripped]
         for i, prop in enumerate(cls.properties):
             literal_name = cpp_naming.enum_literal_name(prop.name)
@@ -2472,14 +2705,23 @@ def _generate_property_enums_from_strings(
 
         literals_joined = ",\n".join(literals)
 
-        result.append(
-            Stripped(
-                f"""\
+        if len(literals) == 0:
+            result.append(
+                Stripped(
+                    f"""\
+enum class {enum_name} : std::uint32_t {{
+}};  // enum class {enum_name}"""
+                )
+            )
+        else:
+            result.append(
+                Stripped(
+                    f"""\
 enum class {enum_name} : std::uint32_t {{
 {I}{indent_but_first_line(literals_joined, I)}
 }};  // enum class {enum_name}"""
+                )
             )
-        )
 
     for cls in symbol_table.concrete_classes:
         enum_name = cpp_naming.enum_name(Identifier(f"Of_{cls.name}"))
@@ -2503,17 +2745,39 @@ enum class {enum_name} : std::uint32_t {{
 
         items_joined = ",\n".join(items)
 
+        property_count_name = cpp_naming.constant_name(
+            Identifier(f"property_count_of_{cls.name}")
+        )
+
         result.append(
             Stripped(
                 f"""\
+const std::size_t {property_count_name} = {len(cls.properties)};"""
+            )
+        )
+
+        if len(items) == 0:
+            result.append(
+                Stripped(
+                    f"""\
+const std::unordered_map<
+{I}std::string,
+{I}{enum_name}
+> {map_name};"""
+                )
+            )
+        else:
+            result.append(
+                Stripped(
+                    f"""\
 const std::unordered_map<
 {I}std::string,
 {I}{enum_name}
 > {map_name} = {{
 {I}{indent_but_first_line(items_joined, I)}
 }};"""
+                )
             )
-        )
 
     result.append(Stripped("}  // namespace properties"))
 
@@ -2629,22 +2893,12 @@ def _xml_deserialize_item_expr(
     raise AssertionError("Should not have gotten here")
 
 
-def _generate_deserialize_list_property(
+def _generate_deserialize_list_expr(
     prop: intermediate.Property,
 ) -> Stripped:
-    """
-    Generate the de-serialization snippet for a property annotated with a list type.
-
-    Return the code as well as whether the snippet needs a proper scope as it will
-    define its own variables.
-    """
+    """Generate the expression reading a property annotated with a list type."""
     type_anno = intermediate.beneath_optional(prop.type_annotation)
     assert isinstance(type_anno, intermediate.ListTypeAnnotation)
-
-    # NOTE (mristin):
-    # The variable corresponding to the list property is an optional std::vector.
-
-    var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
 
     item_type = cpp_common.generate_type(
         type_annotation=type_anno.items, types_namespace=cpp_common.TYPES_NAMESPACE
@@ -2663,23 +2917,20 @@ def _generate_deserialize_list_property(
 
     return Stripped(
         f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = DeserializeList<
+DeserializeList<
 {I}{indent_but_first_line(item_type, I)}
 >(
 {I}reader,
 {I}{indent_but_first_line(deserialize_item_expr, I)}
-);"""
+)"""
     )
 
 
-def _generate_deserialize_tuple_property(
+def _generate_deserialize_tuple_expr(
     prop: intermediate.Property,
 ) -> Stripped:
     """
-    Generate the de-serialization snippet for a property annotated with a tuple type.
+    Generate the expression reading a property annotated with a tuple type.
 
     Non-class items are wrapped in ``<v1>``, ``<v2>``, *etc.* elements (1-based),
     while class items are de-serialized directly from their own element, mirroring
@@ -2690,8 +2941,6 @@ def _generate_deserialize_tuple_property(
     """
     type_anno = intermediate.beneath_optional(prop.type_annotation)
     assert isinstance(type_anno, intermediate.TupleTypeAnnotation)
-
-    var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
 
     item_types = []  # type: List[Stripped]
     item_exprs = []  # type: List[Stripped]
@@ -2724,46 +2973,32 @@ def _generate_deserialize_tuple_property(
 
     return Stripped(
         f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {function_name}<
+{function_name}<
 {I}{indent_but_first_line(item_types_joined, I)}
 >(
 {I}reader,
 {I}{indent_but_first_line(item_exprs_joined, I)}
-);"""
+)"""
     )
 
 
-def _generate_deserialize_property(
+def _generate_deserialize_property_expr(
     prop: intermediate.Property,
 ) -> Stripped:
     """
-    Generate the de-serialization snippet for the given property.
+    Generate the expression reading the content of the given property.
 
-    The ``ok_type`` denotes the type of the return value if no errors. This includes
-    upcast template parameter if the class contains ancestors.
+    The expression evaluates to a pair of the optional value and the optional
+    error, which :py:func:`_generate_from_sequence` hands over to ``ReadInto``.
     """
-    # NOTE (mristin):
-    # The variable ``name`` denotes the start element opening the property.
-
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
     primitive_type = intermediate.try_primitive_type(type_anno)
 
-    var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
-
     if primitive_type is not None:
         deserialize_function = _PRIMITIVE_TYPE_TO_DESERIALIZE[primitive_type]
 
-        return Stripped(
-            f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {deserialize_function}(reader);"""
-        )
+        return Stripped(f"{deserialize_function}(reader)")
 
     else:
         if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
@@ -2775,13 +3010,7 @@ std::tie(
                     Identifier(f"deserialize_{type_anno.our_type.name}")
                 )
 
-                return Stripped(
-                    f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {deserialize_function}(reader);"""
-                )
+                return Stripped(f"{deserialize_function}(reader)")
 
             elif isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive):
                 raise AssertionError("Expected to handle this case before")
@@ -2796,27 +3025,19 @@ std::tie(
                     )
 
                     interface_name = cpp_naming.interface_name(type_anno.our_type.name)
+
                     return Stripped(
                         f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {from_sequence_name}<
+{from_sequence_name}<
 {I}types::{interface_name}
->(reader);"""
+>(reader)"""
                     )
                 else:
                     from_element_name = cpp_naming.function_name(
                         Identifier(f"{type_anno.our_type.name}_from_element")
                     )
 
-                    return Stripped(
-                        f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {from_element_name}(reader);"""
-                    )
+                    return Stripped(f"{from_element_name}(reader)")
 
             elif isinstance(type_anno.our_type, intermediate.NamedUnion):
                 # NOTE (mristin):
@@ -2827,26 +3048,18 @@ std::tie(
                     Identifier(f"{type_anno.our_type.name}_from_element")
                 )
 
-                return Stripped(
-                    f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {from_element_name}(reader);"""
-                )
+                return Stripped(f"{from_element_name}(reader)")
 
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno.our_type)
 
         elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-            return _generate_deserialize_list_property(
-                prop=prop,
-            )
+            return _generate_deserialize_list_expr(prop=prop)
+
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            return _generate_deserialize_tuple_property(
-                prop=prop,
-            )
+            return _generate_deserialize_tuple_expr(prop=prop)
+
         elif isinstance(
             type_anno,
             (
@@ -2857,16 +3070,13 @@ std::tie(
         ):
             deserialize_function = _xml_json_deserialize_function_for(type_anno)
 
-            return Stripped(
-                f"""\
-std::tie(
-{I}{var_name},
-{I}error
-) = {deserialize_function}(reader);"""
-            )
+            return Stripped(f"{deserialize_function}(reader)")
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno)
+
+    raise AssertionError("Should not have gotten here")
 
 
 def _generate_from_sequence(
@@ -2874,34 +3084,14 @@ def _generate_from_sequence(
 ) -> Stripped:
     """Generate the de-serialization of a sequence of XML elements as properties."""
     function_name = cpp_naming.function_name(Identifier(f"{cls.name}_from_sequence"))
-
-    blocks = [
-        Stripped(
-            f"""\
-#ifdef DEBUG
-if (reader.node().kind() == xml_common::NodeKind::Error) {{
-{I}throw std::logic_error(
-{II}"Unexpected unhandled XML error in {function_name}. "
-{II}"{function_name} expects no reader error at entry."
-{I});
-}}
-#endif"""
-        ),
-        Stripped("common::optional<DeserializationError> error;"),
-        Stripped(
-            f"""\
-error = SkipBof(reader);
-if (error.has_value()) {{
-{I}return NoInstanceAndDeserializationError<
-{II}std::shared_ptr<T>
-{I}>(
-{II}std::move(*error)
-{I});
-}}"""
-        ),
-    ]  # type: List[Stripped]
-
     interface_name = cpp_naming.interface_name(cls.name)
+    prop_enum_name = cpp_naming.enum_name(Identifier(f"Of_{cls.name}"))
+    map_name = cpp_naming.constant_name(Identifier(f"map_of_{cls.name}"))
+    property_count_name = cpp_naming.constant_name(
+        Identifier(f"property_count_of_{cls.name}")
+    )
+
+    blocks = []  # type: List[Stripped]
 
     # region Initialization
     if len(cls.properties) > 0:
@@ -2938,209 +3128,74 @@ common::optional<
         blocks.append(Stripped("// endregion Initialization"))
     # endregion
 
-    # region Case blocks for respective properties
+    # region Read the properties
     case_blocks = []  # type: List[Stripped]
 
-    prop_enum_name = cpp_naming.enum_name(Identifier(f"Of_{cls.name}"))
-
     for prop in cls.properties:
-        code = _generate_deserialize_property(prop=prop)
+        read_expr = _generate_deserialize_property_expr(prop=prop)
 
         prop_literal = cpp_naming.enum_literal_name(prop.name)
 
         var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
 
-        # NOTE (mristin):
-        # An engaged optional can only have been set by an earlier turn of
-        # the property loop, so it tells us that the property comes a second time.
-        # The check precedes the read, so the duplicate is refused without its
-        # content ever being looked at.
         case_blocks.append(
             Stripped(
                 f"""\
-case properties::{prop_enum_name}::{prop_literal}: {{
-{I}if ({var_name}.has_value()) {{
-{II}error = DuplicatePropertyError(name);
-{II}break;
-{I}}}
-
-{I}{indent_but_first_line(code, I)}
-{I}break;
-}}"""
+case properties::{prop_enum_name}::{prop_literal}:
+{I}return ReadInto(
+{II}{var_name},
+{II}{indent_but_first_line(read_expr, II)}
+{I});"""
             )
         )
 
+    # NOTE (mristin):
+    # The ``switch`` covers all the literals of the enumeration, so we can only
+    # get to the ``default`` if the value has been corrupted.
     case_blocks.append(
         Stripped(
             f"""\
 default:
-{I}throw std::logic_error(
-{II}common::Concat(
-{III}"Unexpected properties literal of "
-{III}"properties::{prop_enum_name}: ",
-{III}std::to_string(
-{IIII}static_cast<uint32_t>(property)
-{III})
-{II})
+{I}throw UnexpectedPropertyLiteralError(
+{II}"properties::{prop_enum_name}",
+{II}property
 {I});"""
         )
     )
-    # endregion
 
-    # region While loop
     case_blocks_joined = "\n".join(case_blocks)
-
-    map_name = cpp_naming.constant_name(Identifier(f"map_of_{cls.name}"))
 
     blocks.append(
         Stripped(
             f"""\
-while (true) {{
-{I}error = SkipWhitespace(reader);
-{I}if (error.has_value()) {{
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(
-{III}std::move(*error)
-{II});
-{I}}}
+common::optional<DeserializationError> error(
+{I}ReadProperties<
+{II}properties::{property_count_name}
+{I}>(
+{II}reader,
+{II}properties::{map_name},
+{II}L"{interface_name}",
+{II}[&](
+{III}properties::{prop_enum_name} property
+{II}) -> common::optional<DeserializationError> {{
+{III}switch (property) {{
+{IIII}{indent_but_first_line(case_blocks_joined, IIII)}
+{III}}}
+{II}}}
+{I})
+);"""
+        )
+    )
 
-{I}if (reader.node().kind() == xml_common::NodeKind::Stop) {{
-{II}// NOTE (mristin):
-{II}// We reached a closing element of an instance, so we know that
-{II}// the sequence ended.
-{II}break;
-{I}}} else if (reader.node().kind() != xml_common::NodeKind::Start) {{
-{II}return NoInstanceAndDeserializationErrorWithCause<
-{III}std::shared_ptr<T>
-{II}>(
-{III}common::Concat(
-{IIII}L"Expected a start element opening a property "
-{IIII}L"of {interface_name}, but got ",
-{IIII}xml_common::NodeToHumanReadableWstring(reader.node())
-{III})
-{II});
-{I}}}
-
-{I}const std::string name(
-{II}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-{III}const xml_common::StartNode&
-{II}>(reader.node()).name
+    blocks.append(
+        Stripped(
+            f"""\
+if (error.has_value()) {{
+{I}return NoInstanceAndDeserializationError<
+{II}std::shared_ptr<T>
+{I}>(
+{II}std::move(*error)
 {I});
-
-{I}// NOTE (mristin):
-{I}// We consume the start element.
-{I}reader.Read();
-
-{I}if (reader.node().kind() == xml_common::NodeKind::Error) {{
-{II}error = DeserializationErrorFromReader(reader);
-
-{II}PrependElementSegmentToDeserializationError(
-{III}name,
-{III}*error
-{II});
-
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(
-{III}std::move(*error)
-{II});
-{I}}}
-
-{I}auto it = properties::{map_name}.find(
-{II}name
-{I});
-{I}if (it == properties::{map_name}.end()) {{
-{II}return NoInstanceAndDeserializationErrorWithCause<
-{III}std::shared_ptr<T>
-{II}>(
-{III}common::Concat(
-{IIII}L"Expected a start element opening a property "
-{IIII}L"of {interface_name}, "
-{IIII}L"but got a start element "
-{IIII}L"which does not correspond to any of its properties: <",
-{IIII}common::Utf8ToWstring(name),
-{IIII}L">"
-{III})
-{II});
-{I}}}
-
-{I}const properties::{prop_enum_name} property(
-{II}it->second
-{I});
-
-{I}switch (property) {{
-{II}{indent_but_first_line(case_blocks_joined, II)}
-{I}}}
-
-{I}if (error.has_value()) {{
-{II}PrependElementSegmentToDeserializationError(
-{III}name,
-{III}*error
-{II});
-
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(
-{III}std::move(*error)
-{II});
-{I}}}
-
-{I}error = SkipWhitespace(reader);
-{I}if (error.has_value()) {{
-{II}PrependElementSegmentToDeserializationError(
-{III}name,
-{III}*error
-{II});
-
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(
-{III}std::move(*error)
-{II});
-{I}}}
-
-{I}if (!xml_common::IsStopNodeWithName(reader.node(), name)) {{
-{II}error = DeserializationError(
-{III}common::Concat(
-{IIII}L"Expected a stop element </",
-{IIII}common::Utf8ToWstring(name),
-{IIII}L"> closing the property "
-{IIII}L"of {interface_name}, but got ",
-{IIII}xml_common::NodeToHumanReadableWstring(reader.node())
-{III})
-{II});
-
-{II}PrependElementSegmentToDeserializationError(
-{III}name,
-{III}*error
-{II});
-
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(
-{III}std::move(*error)
-{II});
-{I}}}
-
-{I}// NOTE (mristin):
-{I}// We consume the stop element.
-{I}reader.Read();
-
-{I}if (reader.node().kind() == xml_common::NodeKind::Error) {{
-{II}error = DeserializationErrorFromReader(reader);
-
-{II}PrependElementSegmentToDeserializationError(
-{III}name,
-{III}*error
-{II});
-
-{II}return NoInstanceAndDeserializationError<
-{III}std::shared_ptr<T>
-{II}>(
-{III}std::move(*error)
-{II});
-{I}}}
 }}"""
         )
     )
@@ -3265,26 +3320,25 @@ std::pair<
     )
 
 
-def _generate_deserialize_from(
-    function_name: Identifier, from_element_name: Identifier, value_type: Stripped
-) -> Stripped:
+def _generate_deserialize_from_generic() -> Stripped:
     """
-    Generate the impl. of a public de-serialization for a value type.
+    Generate the generic implementation behind the public ``*From`` functions.
 
-    We deliberately do not pass in a class or named union object, and pass
-    names/the value type instead, in order to be able to generate the
-    function both for the most abstract ``IClass``, the classes defined in
-    the symbol table, and the named unions (whose value type is a
-    ``std::variant``, not a ``shared_ptr``-wrapped interface).
+    Every public de-serialization function opens the reader over the stream,
+    de-serializes a single value from the root element and checks that nothing
+    but whitespace follows it. Only the value type and the function reading
+    the element differ, so we generate that framing exactly once.
     """
     return Stripped(
         f"""\
+template <typename ValueT, typename FromElementT>
 common::expected<
-{I}{indent_but_first_line(value_type, I)},
+{I}ValueT,
 {I}DeserializationError
-> {function_name}(
+> DeserializeFrom(
 {I}std::istream& is,
-{I}const ReadingOptions& options
+{I}const ReadingOptions& options,
+{I}const FromElementT& from_element
 ) {{
 {I}xml_common::ReaderMergingText reader(
 {II}is,
@@ -3299,16 +3353,13 @@ common::expected<
 {II});
 {I}}}
 
-{I}common::optional<
-{II}{indent_but_first_line(value_type, II)}
-{I}> instance;
-
+{I}common::optional<ValueT> instance;
 {I}common::optional<DeserializationError> error;
 
 {I}std::tie(
 {II}instance,
 {II}error
-{I}) = {from_element_name}(reader);
+{I}) = from_element(reader);
 
 {I}if (error.has_value()) {{
 {II}return common::make_unexpected(
@@ -3331,6 +3382,38 @@ common::expected<
 {I}}}
 
 {I}return std::move(*instance);
+}}"""
+    )
+
+
+def _generate_deserialize_from(
+    function_name: Identifier, from_element_name: Identifier, value_type: Stripped
+) -> Stripped:
+    """
+    Generate the impl. of a public de-serialization for a value type.
+
+    We deliberately do not pass in a class or named union object, and pass
+    names/the value type instead, in order to be able to generate the
+    function both for the most abstract ``IClass``, the classes defined in
+    the symbol table, and the named unions (whose value type is a
+    ``std::variant``, not a ``shared_ptr``-wrapped interface).
+    """
+    return Stripped(
+        f"""\
+common::expected<
+{I}{indent_but_first_line(value_type, I)},
+{I}DeserializationError
+> {function_name}(
+{I}std::istream& is,
+{I}const ReadingOptions& options
+) {{
+{I}return DeserializeFrom<
+{II}{indent_but_first_line(value_type, II)}
+{I}>(
+{II}is,
+{II}options,
+{II}{from_element_name}
+{I});
 }}"""
     )
 
@@ -5052,6 +5135,7 @@ def generate_implementation(
 {xml_rpc_include}\
 
 #pragma warning(push, 0)
+#include <bitset>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -5080,7 +5164,10 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
         *_generate_instance_and_error_factories_and_manipulations(),
         _generate_skip_bof(),
         *_generate_skip_whitespace(),
-        _generate_deserialize_class_from_element_generic(),
+        _generate_unexpected_property_literal_error(),
+        _generate_read_properties(),
+        _generate_deserialize_from_element_generic(),
+        _generate_deserialize_sole_from_element(),
         _generate_class_from_element(
             interface_name=Identifier("IClass"),
             function_name=cpp_naming.function_name(Identifier("class_from_element")),
@@ -5089,7 +5176,6 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
     ]
 
     if len(symbol_table.named_unions) > 0:
-        blocks.append(_generate_deserialize_union_from_element_generic())
         blocks.append(_generate_wrap_deserialized_as_variant_function())
 
     for cls in symbol_table.classes:
@@ -5154,10 +5240,15 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
     for enumeration in symbol_table.enumerations:
         blocks.append(_generate_deserialize_enumeration(enumeration))
 
+    if any(len(cls.properties) > 0 for cls in symbol_table.concrete_classes):
+        blocks.append(_generate_read_into())
+
     blocks.extend(_generate_property_enums_from_strings(symbol_table=symbol_table))
 
     for concrete_cls in symbol_table.concrete_classes:
         blocks.append(_generate_from_sequence(cls=concrete_cls))
+
+    blocks.append(_generate_deserialize_from_generic())
 
     blocks.append(
         _generate_deserialize_from(
