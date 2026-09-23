@@ -246,6 +246,17 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[List[_Token]]
             )
         ], None
 
+    def transform_reference_to_verification_function_in_doc(
+        self, element: intermediate_doc.ReferenceToVerificationFunction
+    ) -> Tuple[Optional[List[_Token]], Optional[List[str]]]:
+        name = java_naming.method_name(element.verification.name)
+
+        return [
+            _TokenText(
+                f"{{@link {self.context.root_package}.verification.Verification#{name}}}"
+            )
+        ], None
+
     def transform_literal(
         self, element: docutils.nodes.literal
     ) -> Tuple[Optional[List[_Token]], Optional[List[str]]]:
