@@ -198,31 +198,22 @@ std::wstring Path::ToWstring() const {
 
 // endregion Pathing
 
-// region Non-recursive iteration
+namespace {
+
+// region Iteration over the instances
 
 /**
- * This iterator is always done as ISomeItem
- * references no other instances.
+ * Iterate over no instances at all.
  */
-class IteratorOverSomeItem : public impl::IIterator {
+class EmptyIterator : public impl::IIterator {
  public:
-  IteratorOverSomeItem(
-    const std::shared_ptr<types::IClass>&
-  ) {
-    // Intentionally empty.
-  }
-
   void Start() override {
     // Intentionally empty.
   }
 
   void Next() override {
     throw std::logic_error(
-      "You want to move "
-      "an IteratorOverSomeItem, "
-      "but the iterator is always done as "
-      "ISomeItem "
-      "references no other instances."
+      "You want to move an EmptyIterator, but it is always done."
     );
   }
 
@@ -232,885 +223,508 @@ class IteratorOverSomeItem : public impl::IIterator {
 
   const std::shared_ptr<types::IClass>& Get() const override {
     throw std::logic_error(
-      "You want to get from an IteratorOverSomeItem, "
-      "but the iterator is always done as "
-      "ISomeItem references "
-      "no other instances."
+      "You want to get an instance from an EmptyIterator, but it is always done."
     );
   }
 
-  long Index() const override {
-    return -1;
+  void AppendToPath(Path&) const override {
+    throw std::logic_error(
+      "You want to append the path of an EmptyIterator, but it is always done."
+    );
   }
 
   std::unique_ptr<impl::IIterator> Clone() const override {
-    return common::make_unique<IteratorOverSomeItem>(*this);
+    return common::make_unique<EmptyIterator>(*this);
   }
+};  // class EmptyIterator
 
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an IteratorOverSomeItem, "
-      "but the iterator is always done as "
-      "ISomeItem references "
-      "no other instances."
-    );
-  }
-
-  ~IteratorOverSomeItem() override = default;
-};  // class IteratorOverSomeItem
+std::unique_ptr<impl::IIterator> Empty() {
+  return common::make_unique<EmptyIterator>();
+}
 
 /**
- * This iterator is always done as IAnotherItem
- * references no other instances.
+ * \brief Iterate over the instances of the children, one child after another.
+ *
+ * A child is started only once the previous child is done.
  */
-class IteratorOverAnotherItem : public impl::IIterator {
+class ChainIterator : public impl::IIterator {
  public:
-  IteratorOverAnotherItem(
-    const std::shared_ptr<types::IClass>&
-  ) {
+  explicit ChainIterator(
+    std::vector<std::unique_ptr<impl::IIterator> > children
+  ) :
+    children_(std::move(children)),
+    active_(0) {
     // Intentionally empty.
   }
 
-  void Start() override {
-    // Intentionally empty.
-  }
-
-  void Next() override {
-    throw std::logic_error(
-      "You want to move "
-      "an IteratorOverAnotherItem, "
-      "but the iterator is always done as "
-      "IAnotherItem "
-      "references no other instances."
-    );
-  }
-
-  bool Done() const override {
-    return true;
-  }
-
-  const std::shared_ptr<types::IClass>& Get() const override {
-    throw std::logic_error(
-      "You want to get from an IteratorOverAnotherItem, "
-      "but the iterator is always done as "
-      "IAnotherItem references "
-      "no other instances."
-    );
-  }
-
-  long Index() const override {
-    return -1;
-  }
-
-  std::unique_ptr<impl::IIterator> Clone() const override {
-    return common::make_unique<IteratorOverAnotherItem>(*this);
-  }
-
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an IteratorOverAnotherItem, "
-      "but the iterator is always done as "
-      "IAnotherItem references "
-      "no other instances."
-    );
-  }
-
-  ~IteratorOverAnotherItem() override = default;
-};  // class IteratorOverAnotherItem
-
-// region Non-recursive iteration over ISomething
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverSomething : public impl::IIterator {
- public:
-  IteratorOverSomething(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverSomething() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::ISomething* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverSomething
-
-IteratorOverSomething::IteratorOverSomething(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::ISomething*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverSomething::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverSomething::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverSomething, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverSomething::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverSomething::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverSomething, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverSomething::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverSomething, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverSomething::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverSomething, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverSomething, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverSomething::Clone() const {
-  return common::make_unique<IteratorOverSomething>(*this);
-}
-
-void IteratorOverSomething::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        property_ = Property::kItems;
-
-        cursor_ = 0;
-        item_ = std::static_pointer_cast<types::IClass>(
-          std::get<0>(casted_->items())
-        );
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        cursor_ = 1;
-        item_ = std::static_pointer_cast<types::IClass>(
-          std::get<1>(casted_->items())
-        );
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        cursor_.reset();
-
-        property_ = Property::kTricky;
-
-        cursor_ = 1;
-        item_ = std::static_pointer_cast<types::IClass>(
-          std::get<1>(casted_->tricky())
-        );
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        cursor_ = 2;
-        item_ = std::static_pointer_cast<types::IClass>(
-          std::get<2>(casted_->tricky())
-        );
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        cursor_ = 3;
-        item_ = std::static_pointer_cast<types::IClass>(
-          std::get<3>(casted_->tricky())
-        );
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        cursor_.reset();
-
-        if (!(casted_->optional_pair().has_value())) {
-          state_ = 7;
-          continue;
-        }
-
-        property_ = Property::kOptionalPair;
-
-        cursor_ = 1;
-        item_ = std::static_pointer_cast<types::IClass>(
-          std::get<1>(*(casted_->optional_pair()))
-        );
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        cursor_.reset();
-      }
-
-      case 7: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 8;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+  ChainIterator(const ChainIterator& other) :
+    active_(other.active_) {
+    children_.reserve(other.children_.size());
+    for (const std::unique_ptr<impl::IIterator>& child : other.children_) {
+      children_.emplace_back(child->Clone());
     }
   }
-}
 
-// endregion
-
-/**
- * This iterator is always done.
- *
- * It is used for efficient comparisons against end-of-descent.
- */
-class AlwaysDoneIterator : public impl::IIterator {
- public:
   void Start() override {
-    // Intentionally empty.
+    active_ = 0;
+    if (!children_.empty()) {
+      children_[0]->Start();
+    }
+    SkipDoneChildren();
   }
 
   void Next() override {
-    throw std::logic_error(
-      "You want to move an AlwaysDoneIterator, "
-      "but the iterator is always done, as its name suggests."
-    );
+    children_[active_]->Next();
+    SkipDoneChildren();
   }
 
   bool Done() const override {
-    return true;
+    return active_ >= children_.size();
   }
 
   const std::shared_ptr<types::IClass>& Get() const override {
-    throw std::logic_error(
-      "You want to get from an AlwaysDoneIterator, "
-      "but the iterator is always done, as its name suggests."
-    );
+    return children_[active_]->Get();
   }
 
-  std::unique_ptr<IIterator> Clone() const override {
-    return common::make_unique<AlwaysDoneIterator>(*this);
-  };
-
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an AlwaysDoneIterator, "
-      "but the iterator is always done, as its name suggests."
-    );
+  void AppendToPath(Path& path) const override {
+    children_[active_]->AppendToPath(path);
   }
 
-  long Index() const override {
-    return -1;
+  std::unique_ptr<impl::IIterator> Clone() const override {
+    return common::make_unique<ChainIterator>(*this);
   }
 
-  ~AlwaysDoneIterator() override = default;
-};  // class AlwaysDoneIterator
+ private:
+  std::vector<std::unique_ptr<impl::IIterator> > children_;
+
+  /**
+   * Index of the child we currently iterate over
+   */
+  std::size_t active_;
+
+  /**
+   * Move on to the next children, and start them, until one is not done.
+   */
+  void SkipDoneChildren() {
+    while (active_ < children_.size() && children_[active_]->Done()) {
+      ++active_;
+      if (active_ < children_.size()) {
+        children_[active_]->Start();
+      }
+    }
+  }
+};  // class ChainIterator
+
+void CollectChildren(
+  std::vector<std::unique_ptr<impl::IIterator> >&
+) {
+  // Intentionally empty, as there are no more children to collect.
+}
+
+template<typename... Rest>
+void CollectChildren(
+  std::vector<std::unique_ptr<impl::IIterator> >& children,
+  std::unique_ptr<impl::IIterator> first,
+  Rest... rest
+) {
+  children.emplace_back(std::move(first));
+  CollectChildren(children, std::move(rest)...);
+}
+
+// NOTE (mristin):
+// We can not use an initializer list here, as we can not move the unique pointers
+// out of it.
+template<typename... Children>
+std::unique_ptr<impl::IIterator> Chain(
+  Children... children
+) {
+  std::vector<std::unique_ptr<impl::IIterator> > collected;
+  collected.reserve(sizeof...(Children));
+  CollectChildren(collected, std::move(children)...);
+
+  return common::make_unique<ChainIterator>(std::move(collected));
+}
 
 /**
- * Produce a non-recursive iterator over the instance given its runtime model type.
+ * Iterate over the instances of the \p child, which lives in a property.
  */
-std::unique_ptr<impl::IIterator> NewNonRecursiveIterator(
-  const std::shared_ptr<types::IClass>& instance
+class InPropertyIterator : public impl::IIterator {
+ public:
+  InPropertyIterator(
+    Property property,
+    std::unique_ptr<impl::IIterator> child
+  ) :
+    property_(property),
+    child_(std::move(child)) {
+    // Intentionally empty.
+  }
+
+  InPropertyIterator(const InPropertyIterator& other) :
+    property_(other.property_),
+    child_(other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const std::shared_ptr<types::IClass>& Get() const override {
+    return child_->Get();
+  }
+
+  void AppendToPath(Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<PropertySegment>(property_)
+    );
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<impl::IIterator> Clone() const override {
+    return common::make_unique<InPropertyIterator>(*this);
+  }
+
+ private:
+  Property property_;
+  std::unique_ptr<impl::IIterator> child_;
+};  // class InPropertyIterator
+
+std::unique_ptr<impl::IIterator> InProperty(
+  Property property,
+  std::unique_ptr<impl::IIterator> child
 ) {
-  switch (instance->model_type()) {
-    case types::ModelType::kSomeItem:
-      return common::make_unique<IteratorOverSomeItem>(
-        instance
-      );
-    case types::ModelType::kAnotherItem:
-      return common::make_unique<IteratorOverAnotherItem>(
-        instance
-      );
+  return common::make_unique<InPropertyIterator>(property, std::move(child));
+}
+
+/**
+ * Iterate over the instances of the \p child, which lives in a component of a tuple.
+ */
+class AtIndexIterator : public impl::IIterator {
+ public:
+  AtIndexIterator(
+    std::size_t index,
+    std::unique_ptr<impl::IIterator> child
+  ) :
+    index_(index),
+    child_(std::move(child)) {
+    // Intentionally empty.
+  }
+
+  AtIndexIterator(const AtIndexIterator& other) :
+    index_(other.index_),
+    child_(other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const std::shared_ptr<types::IClass>& Get() const override {
+    return child_->Get();
+  }
+
+  void AppendToPath(Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<IndexSegment>(index_)
+    );
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<impl::IIterator> Clone() const override {
+    return common::make_unique<AtIndexIterator>(*this);
+  }
+
+ private:
+  std::size_t index_;
+  std::unique_ptr<impl::IIterator> child_;
+};  // class AtIndexIterator
+
+std::unique_ptr<impl::IIterator> AtIndex(
+  std::size_t index,
+  std::unique_ptr<impl::IIterator> child
+) {
+  return common::make_unique<AtIndexIterator>(index, std::move(child));
+}
+
+/**
+ * \brief Iterate over a single instance.
+ *
+ * We keep a copy of the shared pointer, upcast to types::IClass, so that
+ * \ref Get can return a reference to it.
+ */
+class OneIterator : public impl::IIterator {
+ public:
+  explicit OneIterator(
+    std::shared_ptr<types::IClass> instance
+  ) :
+    instance_(std::move(instance)),
+    done_(true) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    done_ = false;
+  }
+
+  void Next() override {
+    done_ = true;
+  }
+
+  bool Done() const override {
+    return done_;
+  }
+
+  const std::shared_ptr<types::IClass>& Get() const override {
+    return instance_;
+  }
+
+  void AppendToPath(Path&) const override {
+    // Intentionally empty, as the instance itself is the end of the path.
+  }
+
+  std::unique_ptr<impl::IIterator> Clone() const override {
+    return common::make_unique<OneIterator>(*this);
+  }
+
+ private:
+  std::shared_ptr<types::IClass> instance_;
+  bool done_;
+};  // class OneIterator
+
+std::unique_ptr<impl::IIterator> One(
+  std::shared_ptr<types::IClass> instance
+) {
+  return common::make_unique<OneIterator>(std::move(instance));
+}
+
+/**
+ * \brief Iterate over the instances referenced from an instance, dispatched on
+ * its runtime type.
+ *
+ * Defined below, once all the classes have been covered.
+ */
+std::unique_ptr<impl::IIterator> DispatchOnModelType(
+  const types::IClass& instance,
+  bool recursive
+);
+
+/**
+ * \brief Iterate recursively over the instances referenced from an instance.
+ *
+ * We dispatch on the runtime type of the instance only in \ref Start so that
+ * we descend into the instance only once the iteration reaches it.
+ */
+class DispatchingIterator : public impl::IIterator {
+ public:
+  explicit DispatchingIterator(
+    const types::IClass* instance
+  ) :
+    instance_(instance) {
+    // Intentionally empty.
+  }
+
+  DispatchingIterator(const DispatchingIterator& other) :
+    instance_(other.instance_),
+    child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_ = DispatchOnModelType(*instance_, true);
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const std::shared_ptr<types::IClass>& Get() const override {
+    return child_->Get();
+  }
+
+  void AppendToPath(Path& path) const override {
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<impl::IIterator> Clone() const override {
+    return common::make_unique<DispatchingIterator>(*this);
+  }
+
+ private:
+  const types::IClass* instance_;
+  std::unique_ptr<impl::IIterator> child_;
+};  // class DispatchingIterator
+
+/**
+ * Iterate over the instances referenced from the \p instance, if \p recursive.
+ */
+std::unique_ptr<impl::IIterator> Over(
+  const types::IClass& instance,
+  bool recursive
+) {
+  if (!recursive) {
+    // NOTE (mristin):
+    // In the non-recursive mode, we iterate only over the instances referenced
+    // directly, but not over the instances which they reference in turn.
+    return Empty();
+  }
+
+  return common::make_unique<DispatchingIterator>(&instance);
+}
+
+/**
+ * Iterate over the \p instance, and then over the instances that it references.
+ */
+template<typename T>
+std::unique_ptr<impl::IIterator> OneThenOver(
+  const std::shared_ptr<T>& instance,
+  bool recursive
+) {
+  return Chain(One(instance), Over(*instance, recursive));
+}
+
+using tupleOf2_AbstractItem_AbstractItem = std::tuple<
+  std::shared_ptr<types::IAbstractItem>,
+  std::shared_ptr<types::IAbstractItem>
+>;
+
+using tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result = std::tuple<
+  int64_t,
+  std::shared_ptr<types::ISomeItem>,
+  std::shared_ptr<types::IAbstractItem>,
+  std::shared_ptr<types::ISomeItem>,
+  int64_t,
+  types::Result
+>;
+
+using tupleOf2_str_AbstractItem = std::tuple<
+  std::wstring,
+  std::shared_ptr<types::IAbstractItem>
+>;
+
+std::unique_ptr<impl::IIterator> Over_tupleOf2_AbstractItem_AbstractItem(
+  const tupleOf2_AbstractItem_AbstractItem& value,
+  bool recursive
+) {
+  return Chain(
+    AtIndex(0, OneThenOver(std::get<0>(value), recursive)),
+    AtIndex(1, OneThenOver(std::get<1>(value), recursive))
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result(
+  const tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result& value,
+  bool recursive
+) {
+  return Chain(
+    AtIndex(1, OneThenOver(std::get<1>(value), recursive)),
+    AtIndex(2, OneThenOver(std::get<2>(value), recursive)),
+    AtIndex(3, OneThenOver(std::get<3>(value), recursive))
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_tupleOf2_str_AbstractItem(
+  const tupleOf2_str_AbstractItem& value,
+  bool recursive
+) {
+  return AtIndex(1, OneThenOver(std::get<1>(value), recursive));
+}
+
+std::unique_ptr<impl::IIterator> Over_Something(
+  const types::ISomething& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kItems,
+      Over_tupleOf2_AbstractItem_AbstractItem(
+        that.items(),
+        recursive
+      )
+    ),
+    InProperty(
+      Property::kTricky,
+      Over_tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result(
+        that.tricky(),
+        recursive
+      )
+    ),
+    InProperty(
+      Property::kOptionalPair,
+      that.optional_pair().has_value()
+        ? Over_tupleOf2_str_AbstractItem(
+            (*that.optional_pair()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+/**
+ * \brief Iterate over the instances referenced from the \p instance,
+ * dispatched on its runtime type.
+ *
+ * If \p recursive, we iterate also over the instances which the referenced
+ * instances reference in turn.
+ */
+std::unique_ptr<impl::IIterator> DispatchOnModelType(
+  const types::IClass& instance,
+  bool recursive
+) {
+  switch (instance.model_type()) {
     case types::ModelType::kSomething:
-      return common::make_unique<IteratorOverSomething>(
-        instance
+      return Over_Something(
+        dynamic_cast<const types::ISomething&>(instance),
+        recursive
       );
     default:
-      throw std::logic_error(
-        common::Concat(
-          "Unexpected model type: ",
-          std::to_string(
-            static_cast<std::uint32_t>(instance->model_type())
-          )
-        )
-      );
+      // NOTE (mristin):
+      // The instances of the other classes reference no other instances.
+      return Empty();
   }
 }
 
-// endregion Non-recursive iteration
+// endregion Iteration over the instances
 
-// region Recursive iteration
-
-/**
- * Iterate recursively over the instance, including the instance in the iteration.
- *
- * This is a realisation of the following pseudo-code:
- * \code
- * stack = new Stack();
- * stack.push(instance);
- * while not stack.empty():
- *     instance = stack.pop()
- *     yield instance
- *
- *     it = new_non_recursive_iterator(instance)
- *     while not it.done():
- *         yield recursively from it.get()
- *         it.next()
- * \endcode
- */
-class RecursiveInclusiveIterator : public impl::IIterator {
- public:
-  RecursiveInclusiveIterator(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  RecursiveInclusiveIterator(
-    const RecursiveInclusiveIterator& other
-  );
-  RecursiveInclusiveIterator(
-    RecursiveInclusiveIterator&& other
-  );
-  RecursiveInclusiveIterator& operator=(
-    const RecursiveInclusiveIterator& other
-  );
-  RecursiveInclusiveIterator& operator=(
-    RecursiveInclusiveIterator&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~RecursiveInclusiveIterator() override = default;
-
- private:
-  // The instance_ needs to be a pointer so that we can re-assign it in
-  // the constructors and assignment operations.
-  const std::shared_ptr<types::IClass>* instance_;
-
-  // Iterator over the instances referenced from this instance
-  // in the outer loop
-  std::unique_ptr<impl::IIterator> non_recursive_iterator_;
-
-  // Iterator for recursion into the reference referenced from this instance
-  // in the inner loop
-  std::unique_ptr<impl::IIterator> recursive_iterator_;
-
-  const std::shared_ptr<types::IClass>* item_;
-
-  bool done_;
-  long index_;
-  size_t state_;
-
-  void Execute();
-};  // class RecursiveInclusiveIterator
-
-/**
- * Iterate recursively over the instance, excluding the instance in the iteration.
- *
- * This is a realisation of the following pseudo-code:
- * \code
- * stack = new Stack();
- * stack.push(instance);
- * while not stack.empty():
- *     some_instance = stack.pop()
- *     if some_instance is not instance:
- *         yield some_instance
- *
- *     it = new_non_recursive_iterator(some_instance)
- *     while not it.done():
- *         yield recursively from it.get()
- *         it.next()
- * \endcode
- */
-class RecursiveExclusiveIterator : public impl::IIterator {
- public:
-  RecursiveExclusiveIterator(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~RecursiveExclusiveIterator() override = default;
-
- private:
-  RecursiveInclusiveIterator inclusive_iterator_;
-};  // class RecursiveExclusiveIterator
-
-// region RecursiveInclusiveIterator implementation
-
-RecursiveInclusiveIterator::RecursiveInclusiveIterator(
-  const std::shared_ptr<types::IClass>& instance
-) : instance_(&instance), item_(nullptr), index_(-1) {
-  // Intentionally empty.
-}
-
-RecursiveInclusiveIterator::RecursiveInclusiveIterator(
-  const RecursiveInclusiveIterator& other
-) {
-  instance_ = other.instance_;
-  non_recursive_iterator_ = (other.non_recursive_iterator_ == nullptr)
-    ? nullptr
-    : other.non_recursive_iterator_->Clone();
-  recursive_iterator_ = (other.recursive_iterator_ == nullptr)
-    ? nullptr
-    : other.recursive_iterator_->Clone();
-  item_ = other.item_;
-  done_ = other.done_;
-  index_ = other.index_;
-  state_ = other.state_;
-}
-
-RecursiveInclusiveIterator::RecursiveInclusiveIterator(
-  RecursiveInclusiveIterator&& other
-) {
-  instance_ = other.instance_;
-  non_recursive_iterator_ = std::move(other.non_recursive_iterator_);
-  recursive_iterator_ = std::move(other.recursive_iterator_);
-  item_ = other.item_;
-  done_ = other.done_;
-  index_ = other.index_;
-  state_ = other.state_;
-}
-
-RecursiveInclusiveIterator& RecursiveInclusiveIterator::operator=(
-  const RecursiveInclusiveIterator& other
-) {
-  return *this = RecursiveInclusiveIterator(other);
-}
-
-RecursiveInclusiveIterator& RecursiveInclusiveIterator::operator=(
-  RecursiveInclusiveIterator&& other
-) {
-  if (this != &other) {
-    instance_ = other.instance_;
-    non_recursive_iterator_ = std::move(other.non_recursive_iterator_);
-    recursive_iterator_ = std::move(other.recursive_iterator_);
-    item_ = other.item_;
-    done_ = other.done_;
-    index_ = other.index_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void RecursiveInclusiveIterator::Start() {
-  state_ = 0;
-  Execute();
-
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "Expected RecursiveInclusiveIterator not to be done at start, but it was."
-    );
-  }
-
-  if (Index() != 0) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected RecursiveInclusiveIterator::Index() to be 0 on Start()"
-        ", but got ",
-        std::to_string(Index())
-      )
-    );
-  }
-
-  const std::shared_ptr<types::IClass>& current_item(Get());
-  if (current_item == nullptr) {
-    throw std::logic_error(
-      "Unexpected null pointer from Get() at the end of "
-      "RecursiveInclusiveIterator::Start"
-    );
-  }
-
-  if (current_item.get() != instance_->get()) {
-    throw std::logic_error(
-      "Expected the current item to point to the instance "
-      "at the end of RecursiveInclusiveIterator::Start, "
-      "but Get() pointed to a different instance."
-    );
-  }
-  #endif
-}
-
-void RecursiveInclusiveIterator::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a RecursiveInclusiveIterator, but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool RecursiveInclusiveIterator::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& RecursiveInclusiveIterator::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from RecursiveInclusiveIterator, but it was done."
-    );
-  }
-
-  if (item_ == nullptr) {
-    throw std::logic_error(
-      "You want to get from a RecursiveInclusiveIterator, "
-      "but item_ has not been set."
-    );
-  }
-  #endif
-
-  return *item_;
-}
-
-long RecursiveInclusiveIterator::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 on a done RecursiveInclusiveIterator, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void RecursiveInclusiveIterator::PrependToPath(Path* path) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from RecursiveInclusiveIterator, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (Index() == 0) {
-    // Index set to 0 indicates that the iterator points to the instance itself.
-    // Therefore, there is nothing to prepend to the path.
-    return;
-  }
-
-  if (recursive_iterator_ != nullptr) {
-    recursive_iterator_->PrependToPath(path);
-  }
-
-  if (non_recursive_iterator_ != nullptr) {
-    non_recursive_iterator_->PrependToPath(path);
-  }
-}
-
-std::unique_ptr<impl::IIterator> RecursiveInclusiveIterator::Clone() const {
-  return common::make_unique<RecursiveInclusiveIterator>(*this);
-}
-
-void RecursiveInclusiveIterator::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        item_ = instance_;
-        index_ = 0;
-        done_ = false;
-        non_recursive_iterator_.reset(nullptr);
-        recursive_iterator_.reset(nullptr);
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        non_recursive_iterator_ = NewNonRecursiveIterator(
-          *instance_
-        );
-
-        non_recursive_iterator_->Start();
-      }
-
-      case 2: {
-        if (!(!non_recursive_iterator_->Done())) {
-          state_ = 7;
-          continue;
-        }
-
-        item_ = &(non_recursive_iterator_->Get());
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        recursive_iterator_ = common::make_unique<RecursiveExclusiveIterator>(
-          *item_
-        );
-
-        recursive_iterator_->Start();
-      }
-
-      case 4: {
-        if (!(!recursive_iterator_->Done())) {
-          state_ = 6;
-          continue;
-        }
-
-        item_ = &(recursive_iterator_->Get());
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        recursive_iterator_->Next();
-
-        state_ = 4;
-        continue;
-      }
-
-      case 6: {
-        recursive_iterator_.reset(nullptr);
-
-        non_recursive_iterator_->Next();
-
-        state_ = 2;
-        continue;
-      }
-
-      case 7: {
-        non_recursive_iterator_.reset(nullptr);
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 8;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion RecursiveInclusiveIterator implementation
-
-// region RecursiveExclusiveIterator implementation
-
-RecursiveExclusiveIterator::RecursiveExclusiveIterator(
-  const std::shared_ptr<types::IClass>& instance
-) : inclusive_iterator_(instance) {
-  // Intentionally empty.
-}
-
-void RecursiveExclusiveIterator::Start() {
-  inclusive_iterator_.Start();
-
-  #ifdef DEBUG
-  if (inclusive_iterator_.Done()) {
-    throw std::logic_error(
-      "Expected the inclusive iterator to be not-done immediately after start, "
-      "as the first item is expected to point to the instance itself, "
-      "but the inclusive iterator was done."
-    );
-  }
-  #endif
-
-  // Simply skip the instance in the very first yield.
-  inclusive_iterator_.Next();
-}
-
-void RecursiveExclusiveIterator::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a RecursiveExclusiveIterator, but it was done."
-    );
-  }
-  #endif
-
-  inclusive_iterator_.Next();
-}
-
-bool RecursiveExclusiveIterator::Done() const {
-  return inclusive_iterator_.Done();
-}
-
-const std::shared_ptr<types::IClass>& RecursiveExclusiveIterator::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from RecursiveExclusiveIterator, but it was done."
-    );
-  }
-  #endif
-
-  return inclusive_iterator_.Get();
-}
-
-long RecursiveExclusiveIterator::Index() const {
-  if (inclusive_iterator_.Done()) {
-    return -1;
-  }
-
-  return inclusive_iterator_.Index() - 1;
-}
-
-void RecursiveExclusiveIterator::PrependToPath(Path* path) const {
-  inclusive_iterator_.PrependToPath(path);
-}
-
-std::unique_ptr<impl::IIterator> RecursiveExclusiveIterator::Clone() const {
-  return common::make_unique<RecursiveExclusiveIterator>(*this);
-}
-
-// endregion RecursiveExclusiveIterator implementation
-
-// endregion Recursive iteration
+}  // namespace
 
 // region Iterator facade
 
 Iterator::Iterator(
   const Iterator& other
-) : implementation_(other.implementation_->Clone()) {
+) :
+  implementation_(other.implementation_->Clone()),
+  index_(other.index_) {
   // Intentionally empty.
 }
 
 Iterator::Iterator(
   Iterator&& other
-) : implementation_(std::move(other.implementation_)) {
+) :
+  implementation_(std::move(other.implementation_)),
+  index_(other.index_) {
   // Intentionally empty.
 }
 
@@ -1120,7 +734,8 @@ Iterator& Iterator::operator=(const Iterator& other) {
 
 Iterator& Iterator::operator=(Iterator&& other) {
   if (this != &other) {
-    this->implementation_ = std::move(other.implementation_);
+    implementation_ = std::move(other.implementation_);
+    index_ = other.index_;
   }
 
   return *this;
@@ -1155,6 +770,7 @@ Iterator& Iterator::operator++() {
   }
 
   implementation_->Next();
+  index_ = implementation_->Done() ? -1 : index_ + 1;
   return *this;
 }
 
@@ -1166,11 +782,11 @@ Iterator Iterator::operator++(int) {
 }
 
 bool operator==(const Iterator& a, const Iterator& b) {
-  return a.implementation_->Index() == b.implementation_->Index();
+  return a.index_ == b.index_;
 }
 
 bool operator!=(const Iterator& a, const Iterator& b) {
-  return a.implementation_->Index() != b.implementation_->Index();
+  return a.index_ != b.index_;
 }
 
 Path MaterializePath(const Iterator& iterator) {
@@ -1181,7 +797,7 @@ Path MaterializePath(const Iterator& iterator) {
   }
 
   Path path;
-  iterator.implementation_->PrependToPath(&path);
+  iterator.implementation_->AppendToPath(path);
   return path;
 }
 
@@ -1192,7 +808,16 @@ void PrependToPath(const Iterator& iterator, Path* path) {
     );
   }
 
-  iterator.implementation_->PrependToPath(path);
+  Path prefix;
+  iterator.implementation_->AppendToPath(prefix);
+
+  for (
+    auto it = prefix.segments.rbegin();
+    it != prefix.segments.rend();
+    ++it
+  ) {
+    path->segments.emplace_front(std::move(*it));
+  }
 }
 
 // endregion Iterator facade
@@ -1213,7 +838,7 @@ Descent::Descent(
 
 Iterator Descent::begin() const {
   std::unique_ptr<impl::IIterator> it_impl(
-    common::make_unique<RecursiveExclusiveIterator>(instance_)
+    DispatchOnModelType(*instance_, true)
   );
 
   it_impl->Start();
@@ -1229,7 +854,7 @@ Iterator Descent::begin() const {
 }
 
 const Iterator& Descent::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneIterator>());
+  static Iterator iterator(Empty());
   return iterator;
 }
 
@@ -1249,22 +874,23 @@ DescentOnce::DescentOnce(
 
 Iterator DescentOnce::begin() const {
   std::unique_ptr<impl::IIterator> it_impl(
-    NewNonRecursiveIterator(instance_)
+    DispatchOnModelType(*instance_, false)
   );
 
   it_impl->Start();
 
   // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose it_impl.
+  // We short-circuit here for memory frugality,
+  // as we can immediately dispose it_impl.
   if (it_impl->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneIterator>());
+    return end();
   }
 
   return Iterator(std::move(it_impl));
 }
 
 const Iterator& DescentOnce::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneIterator>());
+  static Iterator iterator(Empty());
   return iterator;
 }
 

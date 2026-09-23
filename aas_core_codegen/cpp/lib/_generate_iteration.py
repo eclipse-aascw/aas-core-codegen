@@ -1,15 +1,16 @@
 """Generate code of functions to iterate over instances."""
 
 import io
+import re
 from typing import (
-    Optional,
+    AbstractSet,
     Dict,
+    Set,
+    Optional,
     List,
     Tuple,
     Sequence,
-    Set,
     Final,
-    FrozenSet,
 )
 
 from icontract import ensure, require
@@ -25,7 +26,7 @@ from aas_core_codegen.common import (
 from aas_core_codegen.cpp import (
     common as cpp_common,
     naming as cpp_naming,
-    yielding as cpp_yielding,
+    over as cpp_over,
 )
 from aas_core_codegen.cpp.common import (
     INDENT as I,
@@ -33,8 +34,6 @@ from aas_core_codegen.cpp.common import (
     INDENT3 as III,
     INDENT4 as IIII,
 )
-from aas_core_codegen.intermediate import construction as intermediate_construction
-from aas_core_codegen.yielding import flow as yielding_flow
 
 
 # region Check
@@ -319,10 +318,13 @@ class IIterator {{
 {I}virtual void Next() = 0;
 {I}virtual bool Done() const = 0;
 {I}virtual const std::shared_ptr<types::IClass>& Get() const = 0;
-{I}virtual long Index() const = 0;
 
-{I}/// Prepend the segments to the path reflecting where this iterator points to.
-{I}virtual void PrependToPath(Path* path) const = 0;
+{I}/**
+{I} * \\brief Append the segments leading to the current instance to the \\p path.
+{I} *
+{I} * Only called on request, so the iteration itself builds no paths.
+{I} */
+{I}virtual void AppendToPath(Path& path) const = 0;
 
 {I}virtual std::unique_ptr<IIterator> Clone() const = 0;
 
@@ -337,8 +339,8 @@ class IIterator {{
  * \\brief Iterate over an AAS instance.
  *
  * Unlike STL, this is <em>not</em> a light-weight iterator. We implement
- * a "yielding" iterator by leveraging code generation so that we always keep
- * the model stack as well as the properties iterated thus far.
+ * a "yielding" iterator by composing iterators over the properties so that we
+ * always keep the model stack as well as the properties iterated thus far.
  *
  * This means that copy-construction and equality comparisons are much more heavy-weight
  * than you'd usually expect from an STL iterator. For example, if you want to sort
@@ -418,11 +420,18 @@ class Iterator {{
 {I}explicit Iterator(
 {II}std::unique_ptr<impl::IIterator> implementation
 {I}) :
-{II}implementation_(std::move(implementation)) {{
-{II}  // Intentionally empty.
+{II}implementation_(std::move(implementation)),
+{II}index_(implementation_->Done() ? -1 : 0) {{
+{II}// Intentionally empty.
 {I}}}
 
 {I}std::unique_ptr<impl::IIterator> implementation_;
+
+{I}/**
+{I} * Count the instances iterated thus far so that we can compare the iterators,
+{I} * or -1 if the iteration is done.
+{I} */
+{I}long index_;
 }};"""
         ),
         Stripped("bool operator==(const Iterator& a, const Iterator& b);"),
@@ -844,196 +853,37 @@ std::wstring Path::ToWstring() const {{
     ]
 
 
-class IteratorQualities:
-    """Query the qualities of a non-recursive iterator corresponding to a class."""
+# region Combinators
 
-    #: The class corresponding to the iterator
-    cls: Final[intermediate.ConcreteClass]
+# NOTE (mristin):
+# We iterate lazily over the model by combining the hand-written iterators below.
+# They follow three rules so that we never build the iterators over the whole
+# model up front:
+#
+# 1. ``ChainIterator`` starts a child only once the previous child is done.
+# 2. ``DispatchingIterator`` dispatches on the instance only in ``Start()``.
+# 3. ``EachIterator`` builds the iterator over an item only once the iteration
+#    reaches the item.
+#
+# Under these rules, every combinator is cheap to construct eagerly, and we can
+# stop the iteration at any point without having iterated over the rest.
 
-    #: The properties which should be iterated over
-    relevant_properties: Final[Sequence[intermediate.Property]]
-
-    #: A set of Python IDs of the relevant properties
-    relevant_property_id_set: Final[FrozenSet[intermediate.IdOfProperty]]
-
-    #: Set if the class contains a property which is a list of instances
-    cls_contains_a_list_or_tuple_property: Final[bool]
-
-    def __init__(self, cls: intermediate.ConcreteClass) -> None:
-        """Initialize with the given class."""
-        relevant_properties = []  # type: List[intermediate.Property]
-
-        cls_contains_a_list_or_tuple_property = False
-
-        for prop in cls.properties:
-            type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-            if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
-                pass
-
-            elif isinstance(type_anno, intermediate.OurTypeAnnotation):
-                if isinstance(type_anno.our_type, intermediate.Enumeration):
-                    pass
-
-                elif isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive):
-                    pass
-
-                elif isinstance(
-                    type_anno.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
-                ):
-                    relevant_properties.append(prop)
-
-                elif isinstance(type_anno.our_type, intermediate.NamedUnion):
-                    relevant_properties.append(prop)
-
-                else:
-                    assert_never(type_anno.our_type)
-
-            elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-                if isinstance(type_anno.items, intermediate.PrimitiveTypeAnnotation):
-                    pass
-
-                elif isinstance(type_anno.items, intermediate.OurTypeAnnotation):
-                    if isinstance(type_anno.items.our_type, intermediate.Enumeration):
-                        pass
-
-                    elif isinstance(
-                        type_anno.items.our_type, intermediate.ConstrainedPrimitive
-                    ):
-                        pass
-
-                    elif isinstance(
-                        type_anno.items.our_type,
-                        (intermediate.AbstractClass, intermediate.ConcreteClass),
-                    ):
-                        cls_contains_a_list_or_tuple_property = True
-
-                        relevant_properties.append(prop)
-
-                    elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
-                        cls_contains_a_list_or_tuple_property = True
-
-                        relevant_properties.append(prop)
-
-                    else:
-                        assert_never(type_anno.items.our_type)
-
-                elif isinstance(
-                    type_anno.items,
-                    (
-                        intermediate.JsonValueTypeAnnotation,
-                        intermediate.JsonArrayTypeAnnotation,
-                        intermediate.JsonObjectTypeAnnotation,
-                    ),
-                ):
-                    # NOTE (mristin):
-                    # A JSON-able value is plain data (``nlohmann::json``), never
-                    # a reference to one of our own classes, so it is never
-                    # relevant for iteration/descent.
-                    pass
-
-                else:
-                    raise NotImplementedError(
-                        f"NOTE (mristin): We expect only lists of atomic values "
-                        f"at the moment, but you specified {prop.type_annotation} "
-                        f"in class {cls.name!r} and property {prop.name!r}. "
-                        f"Please contact the developers if you need this feature."
-                    )
-
-            elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-                contains_a_class = False
-                for item_type_anno in type_anno.items:
-                    assert isinstance(
-                        item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
-                    ), (
-                        "Tuple items are restricted to atomic types (primitives, "
-                        "constrained primitives, classes and enumerations) by "
-                        "intermediate._translate._verify_only_simple_type_patterns, "
-                        "so no nested optionals, lists or tuples are expected here."
-                    )
-
-                    is_class_item = isinstance(
-                        item_type_anno, intermediate.OurTypeAnnotation
-                    ) and isinstance(
-                        item_type_anno.our_type,
-                        (intermediate.AbstractClass, intermediate.ConcreteClass),
-                    )
-
-                    is_named_union_item = isinstance(
-                        item_type_anno, intermediate.OurTypeAnnotation
-                    ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion)
-
-                    if is_class_item or is_named_union_item:
-                        contains_a_class = True
-
-                if contains_a_class:
-                    cls_contains_a_list_or_tuple_property = True
-                    relevant_properties.append(prop)
-
-            elif isinstance(
-                type_anno,
-                (
-                    intermediate.JsonValueTypeAnnotation,
-                    intermediate.JsonArrayTypeAnnotation,
-                    intermediate.JsonObjectTypeAnnotation,
-                ),
-            ):
-                # NOTE (mristin):
-                # A JSON-able value is plain data (``nlohmann::json``), never
-                # a reference to one of our own classes, so it is never
-                # relevant for iteration/descent.
-                pass
-
-            else:
-                assert_never(type_anno)
-
-        self.cls = cls
-        self.relevant_properties = relevant_properties
-        self.relevant_property_id_set = frozenset(
-            intermediate.runtime_id(prop) for prop in self.relevant_properties
-        )
-        self.cls_contains_a_list_or_tuple_property = (
-            cls_contains_a_list_or_tuple_property
-        )
-
-
-@require(lambda iterator_qualities: len(iterator_qualities.relevant_properties) == 0)
-def _generate_empty_iterator_over_cls(
-    iterator_qualities: IteratorQualities,
-) -> List[Stripped]:
-    """Generate the iterator over a class with no references to other instances."""
-    interface_name = cpp_naming.interface_name(iterator_qualities.cls.name)
-    iterator_over_cls = cpp_naming.class_name(
-        Identifier(f"Iterator_over_{iterator_qualities.cls.name}")
-    )
-
-    return [
-        Stripped(
-            f"""\
+#: Define the iterator over no instances.
+_EMPTY = [
+    Stripped(
+        f"""\
 /**
- * This iterator is always done as {interface_name}
- * references no other instances.
+ * Iterate over no instances at all.
  */
-class {iterator_over_cls} : public impl::IIterator {{
+class EmptyIterator : public impl::IIterator {{
  public:
-{I}{iterator_over_cls}(
-{II}const std::shared_ptr<types::IClass>&
-{I}) {{
-{II}// Intentionally empty.
-{I}}}
-
 {I}void Start() override {{
 {II}// Intentionally empty.
 {I}}}
 
 {I}void Next() override {{
 {II}throw std::logic_error(
-{III}"You want to move "
-{III}"an {iterator_over_cls}, "
-{III}"but the iterator is always done as "
-{III}"{interface_name} "
-{III}"references no other instances."
+{III}"You want to move an EmptyIterator, but it is always done."
 {II});
 {I}}}
 
@@ -1043,70 +893,1017 @@ class {iterator_over_cls} : public impl::IIterator {{
 
 {I}const std::shared_ptr<types::IClass>& Get() const override {{
 {II}throw std::logic_error(
-{III}"You want to get from an {iterator_over_cls}, "
-{III}"but the iterator is always done as "
-{III}"{interface_name} references "
-{III}"no other instances."
+{III}"You want to get an instance from an EmptyIterator, but it is always done."
 {II});
 {I}}}
 
-{I}long Index() const override {{
-{II}return -1;
+{I}void AppendToPath(Path&) const override {{
+{II}throw std::logic_error(
+{III}"You want to append the path of an EmptyIterator, but it is always done."
+{II});
 {I}}}
 
 {I}std::unique_ptr<impl::IIterator> Clone() const override {{
-{II}return common::make_unique<{iterator_over_cls}>(*this);
+{II}return common::make_unique<EmptyIterator>(*this);
+{I}}}
+}};  // class EmptyIterator"""
+    ),
+    Stripped(
+        f"""\
+std::unique_ptr<impl::IIterator> Empty() {{
+{I}return common::make_unique<EmptyIterator>();
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over a single instance.
+_ONE = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate over a single instance.
+ *
+ * We keep a copy of the shared pointer, upcast to types::IClass, so that
+ * \\ref Get can return a reference to it.
+ */
+class OneIterator : public impl::IIterator {{
+ public:
+{I}explicit OneIterator(
+{II}std::shared_ptr<types::IClass> instance
+{I}) :
+{II}instance_(std::move(instance)),
+{II}done_(true) {{
+{II}// Intentionally empty.
 {I}}}
 
-{I}void PrependToPath(Path*) const override {{
-{II}throw std::logic_error(
-{III}"You want to prepend to path from an {iterator_over_cls}, "
-{III}"but the iterator is always done as "
-{III}"{interface_name} references "
-{III}"no other instances."
+{I}void Start() override {{
+{II}done_ = false;
+{I}}}
+
+{I}void Next() override {{
+{II}done_ = true;
+{I}}}
+
+{I}bool Done() const override {{
+{II}return done_;
+{I}}}
+
+{I}const std::shared_ptr<types::IClass>& Get() const override {{
+{II}return instance_;
+{I}}}
+
+{I}void AppendToPath(Path&) const override {{
+{II}// Intentionally empty, as the instance itself is the end of the path.
+{I}}}
+
+{I}std::unique_ptr<impl::IIterator> Clone() const override {{
+{II}return common::make_unique<OneIterator>(*this);
+{I}}}
+
+ private:
+{I}std::shared_ptr<types::IClass> instance_;
+{I}bool done_;
+}};  // class OneIterator"""
+    ),
+    Stripped(
+        f"""\
+std::unique_ptr<impl::IIterator> One(
+{I}std::shared_ptr<types::IClass> instance
+) {{
+{I}return common::make_unique<OneIterator>(std::move(instance));
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over the children, one after another.
+_CHAIN = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate over the instances of the children, one child after another.
+ *
+ * A child is started only once the previous child is done.
+ */
+class ChainIterator : public impl::IIterator {{
+ public:
+{I}explicit ChainIterator(
+{II}std::vector<std::unique_ptr<impl::IIterator> > children
+{I}) :
+{II}children_(std::move(children)),
+{II}active_(0) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}ChainIterator(const ChainIterator& other) :
+{II}active_(other.active_) {{
+{II}children_.reserve(other.children_.size());
+{II}for (const std::unique_ptr<impl::IIterator>& child : other.children_) {{
+{III}children_.emplace_back(child->Clone());
+{II}}}
+{I}}}
+
+{I}void Start() override {{
+{II}active_ = 0;
+{II}if (!children_.empty()) {{
+{III}children_[0]->Start();
+{II}}}
+{II}SkipDoneChildren();
+{I}}}
+
+{I}void Next() override {{
+{II}children_[active_]->Next();
+{II}SkipDoneChildren();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return active_ >= children_.size();
+{I}}}
+
+{I}const std::shared_ptr<types::IClass>& Get() const override {{
+{II}return children_[active_]->Get();
+{I}}}
+
+{I}void AppendToPath(Path& path) const override {{
+{II}children_[active_]->AppendToPath(path);
+{I}}}
+
+{I}std::unique_ptr<impl::IIterator> Clone() const override {{
+{II}return common::make_unique<ChainIterator>(*this);
+{I}}}
+
+ private:
+{I}std::vector<std::unique_ptr<impl::IIterator> > children_;
+
+{I}/**
+{I} * Index of the child we currently iterate over
+{I} */
+{I}std::size_t active_;
+
+{I}/**
+{I} * Move on to the next children, and start them, until one is not done.
+{I} */
+{I}void SkipDoneChildren() {{
+{II}while (active_ < children_.size() && children_[active_]->Done()) {{
+{III}++active_;
+{III}if (active_ < children_.size()) {{
+{IIII}children_[active_]->Start();
+{III}}}
+{II}}}
+{I}}}
+}};  // class ChainIterator"""
+    ),
+    Stripped(
+        f"""\
+void CollectChildren(
+{I}std::vector<std::unique_ptr<impl::IIterator> >&
+) {{
+{I}// Intentionally empty, as there are no more children to collect.
+}}"""
+    ),
+    Stripped(
+        f"""\
+template<typename... Rest>
+void CollectChildren(
+{I}std::vector<std::unique_ptr<impl::IIterator> >& children,
+{I}std::unique_ptr<impl::IIterator> first,
+{I}Rest... rest
+) {{
+{I}children.emplace_back(std::move(first));
+{I}CollectChildren(children, std::move(rest)...);
+}}"""
+    ),
+    Stripped(
+        f"""\
+// NOTE (mristin):
+// We can not use an initializer list here, as we can not move the unique pointers
+// out of it.
+template<typename... Children>
+std::unique_ptr<impl::IIterator> Chain(
+{I}Children... children
+) {{
+{I}std::vector<std::unique_ptr<impl::IIterator> > collected;
+{I}collected.reserve(sizeof...(Children));
+{I}CollectChildren(collected, std::move(children)...);
+
+{I}return common::make_unique<ChainIterator>(std::move(collected));
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over the instances in a property.
+_IN_PROPERTY = [
+    Stripped(
+        f"""\
+/**
+ * Iterate over the instances of the \\p child, which lives in a property.
+ */
+class InPropertyIterator : public impl::IIterator {{
+ public:
+{I}InPropertyIterator(
+{II}Property property,
+{II}std::unique_ptr<impl::IIterator> child
+{I}) :
+{II}property_(property),
+{II}child_(std::move(child)) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}InPropertyIterator(const InPropertyIterator& other) :
+{II}property_(other.property_),
+{II}child_(other.child_->Clone()) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}child_->Start();
+{I}}}
+
+{I}void Next() override {{
+{II}child_->Next();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return child_->Done();
+{I}}}
+
+{I}const std::shared_ptr<types::IClass>& Get() const override {{
+{II}return child_->Get();
+{I}}}
+
+{I}void AppendToPath(Path& path) const override {{
+{II}path.segments.emplace_back(
+{III}common::make_unique<PropertySegment>(property_)
 {II});
+{II}child_->AppendToPath(path);
 {I}}}
 
-{I}~{iterator_over_cls}() override = default;
-}};  // class {iterator_over_cls}"""
+{I}std::unique_ptr<impl::IIterator> Clone() const override {{
+{II}return common::make_unique<InPropertyIterator>(*this);
+{I}}}
+
+ private:
+{I}Property property_;
+{I}std::unique_ptr<impl::IIterator> child_;
+}};  // class InPropertyIterator"""
+    ),
+    Stripped(
+        f"""\
+std::unique_ptr<impl::IIterator> InProperty(
+{I}Property property,
+{I}std::unique_ptr<impl::IIterator> child
+) {{
+{I}return common::make_unique<InPropertyIterator>(property, std::move(child));
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over the instances in a component of a tuple.
+_AT_INDEX = [
+    Stripped(
+        f"""\
+/**
+ * Iterate over the instances of the \\p child, which lives in a component of a tuple.
+ */
+class AtIndexIterator : public impl::IIterator {{
+ public:
+{I}AtIndexIterator(
+{II}std::size_t index,
+{II}std::unique_ptr<impl::IIterator> child
+{I}) :
+{II}index_(index),
+{II}child_(std::move(child)) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}AtIndexIterator(const AtIndexIterator& other) :
+{II}index_(other.index_),
+{II}child_(other.child_->Clone()) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}child_->Start();
+{I}}}
+
+{I}void Next() override {{
+{II}child_->Next();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return child_->Done();
+{I}}}
+
+{I}const std::shared_ptr<types::IClass>& Get() const override {{
+{II}return child_->Get();
+{I}}}
+
+{I}void AppendToPath(Path& path) const override {{
+{II}path.segments.emplace_back(
+{III}common::make_unique<IndexSegment>(index_)
+{II});
+{II}child_->AppendToPath(path);
+{I}}}
+
+{I}std::unique_ptr<impl::IIterator> Clone() const override {{
+{II}return common::make_unique<AtIndexIterator>(*this);
+{I}}}
+
+ private:
+{I}std::size_t index_;
+{I}std::unique_ptr<impl::IIterator> child_;
+}};  // class AtIndexIterator"""
+    ),
+    Stripped(
+        f"""\
+std::unique_ptr<impl::IIterator> AtIndex(
+{I}std::size_t index,
+{I}std::unique_ptr<impl::IIterator> child
+) {{
+{I}return common::make_unique<AtIndexIterator>(index, std::move(child));
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over the items of a list.
+_EACH = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate over the instances of every item of a list, one item after another.
+ *
+ * The iterator over an item is built only once the iteration reaches the item.
+ */
+template<typename T>
+class EachIterator : public impl::IIterator {{
+ public:
+{I}/**
+{I} * Build the iterator over the instances of an item
+{I} */
+{I}typedef std::unique_ptr<impl::IIterator> (*OverItem)(
+{II}const T& item,
+{II}bool recursive
+{I});
+
+{I}EachIterator(
+{II}const std::vector<T>* items,
+{II}OverItem over_item,
+{II}bool recursive
+{I}) :
+{II}items_(items),
+{II}over_item_(over_item),
+{II}recursive_(recursive),
+{II}index_(0) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}EachIterator(const EachIterator<T>& other) :
+{II}items_(other.items_),
+{II}over_item_(other.over_item_),
+{II}recursive_(other.recursive_),
+{II}index_(other.index_),
+{II}item_(other.item_ == nullptr ? nullptr : other.item_->Clone()) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}index_ = 0;
+{II}item_ = nullptr;
+{II}SkipDoneItems();
+{I}}}
+
+{I}void Next() override {{
+{II}item_->Next();
+{II}SkipDoneItems();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return index_ >= items_->size();
+{I}}}
+
+{I}const std::shared_ptr<types::IClass>& Get() const override {{
+{II}return item_->Get();
+{I}}}
+
+{I}void AppendToPath(Path& path) const override {{
+{II}path.segments.emplace_back(
+{III}common::make_unique<IndexSegment>(index_)
+{II});
+{II}item_->AppendToPath(path);
+{I}}}
+
+{I}std::unique_ptr<impl::IIterator> Clone() const override {{
+{II}return common::make_unique<EachIterator<T> >(*this);
+{I}}}
+
+ private:
+{I}const std::vector<T>* items_;
+{I}OverItem over_item_;
+{I}bool recursive_;
+
+{I}/**
+{I} * Index of the item we currently iterate over
+{I} */
+{I}std::size_t index_;
+
+{I}/**
+{I} * Iterator over the current item, built once we reached the item
+{I} */
+{I}std::unique_ptr<impl::IIterator> item_;
+
+{I}/**
+{I} * Move on to the next items, and build their iterators, until one is not done.
+{I} */
+{I}void SkipDoneItems() {{
+{II}while (index_ < items_->size()) {{
+{III}if (item_ == nullptr) {{
+{IIII}item_ = over_item_((*items_)[index_], recursive_);
+{IIII}item_->Start();
+{III}}}
+
+{III}if (!item_->Done()) {{
+{IIII}return;
+{III}}}
+
+{III}item_ = nullptr;
+{III}++index_;
+{II}}}
+{I}}}
+}};  // class EachIterator"""
+    ),
+    Stripped(
+        f"""\
+template<typename T>
+std::unique_ptr<impl::IIterator> Each(
+{I}const std::vector<T>& items,
+{I}std::unique_ptr<impl::IIterator> (*over_item)(const T& item, bool recursive),
+{I}bool recursive
+) {{
+{I}return common::make_unique<EachIterator<T> >(&items, over_item, recursive);
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over an instance, and then over the instances it references.
+_ONE_THEN_OVER = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate over the instances referenced from an instance, dispatched on
+ * its runtime type.
+ *
+ * Defined below, once all the classes have been covered.
+ */
+std::unique_ptr<impl::IIterator> DispatchOnModelType(
+{I}const types::IClass& instance,
+{I}bool recursive
+);"""
+    ),
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate recursively over the instances referenced from an instance.
+ *
+ * We dispatch on the runtime type of the instance only in \\ref Start so that
+ * we descend into the instance only once the iteration reaches it.
+ */
+class DispatchingIterator : public impl::IIterator {{
+ public:
+{I}explicit DispatchingIterator(
+{II}const types::IClass* instance
+{I}) :
+{II}instance_(instance) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}DispatchingIterator(const DispatchingIterator& other) :
+{II}instance_(other.instance_),
+{II}child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}child_ = DispatchOnModelType(*instance_, true);
+{II}child_->Start();
+{I}}}
+
+{I}void Next() override {{
+{II}child_->Next();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return child_->Done();
+{I}}}
+
+{I}const std::shared_ptr<types::IClass>& Get() const override {{
+{II}return child_->Get();
+{I}}}
+
+{I}void AppendToPath(Path& path) const override {{
+{II}child_->AppendToPath(path);
+{I}}}
+
+{I}std::unique_ptr<impl::IIterator> Clone() const override {{
+{II}return common::make_unique<DispatchingIterator>(*this);
+{I}}}
+
+ private:
+{I}const types::IClass* instance_;
+{I}std::unique_ptr<impl::IIterator> child_;
+}};  // class DispatchingIterator"""
+    ),
+    Stripped(
+        f"""\
+/**
+ * Iterate over the instances referenced from the \\p instance, if \\p recursive.
+ */
+std::unique_ptr<impl::IIterator> Over(
+{I}const types::IClass& instance,
+{I}bool recursive
+) {{
+{I}if (!recursive) {{
+{II}// NOTE (mristin):
+{II}// In the non-recursive mode, we iterate only over the instances referenced
+{II}// directly, but not over the instances which they reference in turn.
+{II}return Empty();
+{I}}}
+
+{I}return common::make_unique<DispatchingIterator>(&instance);
+}}"""
+    ),
+    Stripped(
+        f"""\
+/**
+ * Iterate over the \\p instance, and then over the instances that it references.
+ */
+template<typename T>
+std::unique_ptr<impl::IIterator> OneThenOver(
+{I}const std::shared_ptr<T>& instance,
+{I}bool recursive
+) {{
+{I}return Chain(One(instance), Over(*instance, recursive));
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+# endregion Combinators
+
+# region Iteration over the instances
+
+
+def _yields(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
+    """Check whether a value of ``type_annotation`` references any instances."""
+    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
+        return False
+
+    elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
+        return isinstance(
+            type_annotation.our_type, (intermediate.Class, intermediate.NamedUnion)
         )
+
+    elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
+        return _yields(type_annotation.value)
+
+    elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
+        return _yields(type_annotation.items)
+
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        return any(_yields(item) for item in type_annotation.items)
+
+    elif isinstance(
+        type_annotation,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # A JSON-able value is plain data (``nlohmann::json``), never
+        # a reference to one of our own classes.
+        return False
+
+    else:
+        assert_never(type_annotation)
+
+    raise AssertionError("Unexpected execution path")
+
+
+def _yielding_classes(
+    symbol_table: intermediate.SymbolTable,
+) -> List[intermediate.ConcreteClass]:
+    """List the concrete classes whose instances reference any other instances."""
+    return [
+        cls
+        for cls in symbol_table.concrete_classes
+        if any(_yields(prop.type_annotation) for prop in cls.properties)
     ]
 
 
-def _named_union_extraction_function_name(
-    named_union: intermediate.NamedUnion,
-) -> Identifier:
-    """Determine the name of the ``ExtractIClassFrom{UnionName}`` helper."""
-    return cpp_naming.function_name(
-        Identifier(f"extract_i_class_from_{named_union.name}")
+# fmt: off
+@require(
+    lambda type_annotation, function_name_set:
+    all(
+        cpp_over.over_function_name(referenced) in function_name_set
+        for referenced in cpp_over.referenced_function_types(type_annotation, _yields)
+    ),
+    "The functions over the referenced types have been collected"
+)
+@ensure(
+    lambda function_name_set, result:
+    result is None
+    or cpp_over.called_function_names(result, defined="").issubset(
+        function_name_set
+    ),
+    "The expression calls only the collected functions"
+)
+# fmt: on
+def _generate_over_expression(
+    type_annotation: intermediate.TypeAnnotationUnion,
+    expr: str,
+    function_name_set: AbstractSet[str],
+) -> Optional[Stripped]:
+    """
+    Generate the iterator over the instances in ``expr`` of ``type_annotation``.
+
+    The ``expr`` is the C++ expression of the value, for example:
+
+    * ``that.semantic_id()`` for a property of the class (``that`` is the instance),
+    * ``(*that.semantic_id())`` for the value of an optional property,
+    * ``std::get<1>(value)`` for a component of a tuple, and
+    * ``value`` for an item of a list.
+
+    For example, we generate for a property ``semantic_id: Optional[Reference]``:
+
+    .. code-block:: cpp
+
+        that.semantic_id().has_value()
+          ? OneThenOver((*that.semantic_id()), recursive)
+          : Empty()
+
+    and for a property ``keys: List[Key]``:
+
+    .. code-block:: cpp
+
+        Over_listOf_Key(that.keys(), recursive)
+
+    The ``function_name_set`` contains the names of the collected functions over
+    the lists, tuples and named unions, see
+    :py:func:`cpp_over.collect_function_types`.
+
+    Return ``None`` if a value of the ``type_annotation`` references no instances.
+    """
+    if not _yields(type_annotation):
+        return None
+
+    if isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
+        inner = _generate_over_expression(
+            type_annotation=type_annotation.value,
+            expr=f"(*{expr})",
+            function_name_set=function_name_set,
+        )
+        assert inner is not None
+
+        return Stripped(
+            f"""\
+{expr}.has_value()
+{I}? {indent_but_first_line(inner, II)}
+{I}: Empty()"""
+        )
+
+    elif isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
+        type_annotation.our_type, intermediate.Class
+    ):
+        return cpp_over.generate_call("OneThenOver", [expr, "recursive"])
+
+    elif isinstance(
+        type_annotation,
+        (
+            intermediate.OurTypeAnnotation,
+            intermediate.ListTypeAnnotation,
+            intermediate.TupleTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # The other types of ours reference no instances, so this must be
+        # a named union here.
+        return cpp_over.generate_call(
+            cpp_over.over_function_name(type_annotation), [expr, "recursive"]
+        )
+
+    else:
+        raise AssertionError(
+            f"Unexpected type annotation which references instances: "
+            f"{type_annotation}"
+        )
+
+
+# fmt: off
+@require(
+    lambda type_annotation, function_name_set:
+    cpp_over.over_function_name(type_annotation) in function_name_set,
+    "The function over the type has been collected"
+)
+@require(
+    lambda type_annotation, function_name_set:
+    all(
+        cpp_over.over_function_name(called) in function_name_set
+        for called in cpp_over.called_function_types(type_annotation, _yields)
+    ),
+    "The functions called by the function over the type have been collected"
+)
+@ensure(
+    lambda type_annotation, function_name_set, result:
+    cpp_over.called_function_names(
+        result[1], defined=cpp_over.over_function_name(type_annotation)
+    ).issubset(function_name_set),
+    "The function calls only the collected functions"
+)
+# fmt: on
+def _generate_over_function(
+    type_annotation: intermediate.TypeAnnotationUnion,
+    function_name_set: AbstractSet[str],
+) -> Tuple[Optional[Stripped], Stripped]:
+    """
+    Generate the function over the instances in a value of ``type_annotation``.
+
+    For example, we generate for ``List[Key]`` the alias and the function:
+
+    .. code-block:: cpp
+
+        using listOf_Key = std::vector<
+          std::shared_ptr<types::IKey>
+        >;
+
+        std::unique_ptr<impl::IIterator> Over_listOf_Key(
+          const listOf_Key& value,
+          bool recursive
+        ) {
+          return Each(value, &OneThenOver<types::IKey>, recursive);
+        }
+
+    The ``function_name_set`` contains the names of the collected functions, see
+    :py:func:`cpp_over.collect_function_types`.
+
+    Return the alias, if the type needs one, and the function.
+    """
+    name = cpp_over.over_function_name(type_annotation)
+
+    value_type = cpp_common.generate_type(
+        type_annotation=type_annotation,
+        types_namespace=cpp_common.TYPES_NAMESPACE,
     )
 
+    body: Stripped
 
-@require(lambda named_union: len(named_union.implementers) > 0)
-def _generate_extract_iclass_from_named_union(
-    named_union: intermediate.NamedUnion,
-) -> Stripped:
-    """
-    Generate a helper to extract the ``shared_ptr<IClass>`` held in a union.
+    if isinstance(type_annotation, intermediate.ListTypeAnnotation):
+        items = type_annotation.items
 
-    A named union's value is a ``common::variant``, not a polymorphic pointer,
-    so it can not be ``static_pointer_cast`` directly -- we switch on the
-    variant's own ``index()`` and return the corresponding
-    ``common::get<i>(...)`` alternative, which upcasts to ``IClass`` like any
-    other class pointer. We generate this once per union and reference it
-    by name wherever a union-typed property/item is iterated (single
-    property, list item, tuple item).
-    """
-    union_name = cpp_naming.union_name(named_union.name)
-    function_name = _named_union_extraction_function_name(named_union)
+        item_function: str
+        if isinstance(items, intermediate.OurTypeAnnotation) and isinstance(
+            items.our_type, intermediate.Class
+        ):
+            # NOTE (mristin):
+            # The items of a list of instances are shared pointers, which we pass on
+            # to the hand-written template.
+            interface_name = cpp_naming.interface_name(items.our_type.name)
+            item_function = f"OneThenOver<types::{interface_name}>"
+        else:
+            item_function = cpp_over.over_function_name(items)
 
-    case_blocks = []  # type: List[Stripped]
-    for i in range(len(named_union.implementers)):
-        case_blocks.append(
+        body = Stripped(
+            f"return "
+            f"{cpp_over.generate_call('Each', ['value', f'&{item_function}', 'recursive'])};"
+        )
+
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        components = []  # type: List[Stripped]
+        for i, item in enumerate(type_annotation.items):
+            item_expression = _generate_over_expression(
+                type_annotation=item,
+                expr=f"std::get<{i}>(value)",
+                function_name_set=function_name_set,
+            )
+            if item_expression is not None:
+                components.append(
+                    cpp_over.generate_call("AtIndex", [str(i), item_expression])
+                )
+
+        assert len(components) > 0
+        if len(components) == 1:
+            body = Stripped(f"return {components[0]};")
+        else:
+            body = Stripped(f"return {cpp_over.generate_call('Chain', components)};")
+
+    elif isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
+        type_annotation.our_type, intermediate.NamedUnion
+    ):
+        named_union = type_annotation.our_type
+
+        # NOTE (mristin):
+        # The alternatives of the variant follow the implementers, see
+        # :py:func:`cpp_common.generate_named_union_variant_definition`.
+        case_blocks = [
             Stripped(
                 f"""\
 case {i}:
-{I}return common::get<{i}>(that);"""
+{I}return OneThenOver(common::get<{i}>(value), recursive);"""
+            )
+            for i in range(len(named_union.implementers))
+        ]
+        case_blocks.append(
+            Stripped(
+                f"""\
+default:
+{I}throw std::logic_error("Invalid variant index");"""
+            )
+        )
+        case_blocks_joined = "\n".join(case_blocks)
+
+        body = Stripped(
+            f"""\
+switch (value.index()) {{
+{I}{indent_but_first_line(case_blocks_joined, I)}
+}}"""
+        )
+
+    else:
+        expression = _generate_over_expression(
+            type_annotation=type_annotation,
+            expr="value",
+            function_name_set=function_name_set,
+        )
+        assert expression is not None
+        body = Stripped(f"return {expression};")
+
+    alias = None  # type: Optional[Stripped]
+
+    if isinstance(
+        type_annotation,
+        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+    ):
+        alias_name = cpp_over.moniker(type_annotation)
+        alias = Stripped(f"using {alias_name} = {value_type};")
+        value_type = Stripped(alias_name)
+
+    function = Stripped(
+        f"""\
+std::unique_ptr<impl::IIterator> {name}(
+{I}const {indent_but_first_line(value_type, I)}& value,
+{I}{cpp_over.generate_recursive_parameter(body)}
+) {{
+{I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+    return alias, function
+
+
+# fmt: off
+@require(
+    lambda cls:
+    any(_yields(prop.type_annotation) for prop in cls.properties),
+    "The instances of the class reference other instances"
+)
+@require(
+    lambda cls, function_name_set:
+    all(
+        cpp_over.over_function_name(referenced) in function_name_set
+        for prop in cls.properties
+        for referenced in cpp_over.referenced_function_types(
+            prop.type_annotation, _yields
+        )
+    ),
+    "The functions over the types of the properties have been collected"
+)
+@ensure(
+    lambda cls, function_name_set, result:
+    cpp_over.called_function_names(
+        result, defined=cpp_over.over_class_function_name(cls)
+    ).issubset(function_name_set),
+    "The function calls only the collected functions"
+)
+# fmt: on
+def _generate_over_class(
+    cls: intermediate.ConcreteClass,
+    function_name_set: AbstractSet[str],
+) -> Stripped:
+    """
+    Generate the function over the instances referenced from an instance of ``cls``.
+
+    For example, we generate for a class ``Reference`` with the properties
+    ``referred_semantic_id: Optional[Reference]`` and ``keys: List[Key]``:
+
+    .. code-block:: cpp
+
+        std::unique_ptr<impl::IIterator> Over_Reference(
+          const types::IReference& that,
+          bool recursive
+        ) {
+          return Chain(
+            InProperty(
+              Property::kReferredSemanticId,
+              that.referred_semantic_id().has_value()
+                ? OneThenOver((*that.referred_semantic_id()), recursive)
+                : Empty()
+            ),
+            InProperty(
+              Property::kKeys,
+              Over_listOf_Key(that.keys(), recursive)
+            )
+          );
+        }
+
+    The ``function_name_set`` contains the names of the collected functions, see
+    :py:func:`cpp_over.collect_function_types`.
+    """
+    parts = []  # type: List[Stripped]
+
+    for prop in cls.properties:
+        expression = _generate_over_expression(
+            type_annotation=prop.type_annotation,
+            expr=f"that.{cpp_naming.getter_name(prop.name)}()",
+            function_name_set=function_name_set,
+        )
+        if expression is None:
+            continue
+
+        property_literal = cpp_naming.enum_literal_name(prop.name)
+        parts.append(
+            cpp_over.generate_call(
+                "InProperty", [f"Property::{property_literal}", expression]
+            )
+        )
+
+    assert len(parts) > 0, "Otherwise the class would reference no instances"
+
+    body = (
+        Stripped(f"return {parts[0]};")
+        if len(parts) == 1
+        else Stripped(f"return {cpp_over.generate_call('Chain', parts)};")
+    )
+
+    interface_name = cpp_naming.interface_name(cls.name)
+    name = cpp_over.over_class_function_name(cls)
+
+    return Stripped(
+        f"""\
+std::unique_ptr<impl::IIterator> {name}(
+{I}const types::{interface_name}& that,
+{I}{cpp_over.generate_recursive_parameter(body)}
+) {{
+{I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+
+def _generate_dispatch_on_model_type(
+    yielding_classes: Sequence[intermediate.ConcreteClass],
+) -> Stripped:
+    """Generate the dispatch over the referenced instances on the runtime type."""
+    doc_comment = Stripped(
+        """\
+/**
+ * \\brief Iterate over the instances referenced from the \\p instance,
+ * dispatched on its runtime type.
+ *
+ * If \\p recursive, we iterate also over the instances which the referenced
+ * instances reference in turn.
+ */"""
+    )
+
+    if len(yielding_classes) == 0:
+        return Stripped(
+            f"""\
+{doc_comment}
+std::unique_ptr<impl::IIterator> DispatchOnModelType(
+{I}const types::IClass&,
+{I}bool
+) {{
+{I}// NOTE (mristin):
+{I}// The instances of no class reference any other instances.
+{I}return Empty();
+}}"""
+        )
+
+    case_blocks = []  # type: List[Stripped]
+    for cls in yielding_classes:
+        model_type_literal = cpp_naming.enum_literal_name(cls.name)
+        interface_name = cpp_naming.interface_name(cls.name)
+
+        case_blocks.append(
+            Stripped(
+                f"""\
+case types::ModelType::{model_type_literal}:
+{I}return {cpp_over.over_class_function_name(cls)}(
+{II}dynamic_cast<const types::{interface_name}&>(instance),
+{II}recursive
+{I});"""
             )
         )
 
@@ -1114,7 +1911,9 @@ case {i}:
         Stripped(
             f"""\
 default:
-{I}throw std::logic_error("Invalid variant index");"""
+{I}// NOTE (mristin):
+{I}// The instances of the other classes reference no other instances.
+{I}return Empty();"""
         )
     )
 
@@ -1122,1333 +1921,93 @@ default:
 
     return Stripped(
         f"""\
-std::shared_ptr<types::IClass> {function_name}(
-{I}const types::{union_name}& that
+{doc_comment}
+std::unique_ptr<impl::IIterator> DispatchOnModelType(
+{I}const types::IClass& instance,
+{I}bool recursive
 ) {{
-{I}switch (that.index()) {{
+{I}switch (instance.model_type()) {{
 {II}{indent_but_first_line(case_blocks_joined, II)}
 {I}}}
 }}"""
     )
 
 
-@require(lambda iterator_qualities: len(iterator_qualities.relevant_properties) > 0)
-def _generate_iterator_over_cls_execute_implementation(
-    iterator_qualities: IteratorQualities,
-) -> Stripped:
-    """Generate the implementation of ``Execute()`` member."""
-    cls = iterator_qualities.cls
-
-    flow = [
-        yielding_flow.command_from_text(
-            """\
-property_.reset();
-item_ = nullptr;
-index_ = -1;
-done_ = false;"""
-        )
-    ]  # type: List[yielding_flow.Node]
-
-    if iterator_qualities.cls_contains_a_list_or_tuple_property:
-        flow.append(yielding_flow.command_from_text("cursor_.reset();"))
-
-    for prop in iterator_qualities.relevant_properties:
-        type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-        getter_name = cpp_naming.getter_name(prop.name)
-        property_literal = cpp_naming.enum_literal_name(prop.name)
-
-        if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            type_anno.our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-        ):
-            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-                flow.append(
-                    yielding_flow.IfTrue(
-                        f"casted_->{getter_name}().has_value()",
-                        [
-                            yielding_flow.command_from_text(
-                                f"""\
-property_ = Property::{property_literal};
-item_ = std::static_pointer_cast<types::IClass>(
-{I}*(casted_->{getter_name}())
-);
-++index_;"""
-                            ),
-                            yielding_flow.Yield(),
-                        ],
-                    )
-                )
-            else:
-                flow.append(
-                    yielding_flow.command_from_text(
-                        f"""\
-property_ = Property::{property_literal};
-item_ = std::static_pointer_cast<types::IClass>(
-{I}casted_->{getter_name}()
-);
-++index_;"""
-                    )
-                )
-                flow.append(yielding_flow.Yield())
-
-        elif isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            type_anno.our_type, intermediate.NamedUnion
-        ):
-            extraction_function = _named_union_extraction_function_name(
-                type_anno.our_type
-            )
-
-            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-                flow.append(
-                    yielding_flow.IfTrue(
-                        f"casted_->{getter_name}().has_value()",
-                        [
-                            yielding_flow.command_from_text(
-                                f"""\
-property_ = Property::{property_literal};
-item_ = {extraction_function}(
-{I}*(casted_->{getter_name}())
-);
-++index_;"""
-                            ),
-                            yielding_flow.Yield(),
-                        ],
-                    )
-                )
-            else:
-                flow.append(
-                    yielding_flow.command_from_text(
-                        f"""\
-property_ = Property::{property_literal};
-item_ = {extraction_function}(
-{I}casted_->{getter_name}()
-);
-++index_;"""
-                    )
-                )
-                flow.append(yielding_flow.Yield())
-
-        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-            is_list_of_classes = isinstance(
-                type_anno.items, intermediate.OurTypeAnnotation
-            ) and isinstance(
-                type_anno.items.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
-            )
-
-            is_list_of_named_unions = isinstance(
-                type_anno.items, intermediate.OurTypeAnnotation
-            ) and isinstance(type_anno.items.our_type, intermediate.NamedUnion)
-
-            assert is_list_of_classes or is_list_of_named_unions, (
-                f"NOTE (mristin): We expect only lists of classes or named "
-                f"unions at the moment, but you specified {prop.type_annotation} "
-                f"in class {cls.name!r} and property {prop.name!r}. "
-                f"Please contact the developers if you need this feature."
-            )
-            assert isinstance(type_anno.items, intermediate.OurTypeAnnotation)
-
-            if isinstance(type_anno.items.our_type, intermediate.NamedUnion):
-                extraction_function = _named_union_extraction_function_name(
-                    type_anno.items.our_type
-                )
-                item_extract_expr = Stripped(f"{extraction_function}(item_value)")
-            else:
-                item_extract_expr = Stripped(
-                    "std::static_pointer_cast<types::IClass>(item_value)"
-                )
-
-            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-                list_type = cpp_common.generate_type_with_const_ref_if_applicable(
-                    type_annotation=prop.type_annotation.value,
-                    types_namespace=cpp_common.TYPES_NAMESPACE,
-                )
-                list_var = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
-
-                flow.append(
-                    yielding_flow.IfTrue(
-                        f"casted_->{getter_name}().has_value()",
-                        [
-                            yielding_flow.command_from_text(
-                                f"property_ = Property::{property_literal};"
-                            ),
-                            yielding_flow.For(
-                                f"*cursor_ < casted_->{getter_name}()->size()",
-                                "++(*cursor_);",
-                                [
-                                    yielding_flow.command_from_text(
-                                        f"""\
-{list_type} {list_var}(
-{I}*(casted_->{getter_name}())
-);
-const auto& item_value = {list_var}[*cursor_];
-
-item_ = {item_extract_expr};
-++index_;"""
-                                    ),
-                                    yielding_flow.Yield(),
-                                ],
-                                init="cursor_ = 0;",
-                            ),
-                            yielding_flow.command_from_text("cursor_.reset();"),
-                        ],
-                    )
-                )
-            else:
-                list_type = cpp_common.generate_type_with_const_ref_if_applicable(
-                    type_annotation=prop.type_annotation,
-                    types_namespace=cpp_common.TYPES_NAMESPACE,
-                )
-                list_var = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
-
-                flow.append(
-                    yielding_flow.command_from_text(
-                        f"property_ = Property::{property_literal};"
-                    )
-                )
-                flow.append(
-                    yielding_flow.For(
-                        f"*cursor_ < casted_->{getter_name}().size()",
-                        "++(*cursor_);",
-                        [
-                            yielding_flow.command_from_text(
-                                f"""\
-{list_type} {list_var}(
-{I}casted_->{getter_name}()
-);
-const auto& item_value = {list_var}[*cursor_];
-
-item_ = {item_extract_expr};
-++index_;"""
-                            ),
-                            yielding_flow.Yield(),
-                        ],
-                        init="cursor_ = 0;",
-                    )
-                )
-                flow.append(yielding_flow.command_from_text("cursor_.reset();"))
-
-        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            class_or_union_indices = []  # type: List[Tuple[int, intermediate.OurType]]
-            for i, item_type_anno in enumerate(type_anno.items):
-                if not isinstance(item_type_anno, intermediate.OurTypeAnnotation):
-                    continue
-
-                is_class_item = isinstance(
-                    item_type_anno.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
-                )
-                is_named_union_item = isinstance(
-                    item_type_anno.our_type, intermediate.NamedUnion
-                )
-
-                if is_class_item or is_named_union_item:
-                    class_or_union_indices.append((i, item_type_anno.our_type))
-
-            assert len(class_or_union_indices) > 0, (
-                "Expected at least one class item in the tuple as the property "
-                "has been recognized as relevant in ``IteratorQualities``"
-            )
-
-            # NOTE (mristin):
-            # Unlike lists, tuple items live at fixed, compile-time-known positions,
-            # so we do not need a persistent local variable referring to the tuple
-            # itself. Instead, we re-evaluate the getter and index into it with
-            # ``std::get`` directly in each self-contained command, since a local
-            # variable declared in one command would go out of scope after
-            # the following ``Yield`` -- each command ends up in its own ``case``
-            # block once the control flow is linearized into a co-routine.
-            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-                tuple_getter_expr = Stripped(f"*(casted_->{getter_name}())")
-            else:
-                tuple_getter_expr = Stripped(f"casted_->{getter_name}()")
-
-            yield_nodes = []  # type: List[yielding_flow.Node]
-            for i, item_our_type in class_or_union_indices:
-                tuple_item_expr = Stripped(
-                    f"""\
-std::get<{i}>({tuple_getter_expr})"""
-                )
-
-                extract_expr: Stripped
-                if isinstance(item_our_type, intermediate.NamedUnion):
-                    extraction_function = _named_union_extraction_function_name(
-                        item_our_type
-                    )
-                    extract_expr = Stripped(
-                        f"""\
-{extraction_function}(
-{I}{indent_but_first_line(tuple_item_expr, I)}
-)"""
-                    )
-                else:
-                    extract_expr = Stripped(
-                        f"""\
-std::static_pointer_cast<types::IClass>(
-{I}{indent_but_first_line(tuple_item_expr, I)}
-)"""
-                    )
-
-                yield_nodes.append(
-                    yielding_flow.command_from_text(
-                        f"""\
-cursor_ = {i};
-item_ = {extract_expr};
-++index_;"""
-                    )
-                )
-                yield_nodes.append(yielding_flow.Yield())
-
-            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-                flow.append(
-                    yielding_flow.IfTrue(
-                        f"casted_->{getter_name}().has_value()",
-                        [
-                            yielding_flow.command_from_text(
-                                f"property_ = Property::{property_literal};"
-                            ),
-                            *yield_nodes,
-                            yielding_flow.command_from_text("cursor_.reset();"),
-                        ],
-                    )
-                )
-            else:
-                flow.append(
-                    yielding_flow.command_from_text(
-                        f"property_ = Property::{property_literal};"
-                    )
-                )
-                flow.extend(yield_nodes)
-                flow.append(yielding_flow.command_from_text("cursor_.reset();"))
-
-    flow.append(
-        yielding_flow.command_from_text(
-            """\
-done_ = true;
-index_ = -1;"""
-        )
-    )
-
-    body = cpp_yielding.generate_execute_body(
-        flow=flow, state_member=Identifier("state_")
-    )
-
-    iterator_name = cpp_naming.class_name(Identifier(f"Iterator_over_{cls.name}"))
-
-    return Stripped(
-        f"""\
-void {iterator_name}::Execute() {{
-{I}{indent_but_first_line(body, I)}
-}}"""
-    )
+def _is_used(function: str, code: str) -> bool:
+    """Check whether the generated ``code`` calls or refers to the ``function``."""
+    return re.search(rf"\b{function}\b", code) is not None
 
 
-@require(lambda iterator_qualities: len(iterator_qualities.relevant_properties) > 0)
-def _generate_iterator_over_cls(
-    iterator_qualities: IteratorQualities,
-) -> List[Stripped]:
-    """Generate a non-recursive iterator over referenced instances."""
-    cls = iterator_qualities.cls
-
-    iterator_name = cpp_naming.class_name(Identifier(f"Iterator_over_{cls.name}"))
-
-    interface_name = cpp_naming.interface_name(cls.name)
-
-    private_properties = [
-        Stripped(
-            f"""\
-// We make casted_ a pointer, so that we can follow the rule-of-zero.
-const types::{interface_name}* casted_;"""
-        ),
-        Stripped("std::uint32_t state_;"),
-        Stripped("common::optional<Property> property_;"),
-    ]
-    if iterator_qualities.cls_contains_a_list_or_tuple_property:
-        private_properties.append(
-            Stripped("common::optional<size_t> cursor_;  // in yield-from loops")
-        )
-
-    private_properties.extend(
-        (
-            Stripped("std::shared_ptr<types::IClass> item_;"),
-            Stripped("long index_;  // in total iteration"),
-            Stripped("bool done_;"),
-        )
-    )
-
-    private_properties_joined = "\n".join(private_properties)
-
-    execute_block = _generate_iterator_over_cls_execute_implementation(
-        iterator_qualities=iterator_qualities
-    )
-
-    if iterator_qualities.cls_contains_a_list_or_tuple_property:
-        prepend_to_path_block = Stripped(
-            f"""\
-void {iterator_name}::PrependToPath(
-{I}Path* path
-) const {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to prepend to path from {iterator_name}, "
-{III}"but the iterator was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}if (cursor_.has_value()) {{
-{II}path->segments.emplace_front(
-{III}common::make_unique<IndexSegment>(*cursor_)
-{II});
-{I}}}
-
-{I}#ifdef DEBUG
-{I}if (!property_.has_value()) {{
-{II}throw std::logic_error(
-{III}"You want to prepend to path from {iterator_name}, "
-{III}"but the property_ has not been set to a value."
-{II});
-{I}}}
-{I}#endif
-
-{I}path->segments.emplace_front(
-{II}common::make_unique<PropertySegment>(*property_)
-{I});
-}}"""
-        )
-
-    else:
-        prepend_to_path_block = Stripped(
-            f"""\
-void {iterator_name}::PrependToPath(
-{I}Path* path
-) const {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to prepend to path from {iterator_name}, "
-{III}"but the iterator was done."
-{II});
-{I}}}
-
-{I}if (!property_.has_value()) {{
-{II}throw std::logic_error(
-{III}"You want to prepend to path from {iterator_name}, "
-{III}"but the property_ has not been set to a value."
-{II});
-{I}}}
-{I}#endif
-
-{I}path->segments.emplace_front(
-{II}common::make_unique<PropertySegment>(*property_)
-{I});
-}}"""
-        )
-
-    return [
-        Stripped(
-            f"""\
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class {iterator_name} : public impl::IIterator {{
- public:
-{I}{iterator_name}(
-{II}const std::shared_ptr<types::IClass>& instance
-{I});
-{I}void Start() override;
-{I}void Next() override;
-{I}bool Done() const override;
-{I}const std::shared_ptr<types::IClass>& Get() const override;
-{I}long Index() const override;
-{I}void PrependToPath(Path* path) const override;
-{I}std::unique_ptr<impl::IIterator> Clone() const override;
-{I}~{iterator_name}() override = default;
-
- private:
-{I}{indent_but_first_line(private_properties_joined, I)}
-
-{I}void Execute();
-}};  // class {iterator_name}"""
-        ),
-        Stripped(
-            f"""\
-{iterator_name}::{iterator_name}(
-{I}const std::shared_ptr<types::IClass>& instance
-) :
-{I}// NOTE (mristin):
-{I}// The dynamic cast is necessary due to virtual inheritance. Otherwise,
-{I}// we would have used static cast.
-{I}casted_(
-{II}dynamic_cast<types::{interface_name}*>(
-{III}instance.get()
-{II})
-{I}) {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-void {iterator_name}::Start() {{
-{I}state_ = 0;
-{I}Execute();
-}}"""
-        ),
-        Stripped(
-            f"""\
-void {iterator_name}::Next() {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to move {iterator_name}, "
-{III}"but it was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}Execute();
-}}"""
-        ),
-        Stripped(
-            f"""\
-bool {iterator_name}::Done() const {{
-{I}return done_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-const std::shared_ptr<types::IClass>& {iterator_name}::Get() const {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to get from {iterator_name}, "
-{III}"but the iterator was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}return item_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-long {iterator_name}::Index() const {{
-{I}#ifdef DEBUG
-{I}if (Done() && index_ != -1) {{
-{II}throw std::logic_error(
-{III}common::Concat(
-{IIII}"Expected index to be -1 "
-{IIII}"from a done {iterator_name}, "
-{IIII}"but got: ",
-{IIII}std::to_string(index_)
-{III})
-{II});
-{I}}}
-{I}#endif
-
-{I}return index_;
-}}"""
-        ),
-        prepend_to_path_block,
-        Stripped(
-            f"""\
-std::unique_ptr<impl::IIterator> {iterator_name}::Clone() const {{
-{I}return common::make_unique<{iterator_name}>(*this);
-}}"""
-        ),
-        execute_block,
-    ]
-
-
-def _generate_iteration_over_cls(cls: intermediate.ConcreteClass) -> List[Stripped]:
-    """Generate the iterator over the given class."""
-    iterator_qualities = IteratorQualities(cls=cls)
-
-    if len(iterator_qualities.relevant_properties) == 0:
-        return _generate_empty_iterator_over_cls(iterator_qualities=iterator_qualities)
-
-    interface_name = cpp_naming.interface_name(cls.name)
-
-    return [
-        Stripped(f"// region Non-recursive iteration over {interface_name}"),
-        *_generate_iterator_over_cls(iterator_qualities=iterator_qualities),
-        Stripped("// endregion"),
-    ]
-
-
-def _generate_new_non_recursive_iterator_function(
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _generate_iteration_over_instances(
     symbol_table: intermediate.SymbolTable,
-) -> Stripped:
-    """Generate the factory for non-recursive iterators."""
-    case_blocks = []  # type: List[Stripped]
+) -> Tuple[Optional[List[Stripped]], Optional[List[Error]]]:
+    """Generate the combinators and the functions over the referenced instances."""
+    yielding_classes = _yielding_classes(symbol_table=symbol_table)
 
-    for cls in symbol_table.concrete_classes:
-        enum_name = cpp_naming.enum_name(Identifier("Model_type"))
-        literal_name = cpp_naming.enum_literal_name(cls.name)
+    # NOTE (mristin):
+    # We first collect the lists, tuples and named unions which need a function,
+    # and only then generate the functions, so that the generation itself has no
+    # state to keep.
+    function_types, collection_errors = cpp_over.collect_function_types(
+        classes=yielding_classes, yields=_yields
+    )
+    if collection_errors is not None:
+        return None, collection_errors
 
-        iterator_over_cls = cpp_naming.class_name(
-            Identifier(f"Iterator_over_{cls.name}")
+    assert function_types is not None
+
+    function_name_set = frozenset(
+        cpp_over.over_function_name(function_type) for function_type in function_types
+    )
+
+    aliases_and_functions = [
+        _generate_over_function(
+            type_annotation=function_type, function_name_set=function_name_set
         )
-
-        case_blocks.append(
-            Stripped(
-                f"""\
-case types::{enum_name}::{literal_name}:
-{I}return common::make_unique<{iterator_over_cls}>(
-{II}instance
-{I});"""
-            )
-        )
-
-    case_blocks.append(
-        Stripped(
-            f"""\
-default:
-{I}throw std::logic_error(
-{II}common::Concat(
-{III}"Unexpected model type: ",
-{III}std::to_string(
-{IIII}static_cast<std::uint32_t>(instance->model_type())
-{III})
-{II})
-{I});"""
-        )
-    )
-
-    case_blocks_joined = "\n".join(case_blocks)
-
-    switch_stmt = Stripped(
-        f"""\
-switch (instance->model_type()) {{
-{I}{indent_but_first_line(case_blocks_joined, I)}
-}}"""
-    )
-
-    new_non_recursive_iterator = cpp_naming.function_name(
-        Identifier("new_non_recursive_iterator")
-    )
-
-    return Stripped(
-        f"""\
-/**
- * Produce a non-recursive iterator over the instance given its runtime model type.
- */
-std::unique_ptr<impl::IIterator> {new_non_recursive_iterator}(
-{I}const std::shared_ptr<types::IClass>& instance
-) {{
-{I}{indent_but_first_line(switch_stmt, I)}
-}}"""
-    )
-
-
-def _generate_recursive_inclusive_iterator_execute() -> Stripped:
-    """Generate the ``Execute()`` method of the recursive inclusive iterator."""
-    new_non_recursive_iterator = cpp_naming.function_name(
-        Identifier("new_non_recursive_iterator")
-    )
-
-    flow = [
-        yielding_flow.command_from_text(
-            """\
-item_ = instance_;
-index_ = 0;
-done_ = false;
-non_recursive_iterator_.reset(nullptr);
-recursive_iterator_.reset(nullptr);"""
-        ),
-        yielding_flow.Yield(),
-        yielding_flow.command_from_text(
-            f"""\
-non_recursive_iterator_ = {new_non_recursive_iterator}(
-{I}*instance_
-);"""
-        ),
-        yielding_flow.For(
-            "!non_recursive_iterator_->Done()",
-            "non_recursive_iterator_->Next();",
-            [
-                yielding_flow.command_from_text(
-                    """\
-item_ = &(non_recursive_iterator_->Get());
-++index_;"""
-                ),
-                yielding_flow.Yield(),
-                yielding_flow.command_from_text(
-                    f"""\
-recursive_iterator_ = common::make_unique<RecursiveExclusiveIterator>(
-{I}*item_
-);"""
-                ),
-                yielding_flow.For(
-                    "!recursive_iterator_->Done()",
-                    "recursive_iterator_->Next();",
-                    [
-                        yielding_flow.command_from_text(
-                            """\
-item_ = &(recursive_iterator_->Get());
-++index_;"""
-                        ),
-                        yielding_flow.Yield(),
-                    ],
-                    init="recursive_iterator_->Start();",
-                ),
-                yielding_flow.command_from_text("recursive_iterator_.reset(nullptr);"),
-            ],
-            init="non_recursive_iterator_->Start();",
-        ),
-        yielding_flow.command_from_text(
-            """\
-non_recursive_iterator_.reset(nullptr);
-done_ = true;
-index_ = -1;"""
-        ),
-    ]  # type: List[yielding_flow.Node]
-
-    body = cpp_yielding.generate_execute_body(
-        flow=flow, state_member=Identifier("state_")
-    )
-
-    return Stripped(
-        f"""\
-void RecursiveInclusiveIterator::Execute() {{
-{I}{indent_but_first_line(body, I)}
-}}"""
-    )
-
-
-def _generate_recursive_iteration() -> List[Stripped]:
-    """Generate the iterator to recursively iterate over the referenced instances."""
-    execute_block = _generate_recursive_inclusive_iterator_execute()
-
-    return [
-        Stripped(
-            f"""\
-/**
- * Iterate recursively over the instance, including the instance in the iteration.
- *
- * This is a realisation of the following pseudo-code:
- * \\code
- * stack = new Stack();
- * stack.push(instance);
- * while not stack.empty():
- *     instance = stack.pop()
- *     yield instance
- *
- *     it = new_non_recursive_iterator(instance)
- *     while not it.done():
- *         yield recursively from it.get()
- *         it.next()
- * \\endcode
- */
-class RecursiveInclusiveIterator : public impl::IIterator {{
- public:
-{I}RecursiveInclusiveIterator(
-{II}const std::shared_ptr<types::IClass>& instance
-{I});
-
-{I}RecursiveInclusiveIterator(
-{II}const RecursiveInclusiveIterator& other
-{I});
-{I}RecursiveInclusiveIterator(
-{II}RecursiveInclusiveIterator&& other
-{I});
-{I}RecursiveInclusiveIterator& operator=(
-{II}const RecursiveInclusiveIterator& other
-{I});
-{I}RecursiveInclusiveIterator& operator=(
-{II}RecursiveInclusiveIterator&& other
-{I});
-
-{I}void Start() override;
-{I}void Next() override;
-{I}bool Done() const override;
-{I}const std::shared_ptr<types::IClass>& Get() const override;
-{I}long Index() const override;
-{I}void PrependToPath(Path* path) const override;
-{I}std::unique_ptr<impl::IIterator> Clone() const override;
-{I}~RecursiveInclusiveIterator() override = default;
-
- private:
-{I}// The instance_ needs to be a pointer so that we can re-assign it in
-{I}// the constructors and assignment operations.
-{I}const std::shared_ptr<types::IClass>* instance_;
-
-{I}// Iterator over the instances referenced from this instance
-{I}// in the outer loop
-{I}std::unique_ptr<impl::IIterator> non_recursive_iterator_;
-
-{I}// Iterator for recursion into the reference referenced from this instance
-{I}// in the inner loop
-{I}std::unique_ptr<impl::IIterator> recursive_iterator_;
-
-{I}const std::shared_ptr<types::IClass>* item_;
-
-{I}bool done_;
-{I}long index_;
-{I}size_t state_;
-
-{I}void Execute();
-}};  // class RecursiveInclusiveIterator"""
-        ),
-        Stripped(
-            f"""\
-/**
- * Iterate recursively over the instance, excluding the instance in the iteration.
- *
- * This is a realisation of the following pseudo-code:
- * \\code
- * stack = new Stack();
- * stack.push(instance);
- * while not stack.empty():
- *     some_instance = stack.pop()
- *     if some_instance is not instance:
- *         yield some_instance
- *
- *     it = new_non_recursive_iterator(some_instance)
- *     while not it.done():
- *         yield recursively from it.get()
- *         it.next()
- * \\endcode
- */
-class RecursiveExclusiveIterator : public impl::IIterator {{
- public:
-{I}RecursiveExclusiveIterator(
-{II}const std::shared_ptr<types::IClass>& instance
-{I});
-
-{I}void Start() override;
-{I}void Next() override;
-{I}bool Done() const override;
-{I}const std::shared_ptr<types::IClass>& Get() const override;
-{I}long Index() const override;
-{I}void PrependToPath(Path* path) const override;
-{I}std::unique_ptr<impl::IIterator> Clone() const override;
-{I}~RecursiveExclusiveIterator() override = default;
-
- private:
-{I}RecursiveInclusiveIterator inclusive_iterator_;
-}};  // class RecursiveExclusiveIterator"""
-        ),
-        Stripped("// region RecursiveInclusiveIterator implementation"),
-        Stripped(
-            f"""\
-RecursiveInclusiveIterator::RecursiveInclusiveIterator(
-{I}const std::shared_ptr<types::IClass>& instance
-) : instance_(&instance), item_(nullptr), index_(-1) {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-RecursiveInclusiveIterator::RecursiveInclusiveIterator(
-{I}const RecursiveInclusiveIterator& other
-) {{
-{I}instance_ = other.instance_;
-{I}non_recursive_iterator_ = (other.non_recursive_iterator_ == nullptr)
-{II}? nullptr
-{II}: other.non_recursive_iterator_->Clone();
-{I}recursive_iterator_ = (other.recursive_iterator_ == nullptr)
-{II}? nullptr
-{II}: other.recursive_iterator_->Clone();
-{I}item_ = other.item_;
-{I}done_ = other.done_;
-{I}index_ = other.index_;
-{I}state_ = other.state_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-RecursiveInclusiveIterator::RecursiveInclusiveIterator(
-{I}RecursiveInclusiveIterator&& other
-) {{
-{I}instance_ = other.instance_;
-{I}non_recursive_iterator_ = std::move(other.non_recursive_iterator_);
-{I}recursive_iterator_ = std::move(other.recursive_iterator_);
-{I}item_ = other.item_;
-{I}done_ = other.done_;
-{I}index_ = other.index_;
-{I}state_ = other.state_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-RecursiveInclusiveIterator& RecursiveInclusiveIterator::operator=(
-{I}const RecursiveInclusiveIterator& other
-) {{
-{I}return *this = RecursiveInclusiveIterator(other);
-}}"""
-        ),
-        Stripped(
-            f"""\
-RecursiveInclusiveIterator& RecursiveInclusiveIterator::operator=(
-{I}RecursiveInclusiveIterator&& other
-) {{
-{I}if (this != &other) {{
-{II}instance_ = other.instance_;
-{II}non_recursive_iterator_ = std::move(other.non_recursive_iterator_);
-{II}recursive_iterator_ = std::move(other.recursive_iterator_);
-{II}item_ = other.item_;
-{II}done_ = other.done_;
-{II}index_ = other.index_;
-{II}state_ = other.state_;
-{I}}}
-
-{I}return *this;
-}}"""
-        ),
-        Stripped(
-            f"""\
-void RecursiveInclusiveIterator::Start() {{
-{I}state_ = 0;
-{I}Execute();
-
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"Expected RecursiveInclusiveIterator not to be done at start, but it was."
-{II});
-{I}}}
-
-{I}if (Index() != 0) {{
-{II}throw std::logic_error(
-{III}common::Concat(
-{IIII}"Expected RecursiveInclusiveIterator::Index() to be 0 on Start()"
-{IIII}", but got ",
-{IIII}std::to_string(Index())
-{III})
-{II});
-{I}}}
-
-{I}const std::shared_ptr<types::IClass>& current_item(Get());
-{I}if (current_item == nullptr) {{
-{II}throw std::logic_error(
-{III}"Unexpected null pointer from Get() at the end of "
-{III}"RecursiveInclusiveIterator::Start"
-{II});
-{I}}}
-
-{I}if (current_item.get() != instance_->get()) {{
-{II}throw std::logic_error(
-{III}"Expected the current item to point to the instance "
-{III}"at the end of RecursiveInclusiveIterator::Start, "
-{III}"but Get() pointed to a different instance."
-{II});
-{I}}}
-{I}#endif
-}}"""
-        ),
-        Stripped(
-            f"""\
-void RecursiveInclusiveIterator::Next() {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to move a RecursiveInclusiveIterator, but it was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}Execute();
-}}"""
-        ),
-        Stripped(
-            f"""\
-bool RecursiveInclusiveIterator::Done() const {{
-{I}return done_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-const std::shared_ptr<types::IClass>& RecursiveInclusiveIterator::Get() const {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to get from RecursiveInclusiveIterator, but it was done."
-{II});
-{I}}}
-
-{I}if (item_ == nullptr) {{
-{II}throw std::logic_error(
-{III}"You want to get from a RecursiveInclusiveIterator, "
-{III}"but item_ has not been set."
-{II});
-{I}}}
-{I}#endif
-
-{I}return *item_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-long RecursiveInclusiveIterator::Index() const {{
-{I}#ifdef DEBUG
-{I}if (Done() && index_ != -1) {{
-{II}throw std::logic_error(
-{III}common::Concat(
-{IIII}"Expected index to be -1 on a done RecursiveInclusiveIterator, "
-{IIII}"but got: ",
-{IIII}std::to_string(index_)
-{III})
-{II});
-{I}}}
-{I}#endif
-
-{I}return index_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-void RecursiveInclusiveIterator::PrependToPath(Path* path) const {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to prepend to path from RecursiveInclusiveIterator, "
-{III}"but the iterator was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}if (Index() == 0) {{
-{II}// Index set to 0 indicates that the iterator points to the instance itself.
-{II}// Therefore, there is nothing to prepend to the path.
-{II}return;
-{I}}}
-
-{I}if (recursive_iterator_ != nullptr) {{
-{II}recursive_iterator_->PrependToPath(path);
-{I}}}
-
-{I}if (non_recursive_iterator_ != nullptr) {{
-{II}non_recursive_iterator_->PrependToPath(path);
-{I}}}
-}}"""
-        ),
-        Stripped(
-            f"""\
-std::unique_ptr<impl::IIterator> RecursiveInclusiveIterator::Clone() const {{
-{I}return common::make_unique<RecursiveInclusiveIterator>(*this);
-}}"""
-        ),
-        execute_block,
-        Stripped("// endregion RecursiveInclusiveIterator implementation"),
-        Stripped("// region RecursiveExclusiveIterator implementation"),
-        Stripped(
-            f"""\
-RecursiveExclusiveIterator::RecursiveExclusiveIterator(
-{I}const std::shared_ptr<types::IClass>& instance
-) : inclusive_iterator_(instance) {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-void RecursiveExclusiveIterator::Start() {{
-{I}inclusive_iterator_.Start();
-
-{I}#ifdef DEBUG
-{I}if (inclusive_iterator_.Done()) {{
-{II}throw std::logic_error(
-{III}"Expected the inclusive iterator to be not-done immediately after start, "
-{III}"as the first item is expected to point to the instance itself, "
-{III}"but the inclusive iterator was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}// Simply skip the instance in the very first yield.
-{I}inclusive_iterator_.Next();
-}}"""
-        ),
-        Stripped(
-            f"""\
-void RecursiveExclusiveIterator::Next() {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to move a RecursiveExclusiveIterator, but it was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}inclusive_iterator_.Next();
-}}"""
-        ),
-        Stripped(
-            f"""\
-bool RecursiveExclusiveIterator::Done() const {{
-{I}return inclusive_iterator_.Done();
-}}"""
-        ),
-        Stripped(
-            f"""\
-const std::shared_ptr<types::IClass>& RecursiveExclusiveIterator::Get() const {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to get from RecursiveExclusiveIterator, but it was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}return inclusive_iterator_.Get();
-}}"""
-        ),
-        Stripped(
-            f"""\
-long RecursiveExclusiveIterator::Index() const {{
-{I}if (inclusive_iterator_.Done()) {{
-{II}return -1;
-{I}}}
-
-{I}return inclusive_iterator_.Index() - 1;
-}}"""
-        ),
-        Stripped(
-            f"""\
-void RecursiveExclusiveIterator::PrependToPath(Path* path) const {{
-{I}inclusive_iterator_.PrependToPath(path);
-}}"""
-        ),
-        Stripped(
-            f"""\
-std::unique_ptr<impl::IIterator> RecursiveExclusiveIterator::Clone() const {{
-{I}return common::make_unique<RecursiveExclusiveIterator>(*this);
-}}"""
-        ),
-        Stripped("// endregion RecursiveExclusiveIterator implementation"),
+        for function_type in function_types
     ]
 
-
-def _generate_descent_and_descent_once_implementations() -> List[Stripped]:
-    """Generate the implementation of the descent iterables."""
-    new_non_recursive_iterator = cpp_naming.function_name(
-        Identifier("new_non_recursive_iterator")
-    )
-
-    return [
-        Stripped(
-            f"""\
-// region Descent
-
-// NOTE (mristin):
-// We have to make a copy of the pointer since we would lose otherwise
-// in range-based `for` loops,
-// see: https://stackoverflow.com/questions/29990045/temporary-lifetime-in-range-for-expression
-Descent::Descent(
-{I}std::shared_ptr<types::IClass> instance
-) : instance_(std::move(instance)) {{
-{I}// Intentionally empty.
-}}
-
-Iterator Descent::begin() const {{
-{I}std::unique_ptr<impl::IIterator> it_impl(
-{II}common::make_unique<RecursiveExclusiveIterator>(instance_)
-{I});
-
-{I}it_impl->Start();
-
-{I}// NOTE(mristin):
-{I}// We short-circuit here for memory frugality,
-{I}// as we can immediately dispose it_impl.
-{I}if (it_impl->Done()) {{
-{II}return end();
-{I}}}
-
-{I}return Iterator(std::move(it_impl));
-}}
-
-const Iterator& Descent::end() const {{
-{I}static Iterator iterator(common::make_unique<AlwaysDoneIterator>());
-{I}return iterator;
-}}
-
-// endregion Descent"""
+    generated = [
+        *(alias for alias, _ in aliases_and_functions if alias is not None),
+        *(function for _, function in aliases_and_functions),
+        *(
+            _generate_over_class(cls=cls, function_name_set=function_name_set)
+            for cls in yielding_classes
         ),
-        Stripped(
-            f"""\
-// region DescentOnce
+        _generate_dispatch_on_model_type(yielding_classes=yielding_classes),
+    ]  # type: List[Stripped]
 
-// NOTE (mristin):
-// We have to make a copy of the pointer since we would lose otherwise
-// in range-based `for` loops,
-// see: https://stackoverflow.com/questions/29990045/temporary-lifetime-in-range-for-expression
-DescentOnce::DescentOnce(
-{I}std::shared_ptr<types::IClass> instance
-) : instance_(std::move(instance)) {{
-{I}// Intentionally empty.
-}}
+    generated_code = "\n".join(generated)
 
-Iterator DescentOnce::begin() const {{
-{I}std::unique_ptr<impl::IIterator> it_impl(
-{II}{new_non_recursive_iterator}(instance_)
-{I});
+    # NOTE (mristin):
+    # We include only the combinators which we use, as the compilers warn about
+    # the unused functions.
+    combinators = [*_EMPTY]
+    for function, combinator in (
+        ("Chain", _CHAIN),
+        ("InProperty", _IN_PROPERTY),
+        ("AtIndex", _AT_INDEX),
+        ("Each", _EACH),
+    ):
+        if _is_used(function, generated_code):
+            combinators.extend(combinator)
 
-{I}it_impl->Start();
+    if _is_used("OneThenOver", generated_code):
+        # NOTE (mristin):
+        # ``OneThenOver`` is a chain of ``One`` and ``Over``.
+        if _CHAIN[0] not in combinators:
+            combinators.extend(_CHAIN)
 
-{I}// NOTE(mristin):
-{I}// We short-circuit here for efficiency, as we can immediately dispose it_impl.
-{I}if (it_impl->Done()) {{
-{II}return Iterator(common::make_unique<AlwaysDoneIterator>());
-{I}}}
+        combinators.extend(_ONE)
+        combinators.extend(_ONE_THEN_OVER)
 
-{I}return Iterator(std::move(it_impl));
-}}
-
-const Iterator& DescentOnce::end() const {{
-{I}static Iterator iterator(common::make_unique<AlwaysDoneIterator>());
-{I}return iterator;
-}}
-
-// endregion DescentOnce"""
-        ),
-    ]
+    return [*combinators, *generated], None
 
 
-def _generate_constructor_implementation(cls: intermediate.ConcreteClass) -> Stripped:
-    """Transpile the constructor implementation for the given ``cls``."""
-    assert all(
-        isinstance(stmt, intermediate_construction.AssignArgument)
-        for stmt in cls.constructor.inlined_statements
-    ), (
-        f"We expect only assigns in the inlined constructors, "
-        f"but got for class {cls.name!r}: {cls.constructor.inlined_statements}"
-    )
+# endregion Iteration over the instances
 
-    body_statements = []  # type: List[Stripped]
-
-    for stmt in cls.constructor.inlined_statements:
-        assert isinstance(stmt, intermediate_construction.AssignArgument), (
-            f"Only assigns expected in inlined constructors, but got the following "
-            f"statement for the class {cls.name!r}: {stmt}"
-        )
-
-        prop_member = cpp_naming.private_property_name(stmt.name)
-        arg_name = cpp_naming.argument_name(stmt.argument)
-
-        if stmt.default is not None:
-            if isinstance(stmt.default, intermediate_construction.EmptyList):
-                body_statements.append(
-                    Stripped(
-                        f"""\
-if ({arg_name}.has_value()) {{
-{I}{prop_member} = *{arg_name};
-}} else {{
-{I}{prop_member}.emplace();
-}}"""
-                    )
-                )
-            elif isinstance(stmt.default, intermediate_construction.DefaultEnumLiteral):
-                enum_name = cpp_naming.enum_name(stmt.default.enum.name)
-                literal_name = cpp_naming.enum_literal_name(stmt.default.literal.name)
-
-                body_statements.append(
-                    Stripped(
-                        f"""\
-{prop_member} = ({arg_name}.has_value())
-{I}? *{arg_name}
-{I}: {enum_name}::{literal_name};"""
-                    )
-                )
-            else:
-                # noinspection PyTypeChecker
-                assert_never(stmt.default)
-
-        else:
-            prop = cls.properties_by_name[stmt.name]
-            if cpp_common.is_referencable(prop.type_annotation):
-                body_statements.append(
-                    Stripped(f"{prop_member} = std::move({arg_name});")
-                )
-            else:
-                body_statements.append(Stripped(f"{prop_member} = {arg_name};"))
-
-    body = (
-        "\n\n".join(body_statements)
-        if len(body_statements) > 0
-        else "// Intentionally empty."
-    )
-
-    cls_name = cpp_naming.class_name(cls.name)
-
-    if len(cls.constructor.arguments) == 0:
-        return Stripped(
-            f"""\
-{cls_name}::{cls_name}() {{
-{I}{indent_but_first_line(body, I)}
-}}"""
-        )
-
-    constructor_argument_specs = []  # type: List[str]
-    for arg in cls.constructor.arguments:
-        arg_type = cpp_common.generate_type(arg.type_annotation)
-        arg_name = cpp_naming.argument_name(arg.name)
-
-        constructor_argument_specs.append(f"{arg_type} {arg_name}")
-
-    constructor_arguments_specs_joined = ",\n".join(constructor_argument_specs)
-
-    return Stripped(
-        f"""\
-{cls_name}::{cls_name}(
-{I}{indent_but_first_line(constructor_arguments_specs_joined, I)}
-) {{
-{I}{indent_but_first_line(body, I)}
-}}"""
-    )
-
-
-def _generate_always_done_iterator() -> Stripped:
-    """Generate the definition and implementation of the end-of-descent iterator."""
-    return Stripped(
-        f"""\
-/**
- * This iterator is always done.
- *
- * It is used for efficient comparisons against end-of-descent.
- */
-class AlwaysDoneIterator : public impl::IIterator {{
- public:
-{I}void Start() override {{
-{II}// Intentionally empty.
-{I}}}
-
-{I}void Next() override {{
-{II}throw std::logic_error(
-{III}"You want to move an AlwaysDoneIterator, "
-{III}"but the iterator is always done, as its name suggests."
-{II});
-{I}}}
-
-{I}bool Done() const override {{
-{II}return true;
-{I}}}
-
-{I}const std::shared_ptr<types::IClass>& Get() const override {{
-{II}throw std::logic_error(
-{III}"You want to get from an AlwaysDoneIterator, "
-{III}"but the iterator is always done, as its name suggests."
-{II});
-{I}}}
-
-{I}std::unique_ptr<IIterator> Clone() const override {{
-{II}return common::make_unique<AlwaysDoneIterator>(*this);
-{I}}};
-
-{I}void PrependToPath(Path*) const override {{
-{II}throw std::logic_error(
-{III}"You want to prepend to path from an AlwaysDoneIterator, "
-{III}"but the iterator is always done, as its name suggests."
-{II});
-{I}}}
-
-{I}long Index() const override {{
-{II}return -1;
-{I}}}
-
-{I}~AlwaysDoneIterator() override = default;
-}};  // class AlwaysDoneIterator"""
-    )
+# region Facade
 
 
 def _generate_iterator_implementation() -> List[Stripped]:
@@ -2458,7 +2017,9 @@ def _generate_iterator_implementation() -> List[Stripped]:
             f"""\
 Iterator::Iterator(
 {I}const Iterator& other
-) : implementation_(other.implementation_->Clone()) {{
+) :
+{I}implementation_(other.implementation_->Clone()),
+{I}index_(other.index_) {{
 {I}// Intentionally empty.
 }}"""
         ),
@@ -2466,7 +2027,9 @@ Iterator::Iterator(
             f"""\
 Iterator::Iterator(
 {I}Iterator&& other
-) : implementation_(std::move(other.implementation_)) {{
+) :
+{I}implementation_(std::move(other.implementation_)),
+{I}index_(other.index_) {{
 {I}// Intentionally empty.
 }}"""
         ),
@@ -2480,7 +2043,8 @@ Iterator& Iterator::operator=(const Iterator& other) {{
             f"""\
 Iterator& Iterator::operator=(Iterator&& other) {{
 {I}if (this != &other) {{
-{II}this->implementation_ = std::move(other.implementation_);
+{II}implementation_ = std::move(other.implementation_);
+{II}index_ = other.index_;
 {I}}}
 
 {I}return *this;
@@ -2521,6 +2085,7 @@ Iterator& Iterator::operator++() {{
 {I}}}
 
 {I}implementation_->Next();
+{I}index_ = implementation_->Done() ? -1 : index_ + 1;
 {I}return *this;
 }}"""
         ),
@@ -2536,13 +2101,13 @@ Iterator Iterator::operator++(int) {{
         Stripped(
             f"""\
 bool operator==(const Iterator& a, const Iterator& b) {{
-{I}return a.implementation_->Index() == b.implementation_->Index();
+{I}return a.index_ == b.index_;
 }}"""
         ),
         Stripped(
             f"""\
 bool operator!=(const Iterator& a, const Iterator& b) {{
-{I}return a.implementation_->Index() != b.implementation_->Index();
+{I}return a.index_ != b.index_;
 }}"""
         ),
         Stripped(
@@ -2555,7 +2120,7 @@ Path MaterializePath(const Iterator& iterator) {{
 {I}}}
 
 {I}Path path;
-{I}iterator.implementation_->PrependToPath(&path);
+{I}iterator.implementation_->AppendToPath(path);
 {I}return path;
 }}"""
         ),
@@ -2568,10 +2133,71 @@ void PrependToPath(const Iterator& iterator, Path* path) {{
 {II});
 {I}}}
 
-{I}iterator.implementation_->PrependToPath(path);
+{I}Path prefix;
+{I}iterator.implementation_->AppendToPath(prefix);
+
+{I}for (
+{II}auto it = prefix.segments.rbegin();
+{II}it != prefix.segments.rend();
+{II}++it
+{I}) {{
+{II}path->segments.emplace_front(std::move(*it));
+{I}}}
 }}"""
         ),
     ]
+
+
+def _generate_descent_and_descent_once_implementations() -> List[Stripped]:
+    """Generate the implementation of the descent iterables."""
+    blocks = []  # type: List[Stripped]
+
+    for descent, recursive in (("Descent", "true"), ("DescentOnce", "false")):
+        blocks.append(
+            Stripped(
+                f"""\
+// region {descent}
+
+// NOTE (mristin):
+// We have to make a copy of the pointer since we would lose otherwise
+// in range-based `for` loops,
+// see: https://stackoverflow.com/questions/29990045/temporary-lifetime-in-range-for-expression
+{descent}::{descent}(
+{I}std::shared_ptr<types::IClass> instance
+) : instance_(std::move(instance)) {{
+{I}// Intentionally empty.
+}}
+
+Iterator {descent}::begin() const {{
+{I}std::unique_ptr<impl::IIterator> it_impl(
+{II}DispatchOnModelType(*instance_, {recursive})
+{I});
+
+{I}it_impl->Start();
+
+{I}// NOTE(mristin):
+{I}// We short-circuit here for memory frugality,
+{I}// as we can immediately dispose it_impl.
+{I}if (it_impl->Done()) {{
+{II}return end();
+{I}}}
+
+{I}return Iterator(std::move(it_impl));
+}}
+
+const Iterator& {descent}::end() const {{
+{I}static Iterator iterator(Empty());
+{I}return iterator;
+}}
+
+// endregion {descent}"""
+            )
+        )
+
+    return blocks
+
+
+# endregion Facade
 
 
 def _generate_over_enum_implementation(enum: intermediate.Enumeration) -> Stripped:
@@ -2625,44 +2251,31 @@ def generate_implementation(
         *_generate_key_segment_implementation(),
         *_generate_path_implementation(),
         Stripped("// endregion Pathing"),
-        Stripped("// region Non-recursive iteration"),
     ]  # type: List[Stripped]
 
-    errors = []  # type: List[Error]
-
-    for named_union in symbol_table.named_unions:
-        blocks.append(
-            _generate_extract_iclass_from_named_union(named_union=named_union)
-        )
-
-    for cls in symbol_table.concrete_classes:
-        blocks.extend(_generate_iteration_over_cls(cls=cls))
-
-    blocks.append(_generate_always_done_iterator())
-
-    blocks.append(
-        _generate_new_non_recursive_iterator_function(symbol_table=symbol_table)
+    iteration_blocks, errors = _generate_iteration_over_instances(
+        symbol_table=symbol_table
     )
+    if errors is not None:
+        return None, errors
 
-    blocks.append(Stripped("// endregion Non-recursive iteration"))
+    assert iteration_blocks is not None
 
-    blocks.append(Stripped("// region Recursive iteration"))
-
-    blocks.extend(_generate_recursive_iteration())
-
-    blocks.append(Stripped("// endregion Recursive iteration"))
-
-    blocks.append(Stripped("// region Iterator facade"))
-
-    blocks.extend(_generate_iterator_implementation())
-
-    blocks.append(Stripped("// endregion Iterator facade"))
-
-    blocks.append(Stripped("// region Descents"))
-
-    blocks.extend(_generate_descent_and_descent_once_implementations())
-
-    blocks.append(Stripped("// endregion Descents"))
+    blocks.extend(
+        [
+            Stripped("namespace {"),
+            Stripped("// region Iteration over the instances"),
+            *iteration_blocks,
+            Stripped("// endregion Iteration over the instances"),
+            Stripped("}  // namespace"),
+            Stripped("// region Iterator facade"),
+            *_generate_iterator_implementation(),
+            Stripped("// endregion Iterator facade"),
+            Stripped("// region Descents"),
+            *_generate_descent_and_descent_once_implementations(),
+            Stripped("// endregion Descents"),
+        ]
+    )
 
     if len(symbol_table.enumerations) > 0:
         blocks.append(Stripped("// region Over enumerations"))
@@ -2671,9 +2284,6 @@ def generate_implementation(
             blocks.append(_generate_over_enum_implementation(enum))
 
         blocks.append(Stripped("// endregion Over enumerations"))
-
-    if len(errors) > 0:
-        return None, errors
 
     blocks.extend(
         [

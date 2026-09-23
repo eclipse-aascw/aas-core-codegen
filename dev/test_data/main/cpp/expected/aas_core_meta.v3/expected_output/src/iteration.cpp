@@ -361,1416 +361,22 @@ std::wstring Path::ToWstring() const {
 
 // endregion Pathing
 
-// region Non-recursive iteration
+namespace {
 
-// region Non-recursive iteration over IExtension
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverExtension : public impl::IIterator {
- public:
-  IteratorOverExtension(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverExtension() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IExtension* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverExtension
-
-IteratorOverExtension::IteratorOverExtension(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IExtension*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverExtension::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverExtension::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverExtension, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverExtension::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverExtension::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverExtension, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverExtension::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverExtension, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverExtension::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverExtension, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverExtension, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverExtension::Clone() const {
-  return common::make_unique<IteratorOverExtension>(*this);
-}
-
-void IteratorOverExtension::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 1;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 5;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 2: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        ++(*cursor_);
-
-        state_ = 2;
-        continue;
-      }
-
-      case 4: {
-        cursor_.reset();
-      }
-
-      case 5: {
-        if (!(casted_->refers_to().has_value())) {
-          state_ = 9;
-          continue;
-        }
-
-        property_ = Property::kRefersTo;
-
-        cursor_ = 0;
-      }
-
-      case 6: {
-        if (!(*cursor_ < casted_->refers_to()->size())) {
-          state_ = 8;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_refers_to(
-          *(casted_->refers_to())
-        );
-        const auto& item_value = the_refers_to[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        ++(*cursor_);
-
-        state_ = 6;
-        continue;
-      }
-
-      case 8: {
-        cursor_.reset();
-      }
-
-      case 9: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 10;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IAdministrativeInformation
+// region Iteration over the instances
 
 /**
- * Iterate non-recursively over the instances referenced from an instance.
+ * Iterate over no instances at all.
  */
-class IteratorOverAdministrativeInformation : public impl::IIterator {
+class EmptyIterator : public impl::IIterator {
  public:
-  IteratorOverAdministrativeInformation(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverAdministrativeInformation() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IAdministrativeInformation* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverAdministrativeInformation
-
-IteratorOverAdministrativeInformation::IteratorOverAdministrativeInformation(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IAdministrativeInformation*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverAdministrativeInformation::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverAdministrativeInformation::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverAdministrativeInformation, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverAdministrativeInformation::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverAdministrativeInformation::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverAdministrativeInformation, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverAdministrativeInformation::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverAdministrativeInformation, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverAdministrativeInformation::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverAdministrativeInformation, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverAdministrativeInformation, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverAdministrativeInformation::Clone() const {
-  return common::make_unique<IteratorOverAdministrativeInformation>(*this);
-}
-
-void IteratorOverAdministrativeInformation::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->creator().has_value())) {
-          state_ = 5;
-          continue;
-        }
-
-        property_ = Property::kCreator;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->creator())
-        );
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 6;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IQualifier
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverQualifier : public impl::IIterator {
- public:
-  IteratorOverQualifier(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverQualifier() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IQualifier* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverQualifier
-
-IteratorOverQualifier::IteratorOverQualifier(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IQualifier*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverQualifier::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverQualifier::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverQualifier, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverQualifier::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverQualifier::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverQualifier, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverQualifier::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverQualifier, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverQualifier::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverQualifier, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverQualifier, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverQualifier::Clone() const {
-  return common::make_unique<IteratorOverQualifier>(*this);
-}
-
-void IteratorOverQualifier::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 1;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 5;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 2: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        ++(*cursor_);
-
-        state_ = 2;
-        continue;
-      }
-
-      case 4: {
-        cursor_.reset();
-      }
-
-      case 5: {
-        if (!(casted_->value_id().has_value())) {
-          state_ = 6;
-          continue;
-        }
-
-        property_ = Property::kValueId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->value_id())
-        );
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 7;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IAssetAdministrationShell
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverAssetAdministrationShell : public impl::IIterator {
- public:
-  IteratorOverAssetAdministrationShell(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverAssetAdministrationShell() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IAssetAdministrationShell* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverAssetAdministrationShell
-
-IteratorOverAssetAdministrationShell::IteratorOverAssetAdministrationShell(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IAssetAdministrationShell*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverAssetAdministrationShell::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverAssetAdministrationShell::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverAssetAdministrationShell, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverAssetAdministrationShell::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverAssetAdministrationShell::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverAssetAdministrationShell, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverAssetAdministrationShell::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverAssetAdministrationShell, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverAssetAdministrationShell::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverAssetAdministrationShell, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverAssetAdministrationShell, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverAssetAdministrationShell::Clone() const {
-  return common::make_unique<IteratorOverAssetAdministrationShell>(*this);
-}
-
-void IteratorOverAssetAdministrationShell::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->administration().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kAdministration;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->administration())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->derived_from().has_value())) {
-          state_ = 18;
-          continue;
-        }
-
-        property_ = Property::kDerivedFrom;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->derived_from())
-        );
-        ++index_;
-
-        state_ = 18;
-        return;
-      }
-
-      case 18: {
-        property_ = Property::kAssetInformation;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->asset_information()
-        );
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        if (!(casted_->submodels().has_value())) {
-          state_ = 23;
-          continue;
-        }
-
-        property_ = Property::kSubmodels;
-
-        cursor_ = 0;
-      }
-
-      case 20: {
-        if (!(*cursor_ < casted_->submodels()->size())) {
-          state_ = 22;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_submodels(
-          *(casted_->submodels())
-        );
-        const auto& item_value = the_submodels[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 21;
-        return;
-      }
-
-      case 21: {
-        ++(*cursor_);
-
-        state_ = 20;
-        continue;
-      }
-
-      case 22: {
-        cursor_.reset();
-      }
-
-      case 23: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 24;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IAssetInformation
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverAssetInformation : public impl::IIterator {
- public:
-  IteratorOverAssetInformation(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverAssetInformation() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IAssetInformation* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverAssetInformation
-
-IteratorOverAssetInformation::IteratorOverAssetInformation(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IAssetInformation*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverAssetInformation::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverAssetInformation::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverAssetInformation, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverAssetInformation::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverAssetInformation::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverAssetInformation, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverAssetInformation::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverAssetInformation, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverAssetInformation::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverAssetInformation, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverAssetInformation, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverAssetInformation::Clone() const {
-  return common::make_unique<IteratorOverAssetInformation>(*this);
-}
-
-void IteratorOverAssetInformation::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->specific_asset_ids().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kSpecificAssetIds;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->specific_asset_ids()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ISpecificAssetId>
-        >& the_specific_asset_ids(
-          *(casted_->specific_asset_ids())
-        );
-        const auto& item_value = the_specific_asset_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->default_thumbnail().has_value())) {
-          state_ = 5;
-          continue;
-        }
-
-        property_ = Property::kDefaultThumbnail;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->default_thumbnail())
-        );
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 6;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-/**
- * This iterator is always done as IResource
- * references no other instances.
- */
-class IteratorOverResource : public impl::IIterator {
- public:
-  IteratorOverResource(
-    const std::shared_ptr<types::IClass>&
-  ) {
-    // Intentionally empty.
-  }
-
   void Start() override {
     // Intentionally empty.
   }
 
   void Next() override {
     throw std::logic_error(
-      "You want to move "
-      "an IteratorOverResource, "
-      "but the iterator is always done as "
-      "IResource "
-      "references no other instances."
+      "You want to move an EmptyIterator, but it is always done."
     );
   }
 
@@ -1780,10716 +386,2367 @@ class IteratorOverResource : public impl::IIterator {
 
   const std::shared_ptr<types::IClass>& Get() const override {
     throw std::logic_error(
-      "You want to get from an IteratorOverResource, "
-      "but the iterator is always done as "
-      "IResource references "
-      "no other instances."
+      "You want to get an instance from an EmptyIterator, but it is always done."
     );
   }
 
-  long Index() const override {
-    return -1;
+  void AppendToPath(Path&) const override {
+    throw std::logic_error(
+      "You want to append the path of an EmptyIterator, but it is always done."
+    );
   }
 
   std::unique_ptr<impl::IIterator> Clone() const override {
-    return common::make_unique<IteratorOverResource>(*this);
+    return common::make_unique<EmptyIterator>(*this);
   }
+};  // class EmptyIterator
 
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an IteratorOverResource, "
-      "but the iterator is always done as "
-      "IResource references "
-      "no other instances."
-    );
-  }
-
-  ~IteratorOverResource() override = default;
-};  // class IteratorOverResource
-
-// region Non-recursive iteration over ISpecificAssetId
+std::unique_ptr<impl::IIterator> Empty() {
+  return common::make_unique<EmptyIterator>();
+}
 
 /**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverSpecificAssetId : public impl::IIterator {
- public:
-  IteratorOverSpecificAssetId(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverSpecificAssetId() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::ISpecificAssetId* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverSpecificAssetId
-
-IteratorOverSpecificAssetId::IteratorOverSpecificAssetId(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::ISpecificAssetId*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverSpecificAssetId::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverSpecificAssetId::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverSpecificAssetId, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverSpecificAssetId::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverSpecificAssetId::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverSpecificAssetId, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverSpecificAssetId::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverSpecificAssetId, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverSpecificAssetId::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverSpecificAssetId, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverSpecificAssetId, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverSpecificAssetId::Clone() const {
-  return common::make_unique<IteratorOverSpecificAssetId>(*this);
-}
-
-void IteratorOverSpecificAssetId::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 1;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 5;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 2: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        ++(*cursor_);
-
-        state_ = 2;
-        continue;
-      }
-
-      case 4: {
-        cursor_.reset();
-      }
-
-      case 5: {
-        if (!(casted_->external_subject_id().has_value())) {
-          state_ = 6;
-          continue;
-        }
-
-        property_ = Property::kExternalSubjectId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->external_subject_id())
-        );
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 7;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over ISubmodel
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverSubmodel : public impl::IIterator {
- public:
-  IteratorOverSubmodel(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverSubmodel() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::ISubmodel* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverSubmodel
-
-IteratorOverSubmodel::IteratorOverSubmodel(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::ISubmodel*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverSubmodel::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverSubmodel::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverSubmodel, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverSubmodel::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverSubmodel::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverSubmodel, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverSubmodel::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverSubmodel, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverSubmodel::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverSubmodel, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverSubmodel, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverSubmodel::Clone() const {
-  return common::make_unique<IteratorOverSubmodel>(*this);
-}
-
-void IteratorOverSubmodel::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->administration().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kAdministration;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->administration())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 14;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 18;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 15: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 17;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 16;
-        return;
-      }
-
-      case 16: {
-        ++(*cursor_);
-
-        state_ = 15;
-        continue;
-      }
-
-      case 17: {
-        cursor_.reset();
-      }
-
-      case 18: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 22;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 19: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 21;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 20;
-        return;
-      }
-
-      case 20: {
-        ++(*cursor_);
-
-        state_ = 19;
-        continue;
-      }
-
-      case 21: {
-        cursor_.reset();
-      }
-
-      case 22: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 26;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 23: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 24;
-        return;
-      }
-
-      case 24: {
-        ++(*cursor_);
-
-        state_ = 23;
-        continue;
-      }
-
-      case 25: {
-        cursor_.reset();
-      }
-
-      case 26: {
-        if (!(casted_->submodel_elements().has_value())) {
-          state_ = 30;
-          continue;
-        }
-
-        property_ = Property::kSubmodelElements;
-
-        cursor_ = 0;
-      }
-
-      case 27: {
-        if (!(*cursor_ < casted_->submodel_elements()->size())) {
-          state_ = 29;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ISubmodelElement>
-        >& the_submodel_elements(
-          *(casted_->submodel_elements())
-        );
-        const auto& item_value = the_submodel_elements[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 28;
-        return;
-      }
-
-      case 28: {
-        ++(*cursor_);
-
-        state_ = 27;
-        continue;
-      }
-
-      case 29: {
-        cursor_.reset();
-      }
-
-      case 30: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 31;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IRelationshipElement
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverRelationshipElement : public impl::IIterator {
- public:
-  IteratorOverRelationshipElement(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverRelationshipElement() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IRelationshipElement* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverRelationshipElement
-
-IteratorOverRelationshipElement::IteratorOverRelationshipElement(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IRelationshipElement*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverRelationshipElement::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverRelationshipElement::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverRelationshipElement, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverRelationshipElement::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverRelationshipElement::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverRelationshipElement, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverRelationshipElement::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverRelationshipElement, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverRelationshipElement::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverRelationshipElement, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverRelationshipElement, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverRelationshipElement::Clone() const {
-  return common::make_unique<IteratorOverRelationshipElement>(*this);
-}
-
-void IteratorOverRelationshipElement::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        property_ = Property::kFirst;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->first()
-        );
-        ++index_;
-
-        state_ = 26;
-        return;
-      }
-
-      case 26: {
-        property_ = Property::kSecond;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->second()
-        );
-        ++index_;
-
-        state_ = 27;
-        return;
-      }
-
-      case 27: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 28;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over ISubmodelElementList
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverSubmodelElementList : public impl::IIterator {
- public:
-  IteratorOverSubmodelElementList(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverSubmodelElementList() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::ISubmodelElementList* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverSubmodelElementList
-
-IteratorOverSubmodelElementList::IteratorOverSubmodelElementList(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::ISubmodelElementList*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverSubmodelElementList::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverSubmodelElementList::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverSubmodelElementList, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverSubmodelElementList::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverSubmodelElementList::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverSubmodelElementList, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverSubmodelElementList::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverSubmodelElementList, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverSubmodelElementList::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverSubmodelElementList, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverSubmodelElementList, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverSubmodelElementList::Clone() const {
-  return common::make_unique<IteratorOverSubmodelElementList>(*this);
-}
-
-void IteratorOverSubmodelElementList::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        if (!(casted_->semantic_id_list_element().has_value())) {
-          state_ = 26;
-          continue;
-        }
-
-        property_ = Property::kSemanticIdListElement;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id_list_element())
-        );
-        ++index_;
-
-        state_ = 26;
-        return;
-      }
-
-      case 26: {
-        if (!(casted_->value().has_value())) {
-          state_ = 30;
-          continue;
-        }
-
-        property_ = Property::kValue;
-
-        cursor_ = 0;
-      }
-
-      case 27: {
-        if (!(*cursor_ < casted_->value()->size())) {
-          state_ = 29;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ISubmodelElement>
-        >& the_value(
-          *(casted_->value())
-        );
-        const auto& item_value = the_value[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 28;
-        return;
-      }
-
-      case 28: {
-        ++(*cursor_);
-
-        state_ = 27;
-        continue;
-      }
-
-      case 29: {
-        cursor_.reset();
-      }
-
-      case 30: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 31;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over ISubmodelElementCollection
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverSubmodelElementCollection : public impl::IIterator {
- public:
-  IteratorOverSubmodelElementCollection(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverSubmodelElementCollection() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::ISubmodelElementCollection* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverSubmodelElementCollection
-
-IteratorOverSubmodelElementCollection::IteratorOverSubmodelElementCollection(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::ISubmodelElementCollection*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverSubmodelElementCollection::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverSubmodelElementCollection::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverSubmodelElementCollection, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverSubmodelElementCollection::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverSubmodelElementCollection::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverSubmodelElementCollection, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverSubmodelElementCollection::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverSubmodelElementCollection, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverSubmodelElementCollection::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverSubmodelElementCollection, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverSubmodelElementCollection, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverSubmodelElementCollection::Clone() const {
-  return common::make_unique<IteratorOverSubmodelElementCollection>(*this);
-}
-
-void IteratorOverSubmodelElementCollection::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        if (!(casted_->value().has_value())) {
-          state_ = 29;
-          continue;
-        }
-
-        property_ = Property::kValue;
-
-        cursor_ = 0;
-      }
-
-      case 26: {
-        if (!(*cursor_ < casted_->value()->size())) {
-          state_ = 28;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ISubmodelElement>
-        >& the_value(
-          *(casted_->value())
-        );
-        const auto& item_value = the_value[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 27;
-        return;
-      }
-
-      case 27: {
-        ++(*cursor_);
-
-        state_ = 26;
-        continue;
-      }
-
-      case 28: {
-        cursor_.reset();
-      }
-
-      case 29: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 30;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IProperty
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverProperty : public impl::IIterator {
- public:
-  IteratorOverProperty(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverProperty() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IProperty* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverProperty
-
-IteratorOverProperty::IteratorOverProperty(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IProperty*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverProperty::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverProperty::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverProperty, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverProperty::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverProperty::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverProperty, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverProperty::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverProperty, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverProperty::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverProperty, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverProperty, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverProperty::Clone() const {
-  return common::make_unique<IteratorOverProperty>(*this);
-}
-
-void IteratorOverProperty::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        if (!(casted_->value_id().has_value())) {
-          state_ = 26;
-          continue;
-        }
-
-        property_ = Property::kValueId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->value_id())
-        );
-        ++index_;
-
-        state_ = 26;
-        return;
-      }
-
-      case 26: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 27;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IMultiLanguageProperty
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverMultiLanguageProperty : public impl::IIterator {
- public:
-  IteratorOverMultiLanguageProperty(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverMultiLanguageProperty() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IMultiLanguageProperty* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverMultiLanguageProperty
-
-IteratorOverMultiLanguageProperty::IteratorOverMultiLanguageProperty(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IMultiLanguageProperty*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverMultiLanguageProperty::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverMultiLanguageProperty::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverMultiLanguageProperty, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverMultiLanguageProperty::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverMultiLanguageProperty::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverMultiLanguageProperty, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverMultiLanguageProperty::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverMultiLanguageProperty, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverMultiLanguageProperty::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverMultiLanguageProperty, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverMultiLanguageProperty, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverMultiLanguageProperty::Clone() const {
-  return common::make_unique<IteratorOverMultiLanguageProperty>(*this);
-}
-
-void IteratorOverMultiLanguageProperty::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        if (!(casted_->value().has_value())) {
-          state_ = 29;
-          continue;
-        }
-
-        property_ = Property::kValue;
-
-        cursor_ = 0;
-      }
-
-      case 26: {
-        if (!(*cursor_ < casted_->value()->size())) {
-          state_ = 28;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_value(
-          *(casted_->value())
-        );
-        const auto& item_value = the_value[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 27;
-        return;
-      }
-
-      case 27: {
-        ++(*cursor_);
-
-        state_ = 26;
-        continue;
-      }
-
-      case 28: {
-        cursor_.reset();
-      }
-
-      case 29: {
-        if (!(casted_->value_id().has_value())) {
-          state_ = 30;
-          continue;
-        }
-
-        property_ = Property::kValueId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->value_id())
-        );
-        ++index_;
-
-        state_ = 30;
-        return;
-      }
-
-      case 30: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 31;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IRange
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverRange : public impl::IIterator {
- public:
-  IteratorOverRange(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverRange() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IRange* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverRange
-
-IteratorOverRange::IteratorOverRange(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IRange*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverRange::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverRange::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverRange, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverRange::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverRange::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverRange, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverRange::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverRange, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverRange::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverRange, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverRange, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverRange::Clone() const {
-  return common::make_unique<IteratorOverRange>(*this);
-}
-
-void IteratorOverRange::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 26;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IReferenceElement
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverReferenceElement : public impl::IIterator {
- public:
-  IteratorOverReferenceElement(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverReferenceElement() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IReferenceElement* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverReferenceElement
-
-IteratorOverReferenceElement::IteratorOverReferenceElement(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IReferenceElement*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverReferenceElement::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverReferenceElement::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverReferenceElement, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverReferenceElement::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverReferenceElement::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverReferenceElement, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverReferenceElement::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverReferenceElement, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverReferenceElement::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverReferenceElement, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverReferenceElement, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverReferenceElement::Clone() const {
-  return common::make_unique<IteratorOverReferenceElement>(*this);
-}
-
-void IteratorOverReferenceElement::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        if (!(casted_->value().has_value())) {
-          state_ = 26;
-          continue;
-        }
-
-        property_ = Property::kValue;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->value())
-        );
-        ++index_;
-
-        state_ = 26;
-        return;
-      }
-
-      case 26: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 27;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IBlob
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverBlob : public impl::IIterator {
- public:
-  IteratorOverBlob(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverBlob() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IBlob* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverBlob
-
-IteratorOverBlob::IteratorOverBlob(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IBlob*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverBlob::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverBlob::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverBlob, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverBlob::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverBlob::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverBlob, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverBlob::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverBlob, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverBlob::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverBlob, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverBlob, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverBlob::Clone() const {
-  return common::make_unique<IteratorOverBlob>(*this);
-}
-
-void IteratorOverBlob::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 26;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IFile
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverFile : public impl::IIterator {
- public:
-  IteratorOverFile(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverFile() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IFile* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverFile
-
-IteratorOverFile::IteratorOverFile(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IFile*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverFile::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverFile::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverFile, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverFile::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverFile::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverFile, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverFile::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverFile, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverFile::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverFile, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverFile, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverFile::Clone() const {
-  return common::make_unique<IteratorOverFile>(*this);
-}
-
-void IteratorOverFile::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 26;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IAnnotatedRelationshipElement
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverAnnotatedRelationshipElement : public impl::IIterator {
- public:
-  IteratorOverAnnotatedRelationshipElement(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverAnnotatedRelationshipElement() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IAnnotatedRelationshipElement* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverAnnotatedRelationshipElement
-
-IteratorOverAnnotatedRelationshipElement::IteratorOverAnnotatedRelationshipElement(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IAnnotatedRelationshipElement*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverAnnotatedRelationshipElement::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverAnnotatedRelationshipElement::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverAnnotatedRelationshipElement, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverAnnotatedRelationshipElement::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverAnnotatedRelationshipElement::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverAnnotatedRelationshipElement, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverAnnotatedRelationshipElement::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverAnnotatedRelationshipElement, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverAnnotatedRelationshipElement::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverAnnotatedRelationshipElement, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverAnnotatedRelationshipElement, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverAnnotatedRelationshipElement::Clone() const {
-  return common::make_unique<IteratorOverAnnotatedRelationshipElement>(*this);
-}
-
-void IteratorOverAnnotatedRelationshipElement::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        property_ = Property::kFirst;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->first()
-        );
-        ++index_;
-
-        state_ = 26;
-        return;
-      }
-
-      case 26: {
-        property_ = Property::kSecond;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->second()
-        );
-        ++index_;
-
-        state_ = 27;
-        return;
-      }
-
-      case 27: {
-        if (!(casted_->annotations().has_value())) {
-          state_ = 31;
-          continue;
-        }
-
-        property_ = Property::kAnnotations;
-
-        cursor_ = 0;
-      }
-
-      case 28: {
-        if (!(*cursor_ < casted_->annotations()->size())) {
-          state_ = 30;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IDataElement>
-        >& the_annotations(
-          *(casted_->annotations())
-        );
-        const auto& item_value = the_annotations[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 29;
-        return;
-      }
-
-      case 29: {
-        ++(*cursor_);
-
-        state_ = 28;
-        continue;
-      }
-
-      case 30: {
-        cursor_.reset();
-      }
-
-      case 31: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 32;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IEntity
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverEntity : public impl::IIterator {
- public:
-  IteratorOverEntity(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverEntity() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IEntity* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverEntity
-
-IteratorOverEntity::IteratorOverEntity(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IEntity*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverEntity::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverEntity::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverEntity, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverEntity::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverEntity::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverEntity, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverEntity::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverEntity, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverEntity::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverEntity, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverEntity, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverEntity::Clone() const {
-  return common::make_unique<IteratorOverEntity>(*this);
-}
-
-void IteratorOverEntity::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        if (!(casted_->statements().has_value())) {
-          state_ = 29;
-          continue;
-        }
-
-        property_ = Property::kStatements;
-
-        cursor_ = 0;
-      }
-
-      case 26: {
-        if (!(*cursor_ < casted_->statements()->size())) {
-          state_ = 28;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ISubmodelElement>
-        >& the_statements(
-          *(casted_->statements())
-        );
-        const auto& item_value = the_statements[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 27;
-        return;
-      }
-
-      case 27: {
-        ++(*cursor_);
-
-        state_ = 26;
-        continue;
-      }
-
-      case 28: {
-        cursor_.reset();
-      }
-
-      case 29: {
-        if (!(casted_->specific_asset_ids().has_value())) {
-          state_ = 33;
-          continue;
-        }
-
-        property_ = Property::kSpecificAssetIds;
-
-        cursor_ = 0;
-      }
-
-      case 30: {
-        if (!(*cursor_ < casted_->specific_asset_ids()->size())) {
-          state_ = 32;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ISpecificAssetId>
-        >& the_specific_asset_ids(
-          *(casted_->specific_asset_ids())
-        );
-        const auto& item_value = the_specific_asset_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 31;
-        return;
-      }
-
-      case 31: {
-        ++(*cursor_);
-
-        state_ = 30;
-        continue;
-      }
-
-      case 32: {
-        cursor_.reset();
-      }
-
-      case 33: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 34;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IEventPayload
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverEventPayload : public impl::IIterator {
- public:
-  IteratorOverEventPayload(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverEventPayload() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IEventPayload* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverEventPayload
-
-IteratorOverEventPayload::IteratorOverEventPayload(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IEventPayload*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverEventPayload::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverEventPayload::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverEventPayload, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverEventPayload::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverEventPayload::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverEventPayload, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverEventPayload::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverEventPayload, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverEventPayload::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverEventPayload, "
-      "but the iterator was done."
-    );
-  }
-
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverEventPayload, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverEventPayload::Clone() const {
-  return common::make_unique<IteratorOverEventPayload>(*this);
-}
-
-void IteratorOverEventPayload::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        property_ = Property::kSource;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->source()
-        );
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (!(casted_->source_semantic_id().has_value())) {
-          state_ = 2;
-          continue;
-        }
-
-        property_ = Property::kSourceSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->source_semantic_id())
-        );
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        property_ = Property::kObservableReference;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->observable_reference()
-        );
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (!(casted_->observable_semantic_id().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kObservableSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->observable_semantic_id())
-        );
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (!(casted_->subject_id().has_value())) {
-          state_ = 5;
-          continue;
-        }
-
-        property_ = Property::kSubjectId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->subject_id())
-        );
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 6;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IBasicEventElement
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverBasicEventElement : public impl::IIterator {
- public:
-  IteratorOverBasicEventElement(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverBasicEventElement() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IBasicEventElement* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverBasicEventElement
-
-IteratorOverBasicEventElement::IteratorOverBasicEventElement(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IBasicEventElement*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverBasicEventElement::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverBasicEventElement::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverBasicEventElement, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverBasicEventElement::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverBasicEventElement::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverBasicEventElement, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverBasicEventElement::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverBasicEventElement, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverBasicEventElement::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverBasicEventElement, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverBasicEventElement, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverBasicEventElement::Clone() const {
-  return common::make_unique<IteratorOverBasicEventElement>(*this);
-}
-
-void IteratorOverBasicEventElement::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        property_ = Property::kObserved;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->observed()
-        );
-        ++index_;
-
-        state_ = 26;
-        return;
-      }
-
-      case 26: {
-        if (!(casted_->message_broker().has_value())) {
-          state_ = 27;
-          continue;
-        }
-
-        property_ = Property::kMessageBroker;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->message_broker())
-        );
-        ++index_;
-
-        state_ = 27;
-        return;
-      }
-
-      case 27: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 28;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IOperation
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverOperation : public impl::IIterator {
- public:
-  IteratorOverOperation(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverOperation() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IOperation* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverOperation
-
-IteratorOverOperation::IteratorOverOperation(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IOperation*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverOperation::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverOperation::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverOperation, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverOperation::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverOperation::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverOperation, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverOperation::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverOperation, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverOperation::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverOperation, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverOperation, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverOperation::Clone() const {
-  return common::make_unique<IteratorOverOperation>(*this);
-}
-
-void IteratorOverOperation::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        if (!(casted_->input_variables().has_value())) {
-          state_ = 29;
-          continue;
-        }
-
-        property_ = Property::kInputVariables;
-
-        cursor_ = 0;
-      }
-
-      case 26: {
-        if (!(*cursor_ < casted_->input_variables()->size())) {
-          state_ = 28;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IOperationVariable>
-        >& the_input_variables(
-          *(casted_->input_variables())
-        );
-        const auto& item_value = the_input_variables[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 27;
-        return;
-      }
-
-      case 27: {
-        ++(*cursor_);
-
-        state_ = 26;
-        continue;
-      }
-
-      case 28: {
-        cursor_.reset();
-      }
-
-      case 29: {
-        if (!(casted_->output_variables().has_value())) {
-          state_ = 33;
-          continue;
-        }
-
-        property_ = Property::kOutputVariables;
-
-        cursor_ = 0;
-      }
-
-      case 30: {
-        if (!(*cursor_ < casted_->output_variables()->size())) {
-          state_ = 32;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IOperationVariable>
-        >& the_output_variables(
-          *(casted_->output_variables())
-        );
-        const auto& item_value = the_output_variables[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 31;
-        return;
-      }
-
-      case 31: {
-        ++(*cursor_);
-
-        state_ = 30;
-        continue;
-      }
-
-      case 32: {
-        cursor_.reset();
-      }
-
-      case 33: {
-        if (!(casted_->inoutput_variables().has_value())) {
-          state_ = 37;
-          continue;
-        }
-
-        property_ = Property::kInoutputVariables;
-
-        cursor_ = 0;
-      }
-
-      case 34: {
-        if (!(*cursor_ < casted_->inoutput_variables()->size())) {
-          state_ = 36;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IOperationVariable>
-        >& the_inoutput_variables(
-          *(casted_->inoutput_variables())
-        );
-        const auto& item_value = the_inoutput_variables[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 35;
-        return;
-      }
-
-      case 35: {
-        ++(*cursor_);
-
-        state_ = 34;
-        continue;
-      }
-
-      case 36: {
-        cursor_.reset();
-      }
-
-      case 37: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 38;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IOperationVariable
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverOperationVariable : public impl::IIterator {
- public:
-  IteratorOverOperationVariable(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverOperationVariable() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IOperationVariable* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverOperationVariable
-
-IteratorOverOperationVariable::IteratorOverOperationVariable(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IOperationVariable*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverOperationVariable::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverOperationVariable::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverOperationVariable, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverOperationVariable::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverOperationVariable::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverOperationVariable, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverOperationVariable::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverOperationVariable, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverOperationVariable::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverOperationVariable, "
-      "but the iterator was done."
-    );
-  }
-
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverOperationVariable, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverOperationVariable::Clone() const {
-  return common::make_unique<IteratorOverOperationVariable>(*this);
-}
-
-void IteratorOverOperationVariable::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        property_ = Property::kValue;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->value()
-        );
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over ICapability
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverCapability : public impl::IIterator {
- public:
-  IteratorOverCapability(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverCapability() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::ICapability* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverCapability
-
-IteratorOverCapability::IteratorOverCapability(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::ICapability*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverCapability::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverCapability::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverCapability, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverCapability::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverCapability::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverCapability, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverCapability::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverCapability, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverCapability::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverCapability, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverCapability, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverCapability::Clone() const {
-  return common::make_unique<IteratorOverCapability>(*this);
-}
-
-void IteratorOverCapability::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->semantic_id().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->semantic_id())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->supplemental_semantic_ids().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kSupplementalSemanticIds;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->supplemental_semantic_ids()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_supplemental_semantic_ids(
-          *(casted_->supplemental_semantic_ids())
-        );
-        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->qualifiers().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kQualifiers;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->qualifiers()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IQualifier>
-        >& the_qualifiers(
-          *(casted_->qualifiers())
-        );
-        const auto& item_value = the_qualifiers[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 25;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 22: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 24;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        ++(*cursor_);
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        cursor_.reset();
-      }
-
-      case 25: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 26;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IConceptDescription
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverConceptDescription : public impl::IIterator {
- public:
-  IteratorOverConceptDescription(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverConceptDescription() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IConceptDescription* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverConceptDescription
-
-IteratorOverConceptDescription::IteratorOverConceptDescription(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IConceptDescription*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverConceptDescription::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverConceptDescription::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverConceptDescription, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverConceptDescription::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverConceptDescription::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverConceptDescription, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverConceptDescription::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverConceptDescription, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverConceptDescription::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverConceptDescription, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverConceptDescription, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverConceptDescription::Clone() const {
-  return common::make_unique<IteratorOverConceptDescription>(*this);
-}
-
-void IteratorOverConceptDescription::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->extensions().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kExtensions;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->extensions()->size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IExtension>
-        >& the_extensions(
-          *(casted_->extensions())
-        );
-        const auto& item_value = the_extensions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->display_name().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kDisplayName;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->display_name()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringNameType>
-        >& the_display_name(
-          *(casted_->display_name())
-        );
-        const auto& item_value = the_display_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->description().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDescription;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->description()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringTextType>
-        >& the_description(
-          *(casted_->description())
-        );
-        const auto& item_value = the_description[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->administration().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kAdministration;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->administration())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (
-          !(casted_->embedded_data_specifications().has_value())
-        ) {
-          state_ = 17;
-          continue;
-        }
-
-        property_ = Property::kEmbeddedDataSpecifications;
-
-        cursor_ = 0;
-      }
-
-      case 14: {
-        if (
-          !(*cursor_ < casted_->embedded_data_specifications()->size())
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IEmbeddedDataSpecification>
-        >& the_embedded_data_specifications(
-          *(casted_->embedded_data_specifications())
-        );
-        const auto& item_value = the_embedded_data_specifications[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        ++(*cursor_);
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        cursor_.reset();
-      }
-
-      case 17: {
-        if (!(casted_->is_case_of().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        property_ = Property::kIsCaseOf;
-
-        cursor_ = 0;
-      }
-
-      case 18: {
-        if (!(*cursor_ < casted_->is_case_of()->size())) {
-          state_ = 20;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IReference>
-        >& the_is_case_of(
-          *(casted_->is_case_of())
-        );
-        const auto& item_value = the_is_case_of[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        ++(*cursor_);
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        cursor_.reset();
-      }
-
-      case 21: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 22;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IReference
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverReference : public impl::IIterator {
- public:
-  IteratorOverReference(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverReference() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IReference* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverReference
-
-IteratorOverReference::IteratorOverReference(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IReference*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverReference::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverReference::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverReference, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverReference::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverReference::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverReference, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverReference::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverReference, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverReference::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverReference, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverReference, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverReference::Clone() const {
-  return common::make_unique<IteratorOverReference>(*this);
-}
-
-void IteratorOverReference::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->referred_semantic_id().has_value())) {
-          state_ = 1;
-          continue;
-        }
-
-        property_ = Property::kReferredSemanticId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->referred_semantic_id())
-        );
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        property_ = Property::kKeys;
-
-        cursor_ = 0;
-      }
-
-      case 2: {
-        if (!(*cursor_ < casted_->keys().size())) {
-          state_ = 4;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IKey>
-        >& the_keys(
-          casted_->keys()
-        );
-        const auto& item_value = the_keys[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        ++(*cursor_);
-
-        state_ = 2;
-        continue;
-      }
-
-      case 4: {
-        cursor_.reset();
-
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 5;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-/**
- * This iterator is always done as IKey
- * references no other instances.
- */
-class IteratorOverKey : public impl::IIterator {
- public:
-  IteratorOverKey(
-    const std::shared_ptr<types::IClass>&
-  ) {
-    // Intentionally empty.
-  }
-
-  void Start() override {
-    // Intentionally empty.
-  }
-
-  void Next() override {
-    throw std::logic_error(
-      "You want to move "
-      "an IteratorOverKey, "
-      "but the iterator is always done as "
-      "IKey "
-      "references no other instances."
-    );
-  }
-
-  bool Done() const override {
-    return true;
-  }
-
-  const std::shared_ptr<types::IClass>& Get() const override {
-    throw std::logic_error(
-      "You want to get from an IteratorOverKey, "
-      "but the iterator is always done as "
-      "IKey references "
-      "no other instances."
-    );
-  }
-
-  long Index() const override {
-    return -1;
-  }
-
-  std::unique_ptr<impl::IIterator> Clone() const override {
-    return common::make_unique<IteratorOverKey>(*this);
-  }
-
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an IteratorOverKey, "
-      "but the iterator is always done as "
-      "IKey references "
-      "no other instances."
-    );
-  }
-
-  ~IteratorOverKey() override = default;
-};  // class IteratorOverKey
-
-/**
- * This iterator is always done as ILangStringNameType
- * references no other instances.
- */
-class IteratorOverLangStringNameType : public impl::IIterator {
- public:
-  IteratorOverLangStringNameType(
-    const std::shared_ptr<types::IClass>&
-  ) {
-    // Intentionally empty.
-  }
-
-  void Start() override {
-    // Intentionally empty.
-  }
-
-  void Next() override {
-    throw std::logic_error(
-      "You want to move "
-      "an IteratorOverLangStringNameType, "
-      "but the iterator is always done as "
-      "ILangStringNameType "
-      "references no other instances."
-    );
-  }
-
-  bool Done() const override {
-    return true;
-  }
-
-  const std::shared_ptr<types::IClass>& Get() const override {
-    throw std::logic_error(
-      "You want to get from an IteratorOverLangStringNameType, "
-      "but the iterator is always done as "
-      "ILangStringNameType references "
-      "no other instances."
-    );
-  }
-
-  long Index() const override {
-    return -1;
-  }
-
-  std::unique_ptr<impl::IIterator> Clone() const override {
-    return common::make_unique<IteratorOverLangStringNameType>(*this);
-  }
-
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an IteratorOverLangStringNameType, "
-      "but the iterator is always done as "
-      "ILangStringNameType references "
-      "no other instances."
-    );
-  }
-
-  ~IteratorOverLangStringNameType() override = default;
-};  // class IteratorOverLangStringNameType
-
-/**
- * This iterator is always done as ILangStringTextType
- * references no other instances.
- */
-class IteratorOverLangStringTextType : public impl::IIterator {
- public:
-  IteratorOverLangStringTextType(
-    const std::shared_ptr<types::IClass>&
-  ) {
-    // Intentionally empty.
-  }
-
-  void Start() override {
-    // Intentionally empty.
-  }
-
-  void Next() override {
-    throw std::logic_error(
-      "You want to move "
-      "an IteratorOverLangStringTextType, "
-      "but the iterator is always done as "
-      "ILangStringTextType "
-      "references no other instances."
-    );
-  }
-
-  bool Done() const override {
-    return true;
-  }
-
-  const std::shared_ptr<types::IClass>& Get() const override {
-    throw std::logic_error(
-      "You want to get from an IteratorOverLangStringTextType, "
-      "but the iterator is always done as "
-      "ILangStringTextType references "
-      "no other instances."
-    );
-  }
-
-  long Index() const override {
-    return -1;
-  }
-
-  std::unique_ptr<impl::IIterator> Clone() const override {
-    return common::make_unique<IteratorOverLangStringTextType>(*this);
-  }
-
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an IteratorOverLangStringTextType, "
-      "but the iterator is always done as "
-      "ILangStringTextType references "
-      "no other instances."
-    );
-  }
-
-  ~IteratorOverLangStringTextType() override = default;
-};  // class IteratorOverLangStringTextType
-
-// region Non-recursive iteration over IEnvironment
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverEnvironment : public impl::IIterator {
- public:
-  IteratorOverEnvironment(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverEnvironment() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IEnvironment* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverEnvironment
-
-IteratorOverEnvironment::IteratorOverEnvironment(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IEnvironment*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverEnvironment::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverEnvironment::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverEnvironment, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverEnvironment::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverEnvironment::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverEnvironment, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverEnvironment::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverEnvironment, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverEnvironment::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverEnvironment, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverEnvironment, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverEnvironment::Clone() const {
-  return common::make_unique<IteratorOverEnvironment>(*this);
-}
-
-void IteratorOverEnvironment::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        if (!(casted_->asset_administration_shells().has_value())) {
-          state_ = 4;
-          continue;
-        }
-
-        property_ = Property::kAssetAdministrationShells;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (
-          !(*cursor_ < casted_->asset_administration_shells()->size())
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IAssetAdministrationShell>
-        >& the_asset_administration_shells(
-          *(casted_->asset_administration_shells())
-        );
-        const auto& item_value = the_asset_administration_shells[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-      }
-
-      case 4: {
-        if (!(casted_->submodels().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kSubmodels;
-
-        cursor_ = 0;
-      }
-
-      case 5: {
-        if (!(*cursor_ < casted_->submodels()->size())) {
-          state_ = 7;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ISubmodel>
-        >& the_submodels(
-          *(casted_->submodels())
-        );
-        const auto& item_value = the_submodels[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        ++(*cursor_);
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        cursor_.reset();
-      }
-
-      case 8: {
-        if (!(casted_->concept_descriptions().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kConceptDescriptions;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->concept_descriptions()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IConceptDescription>
-        >& the_concept_descriptions(
-          *(casted_->concept_descriptions())
-        );
-        const auto& item_value = the_concept_descriptions[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 13;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IEmbeddedDataSpecification
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverEmbeddedDataSpecification : public impl::IIterator {
- public:
-  IteratorOverEmbeddedDataSpecification(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverEmbeddedDataSpecification() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IEmbeddedDataSpecification* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverEmbeddedDataSpecification
-
-IteratorOverEmbeddedDataSpecification::IteratorOverEmbeddedDataSpecification(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IEmbeddedDataSpecification*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverEmbeddedDataSpecification::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverEmbeddedDataSpecification::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverEmbeddedDataSpecification, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverEmbeddedDataSpecification::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverEmbeddedDataSpecification::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverEmbeddedDataSpecification, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverEmbeddedDataSpecification::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverEmbeddedDataSpecification, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverEmbeddedDataSpecification::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverEmbeddedDataSpecification, "
-      "but the iterator was done."
-    );
-  }
-
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverEmbeddedDataSpecification, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverEmbeddedDataSpecification::Clone() const {
-  return common::make_unique<IteratorOverEmbeddedDataSpecification>(*this);
-}
-
-void IteratorOverEmbeddedDataSpecification::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        property_ = Property::kDataSpecification;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->data_specification()
-        );
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        property_ = Property::kDataSpecificationContent;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->data_specification_content()
-        );
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 3;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-/**
- * This iterator is always done as ILevelType
- * references no other instances.
- */
-class IteratorOverLevelType : public impl::IIterator {
- public:
-  IteratorOverLevelType(
-    const std::shared_ptr<types::IClass>&
-  ) {
-    // Intentionally empty.
-  }
-
-  void Start() override {
-    // Intentionally empty.
-  }
-
-  void Next() override {
-    throw std::logic_error(
-      "You want to move "
-      "an IteratorOverLevelType, "
-      "but the iterator is always done as "
-      "ILevelType "
-      "references no other instances."
-    );
-  }
-
-  bool Done() const override {
-    return true;
-  }
-
-  const std::shared_ptr<types::IClass>& Get() const override {
-    throw std::logic_error(
-      "You want to get from an IteratorOverLevelType, "
-      "but the iterator is always done as "
-      "ILevelType references "
-      "no other instances."
-    );
-  }
-
-  long Index() const override {
-    return -1;
-  }
-
-  std::unique_ptr<impl::IIterator> Clone() const override {
-    return common::make_unique<IteratorOverLevelType>(*this);
-  }
-
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an IteratorOverLevelType, "
-      "but the iterator is always done as "
-      "ILevelType references "
-      "no other instances."
-    );
-  }
-
-  ~IteratorOverLevelType() override = default;
-};  // class IteratorOverLevelType
-
-// region Non-recursive iteration over IValueReferencePair
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverValueReferencePair : public impl::IIterator {
- public:
-  IteratorOverValueReferencePair(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverValueReferencePair() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IValueReferencePair* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverValueReferencePair
-
-IteratorOverValueReferencePair::IteratorOverValueReferencePair(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IValueReferencePair*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverValueReferencePair::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverValueReferencePair::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverValueReferencePair, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverValueReferencePair::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverValueReferencePair::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverValueReferencePair, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverValueReferencePair::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverValueReferencePair, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverValueReferencePair::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverValueReferencePair, "
-      "but the iterator was done."
-    );
-  }
-
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverValueReferencePair, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverValueReferencePair::Clone() const {
-  return common::make_unique<IteratorOverValueReferencePair>(*this);
-}
-
-void IteratorOverValueReferencePair::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        property_ = Property::kValueId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          casted_->value_id()
-        );
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-// region Non-recursive iteration over IValueList
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverValueList : public impl::IIterator {
- public:
-  IteratorOverValueList(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverValueList() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IValueList* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverValueList
-
-IteratorOverValueList::IteratorOverValueList(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IValueList*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverValueList::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverValueList::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverValueList, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverValueList::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverValueList::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverValueList, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverValueList::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverValueList, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverValueList::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverValueList, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverValueList, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverValueList::Clone() const {
-  return common::make_unique<IteratorOverValueList>(*this);
-}
-
-void IteratorOverValueList::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        property_ = Property::kValueReferencePairs;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->value_reference_pairs().size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::IValueReferencePair>
-        >& the_value_reference_pairs(
-          casted_->value_reference_pairs()
-        );
-        const auto& item_value = the_value_reference_pairs[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 4;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-/**
- * This iterator is always done as ILangStringPreferredNameTypeIec61360
- * references no other instances.
- */
-class IteratorOverLangStringPreferredNameTypeIec61360 : public impl::IIterator {
- public:
-  IteratorOverLangStringPreferredNameTypeIec61360(
-    const std::shared_ptr<types::IClass>&
-  ) {
-    // Intentionally empty.
-  }
-
-  void Start() override {
-    // Intentionally empty.
-  }
-
-  void Next() override {
-    throw std::logic_error(
-      "You want to move "
-      "an IteratorOverLangStringPreferredNameTypeIec61360, "
-      "but the iterator is always done as "
-      "ILangStringPreferredNameTypeIec61360 "
-      "references no other instances."
-    );
-  }
-
-  bool Done() const override {
-    return true;
-  }
-
-  const std::shared_ptr<types::IClass>& Get() const override {
-    throw std::logic_error(
-      "You want to get from an IteratorOverLangStringPreferredNameTypeIec61360, "
-      "but the iterator is always done as "
-      "ILangStringPreferredNameTypeIec61360 references "
-      "no other instances."
-    );
-  }
-
-  long Index() const override {
-    return -1;
-  }
-
-  std::unique_ptr<impl::IIterator> Clone() const override {
-    return common::make_unique<IteratorOverLangStringPreferredNameTypeIec61360>(*this);
-  }
-
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an IteratorOverLangStringPreferredNameTypeIec61360, "
-      "but the iterator is always done as "
-      "ILangStringPreferredNameTypeIec61360 references "
-      "no other instances."
-    );
-  }
-
-  ~IteratorOverLangStringPreferredNameTypeIec61360() override = default;
-};  // class IteratorOverLangStringPreferredNameTypeIec61360
-
-/**
- * This iterator is always done as ILangStringShortNameTypeIec61360
- * references no other instances.
- */
-class IteratorOverLangStringShortNameTypeIec61360 : public impl::IIterator {
- public:
-  IteratorOverLangStringShortNameTypeIec61360(
-    const std::shared_ptr<types::IClass>&
-  ) {
-    // Intentionally empty.
-  }
-
-  void Start() override {
-    // Intentionally empty.
-  }
-
-  void Next() override {
-    throw std::logic_error(
-      "You want to move "
-      "an IteratorOverLangStringShortNameTypeIec61360, "
-      "but the iterator is always done as "
-      "ILangStringShortNameTypeIec61360 "
-      "references no other instances."
-    );
-  }
-
-  bool Done() const override {
-    return true;
-  }
-
-  const std::shared_ptr<types::IClass>& Get() const override {
-    throw std::logic_error(
-      "You want to get from an IteratorOverLangStringShortNameTypeIec61360, "
-      "but the iterator is always done as "
-      "ILangStringShortNameTypeIec61360 references "
-      "no other instances."
-    );
-  }
-
-  long Index() const override {
-    return -1;
-  }
-
-  std::unique_ptr<impl::IIterator> Clone() const override {
-    return common::make_unique<IteratorOverLangStringShortNameTypeIec61360>(*this);
-  }
-
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an IteratorOverLangStringShortNameTypeIec61360, "
-      "but the iterator is always done as "
-      "ILangStringShortNameTypeIec61360 references "
-      "no other instances."
-    );
-  }
-
-  ~IteratorOverLangStringShortNameTypeIec61360() override = default;
-};  // class IteratorOverLangStringShortNameTypeIec61360
-
-/**
- * This iterator is always done as ILangStringDefinitionTypeIec61360
- * references no other instances.
- */
-class IteratorOverLangStringDefinitionTypeIec61360 : public impl::IIterator {
- public:
-  IteratorOverLangStringDefinitionTypeIec61360(
-    const std::shared_ptr<types::IClass>&
-  ) {
-    // Intentionally empty.
-  }
-
-  void Start() override {
-    // Intentionally empty.
-  }
-
-  void Next() override {
-    throw std::logic_error(
-      "You want to move "
-      "an IteratorOverLangStringDefinitionTypeIec61360, "
-      "but the iterator is always done as "
-      "ILangStringDefinitionTypeIec61360 "
-      "references no other instances."
-    );
-  }
-
-  bool Done() const override {
-    return true;
-  }
-
-  const std::shared_ptr<types::IClass>& Get() const override {
-    throw std::logic_error(
-      "You want to get from an IteratorOverLangStringDefinitionTypeIec61360, "
-      "but the iterator is always done as "
-      "ILangStringDefinitionTypeIec61360 references "
-      "no other instances."
-    );
-  }
-
-  long Index() const override {
-    return -1;
-  }
-
-  std::unique_ptr<impl::IIterator> Clone() const override {
-    return common::make_unique<IteratorOverLangStringDefinitionTypeIec61360>(*this);
-  }
-
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an IteratorOverLangStringDefinitionTypeIec61360, "
-      "but the iterator is always done as "
-      "ILangStringDefinitionTypeIec61360 references "
-      "no other instances."
-    );
-  }
-
-  ~IteratorOverLangStringDefinitionTypeIec61360() override = default;
-};  // class IteratorOverLangStringDefinitionTypeIec61360
-
-// region Non-recursive iteration over IDataSpecificationIec61360
-
-/**
- * Iterate non-recursively over the instances referenced from an instance.
- */
-class IteratorOverDataSpecificationIec61360 : public impl::IIterator {
- public:
-  IteratorOverDataSpecificationIec61360(
-    const std::shared_ptr<types::IClass>& instance
-  );
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~IteratorOverDataSpecificationIec61360() override = default;
-
- private:
-  // We make casted_ a pointer, so that we can follow the rule-of-zero.
-  const types::IDataSpecificationIec61360* casted_;
-  std::uint32_t state_;
-  common::optional<Property> property_;
-  common::optional<size_t> cursor_;  // in yield-from loops
-  std::shared_ptr<types::IClass> item_;
-  long index_;  // in total iteration
-  bool done_;
-
-  void Execute();
-};  // class IteratorOverDataSpecificationIec61360
-
-IteratorOverDataSpecificationIec61360::IteratorOverDataSpecificationIec61360(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin):
-  // The dynamic cast is necessary due to virtual inheritance. Otherwise,
-  // we would have used static cast.
-  casted_(
-    dynamic_cast<types::IDataSpecificationIec61360*>(
-      instance.get()
-    )
-  ) {
-  // Intentionally empty.
-}
-
-void IteratorOverDataSpecificationIec61360::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void IteratorOverDataSpecificationIec61360::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move IteratorOverDataSpecificationIec61360, "
-      "but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool IteratorOverDataSpecificationIec61360::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& IteratorOverDataSpecificationIec61360::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from IteratorOverDataSpecificationIec61360, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  return item_;
-}
-
-long IteratorOverDataSpecificationIec61360::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done IteratorOverDataSpecificationIec61360, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void IteratorOverDataSpecificationIec61360::PrependToPath(
-  Path* path
-) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverDataSpecificationIec61360, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (cursor_.has_value()) {
-    path->segments.emplace_front(
-      common::make_unique<IndexSegment>(*cursor_)
-    );
-  }
-
-  #ifdef DEBUG
-  if (!property_.has_value()) {
-    throw std::logic_error(
-      "You want to prepend to path from IteratorOverDataSpecificationIec61360, "
-      "but the property_ has not been set to a value."
-    );
-  }
-  #endif
-
-  path->segments.emplace_front(
-    common::make_unique<PropertySegment>(*property_)
-  );
-}
-
-std::unique_ptr<impl::IIterator> IteratorOverDataSpecificationIec61360::Clone() const {
-  return common::make_unique<IteratorOverDataSpecificationIec61360>(*this);
-}
-
-void IteratorOverDataSpecificationIec61360::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        property_.reset();
-        item_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        cursor_.reset();
-
-        property_ = Property::kPreferredName;
-
-        cursor_ = 0;
-      }
-
-      case 1: {
-        if (!(*cursor_ < casted_->preferred_name().size())) {
-          state_ = 3;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>
-        >& the_preferred_name(
-          casted_->preferred_name()
-        );
-        const auto& item_value = the_preferred_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        ++(*cursor_);
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        cursor_.reset();
-
-        if (!(casted_->short_name().has_value())) {
-          state_ = 7;
-          continue;
-        }
-
-        property_ = Property::kShortName;
-
-        cursor_ = 0;
-      }
-
-      case 4: {
-        if (!(*cursor_ < casted_->short_name()->size())) {
-          state_ = 6;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringShortNameTypeIec61360>
-        >& the_short_name(
-          *(casted_->short_name())
-        );
-        const auto& item_value = the_short_name[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        ++(*cursor_);
-
-        state_ = 4;
-        continue;
-      }
-
-      case 6: {
-        cursor_.reset();
-      }
-
-      case 7: {
-        if (!(casted_->unit_id().has_value())) {
-          state_ = 8;
-          continue;
-        }
-
-        property_ = Property::kUnitId;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->unit_id())
-        );
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (!(casted_->definition().has_value())) {
-          state_ = 12;
-          continue;
-        }
-
-        property_ = Property::kDefinition;
-
-        cursor_ = 0;
-      }
-
-      case 9: {
-        if (!(*cursor_ < casted_->definition()->size())) {
-          state_ = 11;
-          continue;
-        }
-
-        const std::vector<
-          std::shared_ptr<types::ILangStringDefinitionTypeIec61360>
-        >& the_definition(
-          *(casted_->definition())
-        );
-        const auto& item_value = the_definition[*cursor_];
-
-        item_ = std::static_pointer_cast<types::IClass>(item_value);
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        ++(*cursor_);
-
-        state_ = 9;
-        continue;
-      }
-
-      case 11: {
-        cursor_.reset();
-      }
-
-      case 12: {
-        if (!(casted_->value_list().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        property_ = Property::kValueList;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->value_list())
-        );
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(casted_->level_type().has_value())) {
-          state_ = 14;
-          continue;
-        }
-
-        property_ = Property::kLevelType;
-        item_ = std::static_pointer_cast<types::IClass>(
-          *(casted_->level_type())
-        );
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 15;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion
-
-/**
- * This iterator is always done.
+ * \brief Iterate over the instances of the children, one child after another.
  *
- * It is used for efficient comparisons against end-of-descent.
+ * A child is started only once the previous child is done.
  */
-class AlwaysDoneIterator : public impl::IIterator {
+class ChainIterator : public impl::IIterator {
  public:
-  void Start() override {
+  explicit ChainIterator(
+    std::vector<std::unique_ptr<impl::IIterator> > children
+  ) :
+    children_(std::move(children)),
+    active_(0) {
     // Intentionally empty.
   }
 
+  ChainIterator(const ChainIterator& other) :
+    active_(other.active_) {
+    children_.reserve(other.children_.size());
+    for (const std::unique_ptr<impl::IIterator>& child : other.children_) {
+      children_.emplace_back(child->Clone());
+    }
+  }
+
+  void Start() override {
+    active_ = 0;
+    if (!children_.empty()) {
+      children_[0]->Start();
+    }
+    SkipDoneChildren();
+  }
+
   void Next() override {
-    throw std::logic_error(
-      "You want to move an AlwaysDoneIterator, "
-      "but the iterator is always done, as its name suggests."
-    );
+    children_[active_]->Next();
+    SkipDoneChildren();
   }
 
   bool Done() const override {
-    return true;
+    return active_ >= children_.size();
   }
 
   const std::shared_ptr<types::IClass>& Get() const override {
-    throw std::logic_error(
-      "You want to get from an AlwaysDoneIterator, "
-      "but the iterator is always done, as its name suggests."
-    );
+    return children_[active_]->Get();
   }
 
-  std::unique_ptr<IIterator> Clone() const override {
-    return common::make_unique<AlwaysDoneIterator>(*this);
-  };
-
-  void PrependToPath(Path*) const override {
-    throw std::logic_error(
-      "You want to prepend to path from an AlwaysDoneIterator, "
-      "but the iterator is always done, as its name suggests."
-    );
+  void AppendToPath(Path& path) const override {
+    children_[active_]->AppendToPath(path);
   }
 
-  long Index() const override {
-    return -1;
+  std::unique_ptr<impl::IIterator> Clone() const override {
+    return common::make_unique<ChainIterator>(*this);
   }
 
-  ~AlwaysDoneIterator() override = default;
-};  // class AlwaysDoneIterator
+ private:
+  std::vector<std::unique_ptr<impl::IIterator> > children_;
+
+  /**
+   * Index of the child we currently iterate over
+   */
+  std::size_t active_;
+
+  /**
+   * Move on to the next children, and start them, until one is not done.
+   */
+  void SkipDoneChildren() {
+    while (active_ < children_.size() && children_[active_]->Done()) {
+      ++active_;
+      if (active_ < children_.size()) {
+        children_[active_]->Start();
+      }
+    }
+  }
+};  // class ChainIterator
+
+void CollectChildren(
+  std::vector<std::unique_ptr<impl::IIterator> >&
+) {
+  // Intentionally empty, as there are no more children to collect.
+}
+
+template<typename... Rest>
+void CollectChildren(
+  std::vector<std::unique_ptr<impl::IIterator> >& children,
+  std::unique_ptr<impl::IIterator> first,
+  Rest... rest
+) {
+  children.emplace_back(std::move(first));
+  CollectChildren(children, std::move(rest)...);
+}
+
+// NOTE (mristin):
+// We can not use an initializer list here, as we can not move the unique pointers
+// out of it.
+template<typename... Children>
+std::unique_ptr<impl::IIterator> Chain(
+  Children... children
+) {
+  std::vector<std::unique_ptr<impl::IIterator> > collected;
+  collected.reserve(sizeof...(Children));
+  CollectChildren(collected, std::move(children)...);
+
+  return common::make_unique<ChainIterator>(std::move(collected));
+}
 
 /**
- * Produce a non-recursive iterator over the instance given its runtime model type.
+ * Iterate over the instances of the \p child, which lives in a property.
  */
-std::unique_ptr<impl::IIterator> NewNonRecursiveIterator(
-  const std::shared_ptr<types::IClass>& instance
+class InPropertyIterator : public impl::IIterator {
+ public:
+  InPropertyIterator(
+    Property property,
+    std::unique_ptr<impl::IIterator> child
+  ) :
+    property_(property),
+    child_(std::move(child)) {
+    // Intentionally empty.
+  }
+
+  InPropertyIterator(const InPropertyIterator& other) :
+    property_(other.property_),
+    child_(other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const std::shared_ptr<types::IClass>& Get() const override {
+    return child_->Get();
+  }
+
+  void AppendToPath(Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<PropertySegment>(property_)
+    );
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<impl::IIterator> Clone() const override {
+    return common::make_unique<InPropertyIterator>(*this);
+  }
+
+ private:
+  Property property_;
+  std::unique_ptr<impl::IIterator> child_;
+};  // class InPropertyIterator
+
+std::unique_ptr<impl::IIterator> InProperty(
+  Property property,
+  std::unique_ptr<impl::IIterator> child
 ) {
-  switch (instance->model_type()) {
+  return common::make_unique<InPropertyIterator>(property, std::move(child));
+}
+
+/**
+ * \brief Iterate over the instances of every item of a list, one item after another.
+ *
+ * The iterator over an item is built only once the iteration reaches the item.
+ */
+template<typename T>
+class EachIterator : public impl::IIterator {
+ public:
+  /**
+   * Build the iterator over the instances of an item
+   */
+  typedef std::unique_ptr<impl::IIterator> (*OverItem)(
+    const T& item,
+    bool recursive
+  );
+
+  EachIterator(
+    const std::vector<T>* items,
+    OverItem over_item,
+    bool recursive
+  ) :
+    items_(items),
+    over_item_(over_item),
+    recursive_(recursive),
+    index_(0) {
+    // Intentionally empty.
+  }
+
+  EachIterator(const EachIterator<T>& other) :
+    items_(other.items_),
+    over_item_(other.over_item_),
+    recursive_(other.recursive_),
+    index_(other.index_),
+    item_(other.item_ == nullptr ? nullptr : other.item_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    index_ = 0;
+    item_ = nullptr;
+    SkipDoneItems();
+  }
+
+  void Next() override {
+    item_->Next();
+    SkipDoneItems();
+  }
+
+  bool Done() const override {
+    return index_ >= items_->size();
+  }
+
+  const std::shared_ptr<types::IClass>& Get() const override {
+    return item_->Get();
+  }
+
+  void AppendToPath(Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<IndexSegment>(index_)
+    );
+    item_->AppendToPath(path);
+  }
+
+  std::unique_ptr<impl::IIterator> Clone() const override {
+    return common::make_unique<EachIterator<T> >(*this);
+  }
+
+ private:
+  const std::vector<T>* items_;
+  OverItem over_item_;
+  bool recursive_;
+
+  /**
+   * Index of the item we currently iterate over
+   */
+  std::size_t index_;
+
+  /**
+   * Iterator over the current item, built once we reached the item
+   */
+  std::unique_ptr<impl::IIterator> item_;
+
+  /**
+   * Move on to the next items, and build their iterators, until one is not done.
+   */
+  void SkipDoneItems() {
+    while (index_ < items_->size()) {
+      if (item_ == nullptr) {
+        item_ = over_item_((*items_)[index_], recursive_);
+        item_->Start();
+      }
+
+      if (!item_->Done()) {
+        return;
+      }
+
+      item_ = nullptr;
+      ++index_;
+    }
+  }
+};  // class EachIterator
+
+template<typename T>
+std::unique_ptr<impl::IIterator> Each(
+  const std::vector<T>& items,
+  std::unique_ptr<impl::IIterator> (*over_item)(const T& item, bool recursive),
+  bool recursive
+) {
+  return common::make_unique<EachIterator<T> >(&items, over_item, recursive);
+}
+
+/**
+ * \brief Iterate over a single instance.
+ *
+ * We keep a copy of the shared pointer, upcast to types::IClass, so that
+ * \ref Get can return a reference to it.
+ */
+class OneIterator : public impl::IIterator {
+ public:
+  explicit OneIterator(
+    std::shared_ptr<types::IClass> instance
+  ) :
+    instance_(std::move(instance)),
+    done_(true) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    done_ = false;
+  }
+
+  void Next() override {
+    done_ = true;
+  }
+
+  bool Done() const override {
+    return done_;
+  }
+
+  const std::shared_ptr<types::IClass>& Get() const override {
+    return instance_;
+  }
+
+  void AppendToPath(Path&) const override {
+    // Intentionally empty, as the instance itself is the end of the path.
+  }
+
+  std::unique_ptr<impl::IIterator> Clone() const override {
+    return common::make_unique<OneIterator>(*this);
+  }
+
+ private:
+  std::shared_ptr<types::IClass> instance_;
+  bool done_;
+};  // class OneIterator
+
+std::unique_ptr<impl::IIterator> One(
+  std::shared_ptr<types::IClass> instance
+) {
+  return common::make_unique<OneIterator>(std::move(instance));
+}
+
+/**
+ * \brief Iterate over the instances referenced from an instance, dispatched on
+ * its runtime type.
+ *
+ * Defined below, once all the classes have been covered.
+ */
+std::unique_ptr<impl::IIterator> DispatchOnModelType(
+  const types::IClass& instance,
+  bool recursive
+);
+
+/**
+ * \brief Iterate recursively over the instances referenced from an instance.
+ *
+ * We dispatch on the runtime type of the instance only in \ref Start so that
+ * we descend into the instance only once the iteration reaches it.
+ */
+class DispatchingIterator : public impl::IIterator {
+ public:
+  explicit DispatchingIterator(
+    const types::IClass* instance
+  ) :
+    instance_(instance) {
+    // Intentionally empty.
+  }
+
+  DispatchingIterator(const DispatchingIterator& other) :
+    instance_(other.instance_),
+    child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_ = DispatchOnModelType(*instance_, true);
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const std::shared_ptr<types::IClass>& Get() const override {
+    return child_->Get();
+  }
+
+  void AppendToPath(Path& path) const override {
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<impl::IIterator> Clone() const override {
+    return common::make_unique<DispatchingIterator>(*this);
+  }
+
+ private:
+  const types::IClass* instance_;
+  std::unique_ptr<impl::IIterator> child_;
+};  // class DispatchingIterator
+
+/**
+ * Iterate over the instances referenced from the \p instance, if \p recursive.
+ */
+std::unique_ptr<impl::IIterator> Over(
+  const types::IClass& instance,
+  bool recursive
+) {
+  if (!recursive) {
+    // NOTE (mristin):
+    // In the non-recursive mode, we iterate only over the instances referenced
+    // directly, but not over the instances which they reference in turn.
+    return Empty();
+  }
+
+  return common::make_unique<DispatchingIterator>(&instance);
+}
+
+/**
+ * Iterate over the \p instance, and then over the instances that it references.
+ */
+template<typename T>
+std::unique_ptr<impl::IIterator> OneThenOver(
+  const std::shared_ptr<T>& instance,
+  bool recursive
+) {
+  return Chain(One(instance), Over(*instance, recursive));
+}
+
+using listOf_Reference = std::vector<
+  std::shared_ptr<types::IReference>
+>;
+
+using listOf_EmbeddedDataSpecification = std::vector<
+  std::shared_ptr<types::IEmbeddedDataSpecification>
+>;
+
+using listOf_Extension = std::vector<
+  std::shared_ptr<types::IExtension>
+>;
+
+using listOf_LangStringNameType = std::vector<
+  std::shared_ptr<types::ILangStringNameType>
+>;
+
+using listOf_LangStringTextType = std::vector<
+  std::shared_ptr<types::ILangStringTextType>
+>;
+
+using listOf_SpecificAssetId = std::vector<
+  std::shared_ptr<types::ISpecificAssetId>
+>;
+
+using listOf_Qualifier = std::vector<
+  std::shared_ptr<types::IQualifier>
+>;
+
+using listOf_SubmodelElement = std::vector<
+  std::shared_ptr<types::ISubmodelElement>
+>;
+
+using listOf_DataElement = std::vector<
+  std::shared_ptr<types::IDataElement>
+>;
+
+using listOf_OperationVariable = std::vector<
+  std::shared_ptr<types::IOperationVariable>
+>;
+
+using listOf_Key = std::vector<
+  std::shared_ptr<types::IKey>
+>;
+
+using listOf_AssetAdministrationShell = std::vector<
+  std::shared_ptr<types::IAssetAdministrationShell>
+>;
+
+using listOf_Submodel = std::vector<
+  std::shared_ptr<types::ISubmodel>
+>;
+
+using listOf_ConceptDescription = std::vector<
+  std::shared_ptr<types::IConceptDescription>
+>;
+
+using listOf_ValueReferencePair = std::vector<
+  std::shared_ptr<types::IValueReferencePair>
+>;
+
+using listOf_LangStringPreferredNameTypeIec61360 = std::vector<
+  std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>
+>;
+
+using listOf_LangStringShortNameTypeIec61360 = std::vector<
+  std::shared_ptr<types::ILangStringShortNameTypeIec61360>
+>;
+
+using listOf_LangStringDefinitionTypeIec61360 = std::vector<
+  std::shared_ptr<types::ILangStringDefinitionTypeIec61360>
+>;
+
+std::unique_ptr<impl::IIterator> Over_listOf_Reference(
+  const listOf_Reference& value,
+  bool recursive
+) {
+  return Each(value, &OneThenOver<types::IReference>, recursive);
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_EmbeddedDataSpecification(
+  const listOf_EmbeddedDataSpecification& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::IEmbeddedDataSpecification>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_Extension(
+  const listOf_Extension& value,
+  bool recursive
+) {
+  return Each(value, &OneThenOver<types::IExtension>, recursive);
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_LangStringNameType(
+  const listOf_LangStringNameType& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::ILangStringNameType>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_LangStringTextType(
+  const listOf_LangStringTextType& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::ILangStringTextType>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_SpecificAssetId(
+  const listOf_SpecificAssetId& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::ISpecificAssetId>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_Qualifier(
+  const listOf_Qualifier& value,
+  bool recursive
+) {
+  return Each(value, &OneThenOver<types::IQualifier>, recursive);
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_SubmodelElement(
+  const listOf_SubmodelElement& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::ISubmodelElement>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_DataElement(
+  const listOf_DataElement& value,
+  bool recursive
+) {
+  return Each(value, &OneThenOver<types::IDataElement>, recursive);
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_OperationVariable(
+  const listOf_OperationVariable& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::IOperationVariable>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_Key(
+  const listOf_Key& value,
+  bool recursive
+) {
+  return Each(value, &OneThenOver<types::IKey>, recursive);
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_AssetAdministrationShell(
+  const listOf_AssetAdministrationShell& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::IAssetAdministrationShell>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_Submodel(
+  const listOf_Submodel& value,
+  bool recursive
+) {
+  return Each(value, &OneThenOver<types::ISubmodel>, recursive);
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_ConceptDescription(
+  const listOf_ConceptDescription& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::IConceptDescription>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_ValueReferencePair(
+  const listOf_ValueReferencePair& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::IValueReferencePair>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_LangStringPreferredNameTypeIec61360(
+  const listOf_LangStringPreferredNameTypeIec61360& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::ILangStringPreferredNameTypeIec61360>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_LangStringShortNameTypeIec61360(
+  const listOf_LangStringShortNameTypeIec61360& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::ILangStringShortNameTypeIec61360>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_LangStringDefinitionTypeIec61360(
+  const listOf_LangStringDefinitionTypeIec61360& value,
+  bool recursive
+) {
+  return Each(
+    value,
+    &OneThenOver<types::ILangStringDefinitionTypeIec61360>,
+    recursive
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Extension(
+  const types::IExtension& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kRefersTo,
+      that.refers_to().has_value()
+        ? Over_listOf_Reference((*that.refers_to()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_AdministrativeInformation(
+  const types::IAdministrativeInformation& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kCreator,
+      that.creator().has_value()
+        ? OneThenOver((*that.creator()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Qualifier(
+  const types::IQualifier& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kValueId,
+      that.value_id().has_value()
+        ? OneThenOver((*that.value_id()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_AssetAdministrationShell(
+  const types::IAssetAdministrationShell& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kAdministration,
+      that.administration().has_value()
+        ? OneThenOver((*that.administration()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDerivedFrom,
+      that.derived_from().has_value()
+        ? OneThenOver((*that.derived_from()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kAssetInformation,
+      OneThenOver(that.asset_information(), recursive)
+    ),
+    InProperty(
+      Property::kSubmodels,
+      that.submodels().has_value()
+        ? Over_listOf_Reference((*that.submodels()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_AssetInformation(
+  const types::IAssetInformation& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kSpecificAssetIds,
+      that.specific_asset_ids().has_value()
+        ? Over_listOf_SpecificAssetId(
+            (*that.specific_asset_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDefaultThumbnail,
+      that.default_thumbnail().has_value()
+        ? OneThenOver((*that.default_thumbnail()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_SpecificAssetId(
+  const types::ISpecificAssetId& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kExternalSubjectId,
+      that.external_subject_id().has_value()
+        ? OneThenOver((*that.external_subject_id()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Submodel(
+  const types::ISubmodel& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kAdministration,
+      that.administration().has_value()
+        ? OneThenOver((*that.administration()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSubmodelElements,
+      that.submodel_elements().has_value()
+        ? Over_listOf_SubmodelElement(
+            (*that.submodel_elements()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_RelationshipElement(
+  const types::IRelationshipElement& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kFirst,
+      OneThenOver(that.first(), recursive)
+    ),
+    InProperty(
+      Property::kSecond,
+      OneThenOver(that.second(), recursive)
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_SubmodelElementList(
+  const types::ISubmodelElementList& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticIdListElement,
+      that.semantic_id_list_element().has_value()
+        ? OneThenOver((*that.semantic_id_list_element()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kValue,
+      that.value().has_value()
+        ? Over_listOf_SubmodelElement((*that.value()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_SubmodelElementCollection(
+  const types::ISubmodelElementCollection& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kValue,
+      that.value().has_value()
+        ? Over_listOf_SubmodelElement((*that.value()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Property(
+  const types::IProperty& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kValueId,
+      that.value_id().has_value()
+        ? OneThenOver((*that.value_id()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_MultiLanguageProperty(
+  const types::IMultiLanguageProperty& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kValue,
+      that.value().has_value()
+        ? Over_listOf_LangStringTextType((*that.value()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kValueId,
+      that.value_id().has_value()
+        ? OneThenOver((*that.value_id()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Range(
+  const types::IRange& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_ReferenceElement(
+  const types::IReferenceElement& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kValue,
+      that.value().has_value()
+        ? OneThenOver((*that.value()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Blob(
+  const types::IBlob& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_File(
+  const types::IFile& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_AnnotatedRelationshipElement(
+  const types::IAnnotatedRelationshipElement& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kFirst,
+      OneThenOver(that.first(), recursive)
+    ),
+    InProperty(
+      Property::kSecond,
+      OneThenOver(that.second(), recursive)
+    ),
+    InProperty(
+      Property::kAnnotations,
+      that.annotations().has_value()
+        ? Over_listOf_DataElement((*that.annotations()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Entity(
+  const types::IEntity& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kStatements,
+      that.statements().has_value()
+        ? Over_listOf_SubmodelElement((*that.statements()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSpecificAssetIds,
+      that.specific_asset_ids().has_value()
+        ? Over_listOf_SpecificAssetId(
+            (*that.specific_asset_ids()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_EventPayload(
+  const types::IEventPayload& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kSource,
+      OneThenOver(that.source(), recursive)
+    ),
+    InProperty(
+      Property::kSourceSemanticId,
+      that.source_semantic_id().has_value()
+        ? OneThenOver((*that.source_semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kObservableReference,
+      OneThenOver(that.observable_reference(), recursive)
+    ),
+    InProperty(
+      Property::kObservableSemanticId,
+      that.observable_semantic_id().has_value()
+        ? OneThenOver((*that.observable_semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSubjectId,
+      that.subject_id().has_value()
+        ? OneThenOver((*that.subject_id()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_BasicEventElement(
+  const types::IBasicEventElement& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kObserved,
+      OneThenOver(that.observed(), recursive)
+    ),
+    InProperty(
+      Property::kMessageBroker,
+      that.message_broker().has_value()
+        ? OneThenOver((*that.message_broker()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Operation(
+  const types::IOperation& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kInputVariables,
+      that.input_variables().has_value()
+        ? Over_listOf_OperationVariable(
+            (*that.input_variables()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kOutputVariables,
+      that.output_variables().has_value()
+        ? Over_listOf_OperationVariable(
+            (*that.output_variables()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kInoutputVariables,
+      that.inoutput_variables().has_value()
+        ? Over_listOf_OperationVariable(
+            (*that.inoutput_variables()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_OperationVariable(
+  const types::IOperationVariable& that,
+  bool recursive
+) {
+  return InProperty(
+    Property::kValue,
+    OneThenOver(that.value(), recursive)
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Capability(
+  const types::ICapability& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? OneThenOver((*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? Over_listOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_ConceptDescription(
+  const types::IConceptDescription& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kExtensions,
+      that.extensions().has_value()
+        ? Over_listOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDisplayName,
+      that.display_name().has_value()
+        ? Over_listOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kDescription,
+      that.description().has_value()
+        ? Over_listOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kAdministration,
+      that.administration().has_value()
+        ? OneThenOver((*that.administration()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? Over_listOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kIsCaseOf,
+      that.is_case_of().has_value()
+        ? Over_listOf_Reference((*that.is_case_of()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Reference(
+  const types::IReference& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kReferredSemanticId,
+      that.referred_semantic_id().has_value()
+        ? OneThenOver((*that.referred_semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kKeys,
+      Over_listOf_Key(that.keys(), recursive)
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Environment(
+  const types::IEnvironment& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kAssetAdministrationShells,
+      that.asset_administration_shells().has_value()
+        ? Over_listOf_AssetAdministrationShell(
+            (*that.asset_administration_shells()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kSubmodels,
+      that.submodels().has_value()
+        ? Over_listOf_Submodel((*that.submodels()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kConceptDescriptions,
+      that.concept_descriptions().has_value()
+        ? Over_listOf_ConceptDescription(
+            (*that.concept_descriptions()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_EmbeddedDataSpecification(
+  const types::IEmbeddedDataSpecification& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kDataSpecification,
+      OneThenOver(that.data_specification(), recursive)
+    ),
+    InProperty(
+      Property::kDataSpecificationContent,
+      OneThenOver(that.data_specification_content(), recursive)
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_ValueReferencePair(
+  const types::IValueReferencePair& that,
+  bool recursive
+) {
+  return InProperty(
+    Property::kValueId,
+    OneThenOver(that.value_id(), recursive)
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_ValueList(
+  const types::IValueList& that,
+  bool recursive
+) {
+  return InProperty(
+    Property::kValueReferencePairs,
+    Over_listOf_ValueReferencePair(
+      that.value_reference_pairs(),
+      recursive
+    )
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_DataSpecificationIec61360(
+  const types::IDataSpecificationIec61360& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      Property::kPreferredName,
+      Over_listOf_LangStringPreferredNameTypeIec61360(
+        that.preferred_name(),
+        recursive
+      )
+    ),
+    InProperty(
+      Property::kShortName,
+      that.short_name().has_value()
+        ? Over_listOf_LangStringShortNameTypeIec61360(
+            (*that.short_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kUnitId,
+      that.unit_id().has_value()
+        ? OneThenOver((*that.unit_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kDefinition,
+      that.definition().has_value()
+        ? Over_listOf_LangStringDefinitionTypeIec61360(
+            (*that.definition()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kValueList,
+      that.value_list().has_value()
+        ? OneThenOver((*that.value_list()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      Property::kLevelType,
+      that.level_type().has_value()
+        ? OneThenOver((*that.level_type()), recursive)
+        : Empty()
+    )
+  );
+}
+
+/**
+ * \brief Iterate over the instances referenced from the \p instance,
+ * dispatched on its runtime type.
+ *
+ * If \p recursive, we iterate also over the instances which the referenced
+ * instances reference in turn.
+ */
+std::unique_ptr<impl::IIterator> DispatchOnModelType(
+  const types::IClass& instance,
+  bool recursive
+) {
+  switch (instance.model_type()) {
     case types::ModelType::kExtension:
-      return common::make_unique<IteratorOverExtension>(
-        instance
+      return Over_Extension(
+        dynamic_cast<const types::IExtension&>(instance),
+        recursive
       );
     case types::ModelType::kAdministrativeInformation:
-      return common::make_unique<IteratorOverAdministrativeInformation>(
-        instance
+      return Over_AdministrativeInformation(
+        dynamic_cast<const types::IAdministrativeInformation&>(instance),
+        recursive
       );
     case types::ModelType::kQualifier:
-      return common::make_unique<IteratorOverQualifier>(
-        instance
+      return Over_Qualifier(
+        dynamic_cast<const types::IQualifier&>(instance),
+        recursive
       );
     case types::ModelType::kAssetAdministrationShell:
-      return common::make_unique<IteratorOverAssetAdministrationShell>(
-        instance
+      return Over_AssetAdministrationShell(
+        dynamic_cast<const types::IAssetAdministrationShell&>(instance),
+        recursive
       );
     case types::ModelType::kAssetInformation:
-      return common::make_unique<IteratorOverAssetInformation>(
-        instance
-      );
-    case types::ModelType::kResource:
-      return common::make_unique<IteratorOverResource>(
-        instance
+      return Over_AssetInformation(
+        dynamic_cast<const types::IAssetInformation&>(instance),
+        recursive
       );
     case types::ModelType::kSpecificAssetId:
-      return common::make_unique<IteratorOverSpecificAssetId>(
-        instance
+      return Over_SpecificAssetId(
+        dynamic_cast<const types::ISpecificAssetId&>(instance),
+        recursive
       );
     case types::ModelType::kSubmodel:
-      return common::make_unique<IteratorOverSubmodel>(
-        instance
+      return Over_Submodel(
+        dynamic_cast<const types::ISubmodel&>(instance),
+        recursive
       );
     case types::ModelType::kRelationshipElement:
-      return common::make_unique<IteratorOverRelationshipElement>(
-        instance
+      return Over_RelationshipElement(
+        dynamic_cast<const types::IRelationshipElement&>(instance),
+        recursive
       );
     case types::ModelType::kSubmodelElementList:
-      return common::make_unique<IteratorOverSubmodelElementList>(
-        instance
+      return Over_SubmodelElementList(
+        dynamic_cast<const types::ISubmodelElementList&>(instance),
+        recursive
       );
     case types::ModelType::kSubmodelElementCollection:
-      return common::make_unique<IteratorOverSubmodelElementCollection>(
-        instance
+      return Over_SubmodelElementCollection(
+        dynamic_cast<const types::ISubmodelElementCollection&>(instance),
+        recursive
       );
     case types::ModelType::kProperty:
-      return common::make_unique<IteratorOverProperty>(
-        instance
+      return Over_Property(
+        dynamic_cast<const types::IProperty&>(instance),
+        recursive
       );
     case types::ModelType::kMultiLanguageProperty:
-      return common::make_unique<IteratorOverMultiLanguageProperty>(
-        instance
+      return Over_MultiLanguageProperty(
+        dynamic_cast<const types::IMultiLanguageProperty&>(instance),
+        recursive
       );
     case types::ModelType::kRange:
-      return common::make_unique<IteratorOverRange>(
-        instance
+      return Over_Range(
+        dynamic_cast<const types::IRange&>(instance),
+        recursive
       );
     case types::ModelType::kReferenceElement:
-      return common::make_unique<IteratorOverReferenceElement>(
-        instance
+      return Over_ReferenceElement(
+        dynamic_cast<const types::IReferenceElement&>(instance),
+        recursive
       );
     case types::ModelType::kBlob:
-      return common::make_unique<IteratorOverBlob>(
-        instance
+      return Over_Blob(
+        dynamic_cast<const types::IBlob&>(instance),
+        recursive
       );
     case types::ModelType::kFile:
-      return common::make_unique<IteratorOverFile>(
-        instance
+      return Over_File(
+        dynamic_cast<const types::IFile&>(instance),
+        recursive
       );
     case types::ModelType::kAnnotatedRelationshipElement:
-      return common::make_unique<IteratorOverAnnotatedRelationshipElement>(
-        instance
+      return Over_AnnotatedRelationshipElement(
+        dynamic_cast<const types::IAnnotatedRelationshipElement&>(instance),
+        recursive
       );
     case types::ModelType::kEntity:
-      return common::make_unique<IteratorOverEntity>(
-        instance
+      return Over_Entity(
+        dynamic_cast<const types::IEntity&>(instance),
+        recursive
       );
     case types::ModelType::kEventPayload:
-      return common::make_unique<IteratorOverEventPayload>(
-        instance
+      return Over_EventPayload(
+        dynamic_cast<const types::IEventPayload&>(instance),
+        recursive
       );
     case types::ModelType::kBasicEventElement:
-      return common::make_unique<IteratorOverBasicEventElement>(
-        instance
+      return Over_BasicEventElement(
+        dynamic_cast<const types::IBasicEventElement&>(instance),
+        recursive
       );
     case types::ModelType::kOperation:
-      return common::make_unique<IteratorOverOperation>(
-        instance
+      return Over_Operation(
+        dynamic_cast<const types::IOperation&>(instance),
+        recursive
       );
     case types::ModelType::kOperationVariable:
-      return common::make_unique<IteratorOverOperationVariable>(
-        instance
+      return Over_OperationVariable(
+        dynamic_cast<const types::IOperationVariable&>(instance),
+        recursive
       );
     case types::ModelType::kCapability:
-      return common::make_unique<IteratorOverCapability>(
-        instance
+      return Over_Capability(
+        dynamic_cast<const types::ICapability&>(instance),
+        recursive
       );
     case types::ModelType::kConceptDescription:
-      return common::make_unique<IteratorOverConceptDescription>(
-        instance
+      return Over_ConceptDescription(
+        dynamic_cast<const types::IConceptDescription&>(instance),
+        recursive
       );
     case types::ModelType::kReference:
-      return common::make_unique<IteratorOverReference>(
-        instance
-      );
-    case types::ModelType::kKey:
-      return common::make_unique<IteratorOverKey>(
-        instance
-      );
-    case types::ModelType::kLangStringNameType:
-      return common::make_unique<IteratorOverLangStringNameType>(
-        instance
-      );
-    case types::ModelType::kLangStringTextType:
-      return common::make_unique<IteratorOverLangStringTextType>(
-        instance
+      return Over_Reference(
+        dynamic_cast<const types::IReference&>(instance),
+        recursive
       );
     case types::ModelType::kEnvironment:
-      return common::make_unique<IteratorOverEnvironment>(
-        instance
+      return Over_Environment(
+        dynamic_cast<const types::IEnvironment&>(instance),
+        recursive
       );
     case types::ModelType::kEmbeddedDataSpecification:
-      return common::make_unique<IteratorOverEmbeddedDataSpecification>(
-        instance
-      );
-    case types::ModelType::kLevelType:
-      return common::make_unique<IteratorOverLevelType>(
-        instance
+      return Over_EmbeddedDataSpecification(
+        dynamic_cast<const types::IEmbeddedDataSpecification&>(instance),
+        recursive
       );
     case types::ModelType::kValueReferencePair:
-      return common::make_unique<IteratorOverValueReferencePair>(
-        instance
+      return Over_ValueReferencePair(
+        dynamic_cast<const types::IValueReferencePair&>(instance),
+        recursive
       );
     case types::ModelType::kValueList:
-      return common::make_unique<IteratorOverValueList>(
-        instance
-      );
-    case types::ModelType::kLangStringPreferredNameTypeIec61360:
-      return common::make_unique<IteratorOverLangStringPreferredNameTypeIec61360>(
-        instance
-      );
-    case types::ModelType::kLangStringShortNameTypeIec61360:
-      return common::make_unique<IteratorOverLangStringShortNameTypeIec61360>(
-        instance
-      );
-    case types::ModelType::kLangStringDefinitionTypeIec61360:
-      return common::make_unique<IteratorOverLangStringDefinitionTypeIec61360>(
-        instance
+      return Over_ValueList(
+        dynamic_cast<const types::IValueList&>(instance),
+        recursive
       );
     case types::ModelType::kDataSpecificationIec61360:
-      return common::make_unique<IteratorOverDataSpecificationIec61360>(
-        instance
+      return Over_DataSpecificationIec61360(
+        dynamic_cast<const types::IDataSpecificationIec61360&>(instance),
+        recursive
       );
     default:
-      throw std::logic_error(
-        common::Concat(
-          "Unexpected model type: ",
-          std::to_string(
-            static_cast<std::uint32_t>(instance->model_type())
-          )
-        )
-      );
+      // NOTE (mristin):
+      // The instances of the other classes reference no other instances.
+      return Empty();
   }
 }
 
-// endregion Non-recursive iteration
+// endregion Iteration over the instances
 
-// region Recursive iteration
-
-/**
- * Iterate recursively over the instance, including the instance in the iteration.
- *
- * This is a realisation of the following pseudo-code:
- * \code
- * stack = new Stack();
- * stack.push(instance);
- * while not stack.empty():
- *     instance = stack.pop()
- *     yield instance
- *
- *     it = new_non_recursive_iterator(instance)
- *     while not it.done():
- *         yield recursively from it.get()
- *         it.next()
- * \endcode
- */
-class RecursiveInclusiveIterator : public impl::IIterator {
- public:
-  RecursiveInclusiveIterator(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  RecursiveInclusiveIterator(
-    const RecursiveInclusiveIterator& other
-  );
-  RecursiveInclusiveIterator(
-    RecursiveInclusiveIterator&& other
-  );
-  RecursiveInclusiveIterator& operator=(
-    const RecursiveInclusiveIterator& other
-  );
-  RecursiveInclusiveIterator& operator=(
-    RecursiveInclusiveIterator&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~RecursiveInclusiveIterator() override = default;
-
- private:
-  // The instance_ needs to be a pointer so that we can re-assign it in
-  // the constructors and assignment operations.
-  const std::shared_ptr<types::IClass>* instance_;
-
-  // Iterator over the instances referenced from this instance
-  // in the outer loop
-  std::unique_ptr<impl::IIterator> non_recursive_iterator_;
-
-  // Iterator for recursion into the reference referenced from this instance
-  // in the inner loop
-  std::unique_ptr<impl::IIterator> recursive_iterator_;
-
-  const std::shared_ptr<types::IClass>* item_;
-
-  bool done_;
-  long index_;
-  size_t state_;
-
-  void Execute();
-};  // class RecursiveInclusiveIterator
-
-/**
- * Iterate recursively over the instance, excluding the instance in the iteration.
- *
- * This is a realisation of the following pseudo-code:
- * \code
- * stack = new Stack();
- * stack.push(instance);
- * while not stack.empty():
- *     some_instance = stack.pop()
- *     if some_instance is not instance:
- *         yield some_instance
- *
- *     it = new_non_recursive_iterator(some_instance)
- *     while not it.done():
- *         yield recursively from it.get()
- *         it.next()
- * \endcode
- */
-class RecursiveExclusiveIterator : public impl::IIterator {
- public:
-  RecursiveExclusiveIterator(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const std::shared_ptr<types::IClass>& Get() const override;
-  long Index() const override;
-  void PrependToPath(Path* path) const override;
-  std::unique_ptr<impl::IIterator> Clone() const override;
-  ~RecursiveExclusiveIterator() override = default;
-
- private:
-  RecursiveInclusiveIterator inclusive_iterator_;
-};  // class RecursiveExclusiveIterator
-
-// region RecursiveInclusiveIterator implementation
-
-RecursiveInclusiveIterator::RecursiveInclusiveIterator(
-  const std::shared_ptr<types::IClass>& instance
-) : instance_(&instance), item_(nullptr), index_(-1) {
-  // Intentionally empty.
-}
-
-RecursiveInclusiveIterator::RecursiveInclusiveIterator(
-  const RecursiveInclusiveIterator& other
-) {
-  instance_ = other.instance_;
-  non_recursive_iterator_ = (other.non_recursive_iterator_ == nullptr)
-    ? nullptr
-    : other.non_recursive_iterator_->Clone();
-  recursive_iterator_ = (other.recursive_iterator_ == nullptr)
-    ? nullptr
-    : other.recursive_iterator_->Clone();
-  item_ = other.item_;
-  done_ = other.done_;
-  index_ = other.index_;
-  state_ = other.state_;
-}
-
-RecursiveInclusiveIterator::RecursiveInclusiveIterator(
-  RecursiveInclusiveIterator&& other
-) {
-  instance_ = other.instance_;
-  non_recursive_iterator_ = std::move(other.non_recursive_iterator_);
-  recursive_iterator_ = std::move(other.recursive_iterator_);
-  item_ = other.item_;
-  done_ = other.done_;
-  index_ = other.index_;
-  state_ = other.state_;
-}
-
-RecursiveInclusiveIterator& RecursiveInclusiveIterator::operator=(
-  const RecursiveInclusiveIterator& other
-) {
-  return *this = RecursiveInclusiveIterator(other);
-}
-
-RecursiveInclusiveIterator& RecursiveInclusiveIterator::operator=(
-  RecursiveInclusiveIterator&& other
-) {
-  if (this != &other) {
-    instance_ = other.instance_;
-    non_recursive_iterator_ = std::move(other.non_recursive_iterator_);
-    recursive_iterator_ = std::move(other.recursive_iterator_);
-    item_ = other.item_;
-    done_ = other.done_;
-    index_ = other.index_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void RecursiveInclusiveIterator::Start() {
-  state_ = 0;
-  Execute();
-
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "Expected RecursiveInclusiveIterator not to be done at start, but it was."
-    );
-  }
-
-  if (Index() != 0) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected RecursiveInclusiveIterator::Index() to be 0 on Start()"
-        ", but got ",
-        std::to_string(Index())
-      )
-    );
-  }
-
-  const std::shared_ptr<types::IClass>& current_item(Get());
-  if (current_item == nullptr) {
-    throw std::logic_error(
-      "Unexpected null pointer from Get() at the end of "
-      "RecursiveInclusiveIterator::Start"
-    );
-  }
-
-  if (current_item.get() != instance_->get()) {
-    throw std::logic_error(
-      "Expected the current item to point to the instance "
-      "at the end of RecursiveInclusiveIterator::Start, "
-      "but Get() pointed to a different instance."
-    );
-  }
-  #endif
-}
-
-void RecursiveInclusiveIterator::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a RecursiveInclusiveIterator, but it was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool RecursiveInclusiveIterator::Done() const {
-  return done_;
-}
-
-const std::shared_ptr<types::IClass>& RecursiveInclusiveIterator::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from RecursiveInclusiveIterator, but it was done."
-    );
-  }
-
-  if (item_ == nullptr) {
-    throw std::logic_error(
-      "You want to get from a RecursiveInclusiveIterator, "
-      "but item_ has not been set."
-    );
-  }
-  #endif
-
-  return *item_;
-}
-
-long RecursiveInclusiveIterator::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 on a done RecursiveInclusiveIterator, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-void RecursiveInclusiveIterator::PrependToPath(Path* path) const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to prepend to path from RecursiveInclusiveIterator, "
-      "but the iterator was done."
-    );
-  }
-  #endif
-
-  if (Index() == 0) {
-    // Index set to 0 indicates that the iterator points to the instance itself.
-    // Therefore, there is nothing to prepend to the path.
-    return;
-  }
-
-  if (recursive_iterator_ != nullptr) {
-    recursive_iterator_->PrependToPath(path);
-  }
-
-  if (non_recursive_iterator_ != nullptr) {
-    non_recursive_iterator_->PrependToPath(path);
-  }
-}
-
-std::unique_ptr<impl::IIterator> RecursiveInclusiveIterator::Clone() const {
-  return common::make_unique<RecursiveInclusiveIterator>(*this);
-}
-
-void RecursiveInclusiveIterator::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        item_ = instance_;
-        index_ = 0;
-        done_ = false;
-        non_recursive_iterator_.reset(nullptr);
-        recursive_iterator_.reset(nullptr);
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        non_recursive_iterator_ = NewNonRecursiveIterator(
-          *instance_
-        );
-
-        non_recursive_iterator_->Start();
-      }
-
-      case 2: {
-        if (!(!non_recursive_iterator_->Done())) {
-          state_ = 7;
-          continue;
-        }
-
-        item_ = &(non_recursive_iterator_->Get());
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        recursive_iterator_ = common::make_unique<RecursiveExclusiveIterator>(
-          *item_
-        );
-
-        recursive_iterator_->Start();
-      }
-
-      case 4: {
-        if (!(!recursive_iterator_->Done())) {
-          state_ = 6;
-          continue;
-        }
-
-        item_ = &(recursive_iterator_->Get());
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        recursive_iterator_->Next();
-
-        state_ = 4;
-        continue;
-      }
-
-      case 6: {
-        recursive_iterator_.reset(nullptr);
-
-        non_recursive_iterator_->Next();
-
-        state_ = 2;
-        continue;
-      }
-
-      case 7: {
-        non_recursive_iterator_.reset(nullptr);
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 8;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-// endregion RecursiveInclusiveIterator implementation
-
-// region RecursiveExclusiveIterator implementation
-
-RecursiveExclusiveIterator::RecursiveExclusiveIterator(
-  const std::shared_ptr<types::IClass>& instance
-) : inclusive_iterator_(instance) {
-  // Intentionally empty.
-}
-
-void RecursiveExclusiveIterator::Start() {
-  inclusive_iterator_.Start();
-
-  #ifdef DEBUG
-  if (inclusive_iterator_.Done()) {
-    throw std::logic_error(
-      "Expected the inclusive iterator to be not-done immediately after start, "
-      "as the first item is expected to point to the instance itself, "
-      "but the inclusive iterator was done."
-    );
-  }
-  #endif
-
-  // Simply skip the instance in the very first yield.
-  inclusive_iterator_.Next();
-}
-
-void RecursiveExclusiveIterator::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a RecursiveExclusiveIterator, but it was done."
-    );
-  }
-  #endif
-
-  inclusive_iterator_.Next();
-}
-
-bool RecursiveExclusiveIterator::Done() const {
-  return inclusive_iterator_.Done();
-}
-
-const std::shared_ptr<types::IClass>& RecursiveExclusiveIterator::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from RecursiveExclusiveIterator, but it was done."
-    );
-  }
-  #endif
-
-  return inclusive_iterator_.Get();
-}
-
-long RecursiveExclusiveIterator::Index() const {
-  if (inclusive_iterator_.Done()) {
-    return -1;
-  }
-
-  return inclusive_iterator_.Index() - 1;
-}
-
-void RecursiveExclusiveIterator::PrependToPath(Path* path) const {
-  inclusive_iterator_.PrependToPath(path);
-}
-
-std::unique_ptr<impl::IIterator> RecursiveExclusiveIterator::Clone() const {
-  return common::make_unique<RecursiveExclusiveIterator>(*this);
-}
-
-// endregion RecursiveExclusiveIterator implementation
-
-// endregion Recursive iteration
+}  // namespace
 
 // region Iterator facade
 
 Iterator::Iterator(
   const Iterator& other
-) : implementation_(other.implementation_->Clone()) {
+) :
+  implementation_(other.implementation_->Clone()),
+  index_(other.index_) {
   // Intentionally empty.
 }
 
 Iterator::Iterator(
   Iterator&& other
-) : implementation_(std::move(other.implementation_)) {
+) :
+  implementation_(std::move(other.implementation_)),
+  index_(other.index_) {
   // Intentionally empty.
 }
 
@@ -12499,7 +2756,8 @@ Iterator& Iterator::operator=(const Iterator& other) {
 
 Iterator& Iterator::operator=(Iterator&& other) {
   if (this != &other) {
-    this->implementation_ = std::move(other.implementation_);
+    implementation_ = std::move(other.implementation_);
+    index_ = other.index_;
   }
 
   return *this;
@@ -12534,6 +2792,7 @@ Iterator& Iterator::operator++() {
   }
 
   implementation_->Next();
+  index_ = implementation_->Done() ? -1 : index_ + 1;
   return *this;
 }
 
@@ -12545,11 +2804,11 @@ Iterator Iterator::operator++(int) {
 }
 
 bool operator==(const Iterator& a, const Iterator& b) {
-  return a.implementation_->Index() == b.implementation_->Index();
+  return a.index_ == b.index_;
 }
 
 bool operator!=(const Iterator& a, const Iterator& b) {
-  return a.implementation_->Index() != b.implementation_->Index();
+  return a.index_ != b.index_;
 }
 
 Path MaterializePath(const Iterator& iterator) {
@@ -12560,7 +2819,7 @@ Path MaterializePath(const Iterator& iterator) {
   }
 
   Path path;
-  iterator.implementation_->PrependToPath(&path);
+  iterator.implementation_->AppendToPath(path);
   return path;
 }
 
@@ -12571,7 +2830,16 @@ void PrependToPath(const Iterator& iterator, Path* path) {
     );
   }
 
-  iterator.implementation_->PrependToPath(path);
+  Path prefix;
+  iterator.implementation_->AppendToPath(prefix);
+
+  for (
+    auto it = prefix.segments.rbegin();
+    it != prefix.segments.rend();
+    ++it
+  ) {
+    path->segments.emplace_front(std::move(*it));
+  }
 }
 
 // endregion Iterator facade
@@ -12592,7 +2860,7 @@ Descent::Descent(
 
 Iterator Descent::begin() const {
   std::unique_ptr<impl::IIterator> it_impl(
-    common::make_unique<RecursiveExclusiveIterator>(instance_)
+    DispatchOnModelType(*instance_, true)
   );
 
   it_impl->Start();
@@ -12608,7 +2876,7 @@ Iterator Descent::begin() const {
 }
 
 const Iterator& Descent::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneIterator>());
+  static Iterator iterator(Empty());
   return iterator;
 }
 
@@ -12628,22 +2896,23 @@ DescentOnce::DescentOnce(
 
 Iterator DescentOnce::begin() const {
   std::unique_ptr<impl::IIterator> it_impl(
-    NewNonRecursiveIterator(instance_)
+    DispatchOnModelType(*instance_, false)
   );
 
   it_impl->Start();
 
   // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose it_impl.
+  // We short-circuit here for memory frugality,
+  // as we can immediately dispose it_impl.
   if (it_impl->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneIterator>());
+    return end();
   }
 
   return Iterator(std::move(it_impl));
 }
 
 const Iterator& DescentOnce::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneIterator>());
+  static Iterator iterator(Empty());
   return iterator;
 }
 
