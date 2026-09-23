@@ -11,6 +11,7 @@
 #pragma warning(push, 0)
 #include <map>
 #include <set>
+#include <vector>
 #pragma warning(pop)
 
 namespace dummy {
@@ -36,2437 +37,1361 @@ Error::Error(
 
 // endregion struct Error
 
-// region class AlwaysDoneVerificator
-
-class AlwaysDoneVerificator : public impl::IVerificator {
- public:
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  virtual ~AlwaysDoneVerificator() = default;
-};  // class AlwaysDoneVerificator
-
-void AlwaysDoneVerificator::Start() {
-  // Intentionally empty.
-}
-
-void AlwaysDoneVerificator::Next() {
-  throw std::logic_error(
-    "You want to move an AlwaysDoneVerificator, "
-    "but the verificator is always done, as its name suggests."
-  );
-}
-
-bool AlwaysDoneVerificator::Done() const {
-  return true;
-}
-
-const Error& AlwaysDoneVerificator::Get() const {
-    throw std::logic_error(
-      "You want to get from an AlwaysDoneVerificator, "
-      "but the verificator is always done, as its name suggests."
-    );
-}
-
-Error& AlwaysDoneVerificator::GetMutable() {
-    throw std::logic_error(
-      "You want to get mutable from an AlwaysDoneVerificator, "
-      "but the verificator is always done, as its name suggests."
-    );
-}
-
-long AlwaysDoneVerificator::Index() const {
-  return -1;
-}
-
-std::unique_ptr<impl::IVerificator> AlwaysDoneVerificator::Clone() const {
-  return common::make_unique<AlwaysDoneVerificator>(*this);
-}
-
-// endregion class AlwaysDoneVerificator
+namespace {
 
 /**
- * Produce a non-recursive verificator of the instance given its runtime model type.
+ * \brief Enumerate the shapes of the values that we verify.
+ *
+ * A shape tells which checks apply to a value, see \ref ChecksOf.
  */
-std::unique_ptr<impl::IVerificator> NewNonRecursiveVerificator(
-  const std::shared_ptr<types::IClass>& instance
-);
+enum class Shape : std::uint32_t {
+  kStructuralFirst = 0,
+  kStructuralSecond = 1,
+  kMixedAbstractDescendantOne = 2,
+  kMixedAbstractDescendantTwo = 3,
+  kMixedConcreteWithDescendants = 4,
+  kMixedConcreteWithDescendantsChild = 5,
+  kMixedConcreteLeaf = 6,
+  kModelTypedFirst = 7,
+  kModelTypedSecond = 8
+};  // enum class Shape
 
-// region Non-recursive verificators
+/**
+ * \brief Represent a single check of a value.
+ *
+ * The checks of a shape are listed in \ref ChecksOf.
+ */
+struct Check {
+  /**
+   * Check that the invariant holds for the value
+   */
+  bool (*holds)(const void* value);
 
-namespace non_recursive_verificator {
+  /**
+   * Human-readable description of the invariant, reported if it does not hold
+   */
+  const wchar_t* message;
+};  // struct Check
 
-class OfStructuralFirst : public impl::IVerificator {
- public:
-  OfStructuralFirst(
-    const std::shared_ptr<types::IClass>& instance
-  );
+// region Checks
 
-  OfStructuralFirst(
-    const OfStructuralFirst& other
-  );
-  OfStructuralFirst(
-    OfStructuralFirst&& other
-  );
-  OfStructuralFirst& operator=(
-    const OfStructuralFirst& other
-  );
-  OfStructuralFirst& operator=(
-    OfStructuralFirst&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfStructuralFirst() override = default;
-
- private:
-  std::shared_ptr<types::IStructuralFirst> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfStructuralFirst
-
-OfStructuralFirst::OfStructuralFirst(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IStructuralFirst
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfStructuralFirst::OfStructuralFirst(
-  const OfStructuralFirst& other
+bool StructuralFirst_0(
+  const void* value
 ) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
+  const types::IStructuralFirst* that = (
+    static_cast<const types::IStructuralFirst*>(value)
+  );
+  return that->unique_to_first().size() > 0;
 }
 
-OfStructuralFirst::OfStructuralFirst(
-  OfStructuralFirst&& other
+bool StructuralSecond_0(
+  const void* value
 ) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
+  const types::IStructuralSecond* that = (
+    static_cast<const types::IStructuralSecond*>(value)
+  );
+  return that->unique_to_second().size() > 0;
 }
 
-OfStructuralFirst& OfStructuralFirst::operator=(
-  const OfStructuralFirst& other
+bool MixedAbstractDescendantOne_0(
+  const void* value
 ) {
-  return *this = OfStructuralFirst(other);
+  const types::IMixedAbstractDescendantOne* that = (
+    static_cast<const types::IMixedAbstractDescendantOne*>(value)
+  );
+  return that->unique_to_abstract_descendant_one().size() > 0;
 }
 
-OfStructuralFirst& OfStructuralFirst::operator=(
-  OfStructuralFirst&& other
+bool MixedAbstractDescendantTwo_0(
+  const void* value
 ) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
+  const types::IMixedAbstractDescendantTwo* that = (
+    static_cast<const types::IMixedAbstractDescendantTwo*>(value)
+  );
+  return that->unique_to_abstract_descendant_two().size() > 0;
 }
 
-void OfStructuralFirst::Start() {
-  state_ = 0;
-  Execute();
+bool MixedConcreteWithDescendants_0(
+  const void* value
+) {
+  const types::IMixedConcreteWithDescendants* that = (
+    static_cast<const types::IMixedConcreteWithDescendants*>(value)
+  );
+  return that->some_base_property().size() > 0;
 }
 
-void OfStructuralFirst::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfStructuralFirst, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
+bool MixedConcreteWithDescendantsChild_0(
+  const void* value
+) {
+  const types::IMixedConcreteWithDescendantsChild* that = (
+    static_cast<const types::IMixedConcreteWithDescendantsChild*>(value)
+  );
+  return that->some_base_property().size() > 0;
 }
 
-bool OfStructuralFirst::Done() const {
-  return done_;
+bool MixedConcreteWithDescendantsChild_1(
+  const void* value
+) {
+  const types::IMixedConcreteWithDescendantsChild* that = (
+    static_cast<const types::IMixedConcreteWithDescendantsChild*>(value)
+  );
+  return that->some_child_property().size() > 0;
 }
 
-const Error& OfStructuralFirst::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfStructuralFirst, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
+bool MixedConcreteLeaf_0(
+  const void* value
+) {
+  const types::IMixedConcreteLeaf* that = (
+    static_cast<const types::IMixedConcreteLeaf*>(value)
+  );
+  return that->unique_to_concrete_leaf().size() > 0;
 }
 
-Error& OfStructuralFirst::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfStructuralFirst, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
+bool ModelTypedFirst_0(
+  const void* value
+) {
+  const types::IModelTypedFirst* that = (
+    static_cast<const types::IModelTypedFirst*>(value)
+  );
+  return that->some_property().size() > 0;
 }
 
-long OfStructuralFirst::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfStructuralFirst, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
+bool ModelTypedSecond_0(
+  const void* value
+) {
+  const types::IModelTypedSecond* that = (
+    static_cast<const types::IModelTypedSecond*>(value)
+  );
+  return that->some_property().size() > 0;
 }
 
-std::unique_ptr<impl::IVerificator> OfStructuralFirst::Clone() const {
-  return common::make_unique<
-    OfStructuralFirst
-  >(*this);
-}
-
-void OfStructuralFirst::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->unique_to_first().size() > 0) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+/**
+ * Give out the checks of the values of the \p shape.
+ */
+const std::vector<Check>& ChecksOf(Shape shape) {
+  switch (shape) {
+    case Shape::kStructuralFirst: {
+      static const std::vector<Check> checks = {
+        {
+          &StructuralFirst_0,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+        }
+      };
+      return checks;
     }
-  }
-}
-
-class OfStructuralSecond : public impl::IVerificator {
- public:
-  OfStructuralSecond(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfStructuralSecond(
-    const OfStructuralSecond& other
-  );
-  OfStructuralSecond(
-    OfStructuralSecond&& other
-  );
-  OfStructuralSecond& operator=(
-    const OfStructuralSecond& other
-  );
-  OfStructuralSecond& operator=(
-    OfStructuralSecond&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfStructuralSecond() override = default;
-
- private:
-  std::shared_ptr<types::IStructuralSecond> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfStructuralSecond
-
-OfStructuralSecond::OfStructuralSecond(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IStructuralSecond
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfStructuralSecond::OfStructuralSecond(
-  const OfStructuralSecond& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfStructuralSecond::OfStructuralSecond(
-  OfStructuralSecond&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfStructuralSecond& OfStructuralSecond::operator=(
-  const OfStructuralSecond& other
-) {
-  return *this = OfStructuralSecond(other);
-}
-
-OfStructuralSecond& OfStructuralSecond::operator=(
-  OfStructuralSecond&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfStructuralSecond::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfStructuralSecond::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfStructuralSecond, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfStructuralSecond::Done() const {
-  return done_;
-}
-
-const Error& OfStructuralSecond::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfStructuralSecond, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfStructuralSecond::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfStructuralSecond, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfStructuralSecond::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfStructuralSecond, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfStructuralSecond::Clone() const {
-  return common::make_unique<
-    OfStructuralSecond
-  >(*this);
-}
-
-void OfStructuralSecond::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->unique_to_second().size() > 0) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kStructuralSecond: {
+      static const std::vector<Check> checks = {
+        {
+          &StructuralSecond_0,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+        }
+      };
+      return checks;
     }
-  }
-}
-
-class OfMixedAbstractDescendantOne : public impl::IVerificator {
- public:
-  OfMixedAbstractDescendantOne(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfMixedAbstractDescendantOne(
-    const OfMixedAbstractDescendantOne& other
-  );
-  OfMixedAbstractDescendantOne(
-    OfMixedAbstractDescendantOne&& other
-  );
-  OfMixedAbstractDescendantOne& operator=(
-    const OfMixedAbstractDescendantOne& other
-  );
-  OfMixedAbstractDescendantOne& operator=(
-    OfMixedAbstractDescendantOne&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfMixedAbstractDescendantOne() override = default;
-
- private:
-  std::shared_ptr<types::IMixedAbstractDescendantOne> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfMixedAbstractDescendantOne
-
-OfMixedAbstractDescendantOne::OfMixedAbstractDescendantOne(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IMixedAbstractDescendantOne
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfMixedAbstractDescendantOne::OfMixedAbstractDescendantOne(
-  const OfMixedAbstractDescendantOne& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfMixedAbstractDescendantOne::OfMixedAbstractDescendantOne(
-  OfMixedAbstractDescendantOne&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfMixedAbstractDescendantOne& OfMixedAbstractDescendantOne::operator=(
-  const OfMixedAbstractDescendantOne& other
-) {
-  return *this = OfMixedAbstractDescendantOne(other);
-}
-
-OfMixedAbstractDescendantOne& OfMixedAbstractDescendantOne::operator=(
-  OfMixedAbstractDescendantOne&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfMixedAbstractDescendantOne::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfMixedAbstractDescendantOne::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfMixedAbstractDescendantOne, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfMixedAbstractDescendantOne::Done() const {
-  return done_;
-}
-
-const Error& OfMixedAbstractDescendantOne::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfMixedAbstractDescendantOne, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfMixedAbstractDescendantOne::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfMixedAbstractDescendantOne, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfMixedAbstractDescendantOne::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfMixedAbstractDescendantOne, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfMixedAbstractDescendantOne::Clone() const {
-  return common::make_unique<
-    OfMixedAbstractDescendantOne
-  >(*this);
-}
-
-void OfMixedAbstractDescendantOne::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          instance_->unique_to_abstract_descendant_one().size() > 0
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kMixedAbstractDescendantOne: {
+      static const std::vector<Check> checks = {
+        {
+          &MixedAbstractDescendantOne_0,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+        }
+      };
+      return checks;
     }
-  }
-}
-
-class OfMixedAbstractDescendantTwo : public impl::IVerificator {
- public:
-  OfMixedAbstractDescendantTwo(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfMixedAbstractDescendantTwo(
-    const OfMixedAbstractDescendantTwo& other
-  );
-  OfMixedAbstractDescendantTwo(
-    OfMixedAbstractDescendantTwo&& other
-  );
-  OfMixedAbstractDescendantTwo& operator=(
-    const OfMixedAbstractDescendantTwo& other
-  );
-  OfMixedAbstractDescendantTwo& operator=(
-    OfMixedAbstractDescendantTwo&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfMixedAbstractDescendantTwo() override = default;
-
- private:
-  std::shared_ptr<types::IMixedAbstractDescendantTwo> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfMixedAbstractDescendantTwo
-
-OfMixedAbstractDescendantTwo::OfMixedAbstractDescendantTwo(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IMixedAbstractDescendantTwo
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfMixedAbstractDescendantTwo::OfMixedAbstractDescendantTwo(
-  const OfMixedAbstractDescendantTwo& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfMixedAbstractDescendantTwo::OfMixedAbstractDescendantTwo(
-  OfMixedAbstractDescendantTwo&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfMixedAbstractDescendantTwo& OfMixedAbstractDescendantTwo::operator=(
-  const OfMixedAbstractDescendantTwo& other
-) {
-  return *this = OfMixedAbstractDescendantTwo(other);
-}
-
-OfMixedAbstractDescendantTwo& OfMixedAbstractDescendantTwo::operator=(
-  OfMixedAbstractDescendantTwo&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfMixedAbstractDescendantTwo::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfMixedAbstractDescendantTwo::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfMixedAbstractDescendantTwo, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfMixedAbstractDescendantTwo::Done() const {
-  return done_;
-}
-
-const Error& OfMixedAbstractDescendantTwo::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfMixedAbstractDescendantTwo, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfMixedAbstractDescendantTwo::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfMixedAbstractDescendantTwo, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfMixedAbstractDescendantTwo::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfMixedAbstractDescendantTwo, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfMixedAbstractDescendantTwo::Clone() const {
-  return common::make_unique<
-    OfMixedAbstractDescendantTwo
-  >(*this);
-}
-
-void OfMixedAbstractDescendantTwo::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          instance_->unique_to_abstract_descendant_two().size() > 0
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kMixedAbstractDescendantTwo: {
+      static const std::vector<Check> checks = {
+        {
+          &MixedAbstractDescendantTwo_0,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+        }
+      };
+      return checks;
     }
-  }
-}
-
-class OfMixedConcreteWithDescendants : public impl::IVerificator {
- public:
-  OfMixedConcreteWithDescendants(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfMixedConcreteWithDescendants(
-    const OfMixedConcreteWithDescendants& other
-  );
-  OfMixedConcreteWithDescendants(
-    OfMixedConcreteWithDescendants&& other
-  );
-  OfMixedConcreteWithDescendants& operator=(
-    const OfMixedConcreteWithDescendants& other
-  );
-  OfMixedConcreteWithDescendants& operator=(
-    OfMixedConcreteWithDescendants&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfMixedConcreteWithDescendants() override = default;
-
- private:
-  std::shared_ptr<types::IMixedConcreteWithDescendants> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfMixedConcreteWithDescendants
-
-OfMixedConcreteWithDescendants::OfMixedConcreteWithDescendants(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IMixedConcreteWithDescendants
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfMixedConcreteWithDescendants::OfMixedConcreteWithDescendants(
-  const OfMixedConcreteWithDescendants& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfMixedConcreteWithDescendants::OfMixedConcreteWithDescendants(
-  OfMixedConcreteWithDescendants&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfMixedConcreteWithDescendants& OfMixedConcreteWithDescendants::operator=(
-  const OfMixedConcreteWithDescendants& other
-) {
-  return *this = OfMixedConcreteWithDescendants(other);
-}
-
-OfMixedConcreteWithDescendants& OfMixedConcreteWithDescendants::operator=(
-  OfMixedConcreteWithDescendants&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfMixedConcreteWithDescendants::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfMixedConcreteWithDescendants::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfMixedConcreteWithDescendants, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfMixedConcreteWithDescendants::Done() const {
-  return done_;
-}
-
-const Error& OfMixedConcreteWithDescendants::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfMixedConcreteWithDescendants, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfMixedConcreteWithDescendants::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfMixedConcreteWithDescendants, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfMixedConcreteWithDescendants::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfMixedConcreteWithDescendants, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfMixedConcreteWithDescendants::Clone() const {
-  return common::make_unique<
-    OfMixedConcreteWithDescendants
-  >(*this);
-}
-
-void OfMixedConcreteWithDescendants::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->some_base_property().size() > 0) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kMixedConcreteWithDescendants: {
+      static const std::vector<Check> checks = {
+        {
+          &MixedConcreteWithDescendants_0,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+        }
+      };
+      return checks;
     }
-  }
-}
-
-class OfMixedConcreteWithDescendantsChild : public impl::IVerificator {
- public:
-  OfMixedConcreteWithDescendantsChild(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfMixedConcreteWithDescendantsChild(
-    const OfMixedConcreteWithDescendantsChild& other
-  );
-  OfMixedConcreteWithDescendantsChild(
-    OfMixedConcreteWithDescendantsChild&& other
-  );
-  OfMixedConcreteWithDescendantsChild& operator=(
-    const OfMixedConcreteWithDescendantsChild& other
-  );
-  OfMixedConcreteWithDescendantsChild& operator=(
-    OfMixedConcreteWithDescendantsChild&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfMixedConcreteWithDescendantsChild() override = default;
-
- private:
-  std::shared_ptr<types::IMixedConcreteWithDescendantsChild> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfMixedConcreteWithDescendantsChild
-
-OfMixedConcreteWithDescendantsChild::OfMixedConcreteWithDescendantsChild(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IMixedConcreteWithDescendantsChild
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfMixedConcreteWithDescendantsChild::OfMixedConcreteWithDescendantsChild(
-  const OfMixedConcreteWithDescendantsChild& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfMixedConcreteWithDescendantsChild::OfMixedConcreteWithDescendantsChild(
-  OfMixedConcreteWithDescendantsChild&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfMixedConcreteWithDescendantsChild& OfMixedConcreteWithDescendantsChild::operator=(
-  const OfMixedConcreteWithDescendantsChild& other
-) {
-  return *this = OfMixedConcreteWithDescendantsChild(other);
-}
-
-OfMixedConcreteWithDescendantsChild& OfMixedConcreteWithDescendantsChild::operator=(
-  OfMixedConcreteWithDescendantsChild&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfMixedConcreteWithDescendantsChild::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfMixedConcreteWithDescendantsChild::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfMixedConcreteWithDescendantsChild, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfMixedConcreteWithDescendantsChild::Done() const {
-  return done_;
-}
-
-const Error& OfMixedConcreteWithDescendantsChild::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfMixedConcreteWithDescendantsChild, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfMixedConcreteWithDescendantsChild::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfMixedConcreteWithDescendantsChild, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfMixedConcreteWithDescendantsChild::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfMixedConcreteWithDescendantsChild, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfMixedConcreteWithDescendantsChild::Clone() const {
-  return common::make_unique<
-    OfMixedConcreteWithDescendantsChild
-  >(*this);
-}
-
-void OfMixedConcreteWithDescendantsChild::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->some_base_property().size() > 0) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kMixedConcreteWithDescendantsChild: {
+      static const std::vector<Check> checks = {
+        {
+          &MixedConcreteWithDescendantsChild_0,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (instance_->some_child_property().size() > 0) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MixedConcreteWithDescendantsChild_1,
           L"The child value must not be empty."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 3;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfMixedConcreteLeaf : public impl::IVerificator {
- public:
-  OfMixedConcreteLeaf(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfMixedConcreteLeaf(
-    const OfMixedConcreteLeaf& other
-  );
-  OfMixedConcreteLeaf(
-    OfMixedConcreteLeaf&& other
-  );
-  OfMixedConcreteLeaf& operator=(
-    const OfMixedConcreteLeaf& other
-  );
-  OfMixedConcreteLeaf& operator=(
-    OfMixedConcreteLeaf&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfMixedConcreteLeaf() override = default;
-
- private:
-  std::shared_ptr<types::IMixedConcreteLeaf> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfMixedConcreteLeaf
-
-OfMixedConcreteLeaf::OfMixedConcreteLeaf(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IMixedConcreteLeaf
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfMixedConcreteLeaf::OfMixedConcreteLeaf(
-  const OfMixedConcreteLeaf& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfMixedConcreteLeaf::OfMixedConcreteLeaf(
-  OfMixedConcreteLeaf&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfMixedConcreteLeaf& OfMixedConcreteLeaf::operator=(
-  const OfMixedConcreteLeaf& other
-) {
-  return *this = OfMixedConcreteLeaf(other);
-}
-
-OfMixedConcreteLeaf& OfMixedConcreteLeaf::operator=(
-  OfMixedConcreteLeaf&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfMixedConcreteLeaf::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfMixedConcreteLeaf::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfMixedConcreteLeaf, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfMixedConcreteLeaf::Done() const {
-  return done_;
-}
-
-const Error& OfMixedConcreteLeaf::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfMixedConcreteLeaf, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfMixedConcreteLeaf::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfMixedConcreteLeaf, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfMixedConcreteLeaf::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfMixedConcreteLeaf, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfMixedConcreteLeaf::Clone() const {
-  return common::make_unique<
-    OfMixedConcreteLeaf
-  >(*this);
-}
-
-void OfMixedConcreteLeaf::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->unique_to_concrete_leaf().size() > 0) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
-          L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfModelTypedFirst : public impl::IVerificator {
- public:
-  OfModelTypedFirst(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfModelTypedFirst(
-    const OfModelTypedFirst& other
-  );
-  OfModelTypedFirst(
-    OfModelTypedFirst&& other
-  );
-  OfModelTypedFirst& operator=(
-    const OfModelTypedFirst& other
-  );
-  OfModelTypedFirst& operator=(
-    OfModelTypedFirst&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfModelTypedFirst() override = default;
-
- private:
-  std::shared_ptr<types::IModelTypedFirst> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfModelTypedFirst
-
-OfModelTypedFirst::OfModelTypedFirst(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IModelTypedFirst
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfModelTypedFirst::OfModelTypedFirst(
-  const OfModelTypedFirst& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfModelTypedFirst::OfModelTypedFirst(
-  OfModelTypedFirst&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfModelTypedFirst& OfModelTypedFirst::operator=(
-  const OfModelTypedFirst& other
-) {
-  return *this = OfModelTypedFirst(other);
-}
-
-OfModelTypedFirst& OfModelTypedFirst::operator=(
-  OfModelTypedFirst&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfModelTypedFirst::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfModelTypedFirst::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfModelTypedFirst, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfModelTypedFirst::Done() const {
-  return done_;
-}
-
-const Error& OfModelTypedFirst::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfModelTypedFirst, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfModelTypedFirst::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfModelTypedFirst, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfModelTypedFirst::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfModelTypedFirst, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfModelTypedFirst::Clone() const {
-  return common::make_unique<
-    OfModelTypedFirst
-  >(*this);
-}
-
-void OfModelTypedFirst::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->some_property().size() > 0) {
-          state_ = 1;
-          continue;
+    case Shape::kMixedConcreteLeaf: {
+      static const std::vector<Check> checks = {
+        {
+          &MixedConcreteLeaf_0,
+          L"The value must not be empty."
         }
-
-        error_ = common::make_unique<Error>(
-          L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfModelTypedSecond : public impl::IVerificator {
- public:
-  OfModelTypedSecond(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfModelTypedSecond(
-    const OfModelTypedSecond& other
-  );
-  OfModelTypedSecond(
-    OfModelTypedSecond&& other
-  );
-  OfModelTypedSecond& operator=(
-    const OfModelTypedSecond& other
-  );
-  OfModelTypedSecond& operator=(
-    OfModelTypedSecond&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfModelTypedSecond() override = default;
-
- private:
-  std::shared_ptr<types::IModelTypedSecond> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfModelTypedSecond
-
-OfModelTypedSecond::OfModelTypedSecond(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IModelTypedSecond
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfModelTypedSecond::OfModelTypedSecond(
-  const OfModelTypedSecond& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfModelTypedSecond::OfModelTypedSecond(
-  OfModelTypedSecond&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfModelTypedSecond& OfModelTypedSecond::operator=(
-  const OfModelTypedSecond& other
-) {
-  return *this = OfModelTypedSecond(other);
-}
-
-OfModelTypedSecond& OfModelTypedSecond::operator=(
-  OfModelTypedSecond&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfModelTypedSecond::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfModelTypedSecond::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfModelTypedSecond, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfModelTypedSecond::Done() const {
-  return done_;
-}
-
-const Error& OfModelTypedSecond::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfModelTypedSecond, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfModelTypedSecond::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfModelTypedSecond, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfModelTypedSecond::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfModelTypedSecond, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfModelTypedSecond::Clone() const {
-  return common::make_unique<
-    OfModelTypedSecond
-  >(*this);
-}
-
-void OfModelTypedSecond::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->some_property().size() > 0) {
-          state_ = 1;
-          continue;
+    case Shape::kModelTypedFirst: {
+      static const std::vector<Check> checks = {
+        {
+          &ModelTypedFirst_0,
+          L"The value must not be empty."
         }
-
-        error_ = common::make_unique<Error>(
-          L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfSomething : public impl::IVerificator {
- public:
-  OfSomething(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfSomething() override = default;
-};  // class OfSomething
-
-OfSomething::OfSomething(
-  const std::shared_ptr<types::IClass>&
-) {
-  // Intentionally empty.
-}
-
-void OfSomething::Start() {
-  // Intentionally empty.
-}
-
-void OfSomething::Next() {
-  throw std::logic_error(
-    "You want to move "
-    "a verificator OfSomething, "
-    "but the verificator is always done as "
-    "ISomething "
-    "has no invariants defined."
-  );
-}
-
-bool OfSomething::Done() const {
-  return true;
-}
-
-const Error& OfSomething::Get() const {
-  throw std::logic_error(
-    "You want to get from "
-    "a verificator OfSomething, "
-    "but the verificator is always done as "
-    "ISomething "
-    "has no invariants defined."
-  );
-}
-
-Error& OfSomething::GetMutable() {
-  throw std::logic_error(
-    "You want to get mutable from "
-    "a verificator OfSomething, "
-    "but the verificator is always done as "
-    "ISomething "
-    "has no invariants defined."
-  );
-}
-
-long OfSomething::Index() const {
-  return -1;
-}
-
-std::unique_ptr<impl::IVerificator> OfSomething::Clone() const {
-  return common::make_unique<
-    OfSomething
-  >(*this);
-}
-
-}  // namespace non_recursive_verificator
-
-std::unique_ptr<impl::IVerificator> NewNonRecursiveVerificator(
-  const std::shared_ptr<types::IClass>& instance
-) {
-  switch (instance->model_type()) {
-    case types::ModelType::kStructuralFirst:
-      return common::make_unique<
-        non_recursive_verificator::OfStructuralFirst
-      >(
-        instance
-      );
-    case types::ModelType::kStructuralSecond:
-      return common::make_unique<
-        non_recursive_verificator::OfStructuralSecond
-      >(
-        instance
-      );
-    case types::ModelType::kMixedAbstractDescendantOne:
-      return common::make_unique<
-        non_recursive_verificator::OfMixedAbstractDescendantOne
-      >(
-        instance
-      );
-    case types::ModelType::kMixedAbstractDescendantTwo:
-      return common::make_unique<
-        non_recursive_verificator::OfMixedAbstractDescendantTwo
-      >(
-        instance
-      );
-    case types::ModelType::kMixedConcreteWithDescendants:
-      return common::make_unique<
-        non_recursive_verificator::OfMixedConcreteWithDescendants
-      >(
-        instance
-      );
-    case types::ModelType::kMixedConcreteWithDescendantsChild:
-      return common::make_unique<
-        non_recursive_verificator::OfMixedConcreteWithDescendantsChild
-      >(
-        instance
-      );
-    case types::ModelType::kMixedConcreteLeaf:
-      return common::make_unique<
-        non_recursive_verificator::OfMixedConcreteLeaf
-      >(
-        instance
-      );
-    case types::ModelType::kModelTypedFirst:
-      return common::make_unique<
-        non_recursive_verificator::OfModelTypedFirst
-      >(
-        instance
-      );
-    case types::ModelType::kModelTypedSecond:
-      return common::make_unique<
-        non_recursive_verificator::OfModelTypedSecond
-      >(
-        instance
-      );
-    case types::ModelType::kSomething:
-      return common::make_unique<
-        non_recursive_verificator::OfSomething
-      >(
-        instance
-      );
+    case Shape::kModelTypedSecond: {
+      static const std::vector<Check> checks = {
+        {
+          &ModelTypedSecond_0,
+          L"The value must not be empty."
+        }
+      };
+      return checks;
+    }
     default:
       throw std::logic_error(
         common::Concat(
-          "Unexpected model type: ",
-          std::to_string(
-            static_cast<std::uint32_t>(instance->model_type())
-          )
+          "Unexpected shape: ",
+          std::to_string(static_cast<std::uint32_t>(shape))
         )
       );
   }
 }
 
-// endregion Non-recursive verificators
+// endregion Checks
 
-// region Recursive verificators
+/**
+ * \brief Create the nested verification of the \p value, if its \p shape has one.
+ *
+ * \return nullptr if the shape has no nested verification
+ */
+std::unique_ptr<impl::IVerificator> NewNestedVerificator(
+  Shape,
+  const void*
+) {
+  // NOTE (mristin):
+  // The meta-model uses no JSON-able values, so no value needs a nested
+  // verification.
+  return nullptr;
+}
 
-class RecursiveVerificator : public impl::IVerificator {
+// region Iteration over the values
+
+/**
+ * \brief Iterate lazily over the values to be verified.
+ *
+ * Every value comes with its \ref Shape, which tells which checks apply to it.
+ *
+ * We build no paths while iterating. The path to the current value is built only
+ * when an error has been found, see \ref AppendToPath.
+ *
+ * The iterators are combined out of the combinators below. They follow three rules
+ * so that we never build the iterators over the whole model up front:
+ * 1. \ref ChainIterator starts a child only once the previous child is done.
+ * 2. \ref OverIterator dispatches on the instance only in \ref Start.
+ * 3. \ref EachIterator builds the iterator over an item only once the iteration
+ *    reaches the item.
+ *
+ * Under these rules, every combinator is cheap to construct eagerly.
+ */
+class IIterator {
  public:
-  RecursiveVerificator(
-    const std::shared_ptr<types::IClass>& instance
-  );
+  /**
+   * Position at the first value, or become done if there are no values.
+   */
+  virtual void Start() = 0;
 
-  RecursiveVerificator(const RecursiveVerificator& other);
-  RecursiveVerificator(RecursiveVerificator&& other);
-  RecursiveVerificator& operator=(const RecursiveVerificator& other);
-  RecursiveVerificator& operator=(RecursiveVerificator&& other);
+  /**
+   * Move to the next value, or become done if there are no more values.
+   */
+  virtual void Next() = 0;
 
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
+  virtual bool Done() const = 0;
 
-  std::unique_ptr<impl::IVerificator> Clone() const override;
+  /**
+   * \brief Point to the current value.
+   *
+   * The pointer is valid only until the next call to \ref Next.
+   */
+  virtual const void* Value() const = 0;
 
-  ~RecursiveVerificator() override = default;
+  virtual Shape ShapeOf() const = 0;
+
+  /**
+   * \brief Append the segments leading to the current value to the \p path.
+   *
+   * Only called when an error is found, so the iteration itself builds no paths.
+   */
+  virtual void AppendToPath(iteration::Path& path) const = 0;
+
+  virtual std::unique_ptr<IIterator> Clone() const = 0;
+
+  virtual ~IIterator() = default;
+};  // class IIterator
+
+/**
+ * Iterate over no values at all.
+ */
+class EmptyIterator : public IIterator {
+ public:
+  void Start() override {
+    // Intentionally empty.
+  }
+
+  void Next() override {
+    throw std::logic_error(
+      "You want to move an EmptyIterator, but it is always done."
+    );
+  }
+
+  bool Done() const override {
+    return true;
+  }
+
+  const void* Value() const override {
+    throw std::logic_error(
+      "You want to get a value from an EmptyIterator, but it is always done."
+    );
+  }
+
+  Shape ShapeOf() const override {
+    throw std::logic_error(
+      "You want to get a shape from an EmptyIterator, but it is always done."
+    );
+  }
+
+  void AppendToPath(iteration::Path&) const override {
+    throw std::logic_error(
+      "You want to append the path of an EmptyIterator, but it is always done."
+    );
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<EmptyIterator>(*this);
+  }
+};  // class EmptyIterator
+
+std::unique_ptr<IIterator> Empty() {
+  return common::make_unique<EmptyIterator>();
+}
+
+/**
+ * Iterate over a single value which lives in the model.
+ */
+class OneIterator : public IIterator {
+ public:
+  OneIterator(
+    const void* value,
+    Shape shape
+  ) :
+    value_(value),
+    shape_(shape),
+    done_(true) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    done_ = false;
+  }
+
+  void Next() override {
+    done_ = true;
+  }
+
+  bool Done() const override {
+    return done_;
+  }
+
+  const void* Value() const override {
+    return value_;
+  }
+
+  Shape ShapeOf() const override {
+    return shape_;
+  }
+
+  void AppendToPath(iteration::Path&) const override {
+    // Intentionally empty, as the value itself is the end of the path.
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<OneIterator>(*this);
+  }
 
  private:
-  // NOTE(mristin):
-  // We use a pointer to a shared pointer here so that we can implement
-  // copy-assignment and move-assignment. Otherwise, if we used a constant
-  // reference here, the assignments could not be implemented as C++ does not
-  // allow re-binding of constant references.
-  const std::shared_ptr<types::IClass>* instance_;
-
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> verificator_;
+  const void* value_;
+  Shape shape_;
   bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  common::optional<iteration::Iterator> iterator_;
-  common::optional<iteration::Iterator> iterator_end_;
+};  // class OneIterator
 
-  void Execute();
-};  // class RecursiveVerificator
-
-RecursiveVerificator::RecursiveVerificator(
-  const std::shared_ptr<types::IClass>& instance
-) : instance_(&instance) {
-  // Intentionally empty.
-}
-
-RecursiveVerificator::RecursiveVerificator(const RecursiveVerificator& other) {
-  instance_ = other.instance_;
-  state_ = other.state_;
-  verificator_ = other.verificator_->Clone();
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*(other.error_));
-  iterator_ = other.iterator_;
-  iterator_end_ = other.iterator_end_;
-}
-
-RecursiveVerificator::RecursiveVerificator(RecursiveVerificator&& other) {
-  instance_ = other.instance_;
-  state_ = other.state_;
-  verificator_ = std::move(other.verificator_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  iterator_ = std::move(other.iterator_);
-  iterator_end_ = std::move(other.iterator_end_);
-}
-
-RecursiveVerificator& RecursiveVerificator::operator=(
-  const RecursiveVerificator& other
+std::unique_ptr<IIterator> One(
+  const void* value,
+  Shape shape
 ) {
-  return *this = RecursiveVerificator(other);
+  return common::make_unique<OneIterator>(value, shape);
 }
 
-RecursiveVerificator& RecursiveVerificator::operator=(RecursiveVerificator&& other) {
-  if (this != &other) {
-    instance_ = other.instance_;
-    state_ = other.state_;
-    verificator_ = std::move(other.verificator_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    iterator_ = std::move(other.iterator_);
-    iterator_end_ = std::move(other.iterator_end_);
+/**
+ * \brief Iterate over the values of the children, one child after another.
+ *
+ * A child is started only once the previous child is done.
+ */
+class ChainIterator : public IIterator {
+ public:
+  explicit ChainIterator(
+    std::vector<std::unique_ptr<IIterator> > children
+  ) :
+    children_(std::move(children)),
+    active_(0) {
+    // Intentionally empty.
   }
 
-  return *this;
-}
-
-void RecursiveVerificator::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void RecursiveVerificator::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a RecursiveVerificator, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool RecursiveVerificator::Done() const {
-  return done_;
-}
-
-const Error& RecursiveVerificator::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a RecursiveVerificator, "
-      "but the verificator is done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& RecursiveVerificator::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a RecursiveVerificator, "
-      "but the verificator is done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long RecursiveVerificator::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done RecursiveVerificator, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> RecursiveVerificator::Clone() const {
-  return common::make_unique<RecursiveVerificator>(*this);
-}
-
-void RecursiveVerificator::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        error_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        verificator_ = NewNonRecursiveVerificator(*instance_);
-        verificator_->Start();
-      }
-
-      case 1: {
-        if (!(!verificator_->Done())) {
-          state_ = 3;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            verificator_->GetMutable()
-          )
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        verificator_->Next();
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        verificator_ = nullptr;
-
-        {
-          // NOTE (mristin):
-          // We will not need descent, so we introduce it in the scope.
-          iteration::Descent descent(
-            *instance_
-          );
-          iterator_ = descent.begin();
-
-          // NOTE (mristin):
-          // descent.end() is a constant reference, so we make an explicit
-          // copy here.
-          iterator_end_ = descent.end();
-        }
-      }
-
-      case 4: {
-        if (!(*iterator_ != *iterator_end_)) {
-          state_ = 8;
-          continue;
-        }
-
-        verificator_ = NewNonRecursiveVerificator(
-          *(*iterator_)
-        );
-        verificator_->Start();
-      }
-
-      case 5: {
-        if (!(!verificator_->Done())) {
-          state_ = 7;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            verificator_->GetMutable()
-          )
-        );
-
-        error_->path = iteration::MaterializePath(
-          *iterator_
-        );
-
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        verificator_->Next();
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        verificator_ = nullptr;
-
-        ++(*iterator_);
-
-        state_ = 4;
-        continue;
-      }
-
-      case 8: {
-        iterator_.reset();
-        iterator_end_.reset();
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 9;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+  ChainIterator(const ChainIterator& other) :
+    active_(other.active_) {
+    children_.reserve(other.children_.size());
+    for (const std::unique_ptr<IIterator>& child : other.children_) {
+      children_.emplace_back(child->Clone());
     }
   }
+
+  void Start() override {
+    active_ = 0;
+    if (!children_.empty()) {
+      children_[0]->Start();
+    }
+    SkipDoneChildren();
+  }
+
+  void Next() override {
+    children_[active_]->Next();
+    SkipDoneChildren();
+  }
+
+  bool Done() const override {
+    return active_ >= children_.size();
+  }
+
+  const void* Value() const override {
+    return children_[active_]->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return children_[active_]->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    children_[active_]->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<ChainIterator>(*this);
+  }
+
+ private:
+  std::vector<std::unique_ptr<IIterator> > children_;
+
+  /**
+   * Index of the child we currently iterate over
+   */
+  std::size_t active_;
+
+  /**
+   * Move on to the next children, and start them, until one is not done.
+   */
+  void SkipDoneChildren() {
+    while (active_ < children_.size() && children_[active_]->Done()) {
+      ++active_;
+      if (active_ < children_.size()) {
+        children_[active_]->Start();
+      }
+    }
+  }
+};  // class ChainIterator
+
+void CollectChildren(
+  std::vector<std::unique_ptr<IIterator> >&
+) {
+  // Intentionally empty, as there are no more children to collect.
 }
 
-// endregion Recursive verificators
+template<typename... Rest>
+void CollectChildren(
+  std::vector<std::unique_ptr<IIterator> >& children,
+  std::unique_ptr<IIterator> first,
+  Rest... rest
+) {
+  children.emplace_back(std::move(first));
+  CollectChildren(children, std::move(rest)...);
+}
+
+// NOTE (mristin):
+// We can not use an initializer list here, as we can not move the unique pointers
+// out of it.
+template<typename... Children>
+std::unique_ptr<IIterator> Chain(
+  Children... children
+) {
+  std::vector<std::unique_ptr<IIterator> > collected;
+  collected.reserve(sizeof...(Children));
+  CollectChildren(collected, std::move(children)...);
+
+  return common::make_unique<ChainIterator>(std::move(collected));
+}
+
+/**
+ * Iterate over the values of the \p child, which lives in a property.
+ */
+class InPropertyIterator : public IIterator {
+ public:
+  InPropertyIterator(
+    iteration::Property property,
+    std::unique_ptr<IIterator> child
+  ) :
+    property_(property),
+    child_(std::move(child)) {
+    // Intentionally empty.
+  }
+
+  InPropertyIterator(const InPropertyIterator& other) :
+    property_(other.property_),
+    child_(other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const void* Value() const override {
+    return child_->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return child_->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<iteration::PropertySegment>(property_)
+    );
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<InPropertyIterator>(*this);
+  }
+
+ private:
+  iteration::Property property_;
+  std::unique_ptr<IIterator> child_;
+};  // class InPropertyIterator
+
+std::unique_ptr<IIterator> InProperty(
+  iteration::Property property,
+  std::unique_ptr<IIterator> child
+) {
+  return common::make_unique<InPropertyIterator>(property, std::move(child));
+}
+
+/**
+ * Iterate over the values of the \p child, which lives in a component of a tuple.
+ */
+class AtIndexIterator : public IIterator {
+ public:
+  AtIndexIterator(
+    std::size_t index,
+    std::unique_ptr<IIterator> child
+  ) :
+    index_(index),
+    child_(std::move(child)) {
+    // Intentionally empty.
+  }
+
+  AtIndexIterator(const AtIndexIterator& other) :
+    index_(other.index_),
+    child_(other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const void* Value() const override {
+    return child_->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return child_->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<iteration::IndexSegment>(index_)
+    );
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<AtIndexIterator>(*this);
+  }
+
+ private:
+  std::size_t index_;
+  std::unique_ptr<IIterator> child_;
+};  // class AtIndexIterator
+
+std::unique_ptr<IIterator> AtIndex(
+  std::size_t index,
+  std::unique_ptr<IIterator> child
+) {
+  return common::make_unique<AtIndexIterator>(index, std::move(child));
+}
+
+/**
+ * \brief Iterate over the values of every item of a list, one item after another.
+ *
+ * The iterator over an item is built only once the iteration reaches the item.
+ */
+template<typename T>
+class EachIterator : public IIterator {
+ public:
+  /**
+   * Build the iterator over the values of an item
+   */
+  typedef std::unique_ptr<IIterator> (*OverItem)(const T& item, bool recursive);
+
+  EachIterator(
+    const std::vector<T>* items,
+    OverItem over_item,
+    bool recursive
+  ) :
+    items_(items),
+    over_item_(over_item),
+    recursive_(recursive),
+    index_(0) {
+    // Intentionally empty.
+  }
+
+  EachIterator(const EachIterator<T>& other) :
+    items_(other.items_),
+    over_item_(other.over_item_),
+    recursive_(other.recursive_),
+    index_(other.index_),
+    item_(other.item_ == nullptr ? nullptr : other.item_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    index_ = 0;
+    item_ = nullptr;
+    SkipDoneItems();
+  }
+
+  void Next() override {
+    item_->Next();
+    SkipDoneItems();
+  }
+
+  bool Done() const override {
+    return index_ >= items_->size();
+  }
+
+  const void* Value() const override {
+    return item_->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return item_->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<iteration::IndexSegment>(index_)
+    );
+    item_->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<EachIterator<T> >(*this);
+  }
+
+ private:
+  const std::vector<T>* items_;
+  OverItem over_item_;
+  bool recursive_;
+
+  /**
+   * Index of the item we currently iterate over
+   */
+  std::size_t index_;
+
+  /**
+   * Iterator over the current item, built once we reached the item
+   */
+  std::unique_ptr<IIterator> item_;
+
+  /**
+   * Move on to the next items, and build their iterators, until one is not done.
+   */
+  void SkipDoneItems() {
+    while (index_ < items_->size()) {
+      if (item_ == nullptr) {
+        item_ = over_item_((*items_)[index_], recursive_);
+        item_->Start();
+      }
+
+      if (!item_->Done()) {
+        return;
+      }
+
+      item_ = nullptr;
+      ++index_;
+    }
+  }
+};  // class EachIterator
+
+template<typename T>
+std::unique_ptr<IIterator> Each(
+  const std::vector<T>& items,
+  std::unique_ptr<IIterator> (*over_item)(const T& item, bool recursive),
+  bool recursive
+) {
+  return common::make_unique<EachIterator<T> >(&items, over_item, recursive);
+}
+
+/**
+ * \brief Iterate over the values of an instance, dispatched on its runtime type.
+ *
+ * Defined below, once all the classes have been covered.
+ */
+std::unique_ptr<IIterator> OverInstance(
+  const types::IClass& instance,
+  bool recursive
+);
+
+/**
+ * \brief Iterate recursively over the values of an instance referenced from
+ * another instance.
+ *
+ * We dispatch on the runtime type of the instance only in \ref Start so that
+ * we descend into the instance only once the iteration reaches it.
+ */
+class OverIterator : public IIterator {
+ public:
+  explicit OverIterator(
+    const types::IClass* instance
+  ) :
+    instance_(instance) {
+    // Intentionally empty.
+  }
+
+  OverIterator(const OverIterator& other) :
+    instance_(other.instance_),
+    child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_ = OverInstance(*instance_, true);
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const void* Value() const override {
+    return child_->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return child_->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<OverIterator>(*this);
+  }
+
+ private:
+  const types::IClass* instance_;
+  std::unique_ptr<IIterator> child_;
+};  // class OverIterator
+
+std::unique_ptr<IIterator> Over(
+  const types::IClass& instance,
+  bool recursive
+) {
+  if (!recursive) {
+    // NOTE (mristin):
+    // In the non-recursive mode, we verify only the instance itself, but not
+    // the instances that it references.
+    return Empty();
+  }
+
+  return common::make_unique<OverIterator>(&instance);
+}
+
+template<typename T>
+std::unique_ptr<IIterator> OverPointer(
+  const std::shared_ptr<T>& instance,
+  bool recursive
+) {
+  return Over(*instance, recursive);
+}
+
+using ListOf_StructuralUnion = std::vector<types::StructuralUnion>;
+
+using ListOf_MixedUnion = std::vector<types::MixedUnion>;
+
+using ListOf_ModelTypedUnion = std::vector<types::ModelTypedUnion>;
+
+using TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion = std::tuple<
+  types::StructuralUnion,
+  types::MixedUnion,
+  types::ModelTypedUnion
+>;
+
+std::unique_ptr<IIterator> OverStructuralUnion(
+  const types::StructuralUnion& value,
+  bool recursive
+) {
+  switch (value.index()) {
+    case 0:
+      return Over(*common::get<0>(value), recursive);
+    case 1:
+      return Over(*common::get<1>(value), recursive);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+std::unique_ptr<IIterator> OverMixedUnion(
+  const types::MixedUnion& value,
+  bool recursive
+) {
+  switch (value.index()) {
+    case 0:
+      return Over(*common::get<0>(value), recursive);
+    case 1:
+      return Over(*common::get<1>(value), recursive);
+    case 2:
+      return Over(*common::get<2>(value), recursive);
+    case 3:
+      return Over(*common::get<3>(value), recursive);
+    case 4:
+      return Over(*common::get<4>(value), recursive);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+std::unique_ptr<IIterator> OverModelTypedUnion(
+  const types::ModelTypedUnion& value,
+  bool recursive
+) {
+  switch (value.index()) {
+    case 0:
+      return Over(*common::get<0>(value), recursive);
+    case 1:
+      return Over(*common::get<1>(value), recursive);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+std::unique_ptr<IIterator> OverListOf_StructuralUnion(
+  const ListOf_StructuralUnion& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &OverStructuralUnion, recursive);
+}
+
+std::unique_ptr<IIterator> OverListOf_MixedUnion(
+  const ListOf_MixedUnion& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &OverMixedUnion, recursive);
+}
+
+std::unique_ptr<IIterator> OverListOf_ModelTypedUnion(
+  const ListOf_ModelTypedUnion& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &OverModelTypedUnion, recursive);
+}
+
+std::unique_ptr<IIterator> OverTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
+  const TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Chain(
+    AtIndex(
+      0,
+      OverStructuralUnion(std::get<0>(value), recursive)
+    ),
+    AtIndex(1, OverMixedUnion(std::get<1>(value), recursive)),
+    AtIndex(
+      2,
+      OverModelTypedUnion(std::get<2>(value), recursive)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverStructuralFirst(
+  const types::IStructuralFirst& that,
+  bool
+) {
+  return One(&that, Shape::kStructuralFirst);
+}
+
+std::unique_ptr<IIterator> OverStructuralSecond(
+  const types::IStructuralSecond& that,
+  bool
+) {
+  return One(&that, Shape::kStructuralSecond);
+}
+
+std::unique_ptr<IIterator> OverMixedAbstractDescendantOne(
+  const types::IMixedAbstractDescendantOne& that,
+  bool
+) {
+  return One(&that, Shape::kMixedAbstractDescendantOne);
+}
+
+std::unique_ptr<IIterator> OverMixedAbstractDescendantTwo(
+  const types::IMixedAbstractDescendantTwo& that,
+  bool
+) {
+  return One(&that, Shape::kMixedAbstractDescendantTwo);
+}
+
+std::unique_ptr<IIterator> OverMixedConcreteWithDescendants(
+  const types::IMixedConcreteWithDescendants& that,
+  bool
+) {
+  return One(&that, Shape::kMixedConcreteWithDescendants);
+}
+
+std::unique_ptr<IIterator> OverMixedConcreteWithDescendantsChild(
+  const types::IMixedConcreteWithDescendantsChild& that,
+  bool
+) {
+  return One(&that, Shape::kMixedConcreteWithDescendantsChild);
+}
+
+std::unique_ptr<IIterator> OverMixedConcreteLeaf(
+  const types::IMixedConcreteLeaf& that,
+  bool
+) {
+  return One(&that, Shape::kMixedConcreteLeaf);
+}
+
+std::unique_ptr<IIterator> OverModelTypedFirst(
+  const types::IModelTypedFirst& that,
+  bool
+) {
+  return One(&that, Shape::kModelTypedFirst);
+}
+
+std::unique_ptr<IIterator> OverModelTypedSecond(
+  const types::IModelTypedSecond& that,
+  bool
+) {
+  return One(&that, Shape::kModelTypedSecond);
+}
+
+std::unique_ptr<IIterator> OverSomething(
+  const types::ISomething& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      iteration::Property::kStructuralProperty,
+      OverStructuralUnion(that.structural_property(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kMixedProperty,
+      OverMixedUnion(that.mixed_property(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kModelTypedProperty,
+      OverModelTypedUnion(that.model_typed_property(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kListStructuralProperty,
+      OverListOf_StructuralUnion(
+        that.list_structural_property(),
+        recursive
+      )
+    ),
+    InProperty(
+      iteration::Property::kListMixedProperty,
+      OverListOf_MixedUnion(that.list_mixed_property(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kListModelTypedProperty,
+      OverListOf_ModelTypedUnion(
+        that.list_model_typed_property(),
+        recursive
+      )
+    ),
+    InProperty(
+      iteration::Property::kTupleProperty,
+      OverTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
+        that.tuple_property(),
+        recursive
+      )
+    ),
+    InProperty(
+      iteration::Property::kOptionalStructuralProperty,
+      that.optional_structural_property().has_value()
+        ? OverStructuralUnion(
+            (*that.optional_structural_property()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kOptionalMixedProperty,
+      that.optional_mixed_property().has_value()
+        ? OverMixedUnion((*that.optional_mixed_property()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kOptionalModelTypedProperty,
+      that.optional_model_typed_property().has_value()
+        ? OverModelTypedUnion(
+            (*that.optional_model_typed_property()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+/**
+ * Iterate over the values of the \p instance, dispatched on its runtime type.
+ */
+std::unique_ptr<IIterator> OverInstance(
+  const types::IClass& instance,
+  bool recursive
+) {
+  switch (instance.model_type()) {
+    case types::ModelType::kStructuralFirst:
+      return OverStructuralFirst(
+        dynamic_cast<const types::IStructuralFirst&>(instance),
+        recursive
+      );
+    case types::ModelType::kStructuralSecond:
+      return OverStructuralSecond(
+        dynamic_cast<const types::IStructuralSecond&>(instance),
+        recursive
+      );
+    case types::ModelType::kMixedAbstractDescendantOne:
+      return OverMixedAbstractDescendantOne(
+        dynamic_cast<const types::IMixedAbstractDescendantOne&>(instance),
+        recursive
+      );
+    case types::ModelType::kMixedAbstractDescendantTwo:
+      return OverMixedAbstractDescendantTwo(
+        dynamic_cast<const types::IMixedAbstractDescendantTwo&>(instance),
+        recursive
+      );
+    case types::ModelType::kMixedConcreteWithDescendants:
+      return OverMixedConcreteWithDescendants(
+        dynamic_cast<const types::IMixedConcreteWithDescendants&>(instance),
+        recursive
+      );
+    case types::ModelType::kMixedConcreteWithDescendantsChild:
+      return OverMixedConcreteWithDescendantsChild(
+        dynamic_cast<const types::IMixedConcreteWithDescendantsChild&>(instance),
+        recursive
+      );
+    case types::ModelType::kMixedConcreteLeaf:
+      return OverMixedConcreteLeaf(
+        dynamic_cast<const types::IMixedConcreteLeaf&>(instance),
+        recursive
+      );
+    case types::ModelType::kModelTypedFirst:
+      return OverModelTypedFirst(
+        dynamic_cast<const types::IModelTypedFirst&>(instance),
+        recursive
+      );
+    case types::ModelType::kModelTypedSecond:
+      return OverModelTypedSecond(
+        dynamic_cast<const types::IModelTypedSecond&>(instance),
+        recursive
+      );
+    case types::ModelType::kSomething:
+      return OverSomething(
+        dynamic_cast<const types::ISomething&>(instance),
+        recursive
+      );
+    default:
+      // NOTE (mristin):
+      // The instances of the other classes have nothing to verify.
+      return Empty();
+  }
+}
+
+// endregion Iteration over the values
+
+// region Iteration over the errors
+
+/**
+ * \brief Iterate over the errors of the values, one error at a time.
+ *
+ * For every value, we first run the checks of its shape, each reporting at most
+ * one error. Then we run the nested verification of the value, if its shape has
+ * one, which can report many errors, see \ref NewNestedVerificator.
+ *
+ * We do only the work needed to find the next error, and build the path to
+ * the erroneous value only once an error has been found.
+ */
+class ErrorIterator : public impl::IVerificator {
+ public:
+  explicit ErrorIterator(
+    std::unique_ptr<IIterator> values
+  ) :
+    values_(std::move(values)),
+    check_(0),
+    nested_started_(false),
+    index_(-1) {
+    // Intentionally empty.
+  }
+
+  ErrorIterator(const ErrorIterator& other) :
+    values_(other.values_->Clone()),
+    check_(other.check_),
+    nested_started_(other.nested_started_),
+    nested_(other.nested_ == nullptr ? nullptr : other.nested_->Clone()),
+    error_(other.error_),
+    index_(other.index_) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    values_->Start();
+    check_ = 0;
+    nested_started_ = false;
+    nested_ = nullptr;
+    index_ = -1;
+
+    Advance();
+  }
+
+  void Next() override {
+    #ifdef DEBUG
+    if (Done()) {
+      throw std::logic_error(
+        "You want to move an ErrorIterator, but it was done."
+      );
+    }
+    #endif
+
+    Advance();
+  }
+
+  bool Done() const override {
+    return values_->Done();
+  }
+
+  const Error& Get() const override {
+    #ifdef DEBUG
+    if (Done()) {
+      throw std::logic_error(
+        "You want to get from an ErrorIterator, but it was done."
+      );
+    }
+    #endif
+
+    return *error_;
+  }
+
+  Error& GetMutable() override {
+    #ifdef DEBUG
+    if (Done()) {
+      throw std::logic_error(
+        "You want to get mutable from an ErrorIterator, but it was done."
+      );
+    }
+    #endif
+
+    return *error_;
+  }
+
+  long Index() const override {
+    return index_;
+  }
+
+  std::unique_ptr<impl::IVerificator> Clone() const override {
+    return common::make_unique<ErrorIterator>(*this);
+  }
+
+ private:
+  std::unique_ptr<IIterator> values_;
+
+  /**
+   * Index of the next check to run on the current value
+   */
+  std::size_t check_;
+
+  /**
+   * Set if we already started the nested verification of the current value
+   */
+  bool nested_started_;
+
+  /**
+   * Nested verification of the current value, if its shape has one
+   */
+  std::unique_ptr<impl::IVerificator> nested_;
+
+  common::optional<Error> error_;
+
+  /**
+   * Index of the current error, -1 if done
+   */
+  long index_;
+
+  /**
+   * Move on to the next error, or become done if there are no more errors.
+   */
+  void Advance() {
+    while (!values_->Done()) {
+      const void* value = values_->Value();
+      const Shape shape = values_->ShapeOf();
+
+      const std::vector<Check>& checks = ChecksOf(shape);
+      while (check_ < checks.size()) {
+        const Check& check = checks[check_];
+        ++check_;
+
+        if (!check.holds(value)) {
+          error_ = Error(check.message);
+          values_->AppendToPath(error_->path);
+          ++index_;
+          return;
+        }
+      }
+
+      // NOTE (mristin):
+      // All the checks of the value have been run. We now either start the nested
+      // verification of the value, or resume it where we stopped at its last error.
+      if (!nested_started_) {
+        nested_started_ = true;
+        nested_ = NewNestedVerificator(shape, value);
+        if (nested_ != nullptr) {
+          nested_->Start();
+        }
+      } else if (nested_ != nullptr) {
+        nested_->Next();
+      }
+
+      if (nested_ != nullptr && !nested_->Done()) {
+        // NOTE (mristin):
+        // The path of the nested error is relative to the value, so we prefix it
+        // with the path to the value. We take over the data members of the nested
+        // error to avoid a costly copy, as we move the nested verification on
+        // before we look at its error again.
+        Error& nested_error = nested_->GetMutable();
+
+        error_ = Error(std::move(nested_error.cause));
+        values_->AppendToPath(error_->path);
+        for (
+          std::unique_ptr<iteration::ISegment>& segment
+          : nested_error.path.segments
+        ) {
+          error_->path.segments.emplace_back(std::move(segment));
+        }
+
+        ++index_;
+        return;
+      }
+
+      values_->Next();
+      check_ = 0;
+      nested_started_ = false;
+      nested_ = nullptr;
+    }
+
+    error_ = common::nullopt;
+    index_ = -1;
+  }
+};  // class ErrorIterator
+
+/**
+ * Start iterating over the errors of the \p values.
+ */
+Iterator IterateErrors(
+  std::unique_ptr<IIterator> values
+) {
+  std::unique_ptr<impl::IVerificator> verificator(
+    common::make_unique<ErrorIterator>(std::move(values))
+  );
+  verificator->Start();
+
+  return Iterator(std::move(verificator));
+}
+
+/**
+ * Give out the iterator past the last error, shared by all the verifications.
+ */
+const Iterator& PastLastError() {
+  static const Iterator iterator(IterateErrors(Empty()));
+  return iterator;
+}
+
+// endregion Iteration over the errors
+
+}  // namespace
 
 // region NonRecursiveVerification
 
@@ -2477,25 +1402,11 @@ NonRecursiveVerification::NonRecursiveVerification(
 }
 
 Iterator NonRecursiveVerification::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    NewNonRecursiveVerificator(instance_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
+  return IterateErrors(OverInstance(*instance_, false));
 }
 
 const Iterator& NonRecursiveVerification::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
+  return PastLastError();
 }
 
 // endregion NonRecursiveVerification
@@ -2509,25 +1420,11 @@ RecursiveVerification::RecursiveVerification(
 }
 
 Iterator RecursiveVerification::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<RecursiveVerificator>(instance_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
+  return IterateErrors(OverInstance(*instance_, true));
 }
 
 const Iterator& RecursiveVerification::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
+  return PastLastError();
 }
 
 // endregion RecursiveVerification

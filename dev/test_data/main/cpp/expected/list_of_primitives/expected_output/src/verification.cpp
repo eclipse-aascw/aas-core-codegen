@@ -11,6 +11,7 @@
 #pragma warning(push, 0)
 #include <map>
 #include <set>
+#include <vector>
 #pragma warning(pop)
 
 namespace dummy {
@@ -36,464 +37,390 @@ Error::Error(
 
 // endregion struct Error
 
-// region class AlwaysDoneVerificator
-
-class AlwaysDoneVerificator : public impl::IVerificator {
- public:
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  virtual ~AlwaysDoneVerificator() = default;
-};  // class AlwaysDoneVerificator
-
-void AlwaysDoneVerificator::Start() {
-  // Intentionally empty.
-}
-
-void AlwaysDoneVerificator::Next() {
-  throw std::logic_error(
-    "You want to move an AlwaysDoneVerificator, "
-    "but the verificator is always done, as its name suggests."
-  );
-}
-
-bool AlwaysDoneVerificator::Done() const {
-  return true;
-}
-
-const Error& AlwaysDoneVerificator::Get() const {
-    throw std::logic_error(
-      "You want to get from an AlwaysDoneVerificator, "
-      "but the verificator is always done, as its name suggests."
-    );
-}
-
-Error& AlwaysDoneVerificator::GetMutable() {
-    throw std::logic_error(
-      "You want to get mutable from an AlwaysDoneVerificator, "
-      "but the verificator is always done, as its name suggests."
-    );
-}
-
-long AlwaysDoneVerificator::Index() const {
-  return -1;
-}
-
-std::unique_ptr<impl::IVerificator> AlwaysDoneVerificator::Clone() const {
-  return common::make_unique<AlwaysDoneVerificator>(*this);
-}
-
-// endregion class AlwaysDoneVerificator
+namespace {
 
 /**
- * Produce a non-recursive verificator of the instance given its runtime model type.
+ * \brief Enumerate the shapes of the values that we verify.
+ *
+ * A shape tells which checks apply to a value, see \ref ChecksOf.
  */
-std::unique_ptr<impl::IVerificator> NewNonRecursiveVerificator(
-  const std::shared_ptr<types::IClass>& instance
-);
+enum class Shape : std::uint32_t {
+  
+};  // enum class Shape
 
-// region Non-recursive verificators
+/**
+ * \brief Represent a single check of a value.
+ *
+ * The checks of a shape are listed in \ref ChecksOf.
+ */
+struct Check {
+  /**
+   * Check that the invariant holds for the value
+   */
+  bool (*holds)(const void* value);
 
-namespace non_recursive_verificator {
+  /**
+   * Human-readable description of the invariant, reported if it does not hold
+   */
+  const wchar_t* message;
+};  // struct Check
 
-class OfSomething : public impl::IVerificator {
- public:
-  OfSomething(
-    const std::shared_ptr<types::IClass>& instance
-  );
+// region Checks
 
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfSomething() override = default;
-};  // class OfSomething
-
-OfSomething::OfSomething(
-  const std::shared_ptr<types::IClass>&
-) {
-  // Intentionally empty.
-}
-
-void OfSomething::Start() {
-  // Intentionally empty.
-}
-
-void OfSomething::Next() {
-  throw std::logic_error(
-    "You want to move "
-    "a verificator OfSomething, "
-    "but the verificator is always done as "
-    "ISomething "
-    "has no invariants defined."
-  );
-}
-
-bool OfSomething::Done() const {
-  return true;
-}
-
-const Error& OfSomething::Get() const {
-  throw std::logic_error(
-    "You want to get from "
-    "a verificator OfSomething, "
-    "but the verificator is always done as "
-    "ISomething "
-    "has no invariants defined."
-  );
-}
-
-Error& OfSomething::GetMutable() {
-  throw std::logic_error(
-    "You want to get mutable from "
-    "a verificator OfSomething, "
-    "but the verificator is always done as "
-    "ISomething "
-    "has no invariants defined."
-  );
-}
-
-long OfSomething::Index() const {
-  return -1;
-}
-
-std::unique_ptr<impl::IVerificator> OfSomething::Clone() const {
-  return common::make_unique<
-    OfSomething
-  >(*this);
-}
-
-}  // namespace non_recursive_verificator
-
-std::unique_ptr<impl::IVerificator> NewNonRecursiveVerificator(
-  const std::shared_ptr<types::IClass>& instance
-) {
-  switch (instance->model_type()) {
-    case types::ModelType::kSomething:
-      return common::make_unique<
-        non_recursive_verificator::OfSomething
-      >(
-        instance
-      );
+/**
+ * Give out the checks of the values of the \p shape.
+ */
+const std::vector<Check>& ChecksOf(Shape shape) {
+  switch (shape) {
     default:
       throw std::logic_error(
         common::Concat(
-          "Unexpected model type: ",
-          std::to_string(
-            static_cast<std::uint32_t>(instance->model_type())
-          )
+          "Unexpected shape: ",
+          std::to_string(static_cast<std::uint32_t>(shape))
         )
       );
   }
 }
 
-// endregion Non-recursive verificators
+// endregion Checks
 
-// region Recursive verificators
+/**
+ * \brief Create the nested verification of the \p value, if its \p shape has one.
+ *
+ * \return nullptr if the shape has no nested verification
+ */
+std::unique_ptr<impl::IVerificator> NewNestedVerificator(
+  Shape,
+  const void*
+) {
+  // NOTE (mristin):
+  // The meta-model uses no JSON-able values, so no value needs a nested
+  // verification.
+  return nullptr;
+}
 
-class RecursiveVerificator : public impl::IVerificator {
+// region Iteration over the values
+
+/**
+ * \brief Iterate lazily over the values to be verified.
+ *
+ * Every value comes with its \ref Shape, which tells which checks apply to it.
+ *
+ * We build no paths while iterating. The path to the current value is built only
+ * when an error has been found, see \ref AppendToPath.
+ *
+ * The iterators are combined out of the combinators below. They follow three rules
+ * so that we never build the iterators over the whole model up front:
+ * 1. \ref ChainIterator starts a child only once the previous child is done.
+ * 2. \ref OverIterator dispatches on the instance only in \ref Start.
+ * 3. \ref EachIterator builds the iterator over an item only once the iteration
+ *    reaches the item.
+ *
+ * Under these rules, every combinator is cheap to construct eagerly.
+ */
+class IIterator {
  public:
-  RecursiveVerificator(
-    const std::shared_ptr<types::IClass>& instance
-  );
+  /**
+   * Position at the first value, or become done if there are no values.
+   */
+  virtual void Start() = 0;
 
-  RecursiveVerificator(const RecursiveVerificator& other);
-  RecursiveVerificator(RecursiveVerificator&& other);
-  RecursiveVerificator& operator=(const RecursiveVerificator& other);
-  RecursiveVerificator& operator=(RecursiveVerificator&& other);
+  /**
+   * Move to the next value, or become done if there are no more values.
+   */
+  virtual void Next() = 0;
 
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
+  virtual bool Done() const = 0;
 
-  std::unique_ptr<impl::IVerificator> Clone() const override;
+  /**
+   * \brief Point to the current value.
+   *
+   * The pointer is valid only until the next call to \ref Next.
+   */
+  virtual const void* Value() const = 0;
 
-  ~RecursiveVerificator() override = default;
+  virtual Shape ShapeOf() const = 0;
+
+  /**
+   * \brief Append the segments leading to the current value to the \p path.
+   *
+   * Only called when an error is found, so the iteration itself builds no paths.
+   */
+  virtual void AppendToPath(iteration::Path& path) const = 0;
+
+  virtual std::unique_ptr<IIterator> Clone() const = 0;
+
+  virtual ~IIterator() = default;
+};  // class IIterator
+
+/**
+ * Iterate over no values at all.
+ */
+class EmptyIterator : public IIterator {
+ public:
+  void Start() override {
+    // Intentionally empty.
+  }
+
+  void Next() override {
+    throw std::logic_error(
+      "You want to move an EmptyIterator, but it is always done."
+    );
+  }
+
+  bool Done() const override {
+    return true;
+  }
+
+  const void* Value() const override {
+    throw std::logic_error(
+      "You want to get a value from an EmptyIterator, but it is always done."
+    );
+  }
+
+  Shape ShapeOf() const override {
+    throw std::logic_error(
+      "You want to get a shape from an EmptyIterator, but it is always done."
+    );
+  }
+
+  void AppendToPath(iteration::Path&) const override {
+    throw std::logic_error(
+      "You want to append the path of an EmptyIterator, but it is always done."
+    );
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<EmptyIterator>(*this);
+  }
+};  // class EmptyIterator
+
+std::unique_ptr<IIterator> Empty() {
+  return common::make_unique<EmptyIterator>();
+}
+
+/**
+ * Iterate over the values of the \p instance, dispatched on its runtime type.
+ */
+std::unique_ptr<IIterator> OverInstance(
+  const types::IClass&,
+  bool
+) {
+  // NOTE (mristin):
+  // The instances of no class have anything to verify.
+  return Empty();
+}
+
+// endregion Iteration over the values
+
+// region Iteration over the errors
+
+/**
+ * \brief Iterate over the errors of the values, one error at a time.
+ *
+ * For every value, we first run the checks of its shape, each reporting at most
+ * one error. Then we run the nested verification of the value, if its shape has
+ * one, which can report many errors, see \ref NewNestedVerificator.
+ *
+ * We do only the work needed to find the next error, and build the path to
+ * the erroneous value only once an error has been found.
+ */
+class ErrorIterator : public impl::IVerificator {
+ public:
+  explicit ErrorIterator(
+    std::unique_ptr<IIterator> values
+  ) :
+    values_(std::move(values)),
+    check_(0),
+    nested_started_(false),
+    index_(-1) {
+    // Intentionally empty.
+  }
+
+  ErrorIterator(const ErrorIterator& other) :
+    values_(other.values_->Clone()),
+    check_(other.check_),
+    nested_started_(other.nested_started_),
+    nested_(other.nested_ == nullptr ? nullptr : other.nested_->Clone()),
+    error_(other.error_),
+    index_(other.index_) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    values_->Start();
+    check_ = 0;
+    nested_started_ = false;
+    nested_ = nullptr;
+    index_ = -1;
+
+    Advance();
+  }
+
+  void Next() override {
+    #ifdef DEBUG
+    if (Done()) {
+      throw std::logic_error(
+        "You want to move an ErrorIterator, but it was done."
+      );
+    }
+    #endif
+
+    Advance();
+  }
+
+  bool Done() const override {
+    return values_->Done();
+  }
+
+  const Error& Get() const override {
+    #ifdef DEBUG
+    if (Done()) {
+      throw std::logic_error(
+        "You want to get from an ErrorIterator, but it was done."
+      );
+    }
+    #endif
+
+    return *error_;
+  }
+
+  Error& GetMutable() override {
+    #ifdef DEBUG
+    if (Done()) {
+      throw std::logic_error(
+        "You want to get mutable from an ErrorIterator, but it was done."
+      );
+    }
+    #endif
+
+    return *error_;
+  }
+
+  long Index() const override {
+    return index_;
+  }
+
+  std::unique_ptr<impl::IVerificator> Clone() const override {
+    return common::make_unique<ErrorIterator>(*this);
+  }
 
  private:
-  // NOTE(mristin):
-  // We use a pointer to a shared pointer here so that we can implement
-  // copy-assignment and move-assignment. Otherwise, if we used a constant
-  // reference here, the assignments could not be implemented as C++ does not
-  // allow re-binding of constant references.
-  const std::shared_ptr<types::IClass>* instance_;
+  std::unique_ptr<IIterator> values_;
 
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> verificator_;
-  bool done_;
+  /**
+   * Index of the next check to run on the current value
+   */
+  std::size_t check_;
+
+  /**
+   * Set if we already started the nested verification of the current value
+   */
+  bool nested_started_;
+
+  /**
+   * Nested verification of the current value, if its shape has one
+   */
+  std::unique_ptr<impl::IVerificator> nested_;
+
+  common::optional<Error> error_;
+
+  /**
+   * Index of the current error, -1 if done
+   */
   long index_;
-  std::unique_ptr<Error> error_;
-  common::optional<iteration::Iterator> iterator_;
-  common::optional<iteration::Iterator> iterator_end_;
 
-  void Execute();
-};  // class RecursiveVerificator
+  /**
+   * Move on to the next error, or become done if there are no more errors.
+   */
+  void Advance() {
+    while (!values_->Done()) {
+      const void* value = values_->Value();
+      const Shape shape = values_->ShapeOf();
 
-RecursiveVerificator::RecursiveVerificator(
-  const std::shared_ptr<types::IClass>& instance
-) : instance_(&instance) {
-  // Intentionally empty.
-}
+      const std::vector<Check>& checks = ChecksOf(shape);
+      while (check_ < checks.size()) {
+        const Check& check = checks[check_];
+        ++check_;
 
-RecursiveVerificator::RecursiveVerificator(const RecursiveVerificator& other) {
-  instance_ = other.instance_;
-  state_ = other.state_;
-  verificator_ = other.verificator_->Clone();
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*(other.error_));
-  iterator_ = other.iterator_;
-  iterator_end_ = other.iterator_end_;
-}
-
-RecursiveVerificator::RecursiveVerificator(RecursiveVerificator&& other) {
-  instance_ = other.instance_;
-  state_ = other.state_;
-  verificator_ = std::move(other.verificator_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  iterator_ = std::move(other.iterator_);
-  iterator_end_ = std::move(other.iterator_end_);
-}
-
-RecursiveVerificator& RecursiveVerificator::operator=(
-  const RecursiveVerificator& other
-) {
-  return *this = RecursiveVerificator(other);
-}
-
-RecursiveVerificator& RecursiveVerificator::operator=(RecursiveVerificator&& other) {
-  if (this != &other) {
-    instance_ = other.instance_;
-    state_ = other.state_;
-    verificator_ = std::move(other.verificator_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    iterator_ = std::move(other.iterator_);
-    iterator_end_ = std::move(other.iterator_end_);
-  }
-
-  return *this;
-}
-
-void RecursiveVerificator::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void RecursiveVerificator::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a RecursiveVerificator, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool RecursiveVerificator::Done() const {
-  return done_;
-}
-
-const Error& RecursiveVerificator::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a RecursiveVerificator, "
-      "but the verificator is done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& RecursiveVerificator::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a RecursiveVerificator, "
-      "but the verificator is done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long RecursiveVerificator::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done RecursiveVerificator, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> RecursiveVerificator::Clone() const {
-  return common::make_unique<RecursiveVerificator>(*this);
-}
-
-void RecursiveVerificator::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        error_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        verificator_ = NewNonRecursiveVerificator(*instance_);
-        verificator_->Start();
-      }
-
-      case 1: {
-        if (!(!verificator_->Done())) {
-          state_ = 3;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            verificator_->GetMutable()
-          )
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        verificator_->Next();
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        verificator_ = nullptr;
-
-        {
-          // NOTE (mristin):
-          // We will not need descent, so we introduce it in the scope.
-          iteration::Descent descent(
-            *instance_
-          );
-          iterator_ = descent.begin();
-
-          // NOTE (mristin):
-          // descent.end() is a constant reference, so we make an explicit
-          // copy here.
-          iterator_end_ = descent.end();
+        if (!check.holds(value)) {
+          error_ = Error(check.message);
+          values_->AppendToPath(error_->path);
+          ++index_;
+          return;
         }
       }
 
-      case 4: {
-        if (!(*iterator_ != *iterator_end_)) {
-          state_ = 8;
-          continue;
+      // NOTE (mristin):
+      // All the checks of the value have been run. We now either start the nested
+      // verification of the value, or resume it where we stopped at its last error.
+      if (!nested_started_) {
+        nested_started_ = true;
+        nested_ = NewNestedVerificator(shape, value);
+        if (nested_ != nullptr) {
+          nested_->Start();
         }
-
-        verificator_ = NewNonRecursiveVerificator(
-          *(*iterator_)
-        );
-        verificator_->Start();
+      } else if (nested_ != nullptr) {
+        nested_->Next();
       }
 
-      case 5: {
-        if (!(!verificator_->Done())) {
-          state_ = 7;
-          continue;
+      if (nested_ != nullptr && !nested_->Done()) {
+        // NOTE (mristin):
+        // The path of the nested error is relative to the value, so we prefix it
+        // with the path to the value. We take over the data members of the nested
+        // error to avoid a costly copy, as we move the nested verification on
+        // before we look at its error again.
+        Error& nested_error = nested_->GetMutable();
+
+        error_ = Error(std::move(nested_error.cause));
+        values_->AppendToPath(error_->path);
+        for (
+          std::unique_ptr<iteration::ISegment>& segment
+          : nested_error.path.segments
+        ) {
+          error_->path.segments.emplace_back(std::move(segment));
         }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            verificator_->GetMutable()
-          )
-        );
-
-        error_->path = iteration::MaterializePath(
-          *iterator_
-        );
 
         ++index_;
-
-        state_ = 6;
         return;
       }
 
-      case 6: {
-        verificator_->Next();
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        verificator_ = nullptr;
-
-        ++(*iterator_);
-
-        state_ = 4;
-        continue;
-      }
-
-      case 8: {
-        iterator_.reset();
-        iterator_end_.reset();
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 9;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      values_->Next();
+      check_ = 0;
+      nested_started_ = false;
+      nested_ = nullptr;
     }
+
+    error_ = common::nullopt;
+    index_ = -1;
   }
+};  // class ErrorIterator
+
+/**
+ * Start iterating over the errors of the \p values.
+ */
+Iterator IterateErrors(
+  std::unique_ptr<IIterator> values
+) {
+  std::unique_ptr<impl::IVerificator> verificator(
+    common::make_unique<ErrorIterator>(std::move(values))
+  );
+  verificator->Start();
+
+  return Iterator(std::move(verificator));
 }
 
-// endregion Recursive verificators
+/**
+ * Give out the iterator past the last error, shared by all the verifications.
+ */
+const Iterator& PastLastError() {
+  static const Iterator iterator(IterateErrors(Empty()));
+  return iterator;
+}
+
+// endregion Iteration over the errors
+
+}  // namespace
 
 // region NonRecursiveVerification
 
@@ -504,25 +431,11 @@ NonRecursiveVerification::NonRecursiveVerification(
 }
 
 Iterator NonRecursiveVerification::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    NewNonRecursiveVerificator(instance_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
+  return IterateErrors(OverInstance(*instance_, false));
 }
 
 const Iterator& NonRecursiveVerification::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
+  return PastLastError();
 }
 
 // endregion NonRecursiveVerification
@@ -536,25 +449,11 @@ RecursiveVerification::RecursiveVerification(
 }
 
 Iterator RecursiveVerification::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<RecursiveVerificator>(instance_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
+  return IterateErrors(OverInstance(*instance_, true));
 }
 
 const Iterator& RecursiveVerification::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
+  return PastLastError();
 }
 
 // endregion RecursiveVerification

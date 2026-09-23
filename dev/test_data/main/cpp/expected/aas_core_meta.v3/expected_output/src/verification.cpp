@@ -11,6 +11,7 @@
 #pragma warning(push, 0)
 #include <map>
 #include <set>
+#include <vector>
 #pragma warning(pop)
 
 namespace aas_core {
@@ -36,60 +37,6 @@ Error::Error(
 }
 
 // endregion struct Error
-
-// region class AlwaysDoneVerificator
-
-class AlwaysDoneVerificator : public impl::IVerificator {
- public:
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  virtual ~AlwaysDoneVerificator() = default;
-};  // class AlwaysDoneVerificator
-
-void AlwaysDoneVerificator::Start() {
-  // Intentionally empty.
-}
-
-void AlwaysDoneVerificator::Next() {
-  throw std::logic_error(
-    "You want to move an AlwaysDoneVerificator, "
-    "but the verificator is always done, as its name suggests."
-  );
-}
-
-bool AlwaysDoneVerificator::Done() const {
-  return true;
-}
-
-const Error& AlwaysDoneVerificator::Get() const {
-    throw std::logic_error(
-      "You want to get from an AlwaysDoneVerificator, "
-      "but the verificator is always done, as its name suggests."
-    );
-}
-
-Error& AlwaysDoneVerificator::GetMutable() {
-    throw std::logic_error(
-      "You want to get mutable from an AlwaysDoneVerificator, "
-      "but the verificator is always done, as its name suggests."
-    );
-}
-
-long AlwaysDoneVerificator::Index() const {
-  return -1;
-}
-
-std::unique_ptr<impl::IVerificator> AlwaysDoneVerificator::Clone() const {
-  return common::make_unique<AlwaysDoneVerificator>(*this);
-}
-
-// endregion class AlwaysDoneVerificator
 
 // region Verification functions
 
@@ -2294,18656 +2241,5199 @@ bool IsBcp47ForEnglish(
 
 // endregion Verification functions
 
-// region Verification of constrained primitives
+namespace {
 
-namespace constrained_primitive_verificator {
+/**
+ * \brief Enumerate the shapes of the values that we verify.
+ *
+ * A shape tells which checks apply to a value, see \ref ChecksOf.
+ */
+enum class Shape : std::uint32_t {
+  kXmlSerializableString = 0,
+  kNonEmptyXmlSerializableString = 1,
+  kDateTimeUtc = 2,
+  kDuration = 3,
+  kIdentifier = 4,
+  kValueTypeIec61360 = 5,
+  kNameType = 6,
+  kVersionType = 7,
+  kRevisionType = 8,
+  kLabelType = 9,
+  kMessageTopicType = 10,
+  kBcp47LanguageTag = 11,
+  kContentType = 12,
+  kPathType = 13,
+  kQualifierType = 14,
+  kValueDataType = 15,
+  kIdShortType = 16,
+  kExtension = 17,
+  kAdministrativeInformation = 18,
+  kQualifier = 19,
+  kAssetAdministrationShell = 20,
+  kAssetInformation = 21,
+  kSpecificAssetId = 22,
+  kSubmodel = 23,
+  kRelationshipElement = 24,
+  kSubmodelElementList = 25,
+  kSubmodelElementCollection = 26,
+  kProperty = 27,
+  kMultiLanguageProperty = 28,
+  kRange = 29,
+  kReferenceElement = 30,
+  kBlob = 31,
+  kFile = 32,
+  kAnnotatedRelationshipElement = 33,
+  kEntity = 34,
+  kEventPayload = 35,
+  kBasicEventElement = 36,
+  kOperation = 37,
+  kOperationVariable = 38,
+  kCapability = 39,
+  kConceptDescription = 40,
+  kReference = 41,
+  kLangStringNameType = 42,
+  kLangStringTextType = 43,
+  kEnvironment = 44,
+  kValueList = 45,
+  kLangStringPreferredNameTypeIec61360 = 46,
+  kLangStringShortNameTypeIec61360 = 47,
+  kLangStringDefinitionTypeIec61360 = 48,
+  kDataSpecificationIec61360 = 49
+};  // enum class Shape
 
-class OfXmlSerializableString : public impl::IVerificator {
- public:
-  OfXmlSerializableString(
-    const std::wstring& value
-  );
+/**
+ * \brief Represent a single check of a value.
+ *
+ * The checks of a shape are listed in \ref ChecksOf.
+ */
+struct Check {
+  /**
+   * Check that the invariant holds for the value
+   */
+  bool (*holds)(const void* value);
 
-  OfXmlSerializableString(
-    const OfXmlSerializableString& other
-  );
-  OfXmlSerializableString(
-    OfXmlSerializableString&& other
-  );
-  OfXmlSerializableString& operator=(
-    const OfXmlSerializableString& other
-  );
-  OfXmlSerializableString& operator=(
-    OfXmlSerializableString&& other
-  );
+  /**
+   * Human-readable description of the invariant, reported if it does not hold
+   */
+  const wchar_t* message;
+};  // struct Check
 
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
+// region Checks
 
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfXmlSerializableString() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfXmlSerializableString
-
-OfXmlSerializableString::OfXmlSerializableString(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfXmlSerializableString::OfXmlSerializableString(
-  const OfXmlSerializableString& other
+bool XmlSerializableString_0(
+  const void* value
 ) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
 }
 
-OfXmlSerializableString::OfXmlSerializableString(
-  OfXmlSerializableString&& other
+bool NonEmptyXmlSerializableString_0(
+  const void* value
 ) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
 }
 
-OfXmlSerializableString& OfXmlSerializableString::operator=(
-  const OfXmlSerializableString& other
+bool NonEmptyXmlSerializableString_1(
+  const void* value
 ) {
-  return *this = OfXmlSerializableString(other);
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
 }
 
-OfXmlSerializableString& OfXmlSerializableString::operator=(
-  OfXmlSerializableString&& other
+bool DateTimeUtc_0(
+  const void* value
 ) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXsDateTimeUtc(
+    that
+  );
 }
 
-void OfXmlSerializableString::Start() {
-  state_ = 0;
-  Execute();
+bool DateTimeUtc_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return IsXsDateTimeUtc(
+    that
+  );
 }
 
-void OfXmlSerializableString::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfXmlSerializableString, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
+bool Duration_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXsDuration(
+    that
+  );
 }
 
-bool OfXmlSerializableString::Done() const {
-  return done_;
+bool Identifier_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
 }
 
-const Error& OfXmlSerializableString::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfXmlSerializableString, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
+bool Identifier_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
 }
 
-Error& OfXmlSerializableString::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfXmlSerializableString, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
+bool Identifier_2(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() <= 2000;
 }
 
-long OfXmlSerializableString::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfXmlSerializableString, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
+bool ValueTypeIec61360_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
 }
 
-std::unique_ptr<impl::IVerificator> OfXmlSerializableString::Clone() const {
-  return common::make_unique<
-    OfXmlSerializableString
-  >(*this);
+bool ValueTypeIec61360_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
 }
 
-void OfXmlSerializableString::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
+bool ValueTypeIec61360_2(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() <= 2000;
+}
 
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
+bool NameType_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
+}
+
+bool NameType_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
+}
+
+bool NameType_2(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() <= 128;
+}
+
+bool VersionType_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
+}
+
+bool VersionType_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
+}
+
+bool VersionType_2(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesVersionType(
+    that
+  );
+}
+
+bool VersionType_3(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() <= 4;
+}
+
+bool RevisionType_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
+}
+
+bool RevisionType_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
+}
+
+bool RevisionType_2(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesRevisionType(
+    that
+  );
+}
+
+bool RevisionType_3(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() <= 4;
+}
+
+bool LabelType_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
+}
+
+bool LabelType_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
+}
+
+bool LabelType_2(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() <= 64;
+}
+
+bool MessageTopicType_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
+}
+
+bool MessageTopicType_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
+}
+
+bool MessageTopicType_2(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() <= 255;
+}
+
+bool Bcp47LanguageTag_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesBcp47(
+    that
+  );
+}
+
+bool ContentType_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
+}
+
+bool ContentType_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
+}
+
+bool ContentType_2(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() <= 100;
+}
+
+bool ContentType_3(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesMimeType(
+    that
+  );
+}
+
+bool PathType_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
+}
+
+bool PathType_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
+}
+
+bool PathType_2(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() <= 2000;
+}
+
+bool QualifierType_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
+}
+
+bool QualifierType_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
+}
+
+bool QualifierType_2(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() <= 128;
+}
+
+bool ValueDataType_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
+}
+
+bool IdShortType_0(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesXmlSerializableString(
+    that
+  );
+}
+
+bool IdShortType_1(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() >= 1;
+}
+
+bool IdShortType_2(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return that.size() <= 128;
+}
+
+bool IdShortType_3(
+  const void* value
+) {
+  const std::wstring& that = *static_cast<const std::wstring*>(value);
+  return MatchesIdShort(
+    that
+  );
+}
+
+bool Extension_0(
+  const void* value
+) {
+  const types::IExtension* that = (
+    static_cast<const types::IExtension*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool Extension_1(
+  const void* value
+) {
+  const types::IExtension* that = (
+    static_cast<const types::IExtension*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool Extension_2(
+  const void* value
+) {
+  const types::IExtension* that = (
+    static_cast<const types::IExtension*>(value)
+  );
+  return !(that->refers_to().has_value())
+  || ((*(that->refers_to())).size() >= 1);
+}
+
+bool Extension_3(
+  const void* value
+) {
+  const types::IExtension* that = (
+    static_cast<const types::IExtension*>(value)
+  );
+  return !(that->value().has_value())
+  || ValueConsistentWithXsdType(
+    (*(that->value())),
+    that->ValueTypeOrDefault()
+  );
+}
+
+bool AdministrativeInformation_0(
+  const void* value
+) {
+  const types::IAdministrativeInformation* that = (
+    static_cast<const types::IAdministrativeInformation*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool AdministrativeInformation_1(
+  const void* value
+) {
+  const types::IAdministrativeInformation* that = (
+    static_cast<const types::IAdministrativeInformation*>(value)
+  );
+  return !(that->revision().has_value())
+  || (that->version().has_value());
+}
+
+bool Qualifier_0(
+  const void* value
+) {
+  const types::IQualifier* that = (
+    static_cast<const types::IQualifier*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool Qualifier_1(
+  const void* value
+) {
+  const types::IQualifier* that = (
+    static_cast<const types::IQualifier*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool Qualifier_2(
+  const void* value
+) {
+  const types::IQualifier* that = (
+    static_cast<const types::IQualifier*>(value)
+  );
+  return !(that->value().has_value())
+  || ValueConsistentWithXsdType(
+    (*(that->value())),
+    that->value_type()
+  );
+}
+
+bool AssetAdministrationShell_0(
+  const void* value
+) {
+  const types::IAssetAdministrationShell* that = (
+    static_cast<const types::IAssetAdministrationShell*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool AssetAdministrationShell_1(
+  const void* value
+) {
+  const types::IAssetAdministrationShell* that = (
+    static_cast<const types::IAssetAdministrationShell*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool AssetAdministrationShell_2(
+  const void* value
+) {
+  const types::IAssetAdministrationShell* that = (
+    static_cast<const types::IAssetAdministrationShell*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool AssetAdministrationShell_3(
+  const void* value
+) {
+  const types::IAssetAdministrationShell* that = (
+    static_cast<const types::IAssetAdministrationShell*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool AssetAdministrationShell_4(
+  const void* value
+) {
+  const types::IAssetAdministrationShell* that = (
+    static_cast<const types::IAssetAdministrationShell*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool AssetAdministrationShell_5(
+  const void* value
+) {
+  const types::IAssetAdministrationShell* that = (
+    static_cast<const types::IAssetAdministrationShell*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool AssetAdministrationShell_6(
+  const void* value
+) {
+  const types::IAssetAdministrationShell* that = (
+    static_cast<const types::IAssetAdministrationShell*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool AssetAdministrationShell_7(
+  const void* value
+) {
+  const types::IAssetAdministrationShell* that = (
+    static_cast<const types::IAssetAdministrationShell*>(value)
+  );
+  return !(that->submodels().has_value())
+  || ((*(that->submodels())).size() >= 1);
+}
+
+bool AssetAdministrationShell_8(
+  const void* value
+) {
+  const types::IAssetAdministrationShell* that = (
+    static_cast<const types::IAssetAdministrationShell*>(value)
+  );
+  return !(that->derived_from().has_value())
+  || IsModelReferenceTo(
+    (*(that->derived_from())),
+    types::KeyTypes::kAssetAdministrationShell
+  );
+}
+
+bool AssetAdministrationShell_9(
+  const void* value
+) {
+  const types::IAssetAdministrationShell* that = (
+    static_cast<const types::IAssetAdministrationShell*>(value)
+  );
+  return !(that->submodels().has_value())
+  || common::All(
+    [&](const std::shared_ptr<types::IReference>& reference) -> bool {
+      return IsModelReferenceTo(
+        reference,
+        types::KeyTypes::kSubmodel
+      );
+    },
+    (*(that->submodels()))
+  );
+}
+
+bool AssetInformation_0(
+  const void* value
+) {
+  const types::IAssetInformation* that = (
+    static_cast<const types::IAssetInformation*>(value)
+  );
+  return !(that->specific_asset_ids().has_value())
+  || common::All(
+    [&](const std::shared_ptr<types::ISpecificAssetId>& specific_asset_id) -> bool {
+      return (
+        specific_asset_id->name() != L"globalAssetId"
+        || (
+          (
+            (that->global_asset_id().has_value())
+            && specific_asset_id->name() == L"globalAssetId"
+            && specific_asset_id->value() == (*(that->global_asset_id()))
           )
-        ) {
-          state_ = 1;
-          continue;
-        }
+        )
+      );
+    },
+    (*(that->specific_asset_ids()))
+  );
+}
 
-        error_ = common::make_unique<Error>(
+bool AssetInformation_1(
+  const void* value
+) {
+  const types::IAssetInformation* that = (
+    static_cast<const types::IAssetInformation*>(value)
+  );
+  return (
+    (
+      (
+        (that->global_asset_id().has_value())
+        || (that->specific_asset_ids().has_value())
+      )
+    )
+    && (
+      !(that->specific_asset_ids().has_value())
+      || ((*(that->specific_asset_ids())).size() >= 1)
+    )
+  );
+}
+
+bool AssetInformation_2(
+  const void* value
+) {
+  const types::IAssetInformation* that = (
+    static_cast<const types::IAssetInformation*>(value)
+  );
+  return !(that->specific_asset_ids().has_value())
+  || ((*(that->specific_asset_ids())).size() >= 1);
+}
+
+bool SpecificAssetId_0(
+  const void* value
+) {
+  const types::ISpecificAssetId* that = (
+    static_cast<const types::ISpecificAssetId*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool SpecificAssetId_1(
+  const void* value
+) {
+  const types::ISpecificAssetId* that = (
+    static_cast<const types::ISpecificAssetId*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool SpecificAssetId_2(
+  const void* value
+) {
+  const types::ISpecificAssetId* that = (
+    static_cast<const types::ISpecificAssetId*>(value)
+  );
+  return !(that->external_subject_id().has_value())
+  || ((*(that->external_subject_id()))->type() == types::ReferenceTypes::kExternalReference);
+}
+
+bool Submodel_0(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool Submodel_1(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool Submodel_2(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool Submodel_3(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool Submodel_4(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool Submodel_5(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool Submodel_6(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool Submodel_7(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool Submodel_8(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool Submodel_9(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool Submodel_10(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool Submodel_11(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->submodel_elements().has_value())
+  || ((*(that->submodel_elements())).size() >= 1);
+}
+
+bool Submodel_12(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->submodel_elements().has_value())
+  || common::All(
+    [&](const std::shared_ptr<types::ISubmodelElement>& item) -> bool {
+      return item->id_short().has_value();
+    },
+    (*(that->submodel_elements()))
+  );
+}
+
+bool Submodel_13(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->submodel_elements().has_value())
+  || IdShortsAreUnique(
+    (*(that->submodel_elements()))
+  );
+}
+
+bool Submodel_14(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->submodel_elements().has_value())
+  || (!(that->KindOrDefault() != types::ModellingKind::kTemplate)
+  || common::All(
+    [&](const std::shared_ptr<types::ISubmodelElement>& submodel_element) -> bool {
+      return !(submodel_element->qualifiers().has_value())
+      || common::All(
+        [&](const std::shared_ptr<types::IQualifier>& qualifier) -> bool {
+          return qualifier->KindOrDefault() != types::QualifierKind::kTemplateQualifier;
+        },
+        (*(submodel_element->qualifiers()))
+      );
+    },
+    (*(that->submodel_elements()))
+  ));
+}
+
+bool Submodel_15(
+  const void* value
+) {
+  const types::ISubmodel* that = (
+    static_cast<const types::ISubmodel*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || (!common::Some(
+    [&](const std::shared_ptr<types::IQualifier>& qualifier) -> bool {
+      return qualifier->KindOrDefault() == types::QualifierKind::kTemplateQualifier;
+    },
+    (*(that->qualifiers()))
+  )
+  || (that->KindOrDefault() == types::ModellingKind::kTemplate));
+}
+
+bool RelationshipElement_0(
+  const void* value
+) {
+  const types::IRelationshipElement* that = (
+    static_cast<const types::IRelationshipElement*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool RelationshipElement_1(
+  const void* value
+) {
+  const types::IRelationshipElement* that = (
+    static_cast<const types::IRelationshipElement*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool RelationshipElement_2(
+  const void* value
+) {
+  const types::IRelationshipElement* that = (
+    static_cast<const types::IRelationshipElement*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool RelationshipElement_3(
+  const void* value
+) {
+  const types::IRelationshipElement* that = (
+    static_cast<const types::IRelationshipElement*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool RelationshipElement_4(
+  const void* value
+) {
+  const types::IRelationshipElement* that = (
+    static_cast<const types::IRelationshipElement*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool RelationshipElement_5(
+  const void* value
+) {
+  const types::IRelationshipElement* that = (
+    static_cast<const types::IRelationshipElement*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool RelationshipElement_6(
+  const void* value
+) {
+  const types::IRelationshipElement* that = (
+    static_cast<const types::IRelationshipElement*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool RelationshipElement_7(
+  const void* value
+) {
+  const types::IRelationshipElement* that = (
+    static_cast<const types::IRelationshipElement*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool RelationshipElement_8(
+  const void* value
+) {
+  const types::IRelationshipElement* that = (
+    static_cast<const types::IRelationshipElement*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool RelationshipElement_9(
+  const void* value
+) {
+  const types::IRelationshipElement* that = (
+    static_cast<const types::IRelationshipElement*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool RelationshipElement_10(
+  const void* value
+) {
+  const types::IRelationshipElement* that = (
+    static_cast<const types::IRelationshipElement*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool SubmodelElementList_0(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool SubmodelElementList_1(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool SubmodelElementList_2(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool SubmodelElementList_3(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool SubmodelElementList_4(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool SubmodelElementList_5(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool SubmodelElementList_6(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool SubmodelElementList_7(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool SubmodelElementList_8(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool SubmodelElementList_9(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool SubmodelElementList_10(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool SubmodelElementList_11(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->value().has_value())
+  || ((*(that->value())).size() >= 1);
+}
+
+bool SubmodelElementList_12(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !((
+    (that->value().has_value())
+    && (that->semantic_id_list_element().has_value())
+  ))
+  || common::All(
+    [&](const std::shared_ptr<types::ISubmodelElement>& child) -> bool {
+      return !(child->semantic_id().has_value())
+      || ReferenceKeyValuesEqual(
+        (*(child->semantic_id())),
+        (*(that->semantic_id_list_element()))
+      );
+    },
+    (*(that->value()))
+  );
+}
+
+bool SubmodelElementList_13(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->value().has_value())
+  || SubmodelElementsHaveIdenticalSemanticIds(
+    (*(that->value()))
+  );
+}
+
+bool SubmodelElementList_14(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->value().has_value())
+  || common::All(
+    [&](const std::shared_ptr<types::ISubmodelElement>& element) -> bool {
+      return SubmodelElementIsOfType(
+        element,
+        that->type_value_list_element()
+      );
+    },
+    (*(that->value()))
+  );
+}
+
+bool SubmodelElementList_15(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !((
+    that->type_value_list_element() == types::AasSubmodelElements::kProperty
+    || that->type_value_list_element() == types::AasSubmodelElements::kRange
+  ))
+  || ((
+    (that->value_type_list_element().has_value())
+    && (
+      (
+        (!(that->value().has_value()))
+        || PropertiesOrRangesHaveValueType(
+          (*(that->value())),
+          (*(that->value_type_list_element()))
+        )
+      )
+    )
+  ));
+}
+
+bool SubmodelElementList_16(
+  const void* value
+) {
+  const types::ISubmodelElementList* that = (
+    static_cast<const types::ISubmodelElementList*>(value)
+  );
+  return !(that->value().has_value())
+  || common::All(
+    [&](const std::shared_ptr<types::ISubmodelElement>& element) -> bool {
+      return !(element->id_short().has_value());
+    },
+    (*(that->value()))
+  );
+}
+
+bool SubmodelElementCollection_0(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool SubmodelElementCollection_1(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool SubmodelElementCollection_2(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool SubmodelElementCollection_3(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool SubmodelElementCollection_4(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool SubmodelElementCollection_5(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool SubmodelElementCollection_6(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool SubmodelElementCollection_7(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool SubmodelElementCollection_8(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool SubmodelElementCollection_9(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool SubmodelElementCollection_10(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool SubmodelElementCollection_11(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->value().has_value())
+  || ((*(that->value())).size() >= 1);
+}
+
+bool SubmodelElementCollection_12(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->value().has_value())
+  || common::All(
+    [&](const std::shared_ptr<types::ISubmodelElement>& item) -> bool {
+      return item->id_short().has_value();
+    },
+    (*(that->value()))
+  );
+}
+
+bool SubmodelElementCollection_13(
+  const void* value
+) {
+  const types::ISubmodelElementCollection* that = (
+    static_cast<const types::ISubmodelElementCollection*>(value)
+  );
+  return !(that->value().has_value())
+  || IdShortsAreUnique(
+    (*(that->value()))
+  );
+}
+
+bool Property_0(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool Property_1(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool Property_2(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool Property_3(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool Property_4(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool Property_5(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool Property_6(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool Property_7(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool Property_8(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool Property_9(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool Property_10(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool Property_11(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->category().has_value())
+  || common::Contains(
+    constants::kValidCategoriesForDataElement,
+    (*(that->category()))
+  );
+}
+
+bool Property_12(
+  const void* value
+) {
+  const types::IProperty* that = (
+    static_cast<const types::IProperty*>(value)
+  );
+  return !(that->value().has_value())
+  || ValueConsistentWithXsdType(
+    (*(that->value())),
+    that->value_type()
+  );
+}
+
+bool MultiLanguageProperty_0(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool MultiLanguageProperty_1(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool MultiLanguageProperty_2(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool MultiLanguageProperty_3(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool MultiLanguageProperty_4(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool MultiLanguageProperty_5(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool MultiLanguageProperty_6(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool MultiLanguageProperty_7(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool MultiLanguageProperty_8(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool MultiLanguageProperty_9(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool MultiLanguageProperty_10(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool MultiLanguageProperty_11(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->category().has_value())
+  || common::Contains(
+    constants::kValidCategoriesForDataElement,
+    (*(that->category()))
+  );
+}
+
+bool MultiLanguageProperty_12(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->value().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->value()))
+  );
+}
+
+bool MultiLanguageProperty_13(
+  const void* value
+) {
+  const types::IMultiLanguageProperty* that = (
+    static_cast<const types::IMultiLanguageProperty*>(value)
+  );
+  return !(that->value().has_value())
+  || ((*(that->value())).size() >= 1);
+}
+
+bool Range_0(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool Range_1(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool Range_2(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool Range_3(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool Range_4(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool Range_5(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool Range_6(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool Range_7(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool Range_8(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool Range_9(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool Range_10(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool Range_11(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->category().has_value())
+  || common::Contains(
+    constants::kValidCategoriesForDataElement,
+    (*(that->category()))
+  );
+}
+
+bool Range_12(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->max().has_value())
+  || ValueConsistentWithXsdType(
+    (*(that->max())),
+    that->value_type()
+  );
+}
+
+bool Range_13(
+  const void* value
+) {
+  const types::IRange* that = (
+    static_cast<const types::IRange*>(value)
+  );
+  return !(that->min().has_value())
+  || ValueConsistentWithXsdType(
+    (*(that->min())),
+    that->value_type()
+  );
+}
+
+bool ReferenceElement_0(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool ReferenceElement_1(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool ReferenceElement_2(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool ReferenceElement_3(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool ReferenceElement_4(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool ReferenceElement_5(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool ReferenceElement_6(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool ReferenceElement_7(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool ReferenceElement_8(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool ReferenceElement_9(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool ReferenceElement_10(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool ReferenceElement_11(
+  const void* value
+) {
+  const types::IReferenceElement* that = (
+    static_cast<const types::IReferenceElement*>(value)
+  );
+  return !(that->category().has_value())
+  || common::Contains(
+    constants::kValidCategoriesForDataElement,
+    (*(that->category()))
+  );
+}
+
+bool Blob_0(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool Blob_1(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool Blob_2(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool Blob_3(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool Blob_4(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool Blob_5(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool Blob_6(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool Blob_7(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool Blob_8(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool Blob_9(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool Blob_10(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool Blob_11(
+  const void* value
+) {
+  const types::IBlob* that = (
+    static_cast<const types::IBlob*>(value)
+  );
+  return !(that->category().has_value())
+  || common::Contains(
+    constants::kValidCategoriesForDataElement,
+    (*(that->category()))
+  );
+}
+
+bool File_0(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool File_1(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool File_2(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool File_3(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool File_4(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool File_5(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool File_6(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool File_7(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool File_8(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool File_9(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool File_10(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool File_11(
+  const void* value
+) {
+  const types::IFile* that = (
+    static_cast<const types::IFile*>(value)
+  );
+  return !(that->category().has_value())
+  || common::Contains(
+    constants::kValidCategoriesForDataElement,
+    (*(that->category()))
+  );
+}
+
+bool AnnotatedRelationshipElement_0(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool AnnotatedRelationshipElement_1(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool AnnotatedRelationshipElement_2(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool AnnotatedRelationshipElement_3(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool AnnotatedRelationshipElement_4(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool AnnotatedRelationshipElement_5(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool AnnotatedRelationshipElement_6(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool AnnotatedRelationshipElement_7(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool AnnotatedRelationshipElement_8(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool AnnotatedRelationshipElement_9(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool AnnotatedRelationshipElement_10(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool AnnotatedRelationshipElement_11(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->annotations().has_value())
+  || ((*(that->annotations())).size() >= 1);
+}
+
+bool AnnotatedRelationshipElement_12(
+  const void* value
+) {
+  const types::IAnnotatedRelationshipElement* that = (
+    static_cast<const types::IAnnotatedRelationshipElement*>(value)
+  );
+  return !(that->annotations().has_value())
+  || common::All(
+    [&](const std::shared_ptr<types::IDataElement>& item) -> bool {
+      return item->id_short().has_value();
+    },
+    (*(that->annotations()))
+  );
+}
+
+bool Entity_0(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool Entity_1(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool Entity_2(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool Entity_3(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool Entity_4(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool Entity_5(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool Entity_6(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool Entity_7(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool Entity_8(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool Entity_9(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool Entity_10(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool Entity_11(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->statements().has_value())
+  || ((*(that->statements())).size() >= 1);
+}
+
+bool Entity_12(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->statements().has_value())
+  || common::All(
+    [&](const std::shared_ptr<types::ISubmodelElement>& item) -> bool {
+      return item->id_short().has_value();
+    },
+    (*(that->statements()))
+  );
+}
+
+bool Entity_13(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return (
+    (
+      (
+        that->entity_type() == types::EntityType::kSelfManagedEntity
+        && (
+          (
+            (
+              (
+                (that->global_asset_id().has_value())
+                && (!(that->specific_asset_ids().has_value()))
+              )
+            )
+            || (
+              (
+                (!(that->global_asset_id().has_value()))
+                && (that->specific_asset_ids().has_value())
+                && (*(that->specific_asset_ids())).size() >= 1
+              )
+            )
+          )
+        )
+      )
+    )
+    || (
+      (
+        that->entity_type() != types::EntityType::kSelfManagedEntity
+        && (!(that->global_asset_id().has_value()))
+        && (!(that->specific_asset_ids().has_value()))
+      )
+    )
+  );
+}
+
+bool Entity_14(
+  const void* value
+) {
+  const types::IEntity* that = (
+    static_cast<const types::IEntity*>(value)
+  );
+  return !(that->specific_asset_ids().has_value())
+  || ((*(that->specific_asset_ids())).size() >= 1);
+}
+
+bool EventPayload_0(
+  const void* value
+) {
+  const types::IEventPayload* that = (
+    static_cast<const types::IEventPayload*>(value)
+  );
+  return (
+    IsModelReferenceTo(
+      that->source(),
+      types::KeyTypes::kEventElement
+    )
+    || IsModelReferenceTo(
+      that->source(),
+      types::KeyTypes::kBasicEventElement
+    )
+  );
+}
+
+bool EventPayload_1(
+  const void* value
+) {
+  const types::IEventPayload* that = (
+    static_cast<const types::IEventPayload*>(value)
+  );
+  return IsModelReferenceToReferable(
+    that->observable_reference()
+  );
+}
+
+bool BasicEventElement_0(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool BasicEventElement_1(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool BasicEventElement_2(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool BasicEventElement_3(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool BasicEventElement_4(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool BasicEventElement_5(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool BasicEventElement_6(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool BasicEventElement_7(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool BasicEventElement_8(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool BasicEventElement_9(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool BasicEventElement_10(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool BasicEventElement_11(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->direction() == types::Direction::kInput)
+  || (!(that->max_interval().has_value()));
+}
+
+bool BasicEventElement_12(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return IsModelReferenceToReferable(
+    that->observed()
+  );
+}
+
+bool BasicEventElement_13(
+  const void* value
+) {
+  const types::IBasicEventElement* that = (
+    static_cast<const types::IBasicEventElement*>(value)
+  );
+  return !(that->message_broker().has_value())
+  || IsModelReferenceToReferable(
+    (*(that->message_broker()))
+  );
+}
+
+bool Operation_0(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool Operation_1(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool Operation_2(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool Operation_3(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool Operation_4(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool Operation_5(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool Operation_6(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool Operation_7(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool Operation_8(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool Operation_9(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool Operation_10(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool Operation_11(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return IdShortsOfVariablesAreUnique(
+    that->input_variables(),
+    that->output_variables(),
+    that->inoutput_variables()
+  );
+}
+
+bool Operation_12(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->input_variables().has_value())
+  || ((*(that->input_variables())).size() >= 1);
+}
+
+bool Operation_13(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->output_variables().has_value())
+  || ((*(that->output_variables())).size() >= 1);
+}
+
+bool Operation_14(
+  const void* value
+) {
+  const types::IOperation* that = (
+    static_cast<const types::IOperation*>(value)
+  );
+  return !(that->inoutput_variables().has_value())
+  || ((*(that->inoutput_variables())).size() >= 1);
+}
+
+bool OperationVariable_0(
+  const void* value
+) {
+  const types::IOperationVariable* that = (
+    static_cast<const types::IOperationVariable*>(value)
+  );
+  return that->value()->id_short().has_value();
+}
+
+bool Capability_0(
+  const void* value
+) {
+  const types::ICapability* that = (
+    static_cast<const types::ICapability*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool Capability_1(
+  const void* value
+) {
+  const types::ICapability* that = (
+    static_cast<const types::ICapability*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool Capability_2(
+  const void* value
+) {
+  const types::ICapability* that = (
+    static_cast<const types::ICapability*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool Capability_3(
+  const void* value
+) {
+  const types::ICapability* that = (
+    static_cast<const types::ICapability*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool Capability_4(
+  const void* value
+) {
+  const types::ICapability* that = (
+    static_cast<const types::ICapability*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool Capability_5(
+  const void* value
+) {
+  const types::ICapability* that = (
+    static_cast<const types::ICapability*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool Capability_6(
+  const void* value
+) {
+  const types::ICapability* that = (
+    static_cast<const types::ICapability*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || ((*(that->supplemental_semantic_ids())).size() >= 1);
+}
+
+bool Capability_7(
+  const void* value
+) {
+  const types::ICapability* that = (
+    static_cast<const types::ICapability*>(value)
+  );
+  return !(that->supplemental_semantic_ids().has_value())
+  || (that->semantic_id().has_value());
+}
+
+bool Capability_8(
+  const void* value
+) {
+  const types::ICapability* that = (
+    static_cast<const types::ICapability*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || ((*(that->qualifiers())).size() >= 1);
+}
+
+bool Capability_9(
+  const void* value
+) {
+  const types::ICapability* that = (
+    static_cast<const types::ICapability*>(value)
+  );
+  return !(that->qualifiers().has_value())
+  || QualifierTypesAreUnique(
+    (*(that->qualifiers()))
+  );
+}
+
+bool Capability_10(
+  const void* value
+) {
+  const types::ICapability* that = (
+    static_cast<const types::ICapability*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool ConceptDescription_0(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ((*(that->extensions())).size() >= 1);
+}
+
+bool ConceptDescription_1(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !(that->extensions().has_value())
+  || ExtensionNamesAreUnique(
+    (*(that->extensions()))
+  );
+}
+
+bool ConceptDescription_2(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !(that->description().has_value())
+  || ((*(that->description())).size() >= 1);
+}
+
+bool ConceptDescription_3(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !(that->description().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->description()))
+  );
+}
+
+bool ConceptDescription_4(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !(that->display_name().has_value())
+  || ((*(that->display_name())).size() >= 1);
+}
+
+bool ConceptDescription_5(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !(that->display_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->display_name()))
+  );
+}
+
+bool ConceptDescription_6(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((*(that->embedded_data_specifications())).size() >= 1);
+}
+
+bool ConceptDescription_7(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !(that->is_case_of().has_value())
+  || ((*(that->is_case_of())).size() >= 1);
+}
+
+bool ConceptDescription_8(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !(that->embedded_data_specifications().has_value())
+  || ((
+    DataSpecificationIec61360sHaveDefinitionAtLeastInEnglish(
+      (*(that->embedded_data_specifications()))
+    )
+    || DataSpecificationIec61360sHaveValue(
+      (*(that->embedded_data_specifications()))
+    )
+  ));
+}
+
+bool ConceptDescription_9(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !((
+    (that->category().has_value())
+    && (*(that->category())) == L"QUALIFIER_TYPE"
+    && (that->embedded_data_specifications().has_value())
+  ))
+  || DataSpecificationIec61360sHaveDataType(
+    (*(that->embedded_data_specifications()))
+  );
+}
+
+bool ConceptDescription_10(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !((
+    (that->category().has_value())
+    && (*(that->category())) == L"DOCUMENT"
+    && (that->embedded_data_specifications().has_value())
+  ))
+  || DataSpecificationIec61360sForDocumentHaveAppropriateDataType(
+    (*(that->embedded_data_specifications()))
+  );
+}
+
+bool ConceptDescription_11(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !((
+    (that->category().has_value())
+    && (*(that->category())) == L"REFERENCE"
+    && (that->embedded_data_specifications().has_value())
+  ))
+  || DataSpecificationIec61360sForReferenceHaveAppropriateDataType(
+    (*(that->embedded_data_specifications()))
+  );
+}
+
+bool ConceptDescription_12(
+  const void* value
+) {
+  const types::IConceptDescription* that = (
+    static_cast<const types::IConceptDescription*>(value)
+  );
+  return !((
+    (that->category().has_value())
+    && (
+      (
+        (*(that->category())) == L"PROPERTY"
+        || (*(that->category())) == L"VALUE"
+      )
+    )
+    && (that->embedded_data_specifications().has_value())
+  ))
+  || DataSpecificationIec61360sForPropertyOrValueHaveAppropriateDataType(
+    (*(that->embedded_data_specifications()))
+  );
+}
+
+bool Reference_0(
+  const void* value
+) {
+  const types::IReference* that = (
+    static_cast<const types::IReference*>(value)
+  );
+  return that->keys().size() >= 1;
+}
+
+bool Reference_1(
+  const void* value
+) {
+  const types::IReference* that = (
+    static_cast<const types::IReference*>(value)
+  );
+  return !(that->keys().size() >= 1)
+  || common::Contains(
+    constants::kGloballyIdentifiables,
+    that->keys().at(0)->type()
+  );
+}
+
+bool Reference_2(
+  const void* value
+) {
+  const types::IReference* that = (
+    static_cast<const types::IReference*>(value)
+  );
+  return !((
+    that->type() == types::ReferenceTypes::kExternalReference
+    && that->keys().size() >= 1
+  ))
+  || common::Contains(
+    constants::kGenericGloballyIdentifiables,
+    that->keys().at(0)->type()
+  );
+}
+
+bool Reference_3(
+  const void* value
+) {
+  const types::IReference* that = (
+    static_cast<const types::IReference*>(value)
+  );
+  return !((
+    that->type() == types::ReferenceTypes::kModelReference
+    && that->keys().size() >= 1
+  ))
+  || common::Contains(
+    constants::kAasIdentifiables,
+    that->keys().at(0)->type()
+  );
+}
+
+bool Reference_4(
+  const void* value
+) {
+  const types::IReference* that = (
+    static_cast<const types::IReference*>(value)
+  );
+  return !((
+    that->type() == types::ReferenceTypes::kExternalReference
+    && that->keys().size() >= 1
+  ))
+  || ((
+    common::Contains(
+      constants::kGenericGloballyIdentifiables,
+      that->keys().back()->type()
+    )
+    || common::Contains(
+      constants::kGenericFragmentKeys,
+      that->keys().back()->type()
+    )
+  ));
+}
+
+bool Reference_5(
+  const void* value
+) {
+  const types::IReference* that = (
+    static_cast<const types::IReference*>(value)
+  );
+  return !((
+    that->type() == types::ReferenceTypes::kModelReference
+    && that->keys().size() > 1
+  ))
+  || common::AllRange(
+    [&](size_t i) -> bool {
+      return common::Contains(
+        constants::kFragmentKeys,
+        that->keys().at(i)->type()
+      );
+    },
+    1,
+    that->keys().size()
+  );
+}
+
+bool Reference_6(
+  const void* value
+) {
+  const types::IReference* that = (
+    static_cast<const types::IReference*>(value)
+  );
+  return !((
+    that->type() == types::ReferenceTypes::kModelReference
+    && that->keys().size() > 1
+  ))
+  || common::AllRange(
+    [&](size_t i) -> bool {
+      return !common::Contains(
+        constants::kGenericFragmentKeys,
+        that->keys().at(i)->type()
+      );
+    },
+    0,
+    that->keys().size() - (1)
+  );
+}
+
+bool Reference_7(
+  const void* value
+) {
+  const types::IReference* that = (
+    static_cast<const types::IReference*>(value)
+  );
+  return !((
+    that->type() == types::ReferenceTypes::kModelReference
+    && that->keys().size() > 1
+    && that->keys().back()->type() == types::KeyTypes::kFragmentReference
+  ))
+  || ((
+    that->keys().at(that->keys().size() - 2)->type() == types::KeyTypes::kFile
+    || that->keys().at(that->keys().size() - 2)->type() == types::KeyTypes::kBlob
+  ));
+}
+
+bool Reference_8(
+  const void* value
+) {
+  const types::IReference* that = (
+    static_cast<const types::IReference*>(value)
+  );
+  return !((
+    that->type() == types::ReferenceTypes::kModelReference
+    && that->keys().size() > 2
+  ))
+  || common::AllRange(
+    [&](size_t i) -> bool {
+      return !(that->keys().at(i)->type() == types::KeyTypes::kSubmodelElementList)
+      || MatchesXsNonNegativeInteger(
+        that->keys().at(i + (1))->value()
+      );
+    },
+    0,
+    that->keys().size() - (1)
+  );
+}
+
+bool LangStringNameType_0(
+  const void* value
+) {
+  const types::ILangStringNameType* that = (
+    static_cast<const types::ILangStringNameType*>(value)
+  );
+  return that->text().size() <= 128;
+}
+
+bool LangStringTextType_0(
+  const void* value
+) {
+  const types::ILangStringTextType* that = (
+    static_cast<const types::ILangStringTextType*>(value)
+  );
+  return that->text().size() <= 1023;
+}
+
+bool Environment_0(
+  const void* value
+) {
+  const types::IEnvironment* that = (
+    static_cast<const types::IEnvironment*>(value)
+  );
+  return !(that->concept_descriptions().has_value())
+  || ((*(that->concept_descriptions())).size() >= 1);
+}
+
+bool Environment_1(
+  const void* value
+) {
+  const types::IEnvironment* that = (
+    static_cast<const types::IEnvironment*>(value)
+  );
+  return !(that->submodels().has_value())
+  || ((*(that->submodels())).size() >= 1);
+}
+
+bool Environment_2(
+  const void* value
+) {
+  const types::IEnvironment* that = (
+    static_cast<const types::IEnvironment*>(value)
+  );
+  return !(that->asset_administration_shells().has_value())
+  || ((*(that->asset_administration_shells())).size() >= 1);
+}
+
+bool ValueList_0(
+  const void* value
+) {
+  const types::IValueList* that = (
+    static_cast<const types::IValueList*>(value)
+  );
+  return that->value_reference_pairs().size() >= 1;
+}
+
+bool LangStringPreferredNameTypeIec61360_0(
+  const void* value
+) {
+  const types::ILangStringPreferredNameTypeIec61360* that = (
+    static_cast<const types::ILangStringPreferredNameTypeIec61360*>(value)
+  );
+  return that->text().size() <= 255;
+}
+
+bool LangStringShortNameTypeIec61360_0(
+  const void* value
+) {
+  const types::ILangStringShortNameTypeIec61360* that = (
+    static_cast<const types::ILangStringShortNameTypeIec61360*>(value)
+  );
+  return that->text().size() <= 18;
+}
+
+bool LangStringDefinitionTypeIec61360_0(
+  const void* value
+) {
+  const types::ILangStringDefinitionTypeIec61360* that = (
+    static_cast<const types::ILangStringDefinitionTypeIec61360*>(value)
+  );
+  return that->text().size() <= 1023;
+}
+
+bool DataSpecificationIec61360_0(
+  const void* value
+) {
+  const types::IDataSpecificationIec61360* that = (
+    static_cast<const types::IDataSpecificationIec61360*>(value)
+  );
+  return !((
+    (that->value().has_value())
+    && (that->value_list().has_value())
+  ));
+}
+
+bool DataSpecificationIec61360_1(
+  const void* value
+) {
+  const types::IDataSpecificationIec61360* that = (
+    static_cast<const types::IDataSpecificationIec61360*>(value)
+  );
+  return !((
+    (that->data_type().has_value())
+    && common::Contains(
+      constants::kIec61360DataTypesWithUnit,
+      (*(that->data_type()))
+    )
+  ))
+  || ((
+    (that->unit().has_value())
+    || (that->unit_id().has_value())
+  ));
+}
+
+bool DataSpecificationIec61360_2(
+  const void* value
+) {
+  const types::IDataSpecificationIec61360* that = (
+    static_cast<const types::IDataSpecificationIec61360*>(value)
+  );
+  return !(that->definition().has_value())
+  || ((*(that->definition())).size() >= 1);
+}
+
+bool DataSpecificationIec61360_3(
+  const void* value
+) {
+  const types::IDataSpecificationIec61360* that = (
+    static_cast<const types::IDataSpecificationIec61360*>(value)
+  );
+  return !(that->definition().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->definition()))
+  );
+}
+
+bool DataSpecificationIec61360_4(
+  const void* value
+) {
+  const types::IDataSpecificationIec61360* that = (
+    static_cast<const types::IDataSpecificationIec61360*>(value)
+  );
+  return !(that->short_name().has_value())
+  || ((*(that->short_name())).size() >= 1);
+}
+
+bool DataSpecificationIec61360_5(
+  const void* value
+) {
+  const types::IDataSpecificationIec61360* that = (
+    static_cast<const types::IDataSpecificationIec61360*>(value)
+  );
+  return !(that->short_name().has_value())
+  || LangStringsHaveUniqueLanguages(
+    (*(that->short_name()))
+  );
+}
+
+bool DataSpecificationIec61360_6(
+  const void* value
+) {
+  const types::IDataSpecificationIec61360* that = (
+    static_cast<const types::IDataSpecificationIec61360*>(value)
+  );
+  return that->preferred_name().size() >= 1;
+}
+
+bool DataSpecificationIec61360_7(
+  const void* value
+) {
+  const types::IDataSpecificationIec61360* that = (
+    static_cast<const types::IDataSpecificationIec61360*>(value)
+  );
+  return LangStringsHaveUniqueLanguages(
+    that->preferred_name()
+  );
+}
+
+bool DataSpecificationIec61360_8(
+  const void* value
+) {
+  const types::IDataSpecificationIec61360* that = (
+    static_cast<const types::IDataSpecificationIec61360*>(value)
+  );
+  return common::Some(
+    [&](const std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>& lang_string) -> bool {
+      return IsBcp47ForEnglish(
+        lang_string->language()
+      );
+    },
+    that->preferred_name()
+  );
+}
+
+/**
+ * Give out the checks of the values of the \p shape.
+ */
+const std::vector<Check>& ChecksOf(Shape shape) {
+  switch (shape) {
+    case Shape::kXmlSerializableString: {
+      static const std::vector<Check> checks = {
+        {
+          &XmlSerializableString_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+        }
+      };
+      return checks;
     }
-  }
-}
-
-class OfNonEmptyXmlSerializableString : public impl::IVerificator {
- public:
-  OfNonEmptyXmlSerializableString(
-    const std::wstring& value
-  );
-
-  OfNonEmptyXmlSerializableString(
-    const OfNonEmptyXmlSerializableString& other
-  );
-  OfNonEmptyXmlSerializableString(
-    OfNonEmptyXmlSerializableString&& other
-  );
-  OfNonEmptyXmlSerializableString& operator=(
-    const OfNonEmptyXmlSerializableString& other
-  );
-  OfNonEmptyXmlSerializableString& operator=(
-    OfNonEmptyXmlSerializableString&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfNonEmptyXmlSerializableString() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfNonEmptyXmlSerializableString
-
-OfNonEmptyXmlSerializableString::OfNonEmptyXmlSerializableString(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfNonEmptyXmlSerializableString::OfNonEmptyXmlSerializableString(
-  const OfNonEmptyXmlSerializableString& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfNonEmptyXmlSerializableString::OfNonEmptyXmlSerializableString(
-  OfNonEmptyXmlSerializableString&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfNonEmptyXmlSerializableString& OfNonEmptyXmlSerializableString::operator=(
-  const OfNonEmptyXmlSerializableString& other
-) {
-  return *this = OfNonEmptyXmlSerializableString(other);
-}
-
-OfNonEmptyXmlSerializableString& OfNonEmptyXmlSerializableString::operator=(
-  OfNonEmptyXmlSerializableString&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfNonEmptyXmlSerializableString::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfNonEmptyXmlSerializableString::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfNonEmptyXmlSerializableString, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfNonEmptyXmlSerializableString::Done() const {
-  return done_;
-}
-
-const Error& OfNonEmptyXmlSerializableString::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfNonEmptyXmlSerializableString, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfNonEmptyXmlSerializableString::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfNonEmptyXmlSerializableString, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfNonEmptyXmlSerializableString::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfNonEmptyXmlSerializableString, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfNonEmptyXmlSerializableString::Clone() const {
-  return common::make_unique<
-    OfNonEmptyXmlSerializableString
-  >(*this);
-}
-
-void OfNonEmptyXmlSerializableString::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kNonEmptyXmlSerializableString: {
+      static const std::vector<Check> checks = {
+        {
+          &NonEmptyXmlSerializableString_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &NonEmptyXmlSerializableString_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 3;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfDateTimeUtc : public impl::IVerificator {
- public:
-  OfDateTimeUtc(
-    const std::wstring& value
-  );
-
-  OfDateTimeUtc(
-    const OfDateTimeUtc& other
-  );
-  OfDateTimeUtc(
-    OfDateTimeUtc&& other
-  );
-  OfDateTimeUtc& operator=(
-    const OfDateTimeUtc& other
-  );
-  OfDateTimeUtc& operator=(
-    OfDateTimeUtc&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfDateTimeUtc() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfDateTimeUtc
-
-OfDateTimeUtc::OfDateTimeUtc(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfDateTimeUtc::OfDateTimeUtc(
-  const OfDateTimeUtc& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfDateTimeUtc::OfDateTimeUtc(
-  OfDateTimeUtc&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfDateTimeUtc& OfDateTimeUtc::operator=(
-  const OfDateTimeUtc& other
-) {
-  return *this = OfDateTimeUtc(other);
-}
-
-OfDateTimeUtc& OfDateTimeUtc::operator=(
-  OfDateTimeUtc&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfDateTimeUtc::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfDateTimeUtc::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfDateTimeUtc, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfDateTimeUtc::Done() const {
-  return done_;
-}
-
-const Error& OfDateTimeUtc::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfDateTimeUtc, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfDateTimeUtc::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfDateTimeUtc, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfDateTimeUtc::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfDateTimeUtc, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfDateTimeUtc::Clone() const {
-  return common::make_unique<
-    OfDateTimeUtc
-  >(*this);
-}
-
-void OfDateTimeUtc::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXsDateTimeUtc(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kDateTimeUtc: {
+      static const std::vector<Check> checks = {
+        {
+          &DateTimeUtc_0,
           L"The value must match the pattern of xs:dateTime with "
           L"the time zone fixed to UTC."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          IsXsDateTimeUtc(
-            (*value_)
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &DateTimeUtc_1,
           L"The value must represent a valid xs:dateTime with the time "
           L"zone fixed to UTC."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 3;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfDuration : public impl::IVerificator {
- public:
-  OfDuration(
-    const std::wstring& value
-  );
-
-  OfDuration(
-    const OfDuration& other
-  );
-  OfDuration(
-    OfDuration&& other
-  );
-  OfDuration& operator=(
-    const OfDuration& other
-  );
-  OfDuration& operator=(
-    OfDuration&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfDuration() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfDuration
-
-OfDuration::OfDuration(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfDuration::OfDuration(
-  const OfDuration& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfDuration::OfDuration(
-  OfDuration&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfDuration& OfDuration::operator=(
-  const OfDuration& other
-) {
-  return *this = OfDuration(other);
-}
-
-OfDuration& OfDuration::operator=(
-  OfDuration&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfDuration::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfDuration::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfDuration, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfDuration::Done() const {
-  return done_;
-}
-
-const Error& OfDuration::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfDuration, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfDuration::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfDuration, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfDuration::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfDuration, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfDuration::Clone() const {
-  return common::make_unique<
-    OfDuration
-  >(*this);
-}
-
-void OfDuration::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXsDuration(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kDuration: {
+      static const std::vector<Check> checks = {
+        {
+          &Duration_0,
           L"The value must match the pattern of xs:duration."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfBlobType : public impl::IVerificator {
- public:
-  OfBlobType(
-    const std::vector<std::uint8_t>& value
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  virtual ~OfBlobType() = default;
-};  // class OfBlobType
-
-OfBlobType::OfBlobType(
-  const std::vector<std::uint8_t>&
-) {
-  // Intentionally empty.
-}
-
-void OfBlobType::Start() {
-  // Intentionally empty.
-}
-
-void OfBlobType::Next() {
-  throw std::logic_error(
-    "You want to move "
-    "a verificator OfBlobType, "
-    "but the verificator is always done as "
-    "there are no invariants defined for this constrained primitive."
-  );
-}
-
-bool OfBlobType::Done() const {
-  return true;
-}
-
-const Error& OfBlobType::Get() const {
-  throw std::logic_error(
-    "You want to get from "
-    "a verificator OfBlobType, "
-    "but the verificator is always done as "
-    "there are no invariants defined for this constrained primitive."
-  );
-}
-
-Error& OfBlobType::GetMutable() {
-  throw std::logic_error(
-    "You want to get mutable from "
-    "a verificator OfBlobType, "
-    "but the verificator is always done as "
-    "there are no invariants defined for this constrained primitive."
-  );
-}
-
-long OfBlobType::Index() const {
-  return -1;
-}
-
-std::unique_ptr<impl::IVerificator> OfBlobType::Clone() const {
-  return common::make_unique<
-    OfBlobType
-  >(*this);
-}
-
-class OfIdentifier : public impl::IVerificator {
- public:
-  OfIdentifier(
-    const std::wstring& value
-  );
-
-  OfIdentifier(
-    const OfIdentifier& other
-  );
-  OfIdentifier(
-    OfIdentifier&& other
-  );
-  OfIdentifier& operator=(
-    const OfIdentifier& other
-  );
-  OfIdentifier& operator=(
-    OfIdentifier&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfIdentifier() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfIdentifier
-
-OfIdentifier::OfIdentifier(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfIdentifier::OfIdentifier(
-  const OfIdentifier& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfIdentifier::OfIdentifier(
-  OfIdentifier&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfIdentifier& OfIdentifier::operator=(
-  const OfIdentifier& other
-) {
-  return *this = OfIdentifier(other);
-}
-
-OfIdentifier& OfIdentifier::operator=(
-  OfIdentifier&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfIdentifier::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfIdentifier::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfIdentifier, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfIdentifier::Done() const {
-  return done_;
-}
-
-const Error& OfIdentifier::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfIdentifier, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfIdentifier::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfIdentifier, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfIdentifier::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfIdentifier, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfIdentifier::Clone() const {
-  return common::make_unique<
-    OfIdentifier
-  >(*this);
-}
-
-void OfIdentifier::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kIdentifier: {
+      static const std::vector<Check> checks = {
+        {
+          &Identifier_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Identifier_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if ((*value_).size() <= 2000) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Identifier_2,
           L"Identifier shall have a maximum length of 2000 characters."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 4;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfValueTypeIec61360 : public impl::IVerificator {
- public:
-  OfValueTypeIec61360(
-    const std::wstring& value
-  );
-
-  OfValueTypeIec61360(
-    const OfValueTypeIec61360& other
-  );
-  OfValueTypeIec61360(
-    OfValueTypeIec61360&& other
-  );
-  OfValueTypeIec61360& operator=(
-    const OfValueTypeIec61360& other
-  );
-  OfValueTypeIec61360& operator=(
-    OfValueTypeIec61360&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfValueTypeIec61360() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfValueTypeIec61360
-
-OfValueTypeIec61360::OfValueTypeIec61360(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfValueTypeIec61360::OfValueTypeIec61360(
-  const OfValueTypeIec61360& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfValueTypeIec61360::OfValueTypeIec61360(
-  OfValueTypeIec61360&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfValueTypeIec61360& OfValueTypeIec61360::operator=(
-  const OfValueTypeIec61360& other
-) {
-  return *this = OfValueTypeIec61360(other);
-}
-
-OfValueTypeIec61360& OfValueTypeIec61360::operator=(
-  OfValueTypeIec61360&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfValueTypeIec61360::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfValueTypeIec61360::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfValueTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfValueTypeIec61360::Done() const {
-  return done_;
-}
-
-const Error& OfValueTypeIec61360::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfValueTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfValueTypeIec61360::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfValueTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfValueTypeIec61360::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfValueTypeIec61360, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfValueTypeIec61360::Clone() const {
-  return common::make_unique<
-    OfValueTypeIec61360
-  >(*this);
-}
-
-void OfValueTypeIec61360::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kValueTypeIec61360: {
+      static const std::vector<Check> checks = {
+        {
+          &ValueTypeIec61360_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ValueTypeIec61360_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if ((*value_).size() <= 2000) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ValueTypeIec61360_2,
           L"Value type IEC 61360 shall have a maximum length of 2000 "
           L"characters."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 4;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfNameType : public impl::IVerificator {
- public:
-  OfNameType(
-    const std::wstring& value
-  );
-
-  OfNameType(
-    const OfNameType& other
-  );
-  OfNameType(
-    OfNameType&& other
-  );
-  OfNameType& operator=(
-    const OfNameType& other
-  );
-  OfNameType& operator=(
-    OfNameType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfNameType() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfNameType
-
-OfNameType::OfNameType(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfNameType::OfNameType(
-  const OfNameType& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfNameType::OfNameType(
-  OfNameType&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfNameType& OfNameType::operator=(
-  const OfNameType& other
-) {
-  return *this = OfNameType(other);
-}
-
-OfNameType& OfNameType::operator=(
-  OfNameType&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfNameType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfNameType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfNameType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfNameType::Done() const {
-  return done_;
-}
-
-const Error& OfNameType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfNameType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfNameType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfNameType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfNameType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfNameType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfNameType::Clone() const {
-  return common::make_unique<
-    OfNameType
-  >(*this);
-}
-
-void OfNameType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kNameType: {
+      static const std::vector<Check> checks = {
+        {
+          &NameType_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &NameType_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if ((*value_).size() <= 128) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &NameType_2,
           L"Name type shall have a maximum length of 128 characters."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 4;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfVersionType : public impl::IVerificator {
- public:
-  OfVersionType(
-    const std::wstring& value
-  );
-
-  OfVersionType(
-    const OfVersionType& other
-  );
-  OfVersionType(
-    OfVersionType&& other
-  );
-  OfVersionType& operator=(
-    const OfVersionType& other
-  );
-  OfVersionType& operator=(
-    OfVersionType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfVersionType() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfVersionType
-
-OfVersionType::OfVersionType(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfVersionType::OfVersionType(
-  const OfVersionType& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfVersionType::OfVersionType(
-  OfVersionType&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfVersionType& OfVersionType::operator=(
-  const OfVersionType& other
-) {
-  return *this = OfVersionType(other);
-}
-
-OfVersionType& OfVersionType::operator=(
-  OfVersionType&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfVersionType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfVersionType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfVersionType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfVersionType::Done() const {
-  return done_;
-}
-
-const Error& OfVersionType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfVersionType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfVersionType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfVersionType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfVersionType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfVersionType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfVersionType::Clone() const {
-  return common::make_unique<
-    OfVersionType
-  >(*this);
-}
-
-void OfVersionType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kVersionType: {
+      static const std::vector<Check> checks = {
+        {
+          &VersionType_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &VersionType_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          MatchesVersionType(
-            (*value_)
-          )
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &VersionType_2,
           L"Version type shall match the version pattern."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if ((*value_).size() <= 4) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &VersionType_3,
           L"Version type shall have a maximum length of 4 characters."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 5;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfRevisionType : public impl::IVerificator {
- public:
-  OfRevisionType(
-    const std::wstring& value
-  );
-
-  OfRevisionType(
-    const OfRevisionType& other
-  );
-  OfRevisionType(
-    OfRevisionType&& other
-  );
-  OfRevisionType& operator=(
-    const OfRevisionType& other
-  );
-  OfRevisionType& operator=(
-    OfRevisionType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfRevisionType() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfRevisionType
-
-OfRevisionType::OfRevisionType(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfRevisionType::OfRevisionType(
-  const OfRevisionType& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfRevisionType::OfRevisionType(
-  OfRevisionType&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfRevisionType& OfRevisionType::operator=(
-  const OfRevisionType& other
-) {
-  return *this = OfRevisionType(other);
-}
-
-OfRevisionType& OfRevisionType::operator=(
-  OfRevisionType&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfRevisionType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfRevisionType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfRevisionType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfRevisionType::Done() const {
-  return done_;
-}
-
-const Error& OfRevisionType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfRevisionType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfRevisionType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfRevisionType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfRevisionType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfRevisionType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfRevisionType::Clone() const {
-  return common::make_unique<
-    OfRevisionType
-  >(*this);
-}
-
-void OfRevisionType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kRevisionType: {
+      static const std::vector<Check> checks = {
+        {
+          &RevisionType_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RevisionType_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          MatchesRevisionType(
-            (*value_)
-          )
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RevisionType_2,
           L"Revision type shall match the revision pattern."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if ((*value_).size() <= 4) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RevisionType_3,
           L"Revision type shall have a maximum length of 4 characters."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 5;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfLabelType : public impl::IVerificator {
- public:
-  OfLabelType(
-    const std::wstring& value
-  );
-
-  OfLabelType(
-    const OfLabelType& other
-  );
-  OfLabelType(
-    OfLabelType&& other
-  );
-  OfLabelType& operator=(
-    const OfLabelType& other
-  );
-  OfLabelType& operator=(
-    OfLabelType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfLabelType() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfLabelType
-
-OfLabelType::OfLabelType(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfLabelType::OfLabelType(
-  const OfLabelType& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfLabelType::OfLabelType(
-  OfLabelType&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfLabelType& OfLabelType::operator=(
-  const OfLabelType& other
-) {
-  return *this = OfLabelType(other);
-}
-
-OfLabelType& OfLabelType::operator=(
-  OfLabelType&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfLabelType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfLabelType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfLabelType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfLabelType::Done() const {
-  return done_;
-}
-
-const Error& OfLabelType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfLabelType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfLabelType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfLabelType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfLabelType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfLabelType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfLabelType::Clone() const {
-  return common::make_unique<
-    OfLabelType
-  >(*this);
-}
-
-void OfLabelType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kLabelType: {
+      static const std::vector<Check> checks = {
+        {
+          &LabelType_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &LabelType_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if ((*value_).size() <= 64) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &LabelType_2,
           L"Label type shall have a maximum length of 64 characters."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 4;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfMessageTopicType : public impl::IVerificator {
- public:
-  OfMessageTopicType(
-    const std::wstring& value
-  );
-
-  OfMessageTopicType(
-    const OfMessageTopicType& other
-  );
-  OfMessageTopicType(
-    OfMessageTopicType&& other
-  );
-  OfMessageTopicType& operator=(
-    const OfMessageTopicType& other
-  );
-  OfMessageTopicType& operator=(
-    OfMessageTopicType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfMessageTopicType() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfMessageTopicType
-
-OfMessageTopicType::OfMessageTopicType(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfMessageTopicType::OfMessageTopicType(
-  const OfMessageTopicType& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfMessageTopicType::OfMessageTopicType(
-  OfMessageTopicType&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfMessageTopicType& OfMessageTopicType::operator=(
-  const OfMessageTopicType& other
-) {
-  return *this = OfMessageTopicType(other);
-}
-
-OfMessageTopicType& OfMessageTopicType::operator=(
-  OfMessageTopicType&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfMessageTopicType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfMessageTopicType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfMessageTopicType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfMessageTopicType::Done() const {
-  return done_;
-}
-
-const Error& OfMessageTopicType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfMessageTopicType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfMessageTopicType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfMessageTopicType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfMessageTopicType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfMessageTopicType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfMessageTopicType::Clone() const {
-  return common::make_unique<
-    OfMessageTopicType
-  >(*this);
-}
-
-void OfMessageTopicType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kMessageTopicType: {
+      static const std::vector<Check> checks = {
+        {
+          &MessageTopicType_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MessageTopicType_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if ((*value_).size() <= 255) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MessageTopicType_2,
           L"Message topic type shall have a maximum length of 255 "
           L"characters."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 4;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfBcp47LanguageTag : public impl::IVerificator {
- public:
-  OfBcp47LanguageTag(
-    const std::wstring& value
-  );
-
-  OfBcp47LanguageTag(
-    const OfBcp47LanguageTag& other
-  );
-  OfBcp47LanguageTag(
-    OfBcp47LanguageTag&& other
-  );
-  OfBcp47LanguageTag& operator=(
-    const OfBcp47LanguageTag& other
-  );
-  OfBcp47LanguageTag& operator=(
-    OfBcp47LanguageTag&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfBcp47LanguageTag() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfBcp47LanguageTag
-
-OfBcp47LanguageTag::OfBcp47LanguageTag(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfBcp47LanguageTag::OfBcp47LanguageTag(
-  const OfBcp47LanguageTag& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfBcp47LanguageTag::OfBcp47LanguageTag(
-  OfBcp47LanguageTag&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfBcp47LanguageTag& OfBcp47LanguageTag::operator=(
-  const OfBcp47LanguageTag& other
-) {
-  return *this = OfBcp47LanguageTag(other);
-}
-
-OfBcp47LanguageTag& OfBcp47LanguageTag::operator=(
-  OfBcp47LanguageTag&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfBcp47LanguageTag::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfBcp47LanguageTag::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfBcp47LanguageTag, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfBcp47LanguageTag::Done() const {
-  return done_;
-}
-
-const Error& OfBcp47LanguageTag::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfBcp47LanguageTag, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfBcp47LanguageTag::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfBcp47LanguageTag, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfBcp47LanguageTag::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfBcp47LanguageTag, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfBcp47LanguageTag::Clone() const {
-  return common::make_unique<
-    OfBcp47LanguageTag
-  >(*this);
-}
-
-void OfBcp47LanguageTag::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesBcp47(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kBcp47LanguageTag: {
+      static const std::vector<Check> checks = {
+        {
+          &Bcp47LanguageTag_0,
           L"The value must represent a value language tag conformant to "
           L"BCP 47."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfContentType : public impl::IVerificator {
- public:
-  OfContentType(
-    const std::wstring& value
-  );
-
-  OfContentType(
-    const OfContentType& other
-  );
-  OfContentType(
-    OfContentType&& other
-  );
-  OfContentType& operator=(
-    const OfContentType& other
-  );
-  OfContentType& operator=(
-    OfContentType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfContentType() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfContentType
-
-OfContentType::OfContentType(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfContentType::OfContentType(
-  const OfContentType& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfContentType::OfContentType(
-  OfContentType&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfContentType& OfContentType::operator=(
-  const OfContentType& other
-) {
-  return *this = OfContentType(other);
-}
-
-OfContentType& OfContentType::operator=(
-  OfContentType&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfContentType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfContentType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfContentType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfContentType::Done() const {
-  return done_;
-}
-
-const Error& OfContentType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfContentType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfContentType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfContentType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfContentType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfContentType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfContentType::Clone() const {
-  return common::make_unique<
-    OfContentType
-  >(*this);
-}
-
-void OfContentType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kContentType: {
+      static const std::vector<Check> checks = {
+        {
+          &ContentType_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ContentType_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if ((*value_).size() <= 100) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ContentType_2,
           L"Content type shall have a maximum length of 100 characters."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          MatchesMimeType(
-            (*value_)
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ContentType_3,
           L"The value must represent a valid content MIME type "
           L"according to RFC 2046."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 5;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfPathType : public impl::IVerificator {
- public:
-  OfPathType(
-    const std::wstring& value
-  );
-
-  OfPathType(
-    const OfPathType& other
-  );
-  OfPathType(
-    OfPathType&& other
-  );
-  OfPathType& operator=(
-    const OfPathType& other
-  );
-  OfPathType& operator=(
-    OfPathType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfPathType() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfPathType
-
-OfPathType::OfPathType(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfPathType::OfPathType(
-  const OfPathType& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfPathType::OfPathType(
-  OfPathType&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfPathType& OfPathType::operator=(
-  const OfPathType& other
-) {
-  return *this = OfPathType(other);
-}
-
-OfPathType& OfPathType::operator=(
-  OfPathType&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfPathType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfPathType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfPathType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfPathType::Done() const {
-  return done_;
-}
-
-const Error& OfPathType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfPathType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfPathType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfPathType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfPathType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfPathType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfPathType::Clone() const {
-  return common::make_unique<
-    OfPathType
-  >(*this);
-}
-
-void OfPathType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kPathType: {
+      static const std::vector<Check> checks = {
+        {
+          &PathType_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &PathType_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if ((*value_).size() <= 2000) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &PathType_2,
           L"Identifier shall have a maximum length of 2000 characters."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 4;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfQualifierType : public impl::IVerificator {
- public:
-  OfQualifierType(
-    const std::wstring& value
-  );
-
-  OfQualifierType(
-    const OfQualifierType& other
-  );
-  OfQualifierType(
-    OfQualifierType&& other
-  );
-  OfQualifierType& operator=(
-    const OfQualifierType& other
-  );
-  OfQualifierType& operator=(
-    OfQualifierType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfQualifierType() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfQualifierType
-
-OfQualifierType::OfQualifierType(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfQualifierType::OfQualifierType(
-  const OfQualifierType& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfQualifierType::OfQualifierType(
-  OfQualifierType&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfQualifierType& OfQualifierType::operator=(
-  const OfQualifierType& other
-) {
-  return *this = OfQualifierType(other);
-}
-
-OfQualifierType& OfQualifierType::operator=(
-  OfQualifierType&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfQualifierType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfQualifierType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfQualifierType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfQualifierType::Done() const {
-  return done_;
-}
-
-const Error& OfQualifierType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfQualifierType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfQualifierType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfQualifierType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfQualifierType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfQualifierType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfQualifierType::Clone() const {
-  return common::make_unique<
-    OfQualifierType
-  >(*this);
-}
-
-void OfQualifierType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kQualifierType: {
+      static const std::vector<Check> checks = {
+        {
+          &QualifierType_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &QualifierType_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if ((*value_).size() <= 128) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &QualifierType_2,
           L"Name type shall have a maximum length of 128 characters."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 4;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfValueDataType : public impl::IVerificator {
- public:
-  OfValueDataType(
-    const std::wstring& value
-  );
-
-  OfValueDataType(
-    const OfValueDataType& other
-  );
-  OfValueDataType(
-    OfValueDataType&& other
-  );
-  OfValueDataType& operator=(
-    const OfValueDataType& other
-  );
-  OfValueDataType& operator=(
-    OfValueDataType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfValueDataType() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfValueDataType
-
-OfValueDataType::OfValueDataType(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfValueDataType::OfValueDataType(
-  const OfValueDataType& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfValueDataType::OfValueDataType(
-  OfValueDataType&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfValueDataType& OfValueDataType::operator=(
-  const OfValueDataType& other
-) {
-  return *this = OfValueDataType(other);
-}
-
-OfValueDataType& OfValueDataType::operator=(
-  OfValueDataType&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfValueDataType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfValueDataType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfValueDataType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfValueDataType::Done() const {
-  return done_;
-}
-
-const Error& OfValueDataType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfValueDataType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfValueDataType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfValueDataType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfValueDataType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfValueDataType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfValueDataType::Clone() const {
-  return common::make_unique<
-    OfValueDataType
-  >(*this);
-}
-
-void OfValueDataType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kValueDataType: {
+      static const std::vector<Check> checks = {
+        {
+          &ValueDataType_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfIdShortType : public impl::IVerificator {
- public:
-  OfIdShortType(
-    const std::wstring& value
-  );
-
-  OfIdShortType(
-    const OfIdShortType& other
-  );
-  OfIdShortType(
-    OfIdShortType&& other
-  );
-  OfIdShortType& operator=(
-    const OfIdShortType& other
-  );
-  OfIdShortType& operator=(
-    OfIdShortType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfIdShortType() override = default;
-
- private:
-  const std::wstring* value_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  bool done_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfIdShortType
-
-OfIdShortType::OfIdShortType(
-  const std::wstring& value
-) : value_(&value) {
-  // Intentionally empty.
-}
-
-OfIdShortType::OfIdShortType(
-  const OfIdShortType& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfIdShortType::OfIdShortType(
-  OfIdShortType&& other
-) {
-  value_ = other.value_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  done_ = other.done_;
-  state_ = other.state_;
-}
-
-OfIdShortType& OfIdShortType::operator=(
-  const OfIdShortType& other
-) {
-  return *this = OfIdShortType(other);
-}
-
-OfIdShortType& OfIdShortType::operator=(
-  OfIdShortType&& other
-) {
-  if (this != &other) {
-    value_ = other.value_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    done_ = other.done_;
-    state_ = other.state_;
-  }
-
-  return *this;
-}
-
-void OfIdShortType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfIdShortType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfIdShortType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfIdShortType::Done() const {
-  return done_;
-}
-
-const Error& OfIdShortType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfIdShortType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfIdShortType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfIdShortType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfIdShortType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfIdShortType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfIdShortType::Clone() const {
-  return common::make_unique<
-    OfIdShortType
-  >(*this);
-}
-
-void OfIdShortType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          MatchesXmlSerializableString(
-            (*value_)
-          )
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kIdShortType: {
+      static const std::vector<Check> checks = {
+        {
+          &IdShortType_0,
           L"Constraint AASd-130: An attribute with data type 'string' "
           L"shall consist of these characters only: "
           L"^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if ((*value_).size() >= 1) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &IdShortType_1,
           L"The value must not be empty."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if ((*value_).size() <= 128) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &IdShortType_2,
           L"Name type shall have a maximum length of 128 characters."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          MatchesIdShort(
-            (*value_)
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &IdShortType_3,
           L"ID-short of Referables shall only feature letters, digits, "
           L"underscore (``_``); starting mandatory with a letter. "
           L"*I.e.* ``[a-zA-Z][a-zA-Z0-9_]*``."
-        );
-        // No path is prepended as the error refers to the value itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 5;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-}  // namespace constrained_primitive_verificator
-
-namespace constrained_primitive_verification {
-
-// region OfXmlSerializableString
-
-class OfXmlSerializableString : public IVerification {
- public:
-  OfXmlSerializableString(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfXmlSerializableString() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfXmlSerializableString::OfXmlSerializableString(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfXmlSerializableString::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfXmlSerializableString
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfXmlSerializableString::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfXmlSerializableString
-
-// region OfNonEmptyXmlSerializableString
-
-class OfNonEmptyXmlSerializableString : public IVerification {
- public:
-  OfNonEmptyXmlSerializableString(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfNonEmptyXmlSerializableString() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfNonEmptyXmlSerializableString::OfNonEmptyXmlSerializableString(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfNonEmptyXmlSerializableString::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfNonEmptyXmlSerializableString
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfNonEmptyXmlSerializableString::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfNonEmptyXmlSerializableString
-
-// region OfDateTimeUtc
-
-class OfDateTimeUtc : public IVerification {
- public:
-  OfDateTimeUtc(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfDateTimeUtc() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfDateTimeUtc::OfDateTimeUtc(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfDateTimeUtc::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfDateTimeUtc
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfDateTimeUtc::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfDateTimeUtc
-
-// region OfDuration
-
-class OfDuration : public IVerification {
- public:
-  OfDuration(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfDuration() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfDuration::OfDuration(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfDuration::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfDuration
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfDuration::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfDuration
-
-// region OfBlobType
-
-class OfBlobType : public IVerification {
- public:
-  OfBlobType(
-    const std::vector<std::uint8_t>& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfBlobType() override = default;
- private:
-  const std::vector<std::uint8_t>& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfBlobType::OfBlobType(
-  const std::vector<std::uint8_t>& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfBlobType::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfBlobType
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfBlobType::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfBlobType
-
-// region OfIdentifier
-
-class OfIdentifier : public IVerification {
- public:
-  OfIdentifier(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfIdentifier() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfIdentifier::OfIdentifier(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfIdentifier::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfIdentifier
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfIdentifier::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfIdentifier
-
-// region OfValueTypeIec61360
-
-class OfValueTypeIec61360 : public IVerification {
- public:
-  OfValueTypeIec61360(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfValueTypeIec61360() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfValueTypeIec61360::OfValueTypeIec61360(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfValueTypeIec61360::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfValueTypeIec61360
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfValueTypeIec61360::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfValueTypeIec61360
-
-// region OfNameType
-
-class OfNameType : public IVerification {
- public:
-  OfNameType(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfNameType() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfNameType::OfNameType(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfNameType::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfNameType
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfNameType::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfNameType
-
-// region OfVersionType
-
-class OfVersionType : public IVerification {
- public:
-  OfVersionType(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfVersionType() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfVersionType::OfVersionType(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfVersionType::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfVersionType
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfVersionType::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfVersionType
-
-// region OfRevisionType
-
-class OfRevisionType : public IVerification {
- public:
-  OfRevisionType(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfRevisionType() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfRevisionType::OfRevisionType(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfRevisionType::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfRevisionType
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfRevisionType::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfRevisionType
-
-// region OfLabelType
-
-class OfLabelType : public IVerification {
- public:
-  OfLabelType(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfLabelType() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfLabelType::OfLabelType(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfLabelType::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfLabelType
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfLabelType::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfLabelType
-
-// region OfMessageTopicType
-
-class OfMessageTopicType : public IVerification {
- public:
-  OfMessageTopicType(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfMessageTopicType() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfMessageTopicType::OfMessageTopicType(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfMessageTopicType::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfMessageTopicType
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfMessageTopicType::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfMessageTopicType
-
-// region OfBcp47LanguageTag
-
-class OfBcp47LanguageTag : public IVerification {
- public:
-  OfBcp47LanguageTag(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfBcp47LanguageTag() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfBcp47LanguageTag::OfBcp47LanguageTag(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfBcp47LanguageTag::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfBcp47LanguageTag
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfBcp47LanguageTag::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfBcp47LanguageTag
-
-// region OfContentType
-
-class OfContentType : public IVerification {
- public:
-  OfContentType(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfContentType() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfContentType::OfContentType(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfContentType::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfContentType
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfContentType::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfContentType
-
-// region OfPathType
-
-class OfPathType : public IVerification {
- public:
-  OfPathType(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfPathType() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfPathType::OfPathType(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfPathType::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfPathType
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfPathType::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfPathType
-
-// region OfQualifierType
-
-class OfQualifierType : public IVerification {
- public:
-  OfQualifierType(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfQualifierType() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfQualifierType::OfQualifierType(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfQualifierType::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfQualifierType
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfQualifierType::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfQualifierType
-
-// region OfValueDataType
-
-class OfValueDataType : public IVerification {
- public:
-  OfValueDataType(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfValueDataType() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfValueDataType::OfValueDataType(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfValueDataType::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfValueDataType
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfValueDataType::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfValueDataType
-
-// region OfIdShortType
-
-class OfIdShortType : public IVerification {
- public:
-  OfIdShortType(
-    const std::wstring& value
-  );
-
-  Iterator begin() const override;
-  const Iterator& end() const override;
-
-  ~OfIdShortType() override = default;
- private:
-  const std::wstring& value_;
-};  // class ConstrainedPrimitiveVerification
-
-OfIdShortType::OfIdShortType(
-  const std::wstring& value
-) : value_(value) {
-  // Intentionally empty.
-}
-
-Iterator OfIdShortType::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<
-      constrained_primitive_verificator::OfIdShortType
-    >(value_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
-}
-
-const Iterator& OfIdShortType::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
-}
-
-// endregion OfIdShortType
-
-}  // namespace constrained_primitive_verification
-
-std::unique_ptr<IVerification> VerifyXmlSerializableString(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfXmlSerializableString
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyNonEmptyXmlSerializableString(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfNonEmptyXmlSerializableString
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyDateTimeUtc(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfDateTimeUtc
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyDuration(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfDuration
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyBlobType(
-  const std::vector<std::uint8_t>& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfBlobType
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyIdentifier(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfIdentifier
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyValueTypeIec61360(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfValueTypeIec61360
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyNameType(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfNameType
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyVersionType(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfVersionType
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyRevisionType(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfRevisionType
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyLabelType(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfLabelType
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyMessageTopicType(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfMessageTopicType
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyBcp47LanguageTag(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfBcp47LanguageTag
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyContentType(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfContentType
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyPathType(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfPathType
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyQualifierType(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfQualifierType
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyValueDataType(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfValueDataType
-  >(that);
-}
-
-std::unique_ptr<IVerification> VerifyIdShortType(
-  const std::wstring& that
-) {
-  return common::make_unique<
-    constrained_primitive_verification::OfIdShortType
-  >(that);
-}
-
-// endregion Verification of constrained primitives
-
-/**
- * Produce a non-recursive verificator of the instance given its runtime model type.
- */
-std::unique_ptr<impl::IVerificator> NewNonRecursiveVerificator(
-  const std::shared_ptr<types::IClass>& instance
-);
-
-// region Non-recursive verificators
-
-namespace non_recursive_verificator {
-
-class OfExtension : public impl::IVerificator {
- public:
-  OfExtension(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfExtension(
-    const OfExtension& other
-  );
-  OfExtension(
-    OfExtension&& other
-  );
-  OfExtension& operator=(
-    const OfExtension& other
-  );
-  OfExtension& operator=(
-    OfExtension&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfExtension() override = default;
-
- private:
-  std::shared_ptr<types::IExtension> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfExtension
-
-OfExtension::OfExtension(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IExtension
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfExtension::OfExtension(
-  const OfExtension& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfExtension::OfExtension(
-  OfExtension&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfExtension& OfExtension::operator=(
-  const OfExtension& other
-) {
-  return *this = OfExtension(other);
-}
-
-OfExtension& OfExtension::operator=(
-  OfExtension&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfExtension::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfExtension::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfExtension, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfExtension::Done() const {
-  return done_;
-}
-
-const Error& OfExtension::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfExtension, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfExtension::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfExtension, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfExtension::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfExtension, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfExtension::Clone() const {
-  return common::make_unique<
-    OfExtension
-  >(*this);
-}
-
-void OfExtension::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kExtension: {
+      static const std::vector<Check> checks = {
+        {
+          &Extension_0,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Extension_1,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->refers_to().has_value())
-          || ((*(instance_->refers_to())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Extension_2,
           L"Refers-to must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->value().has_value())
-          || ValueConsistentWithXsdType(
-            (*(instance_->value())),
-            instance_->ValueTypeOrDefault()
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Extension_3,
           L"The value must match the value type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            instance_->name()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 5: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 7;
-          continue;
         }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kName
-          )
-        );
-
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        constrained_primitive_verificator_ = nullptr;
-
-        if (!(instance_->value().has_value())) {
-          state_ = 11;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfValueDataType
-          >(
-            *(instance_->value())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 8: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 10;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kValue
-          )
-        );
-
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 8;
-        continue;
-      }
-
-      case 10: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 11: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 12;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfAdministrativeInformation : public impl::IVerificator {
- public:
-  OfAdministrativeInformation(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfAdministrativeInformation(
-    const OfAdministrativeInformation& other
-  );
-  OfAdministrativeInformation(
-    OfAdministrativeInformation&& other
-  );
-  OfAdministrativeInformation& operator=(
-    const OfAdministrativeInformation& other
-  );
-  OfAdministrativeInformation& operator=(
-    OfAdministrativeInformation&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfAdministrativeInformation() override = default;
-
- private:
-  std::shared_ptr<types::IAdministrativeInformation> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfAdministrativeInformation
-
-OfAdministrativeInformation::OfAdministrativeInformation(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IAdministrativeInformation
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfAdministrativeInformation::OfAdministrativeInformation(
-  const OfAdministrativeInformation& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfAdministrativeInformation::OfAdministrativeInformation(
-  OfAdministrativeInformation&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfAdministrativeInformation& OfAdministrativeInformation::operator=(
-  const OfAdministrativeInformation& other
-) {
-  return *this = OfAdministrativeInformation(other);
-}
-
-OfAdministrativeInformation& OfAdministrativeInformation::operator=(
-  OfAdministrativeInformation&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfAdministrativeInformation::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfAdministrativeInformation::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfAdministrativeInformation, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfAdministrativeInformation::Done() const {
-  return done_;
-}
-
-const Error& OfAdministrativeInformation::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfAdministrativeInformation, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfAdministrativeInformation::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfAdministrativeInformation, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfAdministrativeInformation::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfAdministrativeInformation, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfAdministrativeInformation::Clone() const {
-  return common::make_unique<
-    OfAdministrativeInformation
-  >(*this);
-}
-
-void OfAdministrativeInformation::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kAdministrativeInformation: {
+      static const std::vector<Check> checks = {
+        {
+          &AdministrativeInformation_0,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->revision().has_value())
-          || (instance_->version().has_value())
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AdministrativeInformation_1,
           L"Constraint AASd-005: If version is not specified then also "
           L"revision shall be unspecified. This means, a revision "
           L"requires a version. If there is no version there is no "
           L"revision either. Revision is optional."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (!(instance_->version().has_value())) {
-          state_ = 6;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfVersionType
-          >(
-            *(instance_->version())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 3: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 5;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kVersion
-          )
-        );
-
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 3;
-        continue;
-      }
-
-      case 5: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 6: {
-        if (!(instance_->revision().has_value())) {
-          state_ = 10;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfRevisionType
-          >(
-            *(instance_->revision())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 7: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 9;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kRevision
-          )
-        );
-
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 7;
-        continue;
-      }
-
-      case 9: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 10: {
-        if (!(instance_->template_id().has_value())) {
-          state_ = 14;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdentifier
-          >(
-            *(instance_->template_id())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 11: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 13;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kTemplateId
-          )
-        );
-
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 11;
-        continue;
-      }
-
-      case 13: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 14: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 15;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfQualifier : public impl::IVerificator {
- public:
-  OfQualifier(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfQualifier(
-    const OfQualifier& other
-  );
-  OfQualifier(
-    OfQualifier&& other
-  );
-  OfQualifier& operator=(
-    const OfQualifier& other
-  );
-  OfQualifier& operator=(
-    OfQualifier&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfQualifier() override = default;
-
- private:
-  std::shared_ptr<types::IQualifier> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfQualifier
-
-OfQualifier::OfQualifier(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IQualifier
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfQualifier::OfQualifier(
-  const OfQualifier& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfQualifier::OfQualifier(
-  OfQualifier&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfQualifier& OfQualifier::operator=(
-  const OfQualifier& other
-) {
-  return *this = OfQualifier(other);
-}
-
-OfQualifier& OfQualifier::operator=(
-  OfQualifier&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfQualifier::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfQualifier::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfQualifier, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfQualifier::Done() const {
-  return done_;
-}
-
-const Error& OfQualifier::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfQualifier, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfQualifier::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfQualifier, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfQualifier::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfQualifier, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfQualifier::Clone() const {
-  return common::make_unique<
-    OfQualifier
-  >(*this);
-}
-
-void OfQualifier::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kQualifier: {
+      static const std::vector<Check> checks = {
+        {
+          &Qualifier_0,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Qualifier_1,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->value().has_value())
-          || ValueConsistentWithXsdType(
-            (*(instance_->value())),
-            instance_->value_type()
-          )
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Qualifier_2,
           L"Constraint AASd-020: The value shall be consistent to "
           L"the data type as defined in value type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfQualifierType
-          >(
-            instance_->type()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 4: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 6;
-          continue;
         }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kType
-          )
-        );
-
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 4;
-        continue;
-      }
-
-      case 6: {
-        constrained_primitive_verificator_ = nullptr;
-
-        if (!(instance_->value().has_value())) {
-          state_ = 10;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfValueDataType
-          >(
-            *(instance_->value())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 7: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 9;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kValue
-          )
-        );
-
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 7;
-        continue;
-      }
-
-      case 9: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 10: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 11;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfAssetAdministrationShell : public impl::IVerificator {
- public:
-  OfAssetAdministrationShell(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfAssetAdministrationShell(
-    const OfAssetAdministrationShell& other
-  );
-  OfAssetAdministrationShell(
-    OfAssetAdministrationShell&& other
-  );
-  OfAssetAdministrationShell& operator=(
-    const OfAssetAdministrationShell& other
-  );
-  OfAssetAdministrationShell& operator=(
-    OfAssetAdministrationShell&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfAssetAdministrationShell() override = default;
-
- private:
-  std::shared_ptr<types::IAssetAdministrationShell> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfAssetAdministrationShell
-
-OfAssetAdministrationShell::OfAssetAdministrationShell(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IAssetAdministrationShell
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfAssetAdministrationShell::OfAssetAdministrationShell(
-  const OfAssetAdministrationShell& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfAssetAdministrationShell::OfAssetAdministrationShell(
-  OfAssetAdministrationShell&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfAssetAdministrationShell& OfAssetAdministrationShell::operator=(
-  const OfAssetAdministrationShell& other
-) {
-  return *this = OfAssetAdministrationShell(other);
-}
-
-OfAssetAdministrationShell& OfAssetAdministrationShell::operator=(
-  OfAssetAdministrationShell&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfAssetAdministrationShell::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfAssetAdministrationShell::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfAssetAdministrationShell, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfAssetAdministrationShell::Done() const {
-  return done_;
-}
-
-const Error& OfAssetAdministrationShell::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfAssetAdministrationShell, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfAssetAdministrationShell::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfAssetAdministrationShell, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfAssetAdministrationShell::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfAssetAdministrationShell, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfAssetAdministrationShell::Clone() const {
-  return common::make_unique<
-    OfAssetAdministrationShell
-  >(*this);
-}
-
-void OfAssetAdministrationShell::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kAssetAdministrationShell: {
+      static const std::vector<Check> checks = {
+        {
+          &AssetAdministrationShell_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AssetAdministrationShell_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AssetAdministrationShell_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AssetAdministrationShell_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AssetAdministrationShell_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AssetAdministrationShell_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AssetAdministrationShell_6,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->submodels().has_value())
-          || ((*(instance_->submodels())).size() >= 1)
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AssetAdministrationShell_7,
           L"Submodels must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->derived_from().has_value())
-          || IsModelReferenceTo(
-            (*(instance_->derived_from())),
-            types::KeyTypes::kAssetAdministrationShell
-          )
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AssetAdministrationShell_8,
           L"Derived-from must be a model reference to an asset "
           L"administration shell."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->submodels().has_value())
-          || common::All(
-            [&](const std::shared_ptr<types::IReference>& reference) -> bool {
-              return IsModelReferenceTo(
-                reference,
-                types::KeyTypes::kSubmodel
-              );
-            },
-            (*(instance_->submodels()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AssetAdministrationShell_9,
           L"All submodels must be model references to a submodel."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (!(instance_->category().has_value())) {
-          state_ = 14;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 11: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 13;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 11;
-        continue;
-      }
-
-      case 13: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 14: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 18;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 15: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 17;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 16;
-        return;
-      }
-
-      case 16: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 15;
-        continue;
-      }
-
-      case 17: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 18: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdentifier
-          >(
-            instance_->id()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 19: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 21;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kId
-          )
-        );
-
-        ++index_;
-
-        state_ = 20;
-        return;
-      }
-
-      case 20: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 19;
-        continue;
-      }
-
-      case 21: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 22;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfAssetInformation : public impl::IVerificator {
- public:
-  OfAssetInformation(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfAssetInformation(
-    const OfAssetInformation& other
-  );
-  OfAssetInformation(
-    OfAssetInformation&& other
-  );
-  OfAssetInformation& operator=(
-    const OfAssetInformation& other
-  );
-  OfAssetInformation& operator=(
-    OfAssetInformation&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfAssetInformation() override = default;
-
- private:
-  std::shared_ptr<types::IAssetInformation> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfAssetInformation
-
-OfAssetInformation::OfAssetInformation(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IAssetInformation
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfAssetInformation::OfAssetInformation(
-  const OfAssetInformation& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfAssetInformation::OfAssetInformation(
-  OfAssetInformation&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfAssetInformation& OfAssetInformation::operator=(
-  const OfAssetInformation& other
-) {
-  return *this = OfAssetInformation(other);
-}
-
-OfAssetInformation& OfAssetInformation::operator=(
-  OfAssetInformation&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfAssetInformation::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfAssetInformation::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfAssetInformation, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfAssetInformation::Done() const {
-  return done_;
-}
-
-const Error& OfAssetInformation::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfAssetInformation, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfAssetInformation::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfAssetInformation, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfAssetInformation::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfAssetInformation, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfAssetInformation::Clone() const {
-  return common::make_unique<
-    OfAssetInformation
-  >(*this);
-}
-
-void OfAssetInformation::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->specific_asset_ids().has_value())
-          || common::All(
-            [&](const std::shared_ptr<types::ISpecificAssetId>& specific_asset_id) -> bool {
-              return (
-                specific_asset_id->name() != L"globalAssetId"
-                || (
-                  (
-                    (instance_->global_asset_id().has_value())
-                    && specific_asset_id->name() == L"globalAssetId"
-                    && specific_asset_id->value() == (*(instance_->global_asset_id()))
-                  )
-                )
-              );
-            },
-            (*(instance_->specific_asset_ids()))
-          )
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kAssetInformation: {
+      static const std::vector<Check> checks = {
+        {
+          &AssetInformation_0,
           L"Constraint AASd-116: ``globalAssetId`` is a reserved key. "
           L"If used as value for the name of specific asset ID then "
           L"the value of specific asset ID shall be identical to "
           L"the global asset ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          (
-            (
-              (
-                (instance_->global_asset_id().has_value())
-                || (instance_->specific_asset_ids().has_value())
-              )
-            )
-            && (
-              !(instance_->specific_asset_ids().has_value())
-              || ((*(instance_->specific_asset_ids())).size() >= 1)
-            )
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AssetInformation_1,
           L"Constraint AASd-131: Either the global asset ID shall be "
           L"defined or at least one specific asset ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->specific_asset_ids().has_value())
-          || ((*(instance_->specific_asset_ids())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AssetInformation_2,
           L"Specific asset IDs must be either not set or have at least "
           L"one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (!(instance_->global_asset_id().has_value())) {
-          state_ = 7;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdentifier
-          >(
-            *(instance_->global_asset_id())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 4: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 6;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kGlobalAssetId
-          )
-        );
-
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 4;
-        continue;
-      }
-
-      case 6: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 7: {
-        if (!(instance_->asset_type().has_value())) {
-          state_ = 11;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdentifier
-          >(
-            *(instance_->asset_type())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 8: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 10;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kAssetType
-          )
-        );
-
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 8;
-        continue;
-      }
-
-      case 10: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 11: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 12;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfResource : public impl::IVerificator {
- public:
-  OfResource(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfResource(
-    const OfResource& other
-  );
-  OfResource(
-    OfResource&& other
-  );
-  OfResource& operator=(
-    const OfResource& other
-  );
-  OfResource& operator=(
-    OfResource&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfResource() override = default;
-
- private:
-  std::shared_ptr<types::IResource> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfResource
-
-OfResource::OfResource(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IResource
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfResource::OfResource(
-  const OfResource& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfResource::OfResource(
-  OfResource&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfResource& OfResource::operator=(
-  const OfResource& other
-) {
-  return *this = OfResource(other);
-}
-
-OfResource& OfResource::operator=(
-  OfResource&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfResource::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfResource::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfResource, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfResource::Done() const {
-  return done_;
-}
-
-const Error& OfResource::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfResource, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfResource::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfResource, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfResource::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfResource, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfResource::Clone() const {
-  return common::make_unique<
-    OfResource
-  >(*this);
-}
-
-void OfResource::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfPathType
-          >(
-            instance_->path()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 1: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 3;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kPath
-          )
-        );
-
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        constrained_primitive_verificator_ = nullptr;
-
-        if (!(instance_->content_type().has_value())) {
-          state_ = 7;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfContentType
-          >(
-            *(instance_->content_type())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 4: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 6;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kContentType
-          )
-        );
-
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 4;
-        continue;
-      }
-
-      case 6: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 7: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 8;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfSpecificAssetId : public impl::IVerificator {
- public:
-  OfSpecificAssetId(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfSpecificAssetId(
-    const OfSpecificAssetId& other
-  );
-  OfSpecificAssetId(
-    OfSpecificAssetId&& other
-  );
-  OfSpecificAssetId& operator=(
-    const OfSpecificAssetId& other
-  );
-  OfSpecificAssetId& operator=(
-    OfSpecificAssetId&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfSpecificAssetId() override = default;
-
- private:
-  std::shared_ptr<types::ISpecificAssetId> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfSpecificAssetId
-
-OfSpecificAssetId::OfSpecificAssetId(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::ISpecificAssetId
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfSpecificAssetId::OfSpecificAssetId(
-  const OfSpecificAssetId& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfSpecificAssetId::OfSpecificAssetId(
-  OfSpecificAssetId&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfSpecificAssetId& OfSpecificAssetId::operator=(
-  const OfSpecificAssetId& other
-) {
-  return *this = OfSpecificAssetId(other);
-}
-
-OfSpecificAssetId& OfSpecificAssetId::operator=(
-  OfSpecificAssetId&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfSpecificAssetId::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfSpecificAssetId::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfSpecificAssetId, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfSpecificAssetId::Done() const {
-  return done_;
-}
-
-const Error& OfSpecificAssetId::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfSpecificAssetId, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfSpecificAssetId::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfSpecificAssetId, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfSpecificAssetId::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfSpecificAssetId, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfSpecificAssetId::Clone() const {
-  return common::make_unique<
-    OfSpecificAssetId
-  >(*this);
-}
-
-void OfSpecificAssetId::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kSpecificAssetId: {
+      static const std::vector<Check> checks = {
+        {
+          &SpecificAssetId_0,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SpecificAssetId_1,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->external_subject_id().has_value())
-          || ((*(instance_->external_subject_id()))->type() == types::ReferenceTypes::kExternalReference)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SpecificAssetId_2,
           L"Constraint AASd-133: External subject ID shall be "
           L"an external reference."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfLabelType
-          >(
-            instance_->name()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 4: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 6;
-          continue;
         }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kName
-          )
-        );
-
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 4;
-        continue;
-      }
-
-      case 6: {
-        constrained_primitive_verificator_ = nullptr;
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdentifier
-          >(
-            instance_->value()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 7: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 9;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kValue
-          )
-        );
-
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 7;
-        continue;
-      }
-
-      case 9: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 10;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfSubmodel : public impl::IVerificator {
- public:
-  OfSubmodel(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfSubmodel(
-    const OfSubmodel& other
-  );
-  OfSubmodel(
-    OfSubmodel&& other
-  );
-  OfSubmodel& operator=(
-    const OfSubmodel& other
-  );
-  OfSubmodel& operator=(
-    OfSubmodel&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfSubmodel() override = default;
-
- private:
-  std::shared_ptr<types::ISubmodel> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfSubmodel
-
-OfSubmodel::OfSubmodel(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::ISubmodel
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfSubmodel::OfSubmodel(
-  const OfSubmodel& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfSubmodel::OfSubmodel(
-  OfSubmodel&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfSubmodel& OfSubmodel::operator=(
-  const OfSubmodel& other
-) {
-  return *this = OfSubmodel(other);
-}
-
-OfSubmodel& OfSubmodel::operator=(
-  OfSubmodel&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfSubmodel::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfSubmodel::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfSubmodel, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfSubmodel::Done() const {
-  return done_;
-}
-
-const Error& OfSubmodel::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfSubmodel, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfSubmodel::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfSubmodel, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfSubmodel::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfSubmodel, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfSubmodel::Clone() const {
-  return common::make_unique<
-    OfSubmodel
-  >(*this);
-}
-
-void OfSubmodel::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kSubmodel: {
+      static const std::vector<Check> checks = {
+        {
+          &Submodel_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->submodel_elements().has_value())
-          || ((*(instance_->submodel_elements())).size() >= 1)
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_11,
           L"Submodel elements must be either not set or have at least "
           L"one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (
-          !(instance_->submodel_elements().has_value())
-          || common::All(
-            [&](const std::shared_ptr<types::ISubmodelElement>& item) -> bool {
-              return item->id_short().has_value();
-            },
-            (*(instance_->submodel_elements()))
-          )
-        ) {
-          state_ = 13;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_12,
           L"ID-shorts need to be defined for all the items of submodel "
           L"elements according to AASd-117 (ID-short of Referables not "
           L"being a direct child of a Submodel element list shall be "
           L"specified)."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (
-          !(instance_->submodel_elements().has_value())
-          || IdShortsAreUnique(
-            (*(instance_->submodel_elements()))
-          )
-        ) {
-          state_ = 14;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_13,
           L"Constraint AASd-022: ID-short of non-identifiable "
           L"referables within the same name space shall be unique "
           L"(case-sensitive)."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        if (
-          !(instance_->submodel_elements().has_value())
-          || (!(instance_->KindOrDefault() != types::ModellingKind::kTemplate)
-          || common::All(
-            [&](const std::shared_ptr<types::ISubmodelElement>& submodel_element) -> bool {
-              return !(submodel_element->qualifiers().has_value())
-              || common::All(
-                [&](const std::shared_ptr<types::IQualifier>& qualifier) -> bool {
-                  return qualifier->KindOrDefault() != types::QualifierKind::kTemplateQualifier;
-                },
-                (*(submodel_element->qualifiers()))
-              );
-            },
-            (*(instance_->submodel_elements()))
-          ))
-        ) {
-          state_ = 15;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_14,
           L"Constraint AASd-129: If any qualifier kind value of "
           L"a Submodel element qualifier (attribute qualifier inherited "
           L"via Qualifiable) is equal to Template Qualifier then "
           L"the submodel element shall be part of a submodel template, "
           L"i.e. a Submodel with submodel kind (attribute kind "
           L"inherited via Has-Kind) value is equal to Template."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || (!common::Some(
-            [&](const std::shared_ptr<types::IQualifier>& qualifier) -> bool {
-              return qualifier->KindOrDefault() == types::QualifierKind::kTemplateQualifier;
-            },
-            (*(instance_->qualifiers()))
-          )
-          || (instance_->KindOrDefault() == types::ModellingKind::kTemplate))
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Submodel_15,
           L"Constraint AASd-119: If any qualifier kind value of "
           L"a qualifiable qualifier is equal to template qualifier and "
           L"the qualified element has kind then the qualified element "
           L"shall be of kind template."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 16;
-        return;
-      }
-
-      case 16: {
-        if (!(instance_->category().has_value())) {
-          state_ = 20;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 17: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 19;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 18;
-        return;
-      }
-
-      case 18: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 17;
-        continue;
-      }
-
-      case 19: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 20: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 24;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 21: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 23;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 22;
-        return;
-      }
-
-      case 22: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 21;
-        continue;
-      }
-
-      case 23: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 24: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdentifier
-          >(
-            instance_->id()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 25: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 27;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kId
-          )
-        );
-
-        ++index_;
-
-        state_ = 26;
-        return;
-      }
-
-      case 26: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 25;
-        continue;
-      }
-
-      case 27: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 28;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfRelationshipElement : public impl::IVerificator {
- public:
-  OfRelationshipElement(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfRelationshipElement(
-    const OfRelationshipElement& other
-  );
-  OfRelationshipElement(
-    OfRelationshipElement&& other
-  );
-  OfRelationshipElement& operator=(
-    const OfRelationshipElement& other
-  );
-  OfRelationshipElement& operator=(
-    OfRelationshipElement&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfRelationshipElement() override = default;
-
- private:
-  std::shared_ptr<types::IRelationshipElement> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfRelationshipElement
-
-OfRelationshipElement::OfRelationshipElement(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IRelationshipElement
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfRelationshipElement::OfRelationshipElement(
-  const OfRelationshipElement& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfRelationshipElement::OfRelationshipElement(
-  OfRelationshipElement&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfRelationshipElement& OfRelationshipElement::operator=(
-  const OfRelationshipElement& other
-) {
-  return *this = OfRelationshipElement(other);
-}
-
-OfRelationshipElement& OfRelationshipElement::operator=(
-  OfRelationshipElement&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfRelationshipElement::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfRelationshipElement::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfRelationshipElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfRelationshipElement::Done() const {
-  return done_;
-}
-
-const Error& OfRelationshipElement::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfRelationshipElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfRelationshipElement::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfRelationshipElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfRelationshipElement::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfRelationshipElement, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfRelationshipElement::Clone() const {
-  return common::make_unique<
-    OfRelationshipElement
-  >(*this);
-}
-
-void OfRelationshipElement::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kRelationshipElement: {
+      static const std::vector<Check> checks = {
+        {
+          &RelationshipElement_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RelationshipElement_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RelationshipElement_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RelationshipElement_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RelationshipElement_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RelationshipElement_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RelationshipElement_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RelationshipElement_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RelationshipElement_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RelationshipElement_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &RelationshipElement_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (!(instance_->category().has_value())) {
-          state_ = 15;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 12: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 14;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 12;
-        continue;
-      }
-
-      case 14: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 15: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 19;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 16: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 18;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 17;
-        return;
-      }
-
-      case 17: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 16;
-        continue;
-      }
-
-      case 18: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 19: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 20;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfSubmodelElementList : public impl::IVerificator {
- public:
-  OfSubmodelElementList(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfSubmodelElementList(
-    const OfSubmodelElementList& other
-  );
-  OfSubmodelElementList(
-    OfSubmodelElementList&& other
-  );
-  OfSubmodelElementList& operator=(
-    const OfSubmodelElementList& other
-  );
-  OfSubmodelElementList& operator=(
-    OfSubmodelElementList&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfSubmodelElementList() override = default;
-
- private:
-  std::shared_ptr<types::ISubmodelElementList> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfSubmodelElementList
-
-OfSubmodelElementList::OfSubmodelElementList(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::ISubmodelElementList
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfSubmodelElementList::OfSubmodelElementList(
-  const OfSubmodelElementList& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfSubmodelElementList::OfSubmodelElementList(
-  OfSubmodelElementList&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfSubmodelElementList& OfSubmodelElementList::operator=(
-  const OfSubmodelElementList& other
-) {
-  return *this = OfSubmodelElementList(other);
-}
-
-OfSubmodelElementList& OfSubmodelElementList::operator=(
-  OfSubmodelElementList&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfSubmodelElementList::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfSubmodelElementList::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfSubmodelElementList, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfSubmodelElementList::Done() const {
-  return done_;
-}
-
-const Error& OfSubmodelElementList::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfSubmodelElementList, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfSubmodelElementList::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfSubmodelElementList, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfSubmodelElementList::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfSubmodelElementList, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfSubmodelElementList::Clone() const {
-  return common::make_unique<
-    OfSubmodelElementList
-  >(*this);
-}
-
-void OfSubmodelElementList::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kSubmodelElementList: {
+      static const std::vector<Check> checks = {
+        {
+          &SubmodelElementList_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->value().has_value())
-          || ((*(instance_->value())).size() >= 1)
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_11,
           L"Value must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (
-          !((
-            (instance_->value().has_value())
-            && (instance_->semantic_id_list_element().has_value())
-          ))
-          || common::All(
-            [&](const std::shared_ptr<types::ISubmodelElement>& child) -> bool {
-              return !(child->semantic_id().has_value())
-              || ReferenceKeyValuesEqual(
-                (*(child->semantic_id())),
-                (*(instance_->semantic_id_list_element()))
-              );
-            },
-            (*(instance_->value()))
-          )
-        ) {
-          state_ = 13;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_12,
           L"Constraint AASd-107: If a first level child element has "
           L"a semantic ID it shall be identical to semantic ID list "
           L"element."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (
-          !(instance_->value().has_value())
-          || SubmodelElementsHaveIdenticalSemanticIds(
-            (*(instance_->value()))
-          )
-        ) {
-          state_ = 14;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_13,
           L"Constraint AASd-114: If two first level child elements have "
           L"a semantic ID then they shall be identical."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        if (
-          !(instance_->value().has_value())
-          || common::All(
-            [&](const std::shared_ptr<types::ISubmodelElement>& element) -> bool {
-              return SubmodelElementIsOfType(
-                element,
-                instance_->type_value_list_element()
-              );
-            },
-            (*(instance_->value()))
-          )
-        ) {
-          state_ = 15;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_14,
           L"Constraint AASd-108: All first level child elements shall "
           L"have the same submodel element type as specified in type "
           L"value list element."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        if (
-          !((
-            instance_->type_value_list_element() == types::AasSubmodelElements::kProperty
-            || instance_->type_value_list_element() == types::AasSubmodelElements::kRange
-          ))
-          || ((
-            (instance_->value_type_list_element().has_value())
-            && (
-              (
-                (!(instance_->value().has_value()))
-                || PropertiesOrRangesHaveValueType(
-                  (*(instance_->value())),
-                  (*(instance_->value_type_list_element()))
-                )
-              )
-            )
-          ))
-        ) {
-          state_ = 16;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_15,
           L"Constraint AASd-109: If type value list element is equal to "
           L"Property or Range value type list element shall be set and "
           L"all first level child elements shall have the value type as "
           L"specified in value type list element."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 16;
-        return;
-      }
-
-      case 16: {
-        if (
-          !(instance_->value().has_value())
-          || common::All(
-            [&](const std::shared_ptr<types::ISubmodelElement>& element) -> bool {
-              return !(element->id_short().has_value());
-            },
-            (*(instance_->value()))
-          )
-        ) {
-          state_ = 17;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementList_16,
           L"Constraint AASd-120: ID-short of submodel elements being "
           L"a direct child of a  Submodel element list shall not be "
           L"specified."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 17;
-        return;
-      }
-
-      case 17: {
-        if (!(instance_->category().has_value())) {
-          state_ = 21;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 18: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 20;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 21: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 25;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 22: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 24;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 25: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 26;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfSubmodelElementCollection : public impl::IVerificator {
- public:
-  OfSubmodelElementCollection(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfSubmodelElementCollection(
-    const OfSubmodelElementCollection& other
-  );
-  OfSubmodelElementCollection(
-    OfSubmodelElementCollection&& other
-  );
-  OfSubmodelElementCollection& operator=(
-    const OfSubmodelElementCollection& other
-  );
-  OfSubmodelElementCollection& operator=(
-    OfSubmodelElementCollection&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfSubmodelElementCollection() override = default;
-
- private:
-  std::shared_ptr<types::ISubmodelElementCollection> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfSubmodelElementCollection
-
-OfSubmodelElementCollection::OfSubmodelElementCollection(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::ISubmodelElementCollection
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfSubmodelElementCollection::OfSubmodelElementCollection(
-  const OfSubmodelElementCollection& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfSubmodelElementCollection::OfSubmodelElementCollection(
-  OfSubmodelElementCollection&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfSubmodelElementCollection& OfSubmodelElementCollection::operator=(
-  const OfSubmodelElementCollection& other
-) {
-  return *this = OfSubmodelElementCollection(other);
-}
-
-OfSubmodelElementCollection& OfSubmodelElementCollection::operator=(
-  OfSubmodelElementCollection&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfSubmodelElementCollection::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfSubmodelElementCollection::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfSubmodelElementCollection, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfSubmodelElementCollection::Done() const {
-  return done_;
-}
-
-const Error& OfSubmodelElementCollection::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfSubmodelElementCollection, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfSubmodelElementCollection::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfSubmodelElementCollection, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfSubmodelElementCollection::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfSubmodelElementCollection, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfSubmodelElementCollection::Clone() const {
-  return common::make_unique<
-    OfSubmodelElementCollection
-  >(*this);
-}
-
-void OfSubmodelElementCollection::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kSubmodelElementCollection: {
+      static const std::vector<Check> checks = {
+        {
+          &SubmodelElementCollection_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->value().has_value())
-          || ((*(instance_->value())).size() >= 1)
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_11,
           L"Value must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (
-          !(instance_->value().has_value())
-          || common::All(
-            [&](const std::shared_ptr<types::ISubmodelElement>& item) -> bool {
-              return item->id_short().has_value();
-            },
-            (*(instance_->value()))
-          )
-        ) {
-          state_ = 13;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_12,
           L"ID-shorts need to be defined for all the items of value "
           L"according to AASd-117 (ID-short of Referables not being "
           L"a direct child of a Submodel element list shall be "
           L"specified)."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (
-          !(instance_->value().has_value())
-          || IdShortsAreUnique(
-            (*(instance_->value()))
-          )
-        ) {
-          state_ = 14;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &SubmodelElementCollection_13,
           L"ID-shorts of the value must be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        if (!(instance_->category().has_value())) {
-          state_ = 18;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 15: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 17;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 16;
-        return;
-      }
-
-      case 16: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 15;
-        continue;
-      }
-
-      case 17: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 18: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 22;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 19: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 21;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 20;
-        return;
-      }
-
-      case 20: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 19;
-        continue;
-      }
-
-      case 21: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 22: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 23;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfProperty : public impl::IVerificator {
- public:
-  OfProperty(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfProperty(
-    const OfProperty& other
-  );
-  OfProperty(
-    OfProperty&& other
-  );
-  OfProperty& operator=(
-    const OfProperty& other
-  );
-  OfProperty& operator=(
-    OfProperty&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfProperty() override = default;
-
- private:
-  std::shared_ptr<types::IProperty> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfProperty
-
-OfProperty::OfProperty(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IProperty
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfProperty::OfProperty(
-  const OfProperty& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfProperty::OfProperty(
-  OfProperty&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfProperty& OfProperty::operator=(
-  const OfProperty& other
-) {
-  return *this = OfProperty(other);
-}
-
-OfProperty& OfProperty::operator=(
-  OfProperty&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfProperty::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfProperty::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfProperty, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfProperty::Done() const {
-  return done_;
-}
-
-const Error& OfProperty::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfProperty, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfProperty::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfProperty, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfProperty::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfProperty, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfProperty::Clone() const {
-  return common::make_unique<
-    OfProperty
-  >(*this);
-}
-
-void OfProperty::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kProperty: {
+      static const std::vector<Check> checks = {
+        {
+          &Property_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->category().has_value())
-          || common::Contains(
-            constants::kValidCategoriesForDataElement,
-            (*(instance_->category()))
-          )
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_11,
           L"Constraint AASd-090: For data elements category shall be "
           L"one of the following values: CONSTANT, PARAMETER or "
           L"VARIABLE."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (
-          !(instance_->value().has_value())
-          || ValueConsistentWithXsdType(
-            (*(instance_->value())),
-            instance_->value_type()
-          )
-        ) {
-          state_ = 13;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Property_12,
           L"Value must be consistent with the value type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(instance_->category().has_value())) {
-          state_ = 17;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 14: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 16;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 17: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 18: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 20;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 21: {
-        if (!(instance_->value().has_value())) {
-          state_ = 25;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfValueDataType
-          >(
-            *(instance_->value())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 22: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 24;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kValue
-          )
-        );
-
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 25: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 26;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfMultiLanguageProperty : public impl::IVerificator {
- public:
-  OfMultiLanguageProperty(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfMultiLanguageProperty(
-    const OfMultiLanguageProperty& other
-  );
-  OfMultiLanguageProperty(
-    OfMultiLanguageProperty&& other
-  );
-  OfMultiLanguageProperty& operator=(
-    const OfMultiLanguageProperty& other
-  );
-  OfMultiLanguageProperty& operator=(
-    OfMultiLanguageProperty&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfMultiLanguageProperty() override = default;
-
- private:
-  std::shared_ptr<types::IMultiLanguageProperty> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfMultiLanguageProperty
-
-OfMultiLanguageProperty::OfMultiLanguageProperty(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IMultiLanguageProperty
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfMultiLanguageProperty::OfMultiLanguageProperty(
-  const OfMultiLanguageProperty& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfMultiLanguageProperty::OfMultiLanguageProperty(
-  OfMultiLanguageProperty&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfMultiLanguageProperty& OfMultiLanguageProperty::operator=(
-  const OfMultiLanguageProperty& other
-) {
-  return *this = OfMultiLanguageProperty(other);
-}
-
-OfMultiLanguageProperty& OfMultiLanguageProperty::operator=(
-  OfMultiLanguageProperty&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfMultiLanguageProperty::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfMultiLanguageProperty::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfMultiLanguageProperty, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfMultiLanguageProperty::Done() const {
-  return done_;
-}
-
-const Error& OfMultiLanguageProperty::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfMultiLanguageProperty, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfMultiLanguageProperty::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfMultiLanguageProperty, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfMultiLanguageProperty::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfMultiLanguageProperty, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfMultiLanguageProperty::Clone() const {
-  return common::make_unique<
-    OfMultiLanguageProperty
-  >(*this);
-}
-
-void OfMultiLanguageProperty::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kMultiLanguageProperty: {
+      static const std::vector<Check> checks = {
+        {
+          &MultiLanguageProperty_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->category().has_value())
-          || common::Contains(
-            constants::kValidCategoriesForDataElement,
-            (*(instance_->category()))
-          )
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_11,
           L"Constraint AASd-090: For data elements category shall be "
           L"one of the following values: CONSTANT, PARAMETER or "
           L"VARIABLE."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (
-          !(instance_->value().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->value()))
-          )
-        ) {
-          state_ = 13;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_12,
           L"Value must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (
-          !(instance_->value().has_value())
-          || ((*(instance_->value())).size() >= 1)
-        ) {
-          state_ = 14;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &MultiLanguageProperty_13,
           L"Value must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        if (!(instance_->category().has_value())) {
-          state_ = 18;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 15: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 17;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 16;
-        return;
-      }
-
-      case 16: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 15;
-        continue;
-      }
-
-      case 17: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 18: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 22;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 19: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 21;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 20;
-        return;
-      }
-
-      case 20: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 19;
-        continue;
-      }
-
-      case 21: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 22: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 23;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfRange : public impl::IVerificator {
- public:
-  OfRange(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfRange(
-    const OfRange& other
-  );
-  OfRange(
-    OfRange&& other
-  );
-  OfRange& operator=(
-    const OfRange& other
-  );
-  OfRange& operator=(
-    OfRange&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfRange() override = default;
-
- private:
-  std::shared_ptr<types::IRange> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfRange
-
-OfRange::OfRange(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IRange
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfRange::OfRange(
-  const OfRange& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfRange::OfRange(
-  OfRange&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfRange& OfRange::operator=(
-  const OfRange& other
-) {
-  return *this = OfRange(other);
-}
-
-OfRange& OfRange::operator=(
-  OfRange&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfRange::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfRange::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfRange, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfRange::Done() const {
-  return done_;
-}
-
-const Error& OfRange::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfRange, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfRange::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfRange, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfRange::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfRange, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfRange::Clone() const {
-  return common::make_unique<
-    OfRange
-  >(*this);
-}
-
-void OfRange::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kRange: {
+      static const std::vector<Check> checks = {
+        {
+          &Range_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->category().has_value())
-          || common::Contains(
-            constants::kValidCategoriesForDataElement,
-            (*(instance_->category()))
-          )
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_11,
           L"Constraint AASd-090: For data elements category shall be "
           L"one of the following values: CONSTANT, PARAMETER or "
           L"VARIABLE."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (
-          !(instance_->max().has_value())
-          || ValueConsistentWithXsdType(
-            (*(instance_->max())),
-            instance_->value_type()
-          )
-        ) {
-          state_ = 13;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_12,
           L"Max must be consistent with the value type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (
-          !(instance_->min().has_value())
-          || ValueConsistentWithXsdType(
-            (*(instance_->min())),
-            instance_->value_type()
-          )
-        ) {
-          state_ = 14;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Range_13,
           L"Min must be consistent with the value type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        if (!(instance_->category().has_value())) {
-          state_ = 18;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 15: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 17;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 16;
-        return;
-      }
-
-      case 16: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 15;
-        continue;
-      }
-
-      case 17: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 18: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 22;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 19: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 21;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 20;
-        return;
-      }
-
-      case 20: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 19;
-        continue;
-      }
-
-      case 21: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 22: {
-        if (!(instance_->min().has_value())) {
-          state_ = 26;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfValueDataType
-          >(
-            *(instance_->min())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 23: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 25;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kMin
-          )
-        );
-
-        ++index_;
-
-        state_ = 24;
-        return;
-      }
-
-      case 24: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 23;
-        continue;
-      }
-
-      case 25: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 26: {
-        if (!(instance_->max().has_value())) {
-          state_ = 30;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfValueDataType
-          >(
-            *(instance_->max())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 27: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 29;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kMax
-          )
-        );
-
-        ++index_;
-
-        state_ = 28;
-        return;
-      }
-
-      case 28: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 27;
-        continue;
-      }
-
-      case 29: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 30: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 31;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfReferenceElement : public impl::IVerificator {
- public:
-  OfReferenceElement(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfReferenceElement(
-    const OfReferenceElement& other
-  );
-  OfReferenceElement(
-    OfReferenceElement&& other
-  );
-  OfReferenceElement& operator=(
-    const OfReferenceElement& other
-  );
-  OfReferenceElement& operator=(
-    OfReferenceElement&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfReferenceElement() override = default;
-
- private:
-  std::shared_ptr<types::IReferenceElement> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfReferenceElement
-
-OfReferenceElement::OfReferenceElement(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IReferenceElement
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfReferenceElement::OfReferenceElement(
-  const OfReferenceElement& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfReferenceElement::OfReferenceElement(
-  OfReferenceElement&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfReferenceElement& OfReferenceElement::operator=(
-  const OfReferenceElement& other
-) {
-  return *this = OfReferenceElement(other);
-}
-
-OfReferenceElement& OfReferenceElement::operator=(
-  OfReferenceElement&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfReferenceElement::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfReferenceElement::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfReferenceElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfReferenceElement::Done() const {
-  return done_;
-}
-
-const Error& OfReferenceElement::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfReferenceElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfReferenceElement::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfReferenceElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfReferenceElement::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfReferenceElement, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfReferenceElement::Clone() const {
-  return common::make_unique<
-    OfReferenceElement
-  >(*this);
-}
-
-void OfReferenceElement::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kReferenceElement: {
+      static const std::vector<Check> checks = {
+        {
+          &ReferenceElement_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ReferenceElement_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ReferenceElement_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ReferenceElement_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ReferenceElement_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ReferenceElement_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ReferenceElement_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ReferenceElement_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ReferenceElement_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ReferenceElement_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ReferenceElement_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->category().has_value())
-          || common::Contains(
-            constants::kValidCategoriesForDataElement,
-            (*(instance_->category()))
-          )
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ReferenceElement_11,
           L"Constraint AASd-090: For data elements category shall be "
           L"one of the following values: CONSTANT, PARAMETER or "
           L"VARIABLE."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (!(instance_->category().has_value())) {
-          state_ = 16;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 13: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 15;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 13;
-        continue;
-      }
-
-      case 15: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 16: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 20;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 17: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 19;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 18;
-        return;
-      }
-
-      case 18: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 17;
-        continue;
-      }
-
-      case 19: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 20: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 21;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfBlob : public impl::IVerificator {
- public:
-  OfBlob(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfBlob(
-    const OfBlob& other
-  );
-  OfBlob(
-    OfBlob&& other
-  );
-  OfBlob& operator=(
-    const OfBlob& other
-  );
-  OfBlob& operator=(
-    OfBlob&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfBlob() override = default;
-
- private:
-  std::shared_ptr<types::IBlob> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfBlob
-
-OfBlob::OfBlob(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IBlob
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfBlob::OfBlob(
-  const OfBlob& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfBlob::OfBlob(
-  OfBlob&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfBlob& OfBlob::operator=(
-  const OfBlob& other
-) {
-  return *this = OfBlob(other);
-}
-
-OfBlob& OfBlob::operator=(
-  OfBlob&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfBlob::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfBlob::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfBlob, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfBlob::Done() const {
-  return done_;
-}
-
-const Error& OfBlob::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfBlob, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfBlob::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfBlob, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfBlob::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfBlob, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfBlob::Clone() const {
-  return common::make_unique<
-    OfBlob
-  >(*this);
-}
-
-void OfBlob::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kBlob: {
+      static const std::vector<Check> checks = {
+        {
+          &Blob_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Blob_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Blob_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Blob_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Blob_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Blob_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Blob_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Blob_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Blob_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Blob_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Blob_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->category().has_value())
-          || common::Contains(
-            constants::kValidCategoriesForDataElement,
-            (*(instance_->category()))
-          )
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Blob_11,
           L"Constraint AASd-090: For data elements category shall be "
           L"one of the following values: CONSTANT, PARAMETER or "
           L"VARIABLE."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (!(instance_->category().has_value())) {
-          state_ = 16;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 13: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 15;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 13;
-        continue;
-      }
-
-      case 15: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 16: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 20;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 17: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 19;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 18;
-        return;
-      }
-
-      case 18: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 17;
-        continue;
-      }
-
-      case 19: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 20: {
-        if (!(instance_->value().has_value())) {
-          state_ = 24;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfBlobType
-          >(
-            *(instance_->value())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 21: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 23;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kValue
-          )
-        );
-
-        ++index_;
-
-        state_ = 22;
-        return;
-      }
-
-      case 22: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 21;
-        continue;
-      }
-
-      case 23: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 24: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfContentType
-          >(
-            instance_->content_type()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 25: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 27;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kContentType
-          )
-        );
-
-        ++index_;
-
-        state_ = 26;
-        return;
-      }
-
-      case 26: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 25;
-        continue;
-      }
-
-      case 27: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 28;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfFile : public impl::IVerificator {
- public:
-  OfFile(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfFile(
-    const OfFile& other
-  );
-  OfFile(
-    OfFile&& other
-  );
-  OfFile& operator=(
-    const OfFile& other
-  );
-  OfFile& operator=(
-    OfFile&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfFile() override = default;
-
- private:
-  std::shared_ptr<types::IFile> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfFile
-
-OfFile::OfFile(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IFile
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfFile::OfFile(
-  const OfFile& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfFile::OfFile(
-  OfFile&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfFile& OfFile::operator=(
-  const OfFile& other
-) {
-  return *this = OfFile(other);
-}
-
-OfFile& OfFile::operator=(
-  OfFile&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfFile::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfFile::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfFile, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfFile::Done() const {
-  return done_;
-}
-
-const Error& OfFile::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfFile, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfFile::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfFile, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfFile::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfFile, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfFile::Clone() const {
-  return common::make_unique<
-    OfFile
-  >(*this);
-}
-
-void OfFile::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kFile: {
+      static const std::vector<Check> checks = {
+        {
+          &File_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &File_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &File_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &File_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &File_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &File_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &File_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &File_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &File_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &File_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &File_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->category().has_value())
-          || common::Contains(
-            constants::kValidCategoriesForDataElement,
-            (*(instance_->category()))
-          )
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &File_11,
           L"Constraint AASd-090: For data elements category shall be "
           L"one of the following values: CONSTANT, PARAMETER or "
           L"VARIABLE."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (!(instance_->category().has_value())) {
-          state_ = 16;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 13: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 15;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 13;
-        continue;
-      }
-
-      case 15: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 16: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 20;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 17: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 19;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 18;
-        return;
-      }
-
-      case 18: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 17;
-        continue;
-      }
-
-      case 19: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 20: {
-        if (!(instance_->value().has_value())) {
-          state_ = 24;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfPathType
-          >(
-            *(instance_->value())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 21: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 23;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kValue
-          )
-        );
-
-        ++index_;
-
-        state_ = 22;
-        return;
-      }
-
-      case 22: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 21;
-        continue;
-      }
-
-      case 23: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 24: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfContentType
-          >(
-            instance_->content_type()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 25: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 27;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kContentType
-          )
-        );
-
-        ++index_;
-
-        state_ = 26;
-        return;
-      }
-
-      case 26: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 25;
-        continue;
-      }
-
-      case 27: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 28;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfAnnotatedRelationshipElement : public impl::IVerificator {
- public:
-  OfAnnotatedRelationshipElement(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfAnnotatedRelationshipElement(
-    const OfAnnotatedRelationshipElement& other
-  );
-  OfAnnotatedRelationshipElement(
-    OfAnnotatedRelationshipElement&& other
-  );
-  OfAnnotatedRelationshipElement& operator=(
-    const OfAnnotatedRelationshipElement& other
-  );
-  OfAnnotatedRelationshipElement& operator=(
-    OfAnnotatedRelationshipElement&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfAnnotatedRelationshipElement() override = default;
-
- private:
-  std::shared_ptr<types::IAnnotatedRelationshipElement> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfAnnotatedRelationshipElement
-
-OfAnnotatedRelationshipElement::OfAnnotatedRelationshipElement(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IAnnotatedRelationshipElement
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfAnnotatedRelationshipElement::OfAnnotatedRelationshipElement(
-  const OfAnnotatedRelationshipElement& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfAnnotatedRelationshipElement::OfAnnotatedRelationshipElement(
-  OfAnnotatedRelationshipElement&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfAnnotatedRelationshipElement& OfAnnotatedRelationshipElement::operator=(
-  const OfAnnotatedRelationshipElement& other
-) {
-  return *this = OfAnnotatedRelationshipElement(other);
-}
-
-OfAnnotatedRelationshipElement& OfAnnotatedRelationshipElement::operator=(
-  OfAnnotatedRelationshipElement&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfAnnotatedRelationshipElement::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfAnnotatedRelationshipElement::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfAnnotatedRelationshipElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfAnnotatedRelationshipElement::Done() const {
-  return done_;
-}
-
-const Error& OfAnnotatedRelationshipElement::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfAnnotatedRelationshipElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfAnnotatedRelationshipElement::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfAnnotatedRelationshipElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfAnnotatedRelationshipElement::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfAnnotatedRelationshipElement, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfAnnotatedRelationshipElement::Clone() const {
-  return common::make_unique<
-    OfAnnotatedRelationshipElement
-  >(*this);
-}
-
-void OfAnnotatedRelationshipElement::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kAnnotatedRelationshipElement: {
+      static const std::vector<Check> checks = {
+        {
+          &AnnotatedRelationshipElement_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->annotations().has_value())
-          || ((*(instance_->annotations())).size() >= 1)
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_11,
           L"Annotations must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (
-          !(instance_->annotations().has_value())
-          || common::All(
-            [&](const std::shared_ptr<types::IDataElement>& item) -> bool {
-              return item->id_short().has_value();
-            },
-            (*(instance_->annotations()))
-          )
-        ) {
-          state_ = 13;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &AnnotatedRelationshipElement_12,
           L"ID-shorts need to be defined for all the items of "
           L"annotations according to AASd-117 (ID-short of Referables "
           L"not being a direct child of a Submodel element list shall "
           L"be specified)."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(instance_->category().has_value())) {
-          state_ = 17;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 14: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 16;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 17: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 18: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 20;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 21: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 22;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfEntity : public impl::IVerificator {
- public:
-  OfEntity(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfEntity(
-    const OfEntity& other
-  );
-  OfEntity(
-    OfEntity&& other
-  );
-  OfEntity& operator=(
-    const OfEntity& other
-  );
-  OfEntity& operator=(
-    OfEntity&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfEntity() override = default;
-
- private:
-  std::shared_ptr<types::IEntity> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfEntity
-
-OfEntity::OfEntity(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IEntity
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfEntity::OfEntity(
-  const OfEntity& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfEntity::OfEntity(
-  OfEntity&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfEntity& OfEntity::operator=(
-  const OfEntity& other
-) {
-  return *this = OfEntity(other);
-}
-
-OfEntity& OfEntity::operator=(
-  OfEntity&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfEntity::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfEntity::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfEntity, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfEntity::Done() const {
-  return done_;
-}
-
-const Error& OfEntity::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfEntity, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfEntity::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfEntity, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfEntity::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfEntity, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfEntity::Clone() const {
-  return common::make_unique<
-    OfEntity
-  >(*this);
-}
-
-void OfEntity::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kEntity: {
+      static const std::vector<Check> checks = {
+        {
+          &Entity_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->statements().has_value())
-          || ((*(instance_->statements())).size() >= 1)
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_11,
           L"Statements must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (
-          !(instance_->statements().has_value())
-          || common::All(
-            [&](const std::shared_ptr<types::ISubmodelElement>& item) -> bool {
-              return item->id_short().has_value();
-            },
-            (*(instance_->statements()))
-          )
-        ) {
-          state_ = 13;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_12,
           L"ID-shorts need to be defined for all the items of "
           L"statements according to AASd-117 (ID-short of Referables "
           L"not being a direct child of a Submodel element list shall "
           L"be specified)."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (
-          (
-            (
-              (
-                instance_->entity_type() == types::EntityType::kSelfManagedEntity
-                && (
-                  (
-                    (
-                      (
-                        (instance_->global_asset_id().has_value())
-                        && (!(instance_->specific_asset_ids().has_value()))
-                      )
-                    )
-                    || (
-                      (
-                        (!(instance_->global_asset_id().has_value()))
-                        && (instance_->specific_asset_ids().has_value())
-                        && (*(instance_->specific_asset_ids())).size() >= 1
-                      )
-                    )
-                  )
-                )
-              )
-            )
-            || (
-              (
-                instance_->entity_type() != types::EntityType::kSelfManagedEntity
-                && (!(instance_->global_asset_id().has_value()))
-                && (!(instance_->specific_asset_ids().has_value()))
-              )
-            )
-          )
-        ) {
-          state_ = 14;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_13,
           L"Constraint AASd-014: Either the attribute global asset ID "
           L"or specific asset ID must be set if entity type is set to "
           L"self-managed entity. They are not existing otherwise."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        if (
-          !(instance_->specific_asset_ids().has_value())
-          || ((*(instance_->specific_asset_ids())).size() >= 1)
-        ) {
-          state_ = 15;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Entity_14,
           L"Specific asset IDs must be either not set or have at least "
           L"one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        if (!(instance_->category().has_value())) {
-          state_ = 19;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 16: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 18;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 17;
-        return;
-      }
-
-      case 17: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 16;
-        continue;
-      }
-
-      case 18: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 19: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 23;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 20: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 22;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 21;
-        return;
-      }
-
-      case 21: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 20;
-        continue;
-      }
-
-      case 22: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 23: {
-        if (!(instance_->global_asset_id().has_value())) {
-          state_ = 27;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdentifier
-          >(
-            *(instance_->global_asset_id())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 24: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 26;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kGlobalAssetId
-          )
-        );
-
-        ++index_;
-
-        state_ = 25;
-        return;
-      }
-
-      case 25: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 24;
-        continue;
-      }
-
-      case 26: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 27: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 28;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfEventPayload : public impl::IVerificator {
- public:
-  OfEventPayload(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfEventPayload(
-    const OfEventPayload& other
-  );
-  OfEventPayload(
-    OfEventPayload&& other
-  );
-  OfEventPayload& operator=(
-    const OfEventPayload& other
-  );
-  OfEventPayload& operator=(
-    OfEventPayload&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfEventPayload() override = default;
-
- private:
-  std::shared_ptr<types::IEventPayload> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfEventPayload
-
-OfEventPayload::OfEventPayload(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IEventPayload
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfEventPayload::OfEventPayload(
-  const OfEventPayload& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfEventPayload::OfEventPayload(
-  OfEventPayload&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfEventPayload& OfEventPayload::operator=(
-  const OfEventPayload& other
-) {
-  return *this = OfEventPayload(other);
-}
-
-OfEventPayload& OfEventPayload::operator=(
-  OfEventPayload&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfEventPayload::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfEventPayload::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfEventPayload, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfEventPayload::Done() const {
-  return done_;
-}
-
-const Error& OfEventPayload::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfEventPayload, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfEventPayload::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfEventPayload, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfEventPayload::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfEventPayload, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfEventPayload::Clone() const {
-  return common::make_unique<
-    OfEventPayload
-  >(*this);
-}
-
-void OfEventPayload::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          (
-            IsModelReferenceTo(
-              instance_->source(),
-              types::KeyTypes::kEventElement
-            )
-            || IsModelReferenceTo(
-              instance_->source(),
-              types::KeyTypes::kBasicEventElement
-            )
-          )
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kEventPayload: {
+      static const std::vector<Check> checks = {
+        {
+          &EventPayload_0,
           L"Source must be a model reference to an Event element."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          IsModelReferenceToReferable(
-            instance_->observable_reference()
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &EventPayload_1,
           L"Observable reference must be a model reference to "
           L"a referable."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (!(instance_->topic().has_value())) {
-          state_ = 6;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfMessageTopicType
-          >(
-            *(instance_->topic())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 3: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 5;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kTopic
-          )
-        );
-
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 3;
-        continue;
-      }
-
-      case 5: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 6: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfDateTimeUtc
-          >(
-            instance_->time_stamp()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 7: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 9;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kTimeStamp
-          )
-        );
-
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 7;
-        continue;
-      }
-
-      case 9: {
-        constrained_primitive_verificator_ = nullptr;
-
-        if (!(instance_->payload().has_value())) {
-          state_ = 13;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfBlobType
-          >(
-            *(instance_->payload())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 10: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 12;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kPayload
-          )
-        );
-
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 10;
-        continue;
-      }
-
-      case 12: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 13: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 14;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfBasicEventElement : public impl::IVerificator {
- public:
-  OfBasicEventElement(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfBasicEventElement(
-    const OfBasicEventElement& other
-  );
-  OfBasicEventElement(
-    OfBasicEventElement&& other
-  );
-  OfBasicEventElement& operator=(
-    const OfBasicEventElement& other
-  );
-  OfBasicEventElement& operator=(
-    OfBasicEventElement&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfBasicEventElement() override = default;
-
- private:
-  std::shared_ptr<types::IBasicEventElement> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfBasicEventElement
-
-OfBasicEventElement::OfBasicEventElement(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IBasicEventElement
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfBasicEventElement::OfBasicEventElement(
-  const OfBasicEventElement& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfBasicEventElement::OfBasicEventElement(
-  OfBasicEventElement&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfBasicEventElement& OfBasicEventElement::operator=(
-  const OfBasicEventElement& other
-) {
-  return *this = OfBasicEventElement(other);
-}
-
-OfBasicEventElement& OfBasicEventElement::operator=(
-  OfBasicEventElement&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfBasicEventElement::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfBasicEventElement::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfBasicEventElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfBasicEventElement::Done() const {
-  return done_;
-}
-
-const Error& OfBasicEventElement::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfBasicEventElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfBasicEventElement::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfBasicEventElement, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfBasicEventElement::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfBasicEventElement, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfBasicEventElement::Clone() const {
-  return common::make_unique<
-    OfBasicEventElement
-  >(*this);
-}
-
-void OfBasicEventElement::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kBasicEventElement: {
+      static const std::vector<Check> checks = {
+        {
+          &BasicEventElement_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !(instance_->direction() == types::Direction::kInput)
-          || (!(instance_->max_interval().has_value()))
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_11,
           L"Max. interval is not applicable for input direction."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (
-          IsModelReferenceToReferable(
-            instance_->observed()
-          )
-        ) {
-          state_ = 13;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_12,
           L"Observed must be a model reference to a referable."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (
-          !(instance_->message_broker().has_value())
-          || IsModelReferenceToReferable(
-            (*(instance_->message_broker()))
-          )
-        ) {
-          state_ = 14;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &BasicEventElement_13,
           L"Message broker must be a model reference to a referable."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        if (!(instance_->category().has_value())) {
-          state_ = 18;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 15: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 17;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 16;
-        return;
-      }
-
-      case 16: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 15;
-        continue;
-      }
-
-      case 17: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 18: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 22;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 19: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 21;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 20;
-        return;
-      }
-
-      case 20: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 19;
-        continue;
-      }
-
-      case 21: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 22: {
-        if (!(instance_->message_topic().has_value())) {
-          state_ = 26;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfMessageTopicType
-          >(
-            *(instance_->message_topic())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 23: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 25;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kMessageTopic
-          )
-        );
-
-        ++index_;
-
-        state_ = 24;
-        return;
-      }
-
-      case 24: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 23;
-        continue;
-      }
-
-      case 25: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 26: {
-        if (!(instance_->last_update().has_value())) {
-          state_ = 30;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfDateTimeUtc
-          >(
-            *(instance_->last_update())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 27: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 29;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kLastUpdate
-          )
-        );
-
-        ++index_;
-
-        state_ = 28;
-        return;
-      }
-
-      case 28: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 27;
-        continue;
-      }
-
-      case 29: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 30: {
-        if (!(instance_->min_interval().has_value())) {
-          state_ = 34;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfDuration
-          >(
-            *(instance_->min_interval())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 31: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 33;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kMinInterval
-          )
-        );
-
-        ++index_;
-
-        state_ = 32;
-        return;
-      }
-
-      case 32: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 31;
-        continue;
-      }
-
-      case 33: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 34: {
-        if (!(instance_->max_interval().has_value())) {
-          state_ = 38;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfDuration
-          >(
-            *(instance_->max_interval())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 35: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 37;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kMaxInterval
-          )
-        );
-
-        ++index_;
-
-        state_ = 36;
-        return;
-      }
-
-      case 36: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 35;
-        continue;
-      }
-
-      case 37: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 38: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 39;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfOperation : public impl::IVerificator {
- public:
-  OfOperation(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfOperation(
-    const OfOperation& other
-  );
-  OfOperation(
-    OfOperation&& other
-  );
-  OfOperation& operator=(
-    const OfOperation& other
-  );
-  OfOperation& operator=(
-    OfOperation&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfOperation() override = default;
-
- private:
-  std::shared_ptr<types::IOperation> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfOperation
-
-OfOperation::OfOperation(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IOperation
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfOperation::OfOperation(
-  const OfOperation& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfOperation::OfOperation(
-  OfOperation&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfOperation& OfOperation::operator=(
-  const OfOperation& other
-) {
-  return *this = OfOperation(other);
-}
-
-OfOperation& OfOperation::operator=(
-  OfOperation&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfOperation::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfOperation::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfOperation, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfOperation::Done() const {
-  return done_;
-}
-
-const Error& OfOperation::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfOperation, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfOperation::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfOperation, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfOperation::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfOperation, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfOperation::Clone() const {
-  return common::make_unique<
-    OfOperation
-  >(*this);
-}
-
-void OfOperation::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kOperation: {
+      static const std::vector<Check> checks = {
+        {
+          &Operation_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          IdShortsOfVariablesAreUnique(
-            instance_->input_variables(),
-            instance_->output_variables(),
-            instance_->inoutput_variables()
-          )
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_11,
           L"Constraint AASd-134: For an Operation the ID-short of all "
           L"values of input, output and in/output variables."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (
-          !(instance_->input_variables().has_value())
-          || ((*(instance_->input_variables())).size() >= 1)
-        ) {
-          state_ = 13;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_12,
           L"Input variables must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (
-          !(instance_->output_variables().has_value())
-          || ((*(instance_->output_variables())).size() >= 1)
-        ) {
-          state_ = 14;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_13,
           L"Output variables must be either not set or have at least "
           L"one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 14;
-        return;
-      }
-
-      case 14: {
-        if (
-          !(instance_->inoutput_variables().has_value())
-          || ((*(instance_->inoutput_variables())).size() >= 1)
-        ) {
-          state_ = 15;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Operation_14,
           L"Inoutput variables must be either not set or have at least "
           L"one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        if (!(instance_->category().has_value())) {
-          state_ = 19;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 16: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 18;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 17;
-        return;
-      }
-
-      case 17: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 16;
-        continue;
-      }
-
-      case 18: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 19: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 23;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 20: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 22;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 21;
-        return;
-      }
-
-      case 21: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 20;
-        continue;
-      }
-
-      case 22: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 23: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 24;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfOperationVariable : public impl::IVerificator {
- public:
-  OfOperationVariable(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfOperationVariable(
-    const OfOperationVariable& other
-  );
-  OfOperationVariable(
-    OfOperationVariable&& other
-  );
-  OfOperationVariable& operator=(
-    const OfOperationVariable& other
-  );
-  OfOperationVariable& operator=(
-    OfOperationVariable&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfOperationVariable() override = default;
-
- private:
-  std::shared_ptr<types::IOperationVariable> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfOperationVariable
-
-OfOperationVariable::OfOperationVariable(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IOperationVariable
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfOperationVariable::OfOperationVariable(
-  const OfOperationVariable& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfOperationVariable::OfOperationVariable(
-  OfOperationVariable&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfOperationVariable& OfOperationVariable::operator=(
-  const OfOperationVariable& other
-) {
-  return *this = OfOperationVariable(other);
-}
-
-OfOperationVariable& OfOperationVariable::operator=(
-  OfOperationVariable&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfOperationVariable::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfOperationVariable::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfOperationVariable, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfOperationVariable::Done() const {
-  return done_;
-}
-
-const Error& OfOperationVariable::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfOperationVariable, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfOperationVariable::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfOperationVariable, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfOperationVariable::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfOperationVariable, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfOperationVariable::Clone() const {
-  return common::make_unique<
-    OfOperationVariable
-  >(*this);
-}
-
-void OfOperationVariable::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->value()->id_short().has_value()) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kOperationVariable: {
+      static const std::vector<Check> checks = {
+        {
+          &OperationVariable_0,
           L"Value must have the ID-short specified according to "
           L"Constraint AASd-117 (ID-short of Referables not being "
           L"a direct child of a Submodel element list shall be "
           L"specified)."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+        }
+      };
+      return checks;
     }
-  }
-}
-
-class OfCapability : public impl::IVerificator {
- public:
-  OfCapability(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfCapability(
-    const OfCapability& other
-  );
-  OfCapability(
-    OfCapability&& other
-  );
-  OfCapability& operator=(
-    const OfCapability& other
-  );
-  OfCapability& operator=(
-    OfCapability&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfCapability() override = default;
-
- private:
-  std::shared_ptr<types::ICapability> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfCapability
-
-OfCapability::OfCapability(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::ICapability
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfCapability::OfCapability(
-  const OfCapability& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfCapability::OfCapability(
-  OfCapability&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfCapability& OfCapability::operator=(
-  const OfCapability& other
-) {
-  return *this = OfCapability(other);
-}
-
-OfCapability& OfCapability::operator=(
-  OfCapability&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfCapability::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfCapability::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfCapability, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfCapability::Done() const {
-  return done_;
-}
-
-const Error& OfCapability::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfCapability, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfCapability::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfCapability, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfCapability::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfCapability, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfCapability::Clone() const {
-  return common::make_unique<
-    OfCapability
-  >(*this);
-}
-
-void OfCapability::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kCapability: {
+      static const std::vector<Check> checks = {
+        {
+          &Capability_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Capability_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Capability_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Capability_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Capability_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Capability_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || ((*(instance_->supplemental_semantic_ids())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Capability_6,
           L"Supplemental semantic IDs must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->supplemental_semantic_ids().has_value())
-          || (instance_->semantic_id().has_value())
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Capability_7,
           L"Constraint AASd-118: If there are supplemental semantic IDs "
           L"defined then there shall be also a main semantic ID."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || ((*(instance_->qualifiers())).size() >= 1)
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Capability_8,
           L"Qualifiers must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !(instance_->qualifiers().has_value())
-          || QualifierTypesAreUnique(
-            (*(instance_->qualifiers()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Capability_9,
           L"Constraint AASd-021: Every qualifiable can only have one "
           L"qualifier with the same type."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Capability_10,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (!(instance_->category().has_value())) {
-          state_ = 15;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 12: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 14;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 12;
-        continue;
-      }
-
-      case 14: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 15: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 19;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 16: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 18;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 17;
-        return;
-      }
-
-      case 17: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 16;
-        continue;
-      }
-
-      case 18: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 19: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 20;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfConceptDescription : public impl::IVerificator {
- public:
-  OfConceptDescription(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfConceptDescription(
-    const OfConceptDescription& other
-  );
-  OfConceptDescription(
-    OfConceptDescription&& other
-  );
-  OfConceptDescription& operator=(
-    const OfConceptDescription& other
-  );
-  OfConceptDescription& operator=(
-    OfConceptDescription&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfConceptDescription() override = default;
-
- private:
-  std::shared_ptr<types::IConceptDescription> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfConceptDescription
-
-OfConceptDescription::OfConceptDescription(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IConceptDescription
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfConceptDescription::OfConceptDescription(
-  const OfConceptDescription& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfConceptDescription::OfConceptDescription(
-  OfConceptDescription&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfConceptDescription& OfConceptDescription::operator=(
-  const OfConceptDescription& other
-) {
-  return *this = OfConceptDescription(other);
-}
-
-OfConceptDescription& OfConceptDescription::operator=(
-  OfConceptDescription&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfConceptDescription::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfConceptDescription::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfConceptDescription, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfConceptDescription::Done() const {
-  return done_;
-}
-
-const Error& OfConceptDescription::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfConceptDescription, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfConceptDescription::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfConceptDescription, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfConceptDescription::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfConceptDescription, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfConceptDescription::Clone() const {
-  return common::make_unique<
-    OfConceptDescription
-  >(*this);
-}
-
-void OfConceptDescription::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->extensions().has_value())
-          || ((*(instance_->extensions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kConceptDescription: {
+      static const std::vector<Check> checks = {
+        {
+          &ConceptDescription_0,
           L"Extensions must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->extensions().has_value())
-          || ExtensionNamesAreUnique(
-            (*(instance_->extensions()))
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_1,
           L"Constraint AASd-077: The name of an extension within "
           L"Has-Extensions needs to be unique."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->description().has_value())
-          || ((*(instance_->description())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_2,
           L"Description must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->description().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->description()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_3,
           L"Description must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->display_name().has_value())
-          || ((*(instance_->display_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_4,
           L"Display name must be either not set or have at least one "
           L"item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->display_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->display_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_5,
           L"Display name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((*(instance_->embedded_data_specifications())).size() >= 1)
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_6,
           L"Embedded data specifications must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !(instance_->is_case_of().has_value())
-          || ((*(instance_->is_case_of())).size() >= 1)
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_7,
           L"Is-case-of must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !(instance_->embedded_data_specifications().has_value())
-          || ((
-            DataSpecificationIec61360sHaveDefinitionAtLeastInEnglish(
-              (*(instance_->embedded_data_specifications()))
-            )
-            || DataSpecificationIec61360sHaveValue(
-              (*(instance_->embedded_data_specifications()))
-            )
-          ))
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_8,
           L"Constraint AASc-3a-008: For a concept description using "
           L"data specification template IEC 61360, the definition is "
           L"mandatory and shall be defined at least in English. "
           L"Exception: The concept description describes a value."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (
-          !((
-            (instance_->category().has_value())
-            && (*(instance_->category())) == L"QUALIFIER_TYPE"
-            && (instance_->embedded_data_specifications().has_value())
-          ))
-          || DataSpecificationIec61360sHaveDataType(
-            (*(instance_->embedded_data_specifications()))
-          )
-        ) {
-          state_ = 10;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_9,
           L"Constraint AASc-3a-007: For a concept description with "
           L"category QUALIFIER_TYPE using data specification IEC 61360, "
           L"the data type of the data specification is mandatory and "
           L"shall be defined."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 10;
-        return;
-      }
-
-      case 10: {
-        if (
-          !((
-            (instance_->category().has_value())
-            && (*(instance_->category())) == L"DOCUMENT"
-            && (instance_->embedded_data_specifications().has_value())
-          ))
-          || DataSpecificationIec61360sForDocumentHaveAppropriateDataType(
-            (*(instance_->embedded_data_specifications()))
-          )
-        ) {
-          state_ = 11;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_10,
           L"Constraint AASc-3a-006: For a concept description with "
           L"category DOCUMENT using data specification IEC 61360, "
           L"the data type of the data specification shall be one of: "
           L"FILE, BLOB, HTML."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        if (
-          !((
-            (instance_->category().has_value())
-            && (*(instance_->category())) == L"REFERENCE"
-            && (instance_->embedded_data_specifications().has_value())
-          ))
-          || DataSpecificationIec61360sForReferenceHaveAppropriateDataType(
-            (*(instance_->embedded_data_specifications()))
-          )
-        ) {
-          state_ = 12;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_11,
           L"Constraint AASc-3a-005: For a concept description with "
           L"category REFERENCE using data specification IEC 61360, "
           L"the data type of the data specification shall be one of: "
           L"STRING, IRI, IRDI."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 12;
-        return;
-      }
-
-      case 12: {
-        if (
-          !((
-            (instance_->category().has_value())
-            && (
-              (
-                (*(instance_->category())) == L"PROPERTY"
-                || (*(instance_->category())) == L"VALUE"
-              )
-            )
-            && (instance_->embedded_data_specifications().has_value())
-          ))
-          || DataSpecificationIec61360sForPropertyOrValueHaveAppropriateDataType(
-            (*(instance_->embedded_data_specifications()))
-          )
-        ) {
-          state_ = 13;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &ConceptDescription_12,
           L"Constraint AASc-3a-004: For a concept description with "
           L"category PROPERTY or VALUE using data specification IEC "
           L"61360, the data type of the data specification is mandatory "
@@ -20951,4542 +7441,3667 @@ void OfConceptDescription::Execute() {
           L"INTEGER_MEASURE, INTEGER_COUNT, INTEGER_CURRENCY, "
           L"REAL_MEASURE, REAL_COUNT, REAL_CURRENCY, BOOLEAN, RATIONAL, "
           L"RATIONAL_MEASURE, TIME, TIMESTAMP."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 13;
-        return;
-      }
-
-      case 13: {
-        if (!(instance_->category().has_value())) {
-          state_ = 17;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNameType
-          >(
-            *(instance_->category())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 14: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 16;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kCategory
-          )
-        );
-
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 17: {
-        if (!(instance_->id_short().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdShortType
-          >(
-            *(instance_->id_short())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 18: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 20;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kIdShort
-          )
-        );
-
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 21: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdentifier
-          >(
-            instance_->id()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 22: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 24;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kId
-          )
-        );
-
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 25;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfReference : public impl::IVerificator {
- public:
-  OfReference(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfReference(
-    const OfReference& other
-  );
-  OfReference(
-    OfReference&& other
-  );
-  OfReference& operator=(
-    const OfReference& other
-  );
-  OfReference& operator=(
-    OfReference&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfReference() override = default;
-
- private:
-  std::shared_ptr<types::IReference> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfReference
-
-OfReference::OfReference(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IReference
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfReference::OfReference(
-  const OfReference& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfReference::OfReference(
-  OfReference&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfReference& OfReference::operator=(
-  const OfReference& other
-) {
-  return *this = OfReference(other);
-}
-
-OfReference& OfReference::operator=(
-  OfReference&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfReference::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfReference::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfReference, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfReference::Done() const {
-  return done_;
-}
-
-const Error& OfReference::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfReference, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfReference::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfReference, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfReference::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfReference, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfReference::Clone() const {
-  return common::make_unique<
-    OfReference
-  >(*this);
-}
-
-void OfReference::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->keys().size() >= 1) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kReference: {
+      static const std::vector<Check> checks = {
+        {
+          &Reference_0,
           L"Keys must contain at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->keys().size() >= 1)
-          || common::Contains(
-            constants::kGloballyIdentifiables,
-            instance_->keys().at(0)->type()
-          )
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Reference_1,
           L"Constraint AASd-121: For References the value of type of "
           L"the first key of keys shall be one of Globally "
           L"Identifiables."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !((
-            instance_->type() == types::ReferenceTypes::kExternalReference
-            && instance_->keys().size() >= 1
-          ))
-          || common::Contains(
-            constants::kGenericGloballyIdentifiables,
-            instance_->keys().at(0)->type()
-          )
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Reference_2,
           L"Constraint AASd-122: For external references the value of "
           L"type of the first key of keys shall be one of Generic "
           L"Globally Identifiables."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !((
-            instance_->type() == types::ReferenceTypes::kModelReference
-            && instance_->keys().size() >= 1
-          ))
-          || common::Contains(
-            constants::kAasIdentifiables,
-            instance_->keys().at(0)->type()
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Reference_3,
           L"Constraint AASd-123: For model references the value of type "
           L"of the first key of keys shall be one of AAS identifiables."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !((
-            instance_->type() == types::ReferenceTypes::kExternalReference
-            && instance_->keys().size() >= 1
-          ))
-          || ((
-            common::Contains(
-              constants::kGenericGloballyIdentifiables,
-              instance_->keys().back()->type()
-            )
-            || common::Contains(
-              constants::kGenericFragmentKeys,
-              instance_->keys().back()->type()
-            )
-          ))
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Reference_4,
           L"Constraint AASd-124: For external references the last key "
           L"of keys shall be either one of Generic Globally "
           L"Identifiables or one of Generic Fragment Keys."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !((
-            instance_->type() == types::ReferenceTypes::kModelReference
-            && instance_->keys().size() > 1
-          ))
-          || common::AllRange(
-            [&](size_t i) -> bool {
-              return common::Contains(
-                constants::kFragmentKeys,
-                instance_->keys().at(i)->type()
-              );
-            },
-            1,
-            instance_->keys().size()
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Reference_5,
           L"Constraint AASd-125: For model references with more than "
           L"one key in keys the value of type of each of the keys "
           L"following the first key of keys shall be one of Fragment "
           L"Keys."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (
-          !((
-            instance_->type() == types::ReferenceTypes::kModelReference
-            && instance_->keys().size() > 1
-          ))
-          || common::AllRange(
-            [&](size_t i) -> bool {
-              return !common::Contains(
-                constants::kGenericFragmentKeys,
-                instance_->keys().at(i)->type()
-              );
-            },
-            0,
-            instance_->keys().size() - (1)
-          )
-        ) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Reference_6,
           L"Constraint AASd-126: For model references with more than "
           L"one key in keys the value of type of the last key in "
           L"the reference key chain may be one of Generic Fragment Keys "
           L"or no key at all shall have a value out of Generic Fragment "
           L"Keys."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          !((
-            instance_->type() == types::ReferenceTypes::kModelReference
-            && instance_->keys().size() > 1
-            && instance_->keys().back()->type() == types::KeyTypes::kFragmentReference
-          ))
-          || ((
-            instance_->keys().at(instance_->keys().size() - 2)->type() == types::KeyTypes::kFile
-            || instance_->keys().at(instance_->keys().size() - 2)->type() == types::KeyTypes::kBlob
-          ))
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Reference_7,
           L"Constraint AASd-127: For model references, with more than "
           L"one key in keys a key with type Fragment Reference shall be "
           L"preceded by a key with type File or Blob."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          !((
-            instance_->type() == types::ReferenceTypes::kModelReference
-            && instance_->keys().size() > 2
-          ))
-          || common::AllRange(
-            [&](size_t i) -> bool {
-              return !(instance_->keys().at(i)->type() == types::KeyTypes::kSubmodelElementList)
-              || MatchesXsNonNegativeInteger(
-                instance_->keys().at(i + (1))->value()
-              );
-            },
-            0,
-            instance_->keys().size() - (1)
-          )
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Reference_8,
           L"Constraint AASd-128: For model references, the value of "
           L"a key preceded by a key with type Submodel element list is "
           L"an integer number denoting the position in the array of "
           L"the submodel element list."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 10;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfKey : public impl::IVerificator {
- public:
-  OfKey(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfKey(
-    const OfKey& other
-  );
-  OfKey(
-    OfKey&& other
-  );
-  OfKey& operator=(
-    const OfKey& other
-  );
-  OfKey& operator=(
-    OfKey&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfKey() override = default;
-
- private:
-  std::shared_ptr<types::IKey> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfKey
-
-OfKey::OfKey(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IKey
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfKey::OfKey(
-  const OfKey& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfKey::OfKey(
-  OfKey&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfKey& OfKey::operator=(
-  const OfKey& other
-) {
-  return *this = OfKey(other);
-}
-
-OfKey& OfKey::operator=(
-  OfKey&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfKey::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfKey::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfKey, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfKey::Done() const {
-  return done_;
-}
-
-const Error& OfKey::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfKey, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfKey::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfKey, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfKey::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfKey, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfKey::Clone() const {
-  return common::make_unique<
-    OfKey
-  >(*this);
-}
-
-void OfKey::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfIdentifier
-          >(
-            instance_->value()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 1: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 3;
-          continue;
         }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kValue
-          )
-        );
-
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 4;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfLangStringNameType : public impl::IVerificator {
- public:
-  OfLangStringNameType(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfLangStringNameType(
-    const OfLangStringNameType& other
-  );
-  OfLangStringNameType(
-    OfLangStringNameType&& other
-  );
-  OfLangStringNameType& operator=(
-    const OfLangStringNameType& other
-  );
-  OfLangStringNameType& operator=(
-    OfLangStringNameType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfLangStringNameType() override = default;
-
- private:
-  std::shared_ptr<types::ILangStringNameType> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfLangStringNameType
-
-OfLangStringNameType::OfLangStringNameType(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::ILangStringNameType
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfLangStringNameType::OfLangStringNameType(
-  const OfLangStringNameType& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfLangStringNameType::OfLangStringNameType(
-  OfLangStringNameType&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfLangStringNameType& OfLangStringNameType::operator=(
-  const OfLangStringNameType& other
-) {
-  return *this = OfLangStringNameType(other);
-}
-
-OfLangStringNameType& OfLangStringNameType::operator=(
-  OfLangStringNameType&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfLangStringNameType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfLangStringNameType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfLangStringNameType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfLangStringNameType::Done() const {
-  return done_;
-}
-
-const Error& OfLangStringNameType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfLangStringNameType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfLangStringNameType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfLangStringNameType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfLangStringNameType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfLangStringNameType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfLangStringNameType::Clone() const {
-  return common::make_unique<
-    OfLangStringNameType
-  >(*this);
-}
-
-void OfLangStringNameType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->text().size() <= 128) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kLangStringNameType: {
+      static const std::vector<Check> checks = {
+        {
+          &LangStringNameType_0,
           L"String shall have a maximum length of 128 characters."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfBcp47LanguageTag
-          >(
-            instance_->language()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 2: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 4;
-          continue;
         }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kLanguage
-          )
-        );
-
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 2;
-        continue;
-      }
-
-      case 4: {
-        constrained_primitive_verificator_ = nullptr;
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNonEmptyXmlSerializableString
-          >(
-            instance_->text()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 5: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 7;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kText
-          )
-        );
-
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 8;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfLangStringTextType : public impl::IVerificator {
- public:
-  OfLangStringTextType(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfLangStringTextType(
-    const OfLangStringTextType& other
-  );
-  OfLangStringTextType(
-    OfLangStringTextType&& other
-  );
-  OfLangStringTextType& operator=(
-    const OfLangStringTextType& other
-  );
-  OfLangStringTextType& operator=(
-    OfLangStringTextType&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfLangStringTextType() override = default;
-
- private:
-  std::shared_ptr<types::ILangStringTextType> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfLangStringTextType
-
-OfLangStringTextType::OfLangStringTextType(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::ILangStringTextType
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfLangStringTextType::OfLangStringTextType(
-  const OfLangStringTextType& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfLangStringTextType::OfLangStringTextType(
-  OfLangStringTextType&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfLangStringTextType& OfLangStringTextType::operator=(
-  const OfLangStringTextType& other
-) {
-  return *this = OfLangStringTextType(other);
-}
-
-OfLangStringTextType& OfLangStringTextType::operator=(
-  OfLangStringTextType&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfLangStringTextType::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfLangStringTextType::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfLangStringTextType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfLangStringTextType::Done() const {
-  return done_;
-}
-
-const Error& OfLangStringTextType::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfLangStringTextType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfLangStringTextType::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfLangStringTextType, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfLangStringTextType::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfLangStringTextType, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfLangStringTextType::Clone() const {
-  return common::make_unique<
-    OfLangStringTextType
-  >(*this);
-}
-
-void OfLangStringTextType::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->text().size() <= 1023) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kLangStringTextType: {
+      static const std::vector<Check> checks = {
+        {
+          &LangStringTextType_0,
           L"String shall have a maximum length of 1023 characters."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfBcp47LanguageTag
-          >(
-            instance_->language()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 2: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 4;
-          continue;
         }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kLanguage
-          )
-        );
-
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 2;
-        continue;
-      }
-
-      case 4: {
-        constrained_primitive_verificator_ = nullptr;
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNonEmptyXmlSerializableString
-          >(
-            instance_->text()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 5: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 7;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kText
-          )
-        );
-
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 8;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfEnvironment : public impl::IVerificator {
- public:
-  OfEnvironment(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfEnvironment(
-    const OfEnvironment& other
-  );
-  OfEnvironment(
-    OfEnvironment&& other
-  );
-  OfEnvironment& operator=(
-    const OfEnvironment& other
-  );
-  OfEnvironment& operator=(
-    OfEnvironment&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfEnvironment() override = default;
-
- private:
-  std::shared_ptr<types::IEnvironment> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfEnvironment
-
-OfEnvironment::OfEnvironment(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IEnvironment
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfEnvironment::OfEnvironment(
-  const OfEnvironment& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfEnvironment::OfEnvironment(
-  OfEnvironment&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfEnvironment& OfEnvironment::operator=(
-  const OfEnvironment& other
-) {
-  return *this = OfEnvironment(other);
-}
-
-OfEnvironment& OfEnvironment::operator=(
-  OfEnvironment&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfEnvironment::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfEnvironment::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfEnvironment, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfEnvironment::Done() const {
-  return done_;
-}
-
-const Error& OfEnvironment::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfEnvironment, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfEnvironment::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfEnvironment, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfEnvironment::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfEnvironment, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfEnvironment::Clone() const {
-  return common::make_unique<
-    OfEnvironment
-  >(*this);
-}
-
-void OfEnvironment::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !(instance_->concept_descriptions().has_value())
-          || ((*(instance_->concept_descriptions())).size() >= 1)
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kEnvironment: {
+      static const std::vector<Check> checks = {
+        {
+          &Environment_0,
           L"Concept descriptions must be either not set or have at "
           L"least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !(instance_->submodels().has_value())
-          || ((*(instance_->submodels())).size() >= 1)
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Environment_1,
           L"Submodels must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->asset_administration_shells().has_value())
-          || ((*(instance_->asset_administration_shells())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &Environment_2,
           L"Asset administration shells must be either not set or have "
           L"at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 4;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfEmbeddedDataSpecification : public impl::IVerificator {
- public:
-  OfEmbeddedDataSpecification(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfEmbeddedDataSpecification() override = default;
-};  // class OfEmbeddedDataSpecification
-
-OfEmbeddedDataSpecification::OfEmbeddedDataSpecification(
-  const std::shared_ptr<types::IClass>&
-) {
-  // Intentionally empty.
-}
-
-void OfEmbeddedDataSpecification::Start() {
-  // Intentionally empty.
-}
-
-void OfEmbeddedDataSpecification::Next() {
-  throw std::logic_error(
-    "You want to move "
-    "a verificator OfEmbeddedDataSpecification, "
-    "but the verificator is always done as "
-    "IEmbeddedDataSpecification "
-    "has no invariants defined."
-  );
-}
-
-bool OfEmbeddedDataSpecification::Done() const {
-  return true;
-}
-
-const Error& OfEmbeddedDataSpecification::Get() const {
-  throw std::logic_error(
-    "You want to get from "
-    "a verificator OfEmbeddedDataSpecification, "
-    "but the verificator is always done as "
-    "IEmbeddedDataSpecification "
-    "has no invariants defined."
-  );
-}
-
-Error& OfEmbeddedDataSpecification::GetMutable() {
-  throw std::logic_error(
-    "You want to get mutable from "
-    "a verificator OfEmbeddedDataSpecification, "
-    "but the verificator is always done as "
-    "IEmbeddedDataSpecification "
-    "has no invariants defined."
-  );
-}
-
-long OfEmbeddedDataSpecification::Index() const {
-  return -1;
-}
-
-std::unique_ptr<impl::IVerificator> OfEmbeddedDataSpecification::Clone() const {
-  return common::make_unique<
-    OfEmbeddedDataSpecification
-  >(*this);
-}
-
-class OfLevelType : public impl::IVerificator {
- public:
-  OfLevelType(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfLevelType() override = default;
-};  // class OfLevelType
-
-OfLevelType::OfLevelType(
-  const std::shared_ptr<types::IClass>&
-) {
-  // Intentionally empty.
-}
-
-void OfLevelType::Start() {
-  // Intentionally empty.
-}
-
-void OfLevelType::Next() {
-  throw std::logic_error(
-    "You want to move "
-    "a verificator OfLevelType, "
-    "but the verificator is always done as "
-    "ILevelType "
-    "has no invariants defined."
-  );
-}
-
-bool OfLevelType::Done() const {
-  return true;
-}
-
-const Error& OfLevelType::Get() const {
-  throw std::logic_error(
-    "You want to get from "
-    "a verificator OfLevelType, "
-    "but the verificator is always done as "
-    "ILevelType "
-    "has no invariants defined."
-  );
-}
-
-Error& OfLevelType::GetMutable() {
-  throw std::logic_error(
-    "You want to get mutable from "
-    "a verificator OfLevelType, "
-    "but the verificator is always done as "
-    "ILevelType "
-    "has no invariants defined."
-  );
-}
-
-long OfLevelType::Index() const {
-  return -1;
-}
-
-std::unique_ptr<impl::IVerificator> OfLevelType::Clone() const {
-  return common::make_unique<
-    OfLevelType
-  >(*this);
-}
-
-class OfValueReferencePair : public impl::IVerificator {
- public:
-  OfValueReferencePair(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfValueReferencePair(
-    const OfValueReferencePair& other
-  );
-  OfValueReferencePair(
-    OfValueReferencePair&& other
-  );
-  OfValueReferencePair& operator=(
-    const OfValueReferencePair& other
-  );
-  OfValueReferencePair& operator=(
-    OfValueReferencePair&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfValueReferencePair() override = default;
-
- private:
-  std::shared_ptr<types::IValueReferencePair> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfValueReferencePair
-
-OfValueReferencePair::OfValueReferencePair(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IValueReferencePair
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfValueReferencePair::OfValueReferencePair(
-  const OfValueReferencePair& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfValueReferencePair::OfValueReferencePair(
-  OfValueReferencePair&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfValueReferencePair& OfValueReferencePair::operator=(
-  const OfValueReferencePair& other
-) {
-  return *this = OfValueReferencePair(other);
-}
-
-OfValueReferencePair& OfValueReferencePair::operator=(
-  OfValueReferencePair&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfValueReferencePair::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfValueReferencePair::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfValueReferencePair, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfValueReferencePair::Done() const {
-  return done_;
-}
-
-const Error& OfValueReferencePair::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfValueReferencePair, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfValueReferencePair::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfValueReferencePair, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfValueReferencePair::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfValueReferencePair, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfValueReferencePair::Clone() const {
-  return common::make_unique<
-    OfValueReferencePair
-  >(*this);
-}
-
-void OfValueReferencePair::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfValueTypeIec61360
-          >(
-            instance_->value()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 1: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 3;
-          continue;
         }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kValue
-          )
-        );
-
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 4;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfValueList : public impl::IVerificator {
- public:
-  OfValueList(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfValueList(
-    const OfValueList& other
-  );
-  OfValueList(
-    OfValueList&& other
-  );
-  OfValueList& operator=(
-    const OfValueList& other
-  );
-  OfValueList& operator=(
-    OfValueList&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfValueList() override = default;
-
- private:
-  std::shared_ptr<types::IValueList> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-
-  void Execute();
-};  // class OfValueList
-
-OfValueList::OfValueList(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IValueList
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfValueList::OfValueList(
-  const OfValueList& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-}
-
-OfValueList::OfValueList(
-  OfValueList&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-}
-
-OfValueList& OfValueList::operator=(
-  const OfValueList& other
-) {
-  return *this = OfValueList(other);
-}
-
-OfValueList& OfValueList::operator=(
-  OfValueList&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-  }
-  return *this;
-}
-
-void OfValueList::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfValueList::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfValueList, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfValueList::Done() const {
-  return done_;
-}
-
-const Error& OfValueList::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfValueList, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfValueList::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfValueList, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfValueList::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfValueList, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfValueList::Clone() const {
-  return common::make_unique<
-    OfValueList
-  >(*this);
-}
-
-void OfValueList::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->value_reference_pairs().size() >= 1) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kValueList: {
+      static const std::vector<Check> checks = {
+        {
+          &ValueList_0,
           L"Value reference pair types must contain at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 2;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
-    }
-  }
-}
-
-class OfLangStringPreferredNameTypeIec61360 : public impl::IVerificator {
- public:
-  OfLangStringPreferredNameTypeIec61360(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfLangStringPreferredNameTypeIec61360(
-    const OfLangStringPreferredNameTypeIec61360& other
-  );
-  OfLangStringPreferredNameTypeIec61360(
-    OfLangStringPreferredNameTypeIec61360&& other
-  );
-  OfLangStringPreferredNameTypeIec61360& operator=(
-    const OfLangStringPreferredNameTypeIec61360& other
-  );
-  OfLangStringPreferredNameTypeIec61360& operator=(
-    OfLangStringPreferredNameTypeIec61360&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfLangStringPreferredNameTypeIec61360() override = default;
-
- private:
-  std::shared_ptr<types::ILangStringPreferredNameTypeIec61360> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfLangStringPreferredNameTypeIec61360
-
-OfLangStringPreferredNameTypeIec61360::OfLangStringPreferredNameTypeIec61360(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::ILangStringPreferredNameTypeIec61360
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfLangStringPreferredNameTypeIec61360::OfLangStringPreferredNameTypeIec61360(
-  const OfLangStringPreferredNameTypeIec61360& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfLangStringPreferredNameTypeIec61360::OfLangStringPreferredNameTypeIec61360(
-  OfLangStringPreferredNameTypeIec61360&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfLangStringPreferredNameTypeIec61360& OfLangStringPreferredNameTypeIec61360::operator=(
-  const OfLangStringPreferredNameTypeIec61360& other
-) {
-  return *this = OfLangStringPreferredNameTypeIec61360(other);
-}
-
-OfLangStringPreferredNameTypeIec61360& OfLangStringPreferredNameTypeIec61360::operator=(
-  OfLangStringPreferredNameTypeIec61360&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfLangStringPreferredNameTypeIec61360::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfLangStringPreferredNameTypeIec61360::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfLangStringPreferredNameTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfLangStringPreferredNameTypeIec61360::Done() const {
-  return done_;
-}
-
-const Error& OfLangStringPreferredNameTypeIec61360::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfLangStringPreferredNameTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfLangStringPreferredNameTypeIec61360::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfLangStringPreferredNameTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfLangStringPreferredNameTypeIec61360::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfLangStringPreferredNameTypeIec61360, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfLangStringPreferredNameTypeIec61360::Clone() const {
-  return common::make_unique<
-    OfLangStringPreferredNameTypeIec61360
-  >(*this);
-}
-
-void OfLangStringPreferredNameTypeIec61360::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->text().size() <= 255) {
-          state_ = 1;
-          continue;
         }
-
-        error_ = common::make_unique<Error>(
+      };
+      return checks;
+    }
+    case Shape::kLangStringPreferredNameTypeIec61360: {
+      static const std::vector<Check> checks = {
+        {
+          &LangStringPreferredNameTypeIec61360_0,
           L"String shall have a maximum length of 255 characters."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfBcp47LanguageTag
-          >(
-            instance_->language()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 2: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 4;
-          continue;
         }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kLanguage
-          )
-        );
-
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 2;
-        continue;
-      }
-
-      case 4: {
-        constrained_primitive_verificator_ = nullptr;
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNonEmptyXmlSerializableString
-          >(
-            instance_->text()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 5: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 7;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kText
-          )
-        );
-
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 8;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfLangStringShortNameTypeIec61360 : public impl::IVerificator {
- public:
-  OfLangStringShortNameTypeIec61360(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfLangStringShortNameTypeIec61360(
-    const OfLangStringShortNameTypeIec61360& other
-  );
-  OfLangStringShortNameTypeIec61360(
-    OfLangStringShortNameTypeIec61360&& other
-  );
-  OfLangStringShortNameTypeIec61360& operator=(
-    const OfLangStringShortNameTypeIec61360& other
-  );
-  OfLangStringShortNameTypeIec61360& operator=(
-    OfLangStringShortNameTypeIec61360&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfLangStringShortNameTypeIec61360() override = default;
-
- private:
-  std::shared_ptr<types::ILangStringShortNameTypeIec61360> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfLangStringShortNameTypeIec61360
-
-OfLangStringShortNameTypeIec61360::OfLangStringShortNameTypeIec61360(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::ILangStringShortNameTypeIec61360
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfLangStringShortNameTypeIec61360::OfLangStringShortNameTypeIec61360(
-  const OfLangStringShortNameTypeIec61360& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfLangStringShortNameTypeIec61360::OfLangStringShortNameTypeIec61360(
-  OfLangStringShortNameTypeIec61360&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfLangStringShortNameTypeIec61360& OfLangStringShortNameTypeIec61360::operator=(
-  const OfLangStringShortNameTypeIec61360& other
-) {
-  return *this = OfLangStringShortNameTypeIec61360(other);
-}
-
-OfLangStringShortNameTypeIec61360& OfLangStringShortNameTypeIec61360::operator=(
-  OfLangStringShortNameTypeIec61360&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfLangStringShortNameTypeIec61360::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfLangStringShortNameTypeIec61360::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfLangStringShortNameTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfLangStringShortNameTypeIec61360::Done() const {
-  return done_;
-}
-
-const Error& OfLangStringShortNameTypeIec61360::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfLangStringShortNameTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfLangStringShortNameTypeIec61360::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfLangStringShortNameTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfLangStringShortNameTypeIec61360::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfLangStringShortNameTypeIec61360, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfLangStringShortNameTypeIec61360::Clone() const {
-  return common::make_unique<
-    OfLangStringShortNameTypeIec61360
-  >(*this);
-}
-
-void OfLangStringShortNameTypeIec61360::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->text().size() <= 18) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kLangStringShortNameTypeIec61360: {
+      static const std::vector<Check> checks = {
+        {
+          &LangStringShortNameTypeIec61360_0,
           L"String shall have a maximum length of 18 characters."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfBcp47LanguageTag
-          >(
-            instance_->language()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 2: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 4;
-          continue;
         }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kLanguage
-          )
-        );
-
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 2;
-        continue;
-      }
-
-      case 4: {
-        constrained_primitive_verificator_ = nullptr;
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNonEmptyXmlSerializableString
-          >(
-            instance_->text()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 5: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 7;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kText
-          )
-        );
-
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 8;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfLangStringDefinitionTypeIec61360 : public impl::IVerificator {
- public:
-  OfLangStringDefinitionTypeIec61360(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfLangStringDefinitionTypeIec61360(
-    const OfLangStringDefinitionTypeIec61360& other
-  );
-  OfLangStringDefinitionTypeIec61360(
-    OfLangStringDefinitionTypeIec61360&& other
-  );
-  OfLangStringDefinitionTypeIec61360& operator=(
-    const OfLangStringDefinitionTypeIec61360& other
-  );
-  OfLangStringDefinitionTypeIec61360& operator=(
-    OfLangStringDefinitionTypeIec61360&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfLangStringDefinitionTypeIec61360() override = default;
-
- private:
-  std::shared_ptr<types::ILangStringDefinitionTypeIec61360> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfLangStringDefinitionTypeIec61360
-
-OfLangStringDefinitionTypeIec61360::OfLangStringDefinitionTypeIec61360(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::ILangStringDefinitionTypeIec61360
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfLangStringDefinitionTypeIec61360::OfLangStringDefinitionTypeIec61360(
-  const OfLangStringDefinitionTypeIec61360& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfLangStringDefinitionTypeIec61360::OfLangStringDefinitionTypeIec61360(
-  OfLangStringDefinitionTypeIec61360&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfLangStringDefinitionTypeIec61360& OfLangStringDefinitionTypeIec61360::operator=(
-  const OfLangStringDefinitionTypeIec61360& other
-) {
-  return *this = OfLangStringDefinitionTypeIec61360(other);
-}
-
-OfLangStringDefinitionTypeIec61360& OfLangStringDefinitionTypeIec61360::operator=(
-  OfLangStringDefinitionTypeIec61360&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfLangStringDefinitionTypeIec61360::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfLangStringDefinitionTypeIec61360::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfLangStringDefinitionTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfLangStringDefinitionTypeIec61360::Done() const {
-  return done_;
-}
-
-const Error& OfLangStringDefinitionTypeIec61360::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfLangStringDefinitionTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfLangStringDefinitionTypeIec61360::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfLangStringDefinitionTypeIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfLangStringDefinitionTypeIec61360::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfLangStringDefinitionTypeIec61360, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfLangStringDefinitionTypeIec61360::Clone() const {
-  return common::make_unique<
-    OfLangStringDefinitionTypeIec61360
-  >(*this);
-}
-
-void OfLangStringDefinitionTypeIec61360::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (instance_->text().size() <= 1023) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kLangStringDefinitionTypeIec61360: {
+      static const std::vector<Check> checks = {
+        {
+          &LangStringDefinitionTypeIec61360_0,
           L"String shall have a maximum length of 1023 characters."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfBcp47LanguageTag
-          >(
-            instance_->language()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 2: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 4;
-          continue;
         }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kLanguage
-          )
-        );
-
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 2;
-        continue;
-      }
-
-      case 4: {
-        constrained_primitive_verificator_ = nullptr;
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNonEmptyXmlSerializableString
-          >(
-            instance_->text()
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 5: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 7;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kText
-          )
-        );
-
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        constrained_primitive_verificator_ = nullptr;
-
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 8;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-class OfDataSpecificationIec61360 : public impl::IVerificator {
- public:
-  OfDataSpecificationIec61360(
-    const std::shared_ptr<types::IClass>& instance
-  );
-
-  OfDataSpecificationIec61360(
-    const OfDataSpecificationIec61360& other
-  );
-  OfDataSpecificationIec61360(
-    OfDataSpecificationIec61360&& other
-  );
-  OfDataSpecificationIec61360& operator=(
-    const OfDataSpecificationIec61360& other
-  );
-  OfDataSpecificationIec61360& operator=(
-    OfDataSpecificationIec61360&& other
-  );
-
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
-
-  std::unique_ptr<impl::IVerificator> Clone() const override;
-
-  ~OfDataSpecificationIec61360() override = default;
-
- private:
-  std::shared_ptr<types::IDataSpecificationIec61360> instance_;
-  bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> constrained_primitive_verificator_;
-
-  void Execute();
-};  // class OfDataSpecificationIec61360
-
-OfDataSpecificationIec61360::OfDataSpecificationIec61360(
-  const std::shared_ptr<types::IClass>& instance
-) :
-  // NOTE (mristin)
-  // We cast here despite the cost of increasing the use count of the shared pointer.
-  // Otherwise, if we didn't cast, we would not be able to have a uniform interface
-  // for the verification functions based on the shared pointer.
-  instance_(
-    std::dynamic_pointer_cast<
-      types::IDataSpecificationIec61360
-    >(
-      instance
-    )
-  ) {
-  // Intentionally empty.
-}
-
-OfDataSpecificationIec61360::OfDataSpecificationIec61360(
-  const OfDataSpecificationIec61360& other
-) {
-  instance_ = other.instance_;
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = (
-    other.constrained_primitive_verificator_->Clone()
-  );
-}
-
-OfDataSpecificationIec61360::OfDataSpecificationIec61360(
-  OfDataSpecificationIec61360&& other
-) {
-  instance_ = std::move(other.instance_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  state_ = other.state_;
-  constrained_primitive_verificator_ = std::move(
-    other.constrained_primitive_verificator_
-  );
-}
-
-OfDataSpecificationIec61360& OfDataSpecificationIec61360::operator=(
-  const OfDataSpecificationIec61360& other
-) {
-  return *this = OfDataSpecificationIec61360(other);
-}
-
-OfDataSpecificationIec61360& OfDataSpecificationIec61360::operator=(
-  OfDataSpecificationIec61360&& other
-) {
-  if (this != &other) {
-    instance_ = std::move(other.instance_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    state_ = other.state_;
-    constrained_primitive_verificator_ = std::move(
-      other.constrained_primitive_verificator_
-    );
-  }
-  return *this;
-}
-
-void OfDataSpecificationIec61360::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void OfDataSpecificationIec61360::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to move a verificator OfDataSpecificationIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool OfDataSpecificationIec61360::Done() const {
-  return done_;
-}
-
-const Error& OfDataSpecificationIec61360::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a verificator OfDataSpecificationIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& OfDataSpecificationIec61360::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a verificator OfDataSpecificationIec61360, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long OfDataSpecificationIec61360::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done verificator OfDataSpecificationIec61360, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> OfDataSpecificationIec61360::Clone() const {
-  return common::make_unique<
-    OfDataSpecificationIec61360
-  >(*this);
-}
-
-void OfDataSpecificationIec61360::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        done_ = false;
-        error_ = nullptr;
-        index_ = -1;
-
-        if (
-          !((
-            (instance_->value().has_value())
-            && (instance_->value_list().has_value())
-          ))
-        ) {
-          state_ = 1;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+    case Shape::kDataSpecificationIec61360: {
+      static const std::vector<Check> checks = {
+        {
+          &DataSpecificationIec61360_0,
           L"Constraint AASc-3a-010: If value is not empty then value "
           L"list shall be empty and vice versa."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 1;
-        return;
-      }
-
-      case 1: {
-        if (
-          !((
-            (instance_->data_type().has_value())
-            && common::Contains(
-              constants::kIec61360DataTypesWithUnit,
-              (*(instance_->data_type()))
-            )
-          ))
-          || ((
-            (instance_->unit().has_value())
-            || (instance_->unit_id().has_value())
-          ))
-        ) {
-          state_ = 2;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &DataSpecificationIec61360_1,
           L"Constraint AASc-3a-009: If data type is a an integer, real "
           L"or rational with a measure or currency, unit or unit ID "
           L"shall be defined."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        if (
-          !(instance_->definition().has_value())
-          || ((*(instance_->definition())).size() >= 1)
-        ) {
-          state_ = 3;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &DataSpecificationIec61360_2,
           L"Definition must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 3;
-        return;
-      }
-
-      case 3: {
-        if (
-          !(instance_->definition().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->definition()))
-          )
-        ) {
-          state_ = 4;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &DataSpecificationIec61360_3,
           L"Definition must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 4;
-        return;
-      }
-
-      case 4: {
-        if (
-          !(instance_->short_name().has_value())
-          || ((*(instance_->short_name())).size() >= 1)
-        ) {
-          state_ = 5;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &DataSpecificationIec61360_4,
           L"Short name must be either not set or have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 5;
-        return;
-      }
-
-      case 5: {
-        if (
-          !(instance_->short_name().has_value())
-          || LangStringsHaveUniqueLanguages(
-            (*(instance_->short_name()))
-          )
-        ) {
-          state_ = 6;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &DataSpecificationIec61360_5,
           L"Short name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        if (instance_->preferred_name().size() >= 1) {
-          state_ = 7;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &DataSpecificationIec61360_6,
           L"Preferred name must have at least one item."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 7;
-        return;
-      }
-
-      case 7: {
-        if (
-          LangStringsHaveUniqueLanguages(
-            instance_->preferred_name()
-          )
-        ) {
-          state_ = 8;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &DataSpecificationIec61360_7,
           L"Preferred name must specify unique languages."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 8;
-        return;
-      }
-
-      case 8: {
-        if (
-          common::Some(
-            [&](const std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>& lang_string) -> bool {
-              return IsBcp47ForEnglish(
-                lang_string->language()
-              );
-            },
-            instance_->preferred_name()
-          )
-        ) {
-          state_ = 9;
-          continue;
-        }
-
-        error_ = common::make_unique<Error>(
+        },
+        {
+          &DataSpecificationIec61360_8,
           L"Constraint AASc-3a-002: preferred name shall be provided at "
           L"least in English."
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 9;
-        return;
-      }
-
-      case 9: {
-        if (!(instance_->unit().has_value())) {
-          state_ = 13;
-          continue;
         }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNonEmptyXmlSerializableString
-          >(
-            *(instance_->unit())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 10: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 12;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kUnit
-          )
-        );
-
-        ++index_;
-
-        state_ = 11;
-        return;
-      }
-
-      case 11: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 10;
-        continue;
-      }
-
-      case 12: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 13: {
-        if (!(instance_->source_of_definition().has_value())) {
-          state_ = 17;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNonEmptyXmlSerializableString
-          >(
-            *(instance_->source_of_definition())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 14: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 16;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kSourceOfDefinition
-          )
-        );
-
-        ++index_;
-
-        state_ = 15;
-        return;
-      }
-
-      case 15: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 14;
-        continue;
-      }
-
-      case 16: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 17: {
-        if (!(instance_->symbol().has_value())) {
-          state_ = 21;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNonEmptyXmlSerializableString
-          >(
-            *(instance_->symbol())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 18: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 20;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kSymbol
-          )
-        );
-
-        ++index_;
-
-        state_ = 19;
-        return;
-      }
-
-      case 19: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 18;
-        continue;
-      }
-
-      case 20: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 21: {
-        if (!(instance_->value_format().has_value())) {
-          state_ = 25;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfNonEmptyXmlSerializableString
-          >(
-            *(instance_->value_format())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 22: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 24;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kValueFormat
-          )
-        );
-
-        ++index_;
-
-        state_ = 23;
-        return;
-      }
-
-      case 23: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 22;
-        continue;
-      }
-
-      case 24: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 25: {
-        if (!(instance_->value().has_value())) {
-          state_ = 29;
-          continue;
-        }
-
-        constrained_primitive_verificator_ = (
-          common::make_unique<
-            constrained_primitive_verificator::OfValueTypeIec61360
-          >(
-            *(instance_->value())
-          )
-        );
-        constrained_primitive_verificator_->Start();
-      }
-
-      case 26: {
-        if (!(!constrained_primitive_verificator_->Done())) {
-          state_ = 28;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            constrained_primitive_verificator_->GetMutable()
-          )
-        );
-
-        error_->path.segments.emplace_front(
-          common::make_unique<iteration::PropertySegment>(
-            iteration::Property::kValue
-          )
-        );
-
-        ++index_;
-
-        state_ = 27;
-        return;
-      }
-
-      case 27: {
-        constrained_primitive_verificator_->Next();
-
-        state_ = 26;
-        continue;
-      }
-
-      case 28: {
-        constrained_primitive_verificator_ = nullptr;
-      }
-
-      case 29: {
-        done_ = true;
-        error_ = nullptr;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 30;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+      };
+      return checks;
     }
-  }
-}
-
-}  // namespace non_recursive_verificator
-
-std::unique_ptr<impl::IVerificator> NewNonRecursiveVerificator(
-  const std::shared_ptr<types::IClass>& instance
-) {
-  switch (instance->model_type()) {
-    case types::ModelType::kExtension:
-      return common::make_unique<
-        non_recursive_verificator::OfExtension
-      >(
-        instance
-      );
-    case types::ModelType::kAdministrativeInformation:
-      return common::make_unique<
-        non_recursive_verificator::OfAdministrativeInformation
-      >(
-        instance
-      );
-    case types::ModelType::kQualifier:
-      return common::make_unique<
-        non_recursive_verificator::OfQualifier
-      >(
-        instance
-      );
-    case types::ModelType::kAssetAdministrationShell:
-      return common::make_unique<
-        non_recursive_verificator::OfAssetAdministrationShell
-      >(
-        instance
-      );
-    case types::ModelType::kAssetInformation:
-      return common::make_unique<
-        non_recursive_verificator::OfAssetInformation
-      >(
-        instance
-      );
-    case types::ModelType::kResource:
-      return common::make_unique<
-        non_recursive_verificator::OfResource
-      >(
-        instance
-      );
-    case types::ModelType::kSpecificAssetId:
-      return common::make_unique<
-        non_recursive_verificator::OfSpecificAssetId
-      >(
-        instance
-      );
-    case types::ModelType::kSubmodel:
-      return common::make_unique<
-        non_recursive_verificator::OfSubmodel
-      >(
-        instance
-      );
-    case types::ModelType::kRelationshipElement:
-      return common::make_unique<
-        non_recursive_verificator::OfRelationshipElement
-      >(
-        instance
-      );
-    case types::ModelType::kSubmodelElementList:
-      return common::make_unique<
-        non_recursive_verificator::OfSubmodelElementList
-      >(
-        instance
-      );
-    case types::ModelType::kSubmodelElementCollection:
-      return common::make_unique<
-        non_recursive_verificator::OfSubmodelElementCollection
-      >(
-        instance
-      );
-    case types::ModelType::kProperty:
-      return common::make_unique<
-        non_recursive_verificator::OfProperty
-      >(
-        instance
-      );
-    case types::ModelType::kMultiLanguageProperty:
-      return common::make_unique<
-        non_recursive_verificator::OfMultiLanguageProperty
-      >(
-        instance
-      );
-    case types::ModelType::kRange:
-      return common::make_unique<
-        non_recursive_verificator::OfRange
-      >(
-        instance
-      );
-    case types::ModelType::kReferenceElement:
-      return common::make_unique<
-        non_recursive_verificator::OfReferenceElement
-      >(
-        instance
-      );
-    case types::ModelType::kBlob:
-      return common::make_unique<
-        non_recursive_verificator::OfBlob
-      >(
-        instance
-      );
-    case types::ModelType::kFile:
-      return common::make_unique<
-        non_recursive_verificator::OfFile
-      >(
-        instance
-      );
-    case types::ModelType::kAnnotatedRelationshipElement:
-      return common::make_unique<
-        non_recursive_verificator::OfAnnotatedRelationshipElement
-      >(
-        instance
-      );
-    case types::ModelType::kEntity:
-      return common::make_unique<
-        non_recursive_verificator::OfEntity
-      >(
-        instance
-      );
-    case types::ModelType::kEventPayload:
-      return common::make_unique<
-        non_recursive_verificator::OfEventPayload
-      >(
-        instance
-      );
-    case types::ModelType::kBasicEventElement:
-      return common::make_unique<
-        non_recursive_verificator::OfBasicEventElement
-      >(
-        instance
-      );
-    case types::ModelType::kOperation:
-      return common::make_unique<
-        non_recursive_verificator::OfOperation
-      >(
-        instance
-      );
-    case types::ModelType::kOperationVariable:
-      return common::make_unique<
-        non_recursive_verificator::OfOperationVariable
-      >(
-        instance
-      );
-    case types::ModelType::kCapability:
-      return common::make_unique<
-        non_recursive_verificator::OfCapability
-      >(
-        instance
-      );
-    case types::ModelType::kConceptDescription:
-      return common::make_unique<
-        non_recursive_verificator::OfConceptDescription
-      >(
-        instance
-      );
-    case types::ModelType::kReference:
-      return common::make_unique<
-        non_recursive_verificator::OfReference
-      >(
-        instance
-      );
-    case types::ModelType::kKey:
-      return common::make_unique<
-        non_recursive_verificator::OfKey
-      >(
-        instance
-      );
-    case types::ModelType::kLangStringNameType:
-      return common::make_unique<
-        non_recursive_verificator::OfLangStringNameType
-      >(
-        instance
-      );
-    case types::ModelType::kLangStringTextType:
-      return common::make_unique<
-        non_recursive_verificator::OfLangStringTextType
-      >(
-        instance
-      );
-    case types::ModelType::kEnvironment:
-      return common::make_unique<
-        non_recursive_verificator::OfEnvironment
-      >(
-        instance
-      );
-    case types::ModelType::kEmbeddedDataSpecification:
-      return common::make_unique<
-        non_recursive_verificator::OfEmbeddedDataSpecification
-      >(
-        instance
-      );
-    case types::ModelType::kLevelType:
-      return common::make_unique<
-        non_recursive_verificator::OfLevelType
-      >(
-        instance
-      );
-    case types::ModelType::kValueReferencePair:
-      return common::make_unique<
-        non_recursive_verificator::OfValueReferencePair
-      >(
-        instance
-      );
-    case types::ModelType::kValueList:
-      return common::make_unique<
-        non_recursive_verificator::OfValueList
-      >(
-        instance
-      );
-    case types::ModelType::kLangStringPreferredNameTypeIec61360:
-      return common::make_unique<
-        non_recursive_verificator::OfLangStringPreferredNameTypeIec61360
-      >(
-        instance
-      );
-    case types::ModelType::kLangStringShortNameTypeIec61360:
-      return common::make_unique<
-        non_recursive_verificator::OfLangStringShortNameTypeIec61360
-      >(
-        instance
-      );
-    case types::ModelType::kLangStringDefinitionTypeIec61360:
-      return common::make_unique<
-        non_recursive_verificator::OfLangStringDefinitionTypeIec61360
-      >(
-        instance
-      );
-    case types::ModelType::kDataSpecificationIec61360:
-      return common::make_unique<
-        non_recursive_verificator::OfDataSpecificationIec61360
-      >(
-        instance
-      );
     default:
       throw std::logic_error(
         common::Concat(
-          "Unexpected model type: ",
-          std::to_string(
-            static_cast<std::uint32_t>(instance->model_type())
-          )
+          "Unexpected shape: ",
+          std::to_string(static_cast<std::uint32_t>(shape))
         )
       );
   }
 }
 
-// endregion Non-recursive verificators
+// endregion Checks
 
-// region Recursive verificators
+/**
+ * \brief Create the nested verification of the \p value, if its \p shape has one.
+ *
+ * \return nullptr if the shape has no nested verification
+ */
+std::unique_ptr<impl::IVerificator> NewNestedVerificator(
+  Shape,
+  const void*
+) {
+  // NOTE (mristin):
+  // The meta-model uses no JSON-able values, so no value needs a nested
+  // verification.
+  return nullptr;
+}
 
-class RecursiveVerificator : public impl::IVerificator {
+// region Iteration over the values
+
+/**
+ * \brief Iterate lazily over the values to be verified.
+ *
+ * Every value comes with its \ref Shape, which tells which checks apply to it.
+ *
+ * We build no paths while iterating. The path to the current value is built only
+ * when an error has been found, see \ref AppendToPath.
+ *
+ * The iterators are combined out of the combinators below. They follow three rules
+ * so that we never build the iterators over the whole model up front:
+ * 1. \ref ChainIterator starts a child only once the previous child is done.
+ * 2. \ref OverIterator dispatches on the instance only in \ref Start.
+ * 3. \ref EachIterator builds the iterator over an item only once the iteration
+ *    reaches the item.
+ *
+ * Under these rules, every combinator is cheap to construct eagerly.
+ */
+class IIterator {
  public:
-  RecursiveVerificator(
-    const std::shared_ptr<types::IClass>& instance
-  );
+  /**
+   * Position at the first value, or become done if there are no values.
+   */
+  virtual void Start() = 0;
 
-  RecursiveVerificator(const RecursiveVerificator& other);
-  RecursiveVerificator(RecursiveVerificator&& other);
-  RecursiveVerificator& operator=(const RecursiveVerificator& other);
-  RecursiveVerificator& operator=(RecursiveVerificator&& other);
+  /**
+   * Move to the next value, or become done if there are no more values.
+   */
+  virtual void Next() = 0;
 
-  void Start() override;
-  void Next() override;
-  bool Done() const override;
-  const Error& Get() const override;
-  Error& GetMutable() override;
-  long Index() const override;
+  virtual bool Done() const = 0;
 
-  std::unique_ptr<impl::IVerificator> Clone() const override;
+  /**
+   * \brief Point to the current value.
+   *
+   * The pointer is valid only until the next call to \ref Next.
+   */
+  virtual const void* Value() const = 0;
 
-  ~RecursiveVerificator() override = default;
+  virtual Shape ShapeOf() const = 0;
+
+  /**
+   * \brief Append the segments leading to the current value to the \p path.
+   *
+   * Only called when an error is found, so the iteration itself builds no paths.
+   */
+  virtual void AppendToPath(iteration::Path& path) const = 0;
+
+  virtual std::unique_ptr<IIterator> Clone() const = 0;
+
+  virtual ~IIterator() = default;
+};  // class IIterator
+
+/**
+ * Iterate over no values at all.
+ */
+class EmptyIterator : public IIterator {
+ public:
+  void Start() override {
+    // Intentionally empty.
+  }
+
+  void Next() override {
+    throw std::logic_error(
+      "You want to move an EmptyIterator, but it is always done."
+    );
+  }
+
+  bool Done() const override {
+    return true;
+  }
+
+  const void* Value() const override {
+    throw std::logic_error(
+      "You want to get a value from an EmptyIterator, but it is always done."
+    );
+  }
+
+  Shape ShapeOf() const override {
+    throw std::logic_error(
+      "You want to get a shape from an EmptyIterator, but it is always done."
+    );
+  }
+
+  void AppendToPath(iteration::Path&) const override {
+    throw std::logic_error(
+      "You want to append the path of an EmptyIterator, but it is always done."
+    );
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<EmptyIterator>(*this);
+  }
+};  // class EmptyIterator
+
+std::unique_ptr<IIterator> Empty() {
+  return common::make_unique<EmptyIterator>();
+}
+
+/**
+ * Iterate over a single value which lives in the model.
+ */
+class OneIterator : public IIterator {
+ public:
+  OneIterator(
+    const void* value,
+    Shape shape
+  ) :
+    value_(value),
+    shape_(shape),
+    done_(true) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    done_ = false;
+  }
+
+  void Next() override {
+    done_ = true;
+  }
+
+  bool Done() const override {
+    return done_;
+  }
+
+  const void* Value() const override {
+    return value_;
+  }
+
+  Shape ShapeOf() const override {
+    return shape_;
+  }
+
+  void AppendToPath(iteration::Path&) const override {
+    // Intentionally empty, as the value itself is the end of the path.
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<OneIterator>(*this);
+  }
 
  private:
-  // NOTE(mristin):
-  // We use a pointer to a shared pointer here so that we can implement
-  // copy-assignment and move-assignment. Otherwise, if we used a constant
-  // reference here, the assignments could not be implemented as C++ does not
-  // allow re-binding of constant references.
-  const std::shared_ptr<types::IClass>* instance_;
-
-  std::uint32_t state_;
-  std::unique_ptr<impl::IVerificator> verificator_;
+  const void* value_;
+  Shape shape_;
   bool done_;
-  long index_;
-  std::unique_ptr<Error> error_;
-  common::optional<iteration::Iterator> iterator_;
-  common::optional<iteration::Iterator> iterator_end_;
+};  // class OneIterator
 
-  void Execute();
-};  // class RecursiveVerificator
-
-RecursiveVerificator::RecursiveVerificator(
-  const std::shared_ptr<types::IClass>& instance
-) : instance_(&instance) {
-  // Intentionally empty.
-}
-
-RecursiveVerificator::RecursiveVerificator(const RecursiveVerificator& other) {
-  instance_ = other.instance_;
-  state_ = other.state_;
-  verificator_ = other.verificator_->Clone();
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = common::make_unique<Error>(*(other.error_));
-  iterator_ = other.iterator_;
-  iterator_end_ = other.iterator_end_;
-}
-
-RecursiveVerificator::RecursiveVerificator(RecursiveVerificator&& other) {
-  instance_ = other.instance_;
-  state_ = other.state_;
-  verificator_ = std::move(other.verificator_);
-  done_ = other.done_;
-  index_ = other.index_;
-  error_ = std::move(other.error_);
-  iterator_ = std::move(other.iterator_);
-  iterator_end_ = std::move(other.iterator_end_);
-}
-
-RecursiveVerificator& RecursiveVerificator::operator=(
-  const RecursiveVerificator& other
+std::unique_ptr<IIterator> One(
+  const void* value,
+  Shape shape
 ) {
-  return *this = RecursiveVerificator(other);
+  return common::make_unique<OneIterator>(value, shape);
 }
 
-RecursiveVerificator& RecursiveVerificator::operator=(RecursiveVerificator&& other) {
-  if (this != &other) {
-    instance_ = other.instance_;
-    state_ = other.state_;
-    verificator_ = std::move(other.verificator_);
-    done_ = other.done_;
-    index_ = other.index_;
-    error_ = std::move(other.error_);
-    iterator_ = std::move(other.iterator_);
-    iterator_end_ = std::move(other.iterator_end_);
+/**
+ * \brief Iterate over the values of the children, one child after another.
+ *
+ * A child is started only once the previous child is done.
+ */
+class ChainIterator : public IIterator {
+ public:
+  explicit ChainIterator(
+    std::vector<std::unique_ptr<IIterator> > children
+  ) :
+    children_(std::move(children)),
+    active_(0) {
+    // Intentionally empty.
   }
 
-  return *this;
-}
-
-void RecursiveVerificator::Start() {
-  state_ = 0;
-  Execute();
-}
-
-void RecursiveVerificator::Next() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a RecursiveVerificator, "
-      "but the verificator was done."
-    );
-  }
-  #endif
-
-  Execute();
-}
-
-bool RecursiveVerificator::Done() const {
-  return done_;
-}
-
-const Error& RecursiveVerificator::Get() const {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get from a RecursiveVerificator, "
-      "but the verificator is done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-Error& RecursiveVerificator::GetMutable() {
-  #ifdef DEBUG
-  if (Done()) {
-    throw std::logic_error(
-      "You want to get mutable from a RecursiveVerificator, "
-      "but the verificator is done."
-    );
-  }
-  #endif
-
-  return *error_;
-}
-
-long RecursiveVerificator::Index() const {
-  #ifdef DEBUG
-  if (Done() && index_ != -1) {
-    throw std::logic_error(
-      common::Concat(
-        "Expected index to be -1 "
-        "from a done RecursiveVerificator, "
-        "but got: ",
-        std::to_string(index_)
-      )
-    );
-  }
-  #endif
-
-  return index_;
-}
-
-std::unique_ptr<impl::IVerificator> RecursiveVerificator::Clone() const {
-  return common::make_unique<RecursiveVerificator>(*this);
-}
-
-void RecursiveVerificator::Execute() {
-  while (true) {
-    switch (state_) {
-      case 0: {
-        error_ = nullptr;
-        index_ = -1;
-        done_ = false;
-
-        verificator_ = NewNonRecursiveVerificator(*instance_);
-        verificator_->Start();
-      }
-
-      case 1: {
-        if (!(!verificator_->Done())) {
-          state_ = 3;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            verificator_->GetMutable()
-          )
-        );
-        // No path is prepended as the error refers to the instance itself.
-        ++index_;
-
-        state_ = 2;
-        return;
-      }
-
-      case 2: {
-        verificator_->Next();
-
-        state_ = 1;
-        continue;
-      }
-
-      case 3: {
-        verificator_ = nullptr;
-
-        {
-          // NOTE (mristin):
-          // We will not need descent, so we introduce it in the scope.
-          iteration::Descent descent(
-            *instance_
-          );
-          iterator_ = descent.begin();
-
-          // NOTE (mristin):
-          // descent.end() is a constant reference, so we make an explicit
-          // copy here.
-          iterator_end_ = descent.end();
-        }
-      }
-
-      case 4: {
-        if (!(*iterator_ != *iterator_end_)) {
-          state_ = 8;
-          continue;
-        }
-
-        verificator_ = NewNonRecursiveVerificator(
-          *(*iterator_)
-        );
-        verificator_->Start();
-      }
-
-      case 5: {
-        if (!(!verificator_->Done())) {
-          state_ = 7;
-          continue;
-        }
-
-        // We intentionally take over the ownership of the errors' data members,
-        // as we know the implementation in all the detail, and want to avoid a costly
-        // copy.
-        error_ = common::make_unique<Error>(
-          std::move(
-            verificator_->GetMutable()
-          )
-        );
-
-        error_->path = iteration::MaterializePath(
-          *iterator_
-        );
-
-        ++index_;
-
-        state_ = 6;
-        return;
-      }
-
-      case 6: {
-        verificator_->Next();
-
-        state_ = 5;
-        continue;
-      }
-
-      case 7: {
-        verificator_ = nullptr;
-
-        ++(*iterator_);
-
-        state_ = 4;
-        continue;
-      }
-
-      case 8: {
-        iterator_.reset();
-        iterator_end_.reset();
-        done_ = true;
-        index_ = -1;
-
-        // We invalidate the state since we reached the end of the routine.
-        state_ = 9;
-        return;
-      }
-
-      default:
-        throw std::logic_error(
-          common::Concat(
-            "Invalid state_: ",
-            std::to_string(state_)
-          )
-        );
+  ChainIterator(const ChainIterator& other) :
+    active_(other.active_) {
+    children_.reserve(other.children_.size());
+    for (const std::unique_ptr<IIterator>& child : other.children_) {
+      children_.emplace_back(child->Clone());
     }
   }
+
+  void Start() override {
+    active_ = 0;
+    if (!children_.empty()) {
+      children_[0]->Start();
+    }
+    SkipDoneChildren();
+  }
+
+  void Next() override {
+    children_[active_]->Next();
+    SkipDoneChildren();
+  }
+
+  bool Done() const override {
+    return active_ >= children_.size();
+  }
+
+  const void* Value() const override {
+    return children_[active_]->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return children_[active_]->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    children_[active_]->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<ChainIterator>(*this);
+  }
+
+ private:
+  std::vector<std::unique_ptr<IIterator> > children_;
+
+  /**
+   * Index of the child we currently iterate over
+   */
+  std::size_t active_;
+
+  /**
+   * Move on to the next children, and start them, until one is not done.
+   */
+  void SkipDoneChildren() {
+    while (active_ < children_.size() && children_[active_]->Done()) {
+      ++active_;
+      if (active_ < children_.size()) {
+        children_[active_]->Start();
+      }
+    }
+  }
+};  // class ChainIterator
+
+void CollectChildren(
+  std::vector<std::unique_ptr<IIterator> >&
+) {
+  // Intentionally empty, as there are no more children to collect.
 }
 
-// endregion Recursive verificators
+template<typename... Rest>
+void CollectChildren(
+  std::vector<std::unique_ptr<IIterator> >& children,
+  std::unique_ptr<IIterator> first,
+  Rest... rest
+) {
+  children.emplace_back(std::move(first));
+  CollectChildren(children, std::move(rest)...);
+}
+
+// NOTE (mristin):
+// We can not use an initializer list here, as we can not move the unique pointers
+// out of it.
+template<typename... Children>
+std::unique_ptr<IIterator> Chain(
+  Children... children
+) {
+  std::vector<std::unique_ptr<IIterator> > collected;
+  collected.reserve(sizeof...(Children));
+  CollectChildren(collected, std::move(children)...);
+
+  return common::make_unique<ChainIterator>(std::move(collected));
+}
+
+/**
+ * Iterate over the values of the \p child, which lives in a property.
+ */
+class InPropertyIterator : public IIterator {
+ public:
+  InPropertyIterator(
+    iteration::Property property,
+    std::unique_ptr<IIterator> child
+  ) :
+    property_(property),
+    child_(std::move(child)) {
+    // Intentionally empty.
+  }
+
+  InPropertyIterator(const InPropertyIterator& other) :
+    property_(other.property_),
+    child_(other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const void* Value() const override {
+    return child_->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return child_->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<iteration::PropertySegment>(property_)
+    );
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<InPropertyIterator>(*this);
+  }
+
+ private:
+  iteration::Property property_;
+  std::unique_ptr<IIterator> child_;
+};  // class InPropertyIterator
+
+std::unique_ptr<IIterator> InProperty(
+  iteration::Property property,
+  std::unique_ptr<IIterator> child
+) {
+  return common::make_unique<InPropertyIterator>(property, std::move(child));
+}
+
+/**
+ * \brief Iterate over the values of every item of a list, one item after another.
+ *
+ * The iterator over an item is built only once the iteration reaches the item.
+ */
+template<typename T>
+class EachIterator : public IIterator {
+ public:
+  /**
+   * Build the iterator over the values of an item
+   */
+  typedef std::unique_ptr<IIterator> (*OverItem)(const T& item, bool recursive);
+
+  EachIterator(
+    const std::vector<T>* items,
+    OverItem over_item,
+    bool recursive
+  ) :
+    items_(items),
+    over_item_(over_item),
+    recursive_(recursive),
+    index_(0) {
+    // Intentionally empty.
+  }
+
+  EachIterator(const EachIterator<T>& other) :
+    items_(other.items_),
+    over_item_(other.over_item_),
+    recursive_(other.recursive_),
+    index_(other.index_),
+    item_(other.item_ == nullptr ? nullptr : other.item_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    index_ = 0;
+    item_ = nullptr;
+    SkipDoneItems();
+  }
+
+  void Next() override {
+    item_->Next();
+    SkipDoneItems();
+  }
+
+  bool Done() const override {
+    return index_ >= items_->size();
+  }
+
+  const void* Value() const override {
+    return item_->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return item_->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<iteration::IndexSegment>(index_)
+    );
+    item_->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<EachIterator<T> >(*this);
+  }
+
+ private:
+  const std::vector<T>* items_;
+  OverItem over_item_;
+  bool recursive_;
+
+  /**
+   * Index of the item we currently iterate over
+   */
+  std::size_t index_;
+
+  /**
+   * Iterator over the current item, built once we reached the item
+   */
+  std::unique_ptr<IIterator> item_;
+
+  /**
+   * Move on to the next items, and build their iterators, until one is not done.
+   */
+  void SkipDoneItems() {
+    while (index_ < items_->size()) {
+      if (item_ == nullptr) {
+        item_ = over_item_((*items_)[index_], recursive_);
+        item_->Start();
+      }
+
+      if (!item_->Done()) {
+        return;
+      }
+
+      item_ = nullptr;
+      ++index_;
+    }
+  }
+};  // class EachIterator
+
+template<typename T>
+std::unique_ptr<IIterator> Each(
+  const std::vector<T>& items,
+  std::unique_ptr<IIterator> (*over_item)(const T& item, bool recursive),
+  bool recursive
+) {
+  return common::make_unique<EachIterator<T> >(&items, over_item, recursive);
+}
+
+/**
+ * \brief Iterate over the values of an instance, dispatched on its runtime type.
+ *
+ * Defined below, once all the classes have been covered.
+ */
+std::unique_ptr<IIterator> OverInstance(
+  const types::IClass& instance,
+  bool recursive
+);
+
+/**
+ * \brief Iterate recursively over the values of an instance referenced from
+ * another instance.
+ *
+ * We dispatch on the runtime type of the instance only in \ref Start so that
+ * we descend into the instance only once the iteration reaches it.
+ */
+class OverIterator : public IIterator {
+ public:
+  explicit OverIterator(
+    const types::IClass* instance
+  ) :
+    instance_(instance) {
+    // Intentionally empty.
+  }
+
+  OverIterator(const OverIterator& other) :
+    instance_(other.instance_),
+    child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    child_ = OverInstance(*instance_, true);
+    child_->Start();
+  }
+
+  void Next() override {
+    child_->Next();
+  }
+
+  bool Done() const override {
+    return child_->Done();
+  }
+
+  const void* Value() const override {
+    return child_->Value();
+  }
+
+  Shape ShapeOf() const override {
+    return child_->ShapeOf();
+  }
+
+  void AppendToPath(iteration::Path& path) const override {
+    child_->AppendToPath(path);
+  }
+
+  std::unique_ptr<IIterator> Clone() const override {
+    return common::make_unique<OverIterator>(*this);
+  }
+
+ private:
+  const types::IClass* instance_;
+  std::unique_ptr<IIterator> child_;
+};  // class OverIterator
+
+std::unique_ptr<IIterator> Over(
+  const types::IClass& instance,
+  bool recursive
+) {
+  if (!recursive) {
+    // NOTE (mristin):
+    // In the non-recursive mode, we verify only the instance itself, but not
+    // the instances that it references.
+    return Empty();
+  }
+
+  return common::make_unique<OverIterator>(&instance);
+}
+
+template<typename T>
+std::unique_ptr<IIterator> OverPointer(
+  const std::shared_ptr<T>& instance,
+  bool recursive
+) {
+  return Over(*instance, recursive);
+}
+
+using ListOf_Reference = std::vector<
+  std::shared_ptr<types::IReference>
+>;
+
+using ListOf_EmbeddedDataSpecification = std::vector<
+  std::shared_ptr<types::IEmbeddedDataSpecification>
+>;
+
+using ListOf_Extension = std::vector<
+  std::shared_ptr<types::IExtension>
+>;
+
+using ListOf_LangStringNameType = std::vector<
+  std::shared_ptr<types::ILangStringNameType>
+>;
+
+using ListOf_LangStringTextType = std::vector<
+  std::shared_ptr<types::ILangStringTextType>
+>;
+
+using ListOf_SpecificAssetId = std::vector<
+  std::shared_ptr<types::ISpecificAssetId>
+>;
+
+using ListOf_Qualifier = std::vector<
+  std::shared_ptr<types::IQualifier>
+>;
+
+using ListOf_SubmodelElement = std::vector<
+  std::shared_ptr<types::ISubmodelElement>
+>;
+
+using ListOf_DataElement = std::vector<
+  std::shared_ptr<types::IDataElement>
+>;
+
+using ListOf_OperationVariable = std::vector<
+  std::shared_ptr<types::IOperationVariable>
+>;
+
+using ListOf_Key = std::vector<
+  std::shared_ptr<types::IKey>
+>;
+
+using ListOf_AssetAdministrationShell = std::vector<
+  std::shared_ptr<types::IAssetAdministrationShell>
+>;
+
+using ListOf_Submodel = std::vector<
+  std::shared_ptr<types::ISubmodel>
+>;
+
+using ListOf_ConceptDescription = std::vector<
+  std::shared_ptr<types::IConceptDescription>
+>;
+
+using ListOf_ValueReferencePair = std::vector<
+  std::shared_ptr<types::IValueReferencePair>
+>;
+
+using ListOf_LangStringPreferredNameTypeIec61360 = std::vector<
+  std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>
+>;
+
+using ListOf_LangStringShortNameTypeIec61360 = std::vector<
+  std::shared_ptr<types::ILangStringShortNameTypeIec61360>
+>;
+
+using ListOf_LangStringDefinitionTypeIec61360 = std::vector<
+  std::shared_ptr<types::ILangStringDefinitionTypeIec61360>
+>;
+
+std::unique_ptr<IIterator> OverListOf_Reference(
+  const ListOf_Reference& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &OverPointer<types::IReference>, recursive);
+}
+
+std::unique_ptr<IIterator> OverListOf_EmbeddedDataSpecification(
+  const ListOf_EmbeddedDataSpecification& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::IEmbeddedDataSpecification>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverListOf_Extension(
+  const ListOf_Extension& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &OverPointer<types::IExtension>, recursive);
+}
+
+std::unique_ptr<IIterator> OverListOf_LangStringNameType(
+  const ListOf_LangStringNameType& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::ILangStringNameType>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverListOf_LangStringTextType(
+  const ListOf_LangStringTextType& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::ILangStringTextType>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverListOf_SpecificAssetId(
+  const ListOf_SpecificAssetId& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::ISpecificAssetId>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverListOf_Qualifier(
+  const ListOf_Qualifier& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &OverPointer<types::IQualifier>, recursive);
+}
+
+std::unique_ptr<IIterator> OverListOf_SubmodelElement(
+  const ListOf_SubmodelElement& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::ISubmodelElement>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverListOf_DataElement(
+  const ListOf_DataElement& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &OverPointer<types::IDataElement>, recursive);
+}
+
+std::unique_ptr<IIterator> OverListOf_OperationVariable(
+  const ListOf_OperationVariable& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::IOperationVariable>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverListOf_Key(
+  const ListOf_Key& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &OverPointer<types::IKey>, recursive);
+}
+
+std::unique_ptr<IIterator> OverListOf_AssetAdministrationShell(
+  const ListOf_AssetAdministrationShell& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::IAssetAdministrationShell>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverListOf_Submodel(
+  const ListOf_Submodel& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &OverPointer<types::ISubmodel>, recursive);
+}
+
+std::unique_ptr<IIterator> OverListOf_ConceptDescription(
+  const ListOf_ConceptDescription& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::IConceptDescription>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverListOf_ValueReferencePair(
+  const ListOf_ValueReferencePair& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::IValueReferencePair>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverListOf_LangStringPreferredNameTypeIec61360(
+  const ListOf_LangStringPreferredNameTypeIec61360& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::ILangStringPreferredNameTypeIec61360>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverListOf_LangStringShortNameTypeIec61360(
+  const ListOf_LangStringShortNameTypeIec61360& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::ILangStringShortNameTypeIec61360>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverListOf_LangStringDefinitionTypeIec61360(
+  const ListOf_LangStringDefinitionTypeIec61360& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &OverPointer<types::ILangStringDefinitionTypeIec61360>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> OverExtension(
+  const types::IExtension& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kExtension),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kName,
+      One(&that.name(), Shape::kNameType)
+    ),
+    InProperty(
+      iteration::Property::kValue,
+      that.value().has_value()
+        ? One(&(*that.value()), Shape::kValueDataType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kRefersTo,
+      that.refers_to().has_value()
+        ? OverListOf_Reference((*that.refers_to()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverAdministrativeInformation(
+  const types::IAdministrativeInformation& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kAdministrativeInformation),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kVersion,
+      that.version().has_value()
+        ? One(&(*that.version()), Shape::kVersionType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kRevision,
+      that.revision().has_value()
+        ? One(&(*that.revision()), Shape::kRevisionType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCreator,
+      that.creator().has_value()
+        ? Over(*(*that.creator()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kTemplateId,
+      that.template_id().has_value()
+        ? One(&(*that.template_id()), Shape::kIdentifier)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverQualifier(
+  const types::IQualifier& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kQualifier),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kType,
+      One(&that.type(), Shape::kQualifierType)
+    ),
+    InProperty(
+      iteration::Property::kValue,
+      that.value().has_value()
+        ? One(&(*that.value()), Shape::kValueDataType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValueId,
+      that.value_id().has_value()
+        ? Over(*(*that.value_id()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverAssetAdministrationShell(
+  const types::IAssetAdministrationShell& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kAssetAdministrationShell),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kAdministration,
+      that.administration().has_value()
+        ? Over(*(*that.administration()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kId,
+      One(&that.id(), Shape::kIdentifier)
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDerivedFrom,
+      that.derived_from().has_value()
+        ? Over(*(*that.derived_from()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kAssetInformation,
+      Over(*that.asset_information(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kSubmodels,
+      that.submodels().has_value()
+        ? OverListOf_Reference((*that.submodels()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverAssetInformation(
+  const types::IAssetInformation& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kAssetInformation),
+    InProperty(
+      iteration::Property::kGlobalAssetId,
+      that.global_asset_id().has_value()
+        ? One(&(*that.global_asset_id()), Shape::kIdentifier)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSpecificAssetIds,
+      that.specific_asset_ids().has_value()
+        ? OverListOf_SpecificAssetId(
+            (*that.specific_asset_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kAssetType,
+      that.asset_type().has_value()
+        ? One(&(*that.asset_type()), Shape::kIdentifier)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDefaultThumbnail,
+      that.default_thumbnail().has_value()
+        ? Over(*(*that.default_thumbnail()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverResource(
+  const types::IResource& that,
+  bool
+) {
+  return Chain(
+    InProperty(
+      iteration::Property::kPath,
+      One(&that.path(), Shape::kPathType)
+    ),
+    InProperty(
+      iteration::Property::kContentType,
+      that.content_type().has_value()
+        ? One(&(*that.content_type()), Shape::kContentType)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverSpecificAssetId(
+  const types::ISpecificAssetId& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kSpecificAssetId),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kName,
+      One(&that.name(), Shape::kLabelType)
+    ),
+    InProperty(
+      iteration::Property::kValue,
+      One(&that.value(), Shape::kIdentifier)
+    ),
+    InProperty(
+      iteration::Property::kExternalSubjectId,
+      that.external_subject_id().has_value()
+        ? Over(*(*that.external_subject_id()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverSubmodel(
+  const types::ISubmodel& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kSubmodel),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kAdministration,
+      that.administration().has_value()
+        ? Over(*(*that.administration()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kId,
+      One(&that.id(), Shape::kIdentifier)
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSubmodelElements,
+      that.submodel_elements().has_value()
+        ? OverListOf_SubmodelElement(
+            (*that.submodel_elements()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverRelationshipElement(
+  const types::IRelationshipElement& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kRelationshipElement),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kFirst,
+      Over(*that.first(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kSecond,
+      Over(*that.second(), recursive)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverSubmodelElementList(
+  const types::ISubmodelElementList& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kSubmodelElementList),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticIdListElement,
+      that.semantic_id_list_element().has_value()
+        ? Over(*(*that.semantic_id_list_element()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValue,
+      that.value().has_value()
+        ? OverListOf_SubmodelElement((*that.value()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverSubmodelElementCollection(
+  const types::ISubmodelElementCollection& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kSubmodelElementCollection),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValue,
+      that.value().has_value()
+        ? OverListOf_SubmodelElement((*that.value()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverProperty(
+  const types::IProperty& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kProperty),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValue,
+      that.value().has_value()
+        ? One(&(*that.value()), Shape::kValueDataType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValueId,
+      that.value_id().has_value()
+        ? Over(*(*that.value_id()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverMultiLanguageProperty(
+  const types::IMultiLanguageProperty& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kMultiLanguageProperty),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValue,
+      that.value().has_value()
+        ? OverListOf_LangStringTextType((*that.value()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValueId,
+      that.value_id().has_value()
+        ? Over(*(*that.value_id()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverRange(
+  const types::IRange& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kRange),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kMin,
+      that.min().has_value()
+        ? One(&(*that.min()), Shape::kValueDataType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kMax,
+      that.max().has_value()
+        ? One(&(*that.max()), Shape::kValueDataType)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverReferenceElement(
+  const types::IReferenceElement& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kReferenceElement),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValue,
+      that.value().has_value()
+        ? Over(*(*that.value()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverBlob(
+  const types::IBlob& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kBlob),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kContentType,
+      One(&that.content_type(), Shape::kContentType)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverFile(
+  const types::IFile& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kFile),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValue,
+      that.value().has_value()
+        ? One(&(*that.value()), Shape::kPathType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kContentType,
+      One(&that.content_type(), Shape::kContentType)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverAnnotatedRelationshipElement(
+  const types::IAnnotatedRelationshipElement& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kAnnotatedRelationshipElement),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kFirst,
+      Over(*that.first(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kSecond,
+      Over(*that.second(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kAnnotations,
+      that.annotations().has_value()
+        ? OverListOf_DataElement((*that.annotations()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverEntity(
+  const types::IEntity& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kEntity),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kStatements,
+      that.statements().has_value()
+        ? OverListOf_SubmodelElement((*that.statements()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kGlobalAssetId,
+      that.global_asset_id().has_value()
+        ? One(&(*that.global_asset_id()), Shape::kIdentifier)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSpecificAssetIds,
+      that.specific_asset_ids().has_value()
+        ? OverListOf_SpecificAssetId(
+            (*that.specific_asset_ids()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverEventPayload(
+  const types::IEventPayload& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kEventPayload),
+    InProperty(
+      iteration::Property::kSource,
+      Over(*that.source(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kSourceSemanticId,
+      that.source_semantic_id().has_value()
+        ? Over(*(*that.source_semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kObservableReference,
+      Over(*that.observable_reference(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kObservableSemanticId,
+      that.observable_semantic_id().has_value()
+        ? Over(*(*that.observable_semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kTopic,
+      that.topic().has_value()
+        ? One(&(*that.topic()), Shape::kMessageTopicType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSubjectId,
+      that.subject_id().has_value()
+        ? Over(*(*that.subject_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kTimeStamp,
+      One(&that.time_stamp(), Shape::kDateTimeUtc)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverBasicEventElement(
+  const types::IBasicEventElement& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kBasicEventElement),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kObserved,
+      Over(*that.observed(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kMessageTopic,
+      that.message_topic().has_value()
+        ? One(&(*that.message_topic()), Shape::kMessageTopicType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kMessageBroker,
+      that.message_broker().has_value()
+        ? Over(*(*that.message_broker()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kLastUpdate,
+      that.last_update().has_value()
+        ? One(&(*that.last_update()), Shape::kDateTimeUtc)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kMinInterval,
+      that.min_interval().has_value()
+        ? One(&(*that.min_interval()), Shape::kDuration)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kMaxInterval,
+      that.max_interval().has_value()
+        ? One(&(*that.max_interval()), Shape::kDuration)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverOperation(
+  const types::IOperation& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kOperation),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kInputVariables,
+      that.input_variables().has_value()
+        ? OverListOf_OperationVariable(
+            (*that.input_variables()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kOutputVariables,
+      that.output_variables().has_value()
+        ? OverListOf_OperationVariable(
+            (*that.output_variables()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kInoutputVariables,
+      that.inoutput_variables().has_value()
+        ? OverListOf_OperationVariable(
+            (*that.inoutput_variables()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverOperationVariable(
+  const types::IOperationVariable& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kOperationVariable),
+    InProperty(
+      iteration::Property::kValue,
+      Over(*that.value(), recursive)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverCapability(
+  const types::ICapability& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kCapability),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSemanticId,
+      that.semantic_id().has_value()
+        ? Over(*(*that.semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSupplementalSemanticIds,
+      that.supplemental_semantic_ids().has_value()
+        ? OverListOf_Reference(
+            (*that.supplemental_semantic_ids()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kQualifiers,
+      that.qualifiers().has_value()
+        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverConceptDescription(
+  const types::IConceptDescription& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kConceptDescription),
+    InProperty(
+      iteration::Property::kExtensions,
+      that.extensions().has_value()
+        ? OverListOf_Extension((*that.extensions()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kCategory,
+      that.category().has_value()
+        ? One(&(*that.category()), Shape::kNameType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIdShort,
+      that.id_short().has_value()
+        ? One(&(*that.id_short()), Shape::kIdShortType)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDisplayName,
+      that.display_name().has_value()
+        ? OverListOf_LangStringNameType(
+            (*that.display_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDescription,
+      that.description().has_value()
+        ? OverListOf_LangStringTextType(
+            (*that.description()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kAdministration,
+      that.administration().has_value()
+        ? Over(*(*that.administration()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kId,
+      One(&that.id(), Shape::kIdentifier)
+    ),
+    InProperty(
+      iteration::Property::kEmbeddedDataSpecifications,
+      that.embedded_data_specifications().has_value()
+        ? OverListOf_EmbeddedDataSpecification(
+            (*that.embedded_data_specifications()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kIsCaseOf,
+      that.is_case_of().has_value()
+        ? OverListOf_Reference((*that.is_case_of()), recursive)
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverReference(
+  const types::IReference& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kReference),
+    InProperty(
+      iteration::Property::kReferredSemanticId,
+      that.referred_semantic_id().has_value()
+        ? Over(*(*that.referred_semantic_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kKeys,
+      OverListOf_Key(that.keys(), recursive)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverKey(
+  const types::IKey& that,
+  bool
+) {
+  return InProperty(
+    iteration::Property::kValue,
+    One(&that.value(), Shape::kIdentifier)
+  );
+}
+
+std::unique_ptr<IIterator> OverLangStringNameType(
+  const types::ILangStringNameType& that,
+  bool
+) {
+  return Chain(
+    One(&that, Shape::kLangStringNameType),
+    InProperty(
+      iteration::Property::kLanguage,
+      One(&that.language(), Shape::kBcp47LanguageTag)
+    ),
+    InProperty(
+      iteration::Property::kText,
+      One(&that.text(), Shape::kNonEmptyXmlSerializableString)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverLangStringTextType(
+  const types::ILangStringTextType& that,
+  bool
+) {
+  return Chain(
+    One(&that, Shape::kLangStringTextType),
+    InProperty(
+      iteration::Property::kLanguage,
+      One(&that.language(), Shape::kBcp47LanguageTag)
+    ),
+    InProperty(
+      iteration::Property::kText,
+      One(&that.text(), Shape::kNonEmptyXmlSerializableString)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverEnvironment(
+  const types::IEnvironment& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kEnvironment),
+    InProperty(
+      iteration::Property::kAssetAdministrationShells,
+      that.asset_administration_shells().has_value()
+        ? OverListOf_AssetAdministrationShell(
+            (*that.asset_administration_shells()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSubmodels,
+      that.submodels().has_value()
+        ? OverListOf_Submodel((*that.submodels()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kConceptDescriptions,
+      that.concept_descriptions().has_value()
+        ? OverListOf_ConceptDescription(
+            (*that.concept_descriptions()),
+            recursive
+          )
+        : Empty()
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverEmbeddedDataSpecification(
+  const types::IEmbeddedDataSpecification& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      iteration::Property::kDataSpecification,
+      Over(*that.data_specification(), recursive)
+    ),
+    InProperty(
+      iteration::Property::kDataSpecificationContent,
+      Over(*that.data_specification_content(), recursive)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverValueReferencePair(
+  const types::IValueReferencePair& that,
+  bool recursive
+) {
+  return Chain(
+    InProperty(
+      iteration::Property::kValue,
+      One(&that.value(), Shape::kValueTypeIec61360)
+    ),
+    InProperty(
+      iteration::Property::kValueId,
+      Over(*that.value_id(), recursive)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverValueList(
+  const types::IValueList& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kValueList),
+    InProperty(
+      iteration::Property::kValueReferencePairs,
+      OverListOf_ValueReferencePair(
+        that.value_reference_pairs(),
+        recursive
+      )
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverLangStringPreferredNameTypeIec61360(
+  const types::ILangStringPreferredNameTypeIec61360& that,
+  bool
+) {
+  return Chain(
+    One(&that, Shape::kLangStringPreferredNameTypeIec61360),
+    InProperty(
+      iteration::Property::kLanguage,
+      One(&that.language(), Shape::kBcp47LanguageTag)
+    ),
+    InProperty(
+      iteration::Property::kText,
+      One(&that.text(), Shape::kNonEmptyXmlSerializableString)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverLangStringShortNameTypeIec61360(
+  const types::ILangStringShortNameTypeIec61360& that,
+  bool
+) {
+  return Chain(
+    One(&that, Shape::kLangStringShortNameTypeIec61360),
+    InProperty(
+      iteration::Property::kLanguage,
+      One(&that.language(), Shape::kBcp47LanguageTag)
+    ),
+    InProperty(
+      iteration::Property::kText,
+      One(&that.text(), Shape::kNonEmptyXmlSerializableString)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverLangStringDefinitionTypeIec61360(
+  const types::ILangStringDefinitionTypeIec61360& that,
+  bool
+) {
+  return Chain(
+    One(&that, Shape::kLangStringDefinitionTypeIec61360),
+    InProperty(
+      iteration::Property::kLanguage,
+      One(&that.language(), Shape::kBcp47LanguageTag)
+    ),
+    InProperty(
+      iteration::Property::kText,
+      One(&that.text(), Shape::kNonEmptyXmlSerializableString)
+    )
+  );
+}
+
+std::unique_ptr<IIterator> OverDataSpecificationIec61360(
+  const types::IDataSpecificationIec61360& that,
+  bool recursive
+) {
+  return Chain(
+    One(&that, Shape::kDataSpecificationIec61360),
+    InProperty(
+      iteration::Property::kPreferredName,
+      OverListOf_LangStringPreferredNameTypeIec61360(
+        that.preferred_name(),
+        recursive
+      )
+    ),
+    InProperty(
+      iteration::Property::kShortName,
+      that.short_name().has_value()
+        ? OverListOf_LangStringShortNameTypeIec61360(
+            (*that.short_name()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kUnit,
+      that.unit().has_value()
+        ? One(&(*that.unit()), Shape::kNonEmptyXmlSerializableString)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kUnitId,
+      that.unit_id().has_value()
+        ? Over(*(*that.unit_id()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSourceOfDefinition,
+      that.source_of_definition().has_value()
+        ? One(
+            &(*that.source_of_definition()),
+            Shape::kNonEmptyXmlSerializableString
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kSymbol,
+      that.symbol().has_value()
+        ? One(
+            &(*that.symbol()),
+            Shape::kNonEmptyXmlSerializableString
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kDefinition,
+      that.definition().has_value()
+        ? OverListOf_LangStringDefinitionTypeIec61360(
+            (*that.definition()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValueFormat,
+      that.value_format().has_value()
+        ? One(
+            &(*that.value_format()),
+            Shape::kNonEmptyXmlSerializableString
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValueList,
+      that.value_list().has_value()
+        ? Over(*(*that.value_list()), recursive)
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kValue,
+      that.value().has_value()
+        ? One(&(*that.value()), Shape::kValueTypeIec61360)
+        : Empty()
+    )
+  );
+}
+
+/**
+ * Iterate over the values of the \p instance, dispatched on its runtime type.
+ */
+std::unique_ptr<IIterator> OverInstance(
+  const types::IClass& instance,
+  bool recursive
+) {
+  switch (instance.model_type()) {
+    case types::ModelType::kExtension:
+      return OverExtension(
+        dynamic_cast<const types::IExtension&>(instance),
+        recursive
+      );
+    case types::ModelType::kAdministrativeInformation:
+      return OverAdministrativeInformation(
+        dynamic_cast<const types::IAdministrativeInformation&>(instance),
+        recursive
+      );
+    case types::ModelType::kQualifier:
+      return OverQualifier(
+        dynamic_cast<const types::IQualifier&>(instance),
+        recursive
+      );
+    case types::ModelType::kAssetAdministrationShell:
+      return OverAssetAdministrationShell(
+        dynamic_cast<const types::IAssetAdministrationShell&>(instance),
+        recursive
+      );
+    case types::ModelType::kAssetInformation:
+      return OverAssetInformation(
+        dynamic_cast<const types::IAssetInformation&>(instance),
+        recursive
+      );
+    case types::ModelType::kResource:
+      return OverResource(
+        dynamic_cast<const types::IResource&>(instance),
+        recursive
+      );
+    case types::ModelType::kSpecificAssetId:
+      return OverSpecificAssetId(
+        dynamic_cast<const types::ISpecificAssetId&>(instance),
+        recursive
+      );
+    case types::ModelType::kSubmodel:
+      return OverSubmodel(
+        dynamic_cast<const types::ISubmodel&>(instance),
+        recursive
+      );
+    case types::ModelType::kRelationshipElement:
+      return OverRelationshipElement(
+        dynamic_cast<const types::IRelationshipElement&>(instance),
+        recursive
+      );
+    case types::ModelType::kSubmodelElementList:
+      return OverSubmodelElementList(
+        dynamic_cast<const types::ISubmodelElementList&>(instance),
+        recursive
+      );
+    case types::ModelType::kSubmodelElementCollection:
+      return OverSubmodelElementCollection(
+        dynamic_cast<const types::ISubmodelElementCollection&>(instance),
+        recursive
+      );
+    case types::ModelType::kProperty:
+      return OverProperty(
+        dynamic_cast<const types::IProperty&>(instance),
+        recursive
+      );
+    case types::ModelType::kMultiLanguageProperty:
+      return OverMultiLanguageProperty(
+        dynamic_cast<const types::IMultiLanguageProperty&>(instance),
+        recursive
+      );
+    case types::ModelType::kRange:
+      return OverRange(
+        dynamic_cast<const types::IRange&>(instance),
+        recursive
+      );
+    case types::ModelType::kReferenceElement:
+      return OverReferenceElement(
+        dynamic_cast<const types::IReferenceElement&>(instance),
+        recursive
+      );
+    case types::ModelType::kBlob:
+      return OverBlob(
+        dynamic_cast<const types::IBlob&>(instance),
+        recursive
+      );
+    case types::ModelType::kFile:
+      return OverFile(
+        dynamic_cast<const types::IFile&>(instance),
+        recursive
+      );
+    case types::ModelType::kAnnotatedRelationshipElement:
+      return OverAnnotatedRelationshipElement(
+        dynamic_cast<const types::IAnnotatedRelationshipElement&>(instance),
+        recursive
+      );
+    case types::ModelType::kEntity:
+      return OverEntity(
+        dynamic_cast<const types::IEntity&>(instance),
+        recursive
+      );
+    case types::ModelType::kEventPayload:
+      return OverEventPayload(
+        dynamic_cast<const types::IEventPayload&>(instance),
+        recursive
+      );
+    case types::ModelType::kBasicEventElement:
+      return OverBasicEventElement(
+        dynamic_cast<const types::IBasicEventElement&>(instance),
+        recursive
+      );
+    case types::ModelType::kOperation:
+      return OverOperation(
+        dynamic_cast<const types::IOperation&>(instance),
+        recursive
+      );
+    case types::ModelType::kOperationVariable:
+      return OverOperationVariable(
+        dynamic_cast<const types::IOperationVariable&>(instance),
+        recursive
+      );
+    case types::ModelType::kCapability:
+      return OverCapability(
+        dynamic_cast<const types::ICapability&>(instance),
+        recursive
+      );
+    case types::ModelType::kConceptDescription:
+      return OverConceptDescription(
+        dynamic_cast<const types::IConceptDescription&>(instance),
+        recursive
+      );
+    case types::ModelType::kReference:
+      return OverReference(
+        dynamic_cast<const types::IReference&>(instance),
+        recursive
+      );
+    case types::ModelType::kKey:
+      return OverKey(
+        dynamic_cast<const types::IKey&>(instance),
+        recursive
+      );
+    case types::ModelType::kLangStringNameType:
+      return OverLangStringNameType(
+        dynamic_cast<const types::ILangStringNameType&>(instance),
+        recursive
+      );
+    case types::ModelType::kLangStringTextType:
+      return OverLangStringTextType(
+        dynamic_cast<const types::ILangStringTextType&>(instance),
+        recursive
+      );
+    case types::ModelType::kEnvironment:
+      return OverEnvironment(
+        dynamic_cast<const types::IEnvironment&>(instance),
+        recursive
+      );
+    case types::ModelType::kEmbeddedDataSpecification:
+      return OverEmbeddedDataSpecification(
+        dynamic_cast<const types::IEmbeddedDataSpecification&>(instance),
+        recursive
+      );
+    case types::ModelType::kValueReferencePair:
+      return OverValueReferencePair(
+        dynamic_cast<const types::IValueReferencePair&>(instance),
+        recursive
+      );
+    case types::ModelType::kValueList:
+      return OverValueList(
+        dynamic_cast<const types::IValueList&>(instance),
+        recursive
+      );
+    case types::ModelType::kLangStringPreferredNameTypeIec61360:
+      return OverLangStringPreferredNameTypeIec61360(
+        dynamic_cast<const types::ILangStringPreferredNameTypeIec61360&>(instance),
+        recursive
+      );
+    case types::ModelType::kLangStringShortNameTypeIec61360:
+      return OverLangStringShortNameTypeIec61360(
+        dynamic_cast<const types::ILangStringShortNameTypeIec61360&>(instance),
+        recursive
+      );
+    case types::ModelType::kLangStringDefinitionTypeIec61360:
+      return OverLangStringDefinitionTypeIec61360(
+        dynamic_cast<const types::ILangStringDefinitionTypeIec61360&>(instance),
+        recursive
+      );
+    case types::ModelType::kDataSpecificationIec61360:
+      return OverDataSpecificationIec61360(
+        dynamic_cast<const types::IDataSpecificationIec61360&>(instance),
+        recursive
+      );
+    default:
+      // NOTE (mristin):
+      // The instances of the other classes have nothing to verify.
+      return Empty();
+  }
+}
+
+// endregion Iteration over the values
+
+// region Iteration over the errors
+
+/**
+ * \brief Iterate over the errors of the values, one error at a time.
+ *
+ * For every value, we first run the checks of its shape, each reporting at most
+ * one error. Then we run the nested verification of the value, if its shape has
+ * one, which can report many errors, see \ref NewNestedVerificator.
+ *
+ * We do only the work needed to find the next error, and build the path to
+ * the erroneous value only once an error has been found.
+ */
+class ErrorIterator : public impl::IVerificator {
+ public:
+  explicit ErrorIterator(
+    std::unique_ptr<IIterator> values
+  ) :
+    values_(std::move(values)),
+    check_(0),
+    nested_started_(false),
+    index_(-1) {
+    // Intentionally empty.
+  }
+
+  ErrorIterator(const ErrorIterator& other) :
+    values_(other.values_->Clone()),
+    check_(other.check_),
+    nested_started_(other.nested_started_),
+    nested_(other.nested_ == nullptr ? nullptr : other.nested_->Clone()),
+    error_(other.error_),
+    index_(other.index_) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    values_->Start();
+    check_ = 0;
+    nested_started_ = false;
+    nested_ = nullptr;
+    index_ = -1;
+
+    Advance();
+  }
+
+  void Next() override {
+    #ifdef DEBUG
+    if (Done()) {
+      throw std::logic_error(
+        "You want to move an ErrorIterator, but it was done."
+      );
+    }
+    #endif
+
+    Advance();
+  }
+
+  bool Done() const override {
+    return values_->Done();
+  }
+
+  const Error& Get() const override {
+    #ifdef DEBUG
+    if (Done()) {
+      throw std::logic_error(
+        "You want to get from an ErrorIterator, but it was done."
+      );
+    }
+    #endif
+
+    return *error_;
+  }
+
+  Error& GetMutable() override {
+    #ifdef DEBUG
+    if (Done()) {
+      throw std::logic_error(
+        "You want to get mutable from an ErrorIterator, but it was done."
+      );
+    }
+    #endif
+
+    return *error_;
+  }
+
+  long Index() const override {
+    return index_;
+  }
+
+  std::unique_ptr<impl::IVerificator> Clone() const override {
+    return common::make_unique<ErrorIterator>(*this);
+  }
+
+ private:
+  std::unique_ptr<IIterator> values_;
+
+  /**
+   * Index of the next check to run on the current value
+   */
+  std::size_t check_;
+
+  /**
+   * Set if we already started the nested verification of the current value
+   */
+  bool nested_started_;
+
+  /**
+   * Nested verification of the current value, if its shape has one
+   */
+  std::unique_ptr<impl::IVerificator> nested_;
+
+  common::optional<Error> error_;
+
+  /**
+   * Index of the current error, -1 if done
+   */
+  long index_;
+
+  /**
+   * Move on to the next error, or become done if there are no more errors.
+   */
+  void Advance() {
+    while (!values_->Done()) {
+      const void* value = values_->Value();
+      const Shape shape = values_->ShapeOf();
+
+      const std::vector<Check>& checks = ChecksOf(shape);
+      while (check_ < checks.size()) {
+        const Check& check = checks[check_];
+        ++check_;
+
+        if (!check.holds(value)) {
+          error_ = Error(check.message);
+          values_->AppendToPath(error_->path);
+          ++index_;
+          return;
+        }
+      }
+
+      // NOTE (mristin):
+      // All the checks of the value have been run. We now either start the nested
+      // verification of the value, or resume it where we stopped at its last error.
+      if (!nested_started_) {
+        nested_started_ = true;
+        nested_ = NewNestedVerificator(shape, value);
+        if (nested_ != nullptr) {
+          nested_->Start();
+        }
+      } else if (nested_ != nullptr) {
+        nested_->Next();
+      }
+
+      if (nested_ != nullptr && !nested_->Done()) {
+        // NOTE (mristin):
+        // The path of the nested error is relative to the value, so we prefix it
+        // with the path to the value. We take over the data members of the nested
+        // error to avoid a costly copy, as we move the nested verification on
+        // before we look at its error again.
+        Error& nested_error = nested_->GetMutable();
+
+        error_ = Error(std::move(nested_error.cause));
+        values_->AppendToPath(error_->path);
+        for (
+          std::unique_ptr<iteration::ISegment>& segment
+          : nested_error.path.segments
+        ) {
+          error_->path.segments.emplace_back(std::move(segment));
+        }
+
+        ++index_;
+        return;
+      }
+
+      values_->Next();
+      check_ = 0;
+      nested_started_ = false;
+      nested_ = nullptr;
+    }
+
+    error_ = common::nullopt;
+    index_ = -1;
+  }
+};  // class ErrorIterator
+
+/**
+ * Start iterating over the errors of the \p values.
+ */
+Iterator IterateErrors(
+  std::unique_ptr<IIterator> values
+) {
+  std::unique_ptr<impl::IVerificator> verificator(
+    common::make_unique<ErrorIterator>(std::move(values))
+  );
+  verificator->Start();
+
+  return Iterator(std::move(verificator));
+}
+
+/**
+ * Give out the iterator past the last error, shared by all the verifications.
+ */
+const Iterator& PastLastError() {
+  static const Iterator iterator(IterateErrors(Empty()));
+  return iterator;
+}
+
+/**
+ * Verify the values given by the iterator, which we restart on every \ref begin.
+ */
+class ValuesVerification : public IVerification {
+ public:
+  explicit ValuesVerification(
+    std::unique_ptr<IIterator> values
+  ) :
+    values_(std::move(values)) {
+    // Intentionally empty.
+  }
+
+  Iterator begin() const override {
+    return IterateErrors(values_->Clone());
+  }
+
+  const Iterator& end() const override {
+    return PastLastError();
+  }
+
+  ~ValuesVerification() override = default;
+
+ private:
+  std::unique_ptr<IIterator> values_;
+};  // class ValuesVerification
+
+// endregion Iteration over the errors
+
+}  // namespace
+
+// region Verification of constrained primitives
+
+std::unique_ptr<IVerification> VerifyXmlSerializableString(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kXmlSerializableString)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyNonEmptyXmlSerializableString(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kNonEmptyXmlSerializableString)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyDateTimeUtc(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kDateTimeUtc)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyDuration(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kDuration)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyBlobType(
+  const std::vector<std::uint8_t>&
+) {
+  // NOTE (mristin):
+  // There are no invariants to verify.
+  return common::make_unique<ValuesVerification>(Empty());
+}
+
+std::unique_ptr<IVerification> VerifyIdentifier(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kIdentifier)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyValueTypeIec61360(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kValueTypeIec61360)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyNameType(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kNameType)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyVersionType(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kVersionType)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyRevisionType(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kRevisionType)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyLabelType(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kLabelType)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyMessageTopicType(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kMessageTopicType)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyBcp47LanguageTag(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kBcp47LanguageTag)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyContentType(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kContentType)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyPathType(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kPathType)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyQualifierType(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kQualifierType)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyValueDataType(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kValueDataType)
+  );
+}
+
+std::unique_ptr<IVerification> VerifyIdShortType(
+  const std::wstring& that
+) {
+  return common::make_unique<ValuesVerification>(
+    One(&that, Shape::kIdShortType)
+  );
+}
+
+// endregion Verification of constrained primitives
 
 // region NonRecursiveVerification
 
@@ -25497,25 +11112,11 @@ NonRecursiveVerification::NonRecursiveVerification(
 }
 
 Iterator NonRecursiveVerification::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    NewNonRecursiveVerificator(instance_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
+  return IterateErrors(OverInstance(*instance_, false));
 }
 
 const Iterator& NonRecursiveVerification::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
+  return PastLastError();
 }
 
 // endregion NonRecursiveVerification
@@ -25529,25 +11130,11 @@ RecursiveVerification::RecursiveVerification(
 }
 
 Iterator RecursiveVerification::begin() const {
-  std::unique_ptr<impl::IVerificator> verificator(
-    common::make_unique<RecursiveVerificator>(instance_)
-  );
-
-  verificator->Start();
-
-  // NOTE(mristin):
-  // We short-circuit here for efficiency, as we can immediately dispose
-  // of the verificator.
-  if (verificator->Done()) {
-    return Iterator(common::make_unique<AlwaysDoneVerificator>());
-  }
-
-  return Iterator(std::move(verificator));
+  return IterateErrors(OverInstance(*instance_, true));
 }
 
 const Iterator& RecursiveVerification::end() const {
-  static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-  return iterator;
+  return PastLastError();
 }
 
 // endregion RecursiveVerification

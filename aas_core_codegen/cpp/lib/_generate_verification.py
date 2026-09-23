@@ -1,12 +1,16 @@
 """Generate code of verification logic."""
 import io
+import re
 from typing import (
+    AbstractSet,
     Optional,
     List,
     Tuple,
     Union,
     Sequence,
     Mapping,
+    MutableMapping,
+    Set,
     Final,
 )
 
@@ -28,17 +32,16 @@ from aas_core_codegen.cpp import (
     description as cpp_description,
     transpilation as cpp_transpilation,
     optionaling as cpp_optionaling,
-    yielding as cpp_yielding,
 )
 from aas_core_codegen.cpp.common import (
     INDENT as I,
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
+    INDENT5 as IIIII,
 )
 from aas_core_codegen.intermediate import type_inference as intermediate_type_inference
 from aas_core_codegen.parse import tree as parse_tree
-from aas_core_codegen.yielding import flow as yielding_flow
 
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -114,37 +117,6 @@ bool {function_name}(
     return Stripped("\n".join(blocks)), None
 
 
-def _constrained_primitive_verificator_value_is_pointer(
-    primitive_type: intermediate.PrimitiveType,
-) -> bool:
-    """
-    Check whether we keep the value of a constrained primitive as a pointer.
-
-    Values which are cheap to copy such as booleans and integers are copied by value
-    in the verificator constructor. On the other hand, primitive types represented as
-    STL containers are copied as pointers to avoid unnecessary cost.
-
-    In many places in code we have to decide how to dereference the value.
-    """
-    if primitive_type is intermediate.PrimitiveType.BOOL:
-        return False
-
-    elif primitive_type is intermediate.PrimitiveType.INT:
-        return False
-
-    elif primitive_type is intermediate.PrimitiveType.FLOAT:
-        return False
-
-    elif primitive_type is intermediate.PrimitiveType.STR:
-        return True
-
-    elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-        return True
-
-    else:
-        assert_never(primitive_type)
-
-
 def _generate_definition_of_verify_constrained_primitive(
     constrained_primitive: intermediate.ConstrainedPrimitive,
 ) -> Stripped:
@@ -159,9 +131,7 @@ def _generate_definition_of_verify_constrained_primitive(
 
     arg_name = cpp_naming.argument_name(Identifier("that"))
 
-    if _constrained_primitive_verificator_value_is_pointer(
-        primitive_type=constrained_primitive.constrainee
-    ):
+    if cpp_common.primitive_type_is_referencable(constrained_primitive.constrainee):
         documentation_comment = Stripped(
             """\
 /**
@@ -280,8 +250,8 @@ struct Error {{
  * processed.
  *
  * Unlike STL, this is <em>not</em> a light-weight iterator. We implement
- * a "yielding" iterator by leveraging code generation so that we always keep
- * the model stack as well as the properties verified thus far.
+ * a "yielding" iterator which keeps where it stopped in the model, so that
+ * it looks for the next error only when you move it.
  *
  * This means that copy-construction and equality comparisons are much more heavy-weight
  * than you'd usually expect from an STL iterator. For example, if you want to sort
@@ -531,23 +501,6 @@ Error::Error(
     ]
 
 
-def _generate_new_non_recursive_verificator_definition() -> Stripped:
-    """Generate the def. of the factory function for non-recursive verificators."""
-    new_non_recursive_verificator = cpp_naming.function_name(
-        Identifier("new_non_recursive_verificator")
-    )
-
-    return Stripped(
-        f"""\
-/**
- * Produce a non-recursive verificator of the instance given its runtime model type.
- */
-std::unique_ptr<impl::IVerificator> {new_non_recursive_verificator}(
-{I}const std::shared_ptr<types::IClass>& instance
-);"""
-    )
-
-
 def _generate_iterator_implementation() -> List[Stripped]:
     """Generate the implementation of the class ``Iterator``."""
     return [
@@ -650,1781 +603,6 @@ bool operator!=(const Iterator& a, const Iterator& b) {{
         ),
         Stripped("// endregion struct Iterator"),
     ]
-
-
-def _generate_non_recursive_verification() -> List[Stripped]:
-    """Generate the ``NonRecursiveVerification`` class."""
-    return [
-        Stripped("// region NonRecursiveVerification"),
-        Stripped(
-            f"""\
-NonRecursiveVerification::NonRecursiveVerification(
-{I}const std::shared_ptr<types::IClass>& instance
-) : instance_(instance) {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-Iterator NonRecursiveVerification::begin() const {{
-{I}std::unique_ptr<impl::IVerificator> verificator(
-{II}NewNonRecursiveVerificator(instance_)
-{I});
-
-{I}verificator->Start();
-
-{I}// NOTE(mristin):
-{I}// We short-circuit here for efficiency, as we can immediately dispose
-{I}// of the verificator.
-{I}if (verificator->Done()) {{
-{II}return Iterator(common::make_unique<AlwaysDoneVerificator>());
-{I}}}
-
-{I}return Iterator(std::move(verificator));
-}}"""
-        ),
-        Stripped(
-            f"""\
-const Iterator& NonRecursiveVerification::end() const {{
-{I}static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-{I}return iterator;
-}}"""
-        ),
-        Stripped("// endregion NonRecursiveVerification"),
-    ]
-
-
-def _generate_recursive_verification() -> List[Stripped]:
-    """Generate the ``RecursiveVerification`` class."""
-    return [
-        Stripped("// region RecursiveVerification"),
-        Stripped(
-            f"""\
-RecursiveVerification::RecursiveVerification(
-{I}const std::shared_ptr<types::IClass>& instance
-) : instance_(instance) {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-Iterator RecursiveVerification::begin() const {{
-{I}std::unique_ptr<impl::IVerificator> verificator(
-{II}common::make_unique<RecursiveVerificator>(instance_)
-{I});
-
-{I}verificator->Start();
-
-{I}// NOTE(mristin):
-{I}// We short-circuit here for efficiency, as we can immediately dispose
-{I}// of the verificator.
-{I}if (verificator->Done()) {{
-{II}return Iterator(common::make_unique<AlwaysDoneVerificator>());
-{I}}}
-
-{I}return Iterator(std::move(verificator));
-}}"""
-        ),
-        Stripped(
-            f"""\
-const Iterator& RecursiveVerification::end() const {{
-{I}static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-{I}return iterator;
-}}"""
-        ),
-        Stripped("// endregion RecursiveVerification"),
-    ]
-
-
-def _generate_always_done_verificator() -> List[Stripped]:
-    """Generate the verificator which always has ``Done`` set."""
-    return [
-        Stripped("// region class AlwaysDoneVerificator"),
-        Stripped(
-            f"""\
-class AlwaysDoneVerificator : public impl::IVerificator {{
- public:
-{I}void Start() override;
-{I}void Next() override;
-{I}bool Done() const override;
-{I}const Error& Get() const override;
-{I}Error& GetMutable() override;
-{I}long Index() const override;
-{I}std::unique_ptr<impl::IVerificator> Clone() const override;
-
-{I}virtual ~AlwaysDoneVerificator() = default;
-}};  // class AlwaysDoneVerificator"""
-        ),
-        Stripped(
-            f"""\
-void AlwaysDoneVerificator::Start() {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-void AlwaysDoneVerificator::Next() {{
-{I}throw std::logic_error(
-{II}"You want to move an AlwaysDoneVerificator, "
-{II}"but the verificator is always done, as its name suggests."
-{I});
-}}"""
-        ),
-        Stripped(
-            f"""\
-bool AlwaysDoneVerificator::Done() const {{
-{I}return true;
-}}"""
-        ),
-        Stripped(
-            f"""\
-const Error& AlwaysDoneVerificator::Get() const {{
-{II}throw std::logic_error(
-{III}"You want to get from an AlwaysDoneVerificator, "
-{III}"but the verificator is always done, as its name suggests."
-{II});
-}}"""
-        ),
-        Stripped(
-            f"""\
-Error& AlwaysDoneVerificator::GetMutable() {{
-{II}throw std::logic_error(
-{III}"You want to get mutable from an AlwaysDoneVerificator, "
-{III}"but the verificator is always done, as its name suggests."
-{II});
-}}"""
-        ),
-        Stripped(
-            f"""\
-long AlwaysDoneVerificator::Index() const {{
-{I}return -1;
-}}"""
-        ),
-        Stripped(
-            f"""\
-std::unique_ptr<impl::IVerificator> AlwaysDoneVerificator::Clone() const {{
-{I}return common::make_unique<AlwaysDoneVerificator>(*this);
-}}"""
-        ),
-        Stripped("// endregion class AlwaysDoneVerificator"),
-    ]
-
-
-def _find_constrained_primitive(
-    type_annotation: intermediate.TypeAnnotationUnion,
-) -> Optional[intermediate.ConstrainedPrimitive]:
-    """
-    Find the constrained primitive in the given type annotation.
-
-    The constrained primitive can be referenced from the type annotation, or contained
-    as its generic parameter.
-    """
-    if isinstance(
-        type_annotation,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-    ):
-        return intermediate.try_constrained_primitive(type_annotation)
-
-    elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
-        return _find_constrained_primitive(type_annotation.value)
-
-    elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
-        return _find_constrained_primitive(type_annotation.items)
-
-    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
-        for item in type_annotation.items:
-            result = _find_constrained_primitive(item)
-            if result is not None:
-                return result
-
-        return None
-
-    elif isinstance(
-        type_annotation,
-        (intermediate.JsonValueTypeAnnotation, intermediate.JsonArrayTypeAnnotation),
-    ):
-        # NOTE (mristin):
-        # Neither has a key to constrain, and the value is always the fully
-        # open ``JSONValue``, so there is nothing to find here.
-        return None
-
-    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
-        # NOTE (mristin):
-        # ``JsonObjectTypeAnnotation.key`` is either a plain ``str`` or
-        # a class (transitively) constraining ``str`` -- delegate to find out
-        # which, exactly as we would for any other property.
-        return _find_constrained_primitive(type_annotation.key)
-
-    else:
-        assert_never(type_annotation)
-
-
-class VerificatorQualities:
-    """Model the relevant qualities of a verificator."""
-
-    #: Class that we want to verify
-    cls: Final[intermediate.ConcreteClass]
-
-    #: If set, the verificator performs no verification steps.
-    is_noop: Final[bool]
-
-    #: List properties which are annotated with a (possibly optional) constrained
-    #: primitive
-    constrained_primitive_properties: Final[Sequence[intermediate.Property]]
-
-    #: List properties which are annotated with a (possibly optional) JSON-able
-    #: type (``JSONValue``, ``JSONArray`` or ``JSONObject[K]``), and therefore need
-    #: to be exhaustively verified with :class:`JsonValueVerificator`, regardless of
-    #: whether ``K`` is further constrained
-    json_properties: Final[Sequence[intermediate.Property]]
-
-    # fmt: off
-    @ensure(
-        lambda self:
-        not (
-            len(self.cls.invariants) == 0
-            and len(self.constrained_primitive_properties) == 0
-            and len(self.json_properties) == 0
-        ) or self.is_noop,
-        "The verificator is a no-op if there are no invariants, no constrained "
-        "primitive properties and no JSON-able properties in the class"
-    )
-    @ensure(
-        lambda self:
-        not (
-            len(self.cls.invariants) > 0
-            or len(self.constrained_primitive_properties) > 0
-            or len(self.json_properties) > 0
-        ) or not self.is_noop,
-        "The verificator is *not* a no-op if there is at least one invariant, "
-        "a property annotated with a constrained primitive or a JSON-able property"
-    )
-    # fmt: on
-    def __init__(self, cls: intermediate.ConcreteClass) -> None:
-        self.cls = cls
-
-        self.constrained_primitive_properties = [
-            prop
-            for prop in cls.properties
-            if _find_constrained_primitive(prop.type_annotation) is not None
-        ]
-
-        self.json_properties = [
-            prop
-            for prop in cls.properties
-            if isinstance(
-                intermediate.beneath_optional(prop.type_annotation),
-                (
-                    intermediate.JsonValueTypeAnnotation,
-                    intermediate.JsonArrayTypeAnnotation,
-                    intermediate.JsonObjectTypeAnnotation,
-                ),
-            )
-        ]
-
-        self.is_noop = (
-            len(cls.invariants) == 0
-            and len(self.constrained_primitive_properties) == 0
-            and len(self.json_properties) == 0
-        )
-
-
-@require(lambda verificator_qualities: verificator_qualities.is_noop)
-def _generate_empty_non_recursive_verificator(
-    verificator_qualities: VerificatorQualities,
-) -> List[Stripped]:
-    """
-    Generate an implementation of a non-recursive verificator which is always done.
-
-    Though the implementation is a duplicate in logic of ``AlwaysDoneVerificator``,
-    the assertion error messages are different, so we generate a separate class.
-    """
-    # Shortcut
-    cls = verificator_qualities.cls
-
-    of_cls = cpp_naming.class_name(Identifier(f"Of_{cls.name}"))
-    interface_name = cpp_naming.interface_name(cls.name)
-
-    return [
-        Stripped(
-            f"""\
-class {of_cls} : public impl::IVerificator {{
- public:
-{I}{of_cls}(
-{II}const std::shared_ptr<types::IClass>& instance
-{I});
-
-{I}void Start() override;
-{I}void Next() override;
-{I}bool Done() const override;
-{I}const Error& Get() const override;
-{I}Error& GetMutable() override;
-{I}long Index() const override;
-
-{I}std::unique_ptr<impl::IVerificator> Clone() const override;
-
-{I}~{of_cls}() override = default;
-}};  // class {of_cls}"""
-        ),
-        Stripped(
-            f"""\
-{of_cls}::{of_cls}(
-{I}const std::shared_ptr<types::IClass>&
-) {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-void {of_cls}::Start() {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-void {of_cls}::Next() {{
-{I}throw std::logic_error(
-{II}"You want to move "
-{II}"a verificator {of_cls}, "
-{II}"but the verificator is always done as "
-{II}"{interface_name} "
-{II}"has no invariants defined."
-{I});
-}}"""
-        ),
-        Stripped(
-            f"""\
-bool {of_cls}::Done() const {{
-{I}return true;
-}}"""
-        ),
-        Stripped(
-            f"""\
-const Error& {of_cls}::Get() const {{
-{I}throw std::logic_error(
-{II}"You want to get from "
-{II}"a verificator {of_cls}, "
-{II}"but the verificator is always done as "
-{II}"{interface_name} "
-{II}"has no invariants defined."
-{I});
-}}"""
-        ),
-        Stripped(
-            f"""\
-Error& {of_cls}::GetMutable() {{
-{I}throw std::logic_error(
-{II}"You want to get mutable from "
-{II}"a verificator {of_cls}, "
-{II}"but the verificator is always done as "
-{II}"{interface_name} "
-{II}"has no invariants defined."
-{I});
-}}"""
-        ),
-        Stripped(
-            f"""\
-long {of_cls}::Index() const {{
-{I}return -1;
-}}"""
-        ),
-        Stripped(
-            f"""\
-std::unique_ptr<impl::IVerificator> {of_cls}::Clone() const {{
-{I}return common::make_unique<
-{II}{of_cls}
-{I}>(*this);
-}}"""
-        ),
-    ]
-
-
-class _ClassInvariantTranspiler(cpp_transpilation.Transpiler):
-    """Transpile invariants of the classes."""
-
-    def __init__(
-        self,
-        type_map: Mapping[
-            parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
-        ],
-        is_optional_map: Mapping[parse_tree.Node, bool],
-        environment: intermediate_type_inference.Environment,
-        symbol_table: intermediate.SymbolTable,
-    ) -> None:
-        """Initialize with the given values."""
-        cpp_transpilation.Transpiler.__init__(
-            self,
-            type_map=type_map,
-            is_optional_map=is_optional_map,
-            environment=environment,
-            types_namespace=cpp_common.TYPES_NAMESPACE,
-        )
-
-        self._symbol_table = symbol_table
-
-    def transform_name(
-        self, node: parse_tree.Name
-    ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        if node.identifier in self._variable_name_set:
-            return Stripped(cpp_naming.variable_name(node.identifier)), None
-
-        if node.identifier == "self":
-            # The ``instance_`` refers to the instance under verification.
-            return Stripped("instance_"), None
-
-        if node.identifier in self._symbol_table.constants_by_name:
-            constant = cpp_naming.constant_name(node.identifier)
-            return Stripped(f"{cpp_common.CONSTANTS_NAMESPACE}::{constant}"), None
-
-        if node.identifier in self._symbol_table.verification_functions_by_name:
-            return Stripped(cpp_naming.function_name(node.identifier)), None
-
-        our_type = self._symbol_table.find_our_type(name=node.identifier)
-        if isinstance(our_type, intermediate.Enumeration):
-            return (
-                Stripped(
-                    f"{cpp_common.TYPES_NAMESPACE}::{cpp_naming.enum_name(node.identifier)}"
-                ),
-                None,
-            )
-
-        return None, Error(
-            node.original_node,
-            f"We can not determine how to transpile the name {node.identifier!r} "
-            f"to C++. We could not find it neither in the local variables, "
-            f"nor in the global constants, nor in verification functions, "
-            f"nor as an enumeration. If you expect this name to be transpilable, "
-            f"please contact the developers.",
-        )
-
-
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _transpile_class_invariant(
-    invariant: intermediate.Invariant,
-    symbol_table: intermediate.SymbolTable,
-    environment: intermediate_type_inference.Environment,
-) -> Tuple[Optional[Stripped], Optional[Error]]:
-    """Translate the invariant from the meta-model into a C++ condition."""
-    # fmt: off
-    type_map, inference_error = (
-        intermediate_type_inference.infer_for_invariant(
-            invariant=invariant,
-            environment=environment
-        )
-    )
-    # fmt: on
-
-    if inference_error is not None:
-        return None, inference_error
-
-    assert type_map is not None
-
-    optional_inferrer = cpp_optionaling.Inferrer(
-        environment=environment, type_map=type_map
-    )
-
-    _ = optional_inferrer.transform(invariant.body)
-
-    if len(optional_inferrer.errors) > 0:
-        return None, Error(
-            invariant.parsed.node,
-            "Failed to infer whether one or more nodes are ``common::optional`` "
-            "in the invariant",
-            optional_inferrer.errors,
-        )
-
-    transpiler = _ClassInvariantTranspiler(
-        type_map=type_map,
-        is_optional_map=optional_inferrer.is_optional_map,
-        environment=environment,
-        symbol_table=symbol_table,
-    )
-
-    expr, error = transpiler.transform(invariant.body)
-
-    if error is not None:
-        return None, error
-
-    assert expr is not None
-    return expr, None
-
-
-@require(lambda verificator_qualities: not verificator_qualities.is_noop)
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _generate_non_recursive_verificator_execute(
-    verificator_qualities: VerificatorQualities,
-    symbol_table: intermediate.SymbolTable,
-    environment: intermediate_type_inference.Environment,
-) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
-    """Generate the impl. of the ``Execute()`` for a verificator of class ``cls``."""
-    flow = [
-        yielding_flow.command_from_text(
-            """\
-done_ = false;
-error_ = nullptr;
-index_ = -1;"""
-        )
-    ]  # type: List[yielding_flow.Node]
-
-    for prop in verificator_qualities.constrained_primitive_properties:
-        if isinstance(
-            intermediate.beneath_optional(prop.type_annotation),
-            intermediate.ListTypeAnnotation,
-        ):
-            flow.append(
-                yielding_flow.command_from_text(
-                    """\
-// NOTE (mristin):
-// We reset the index in constrained primitives for easier debugging since this bears
-// negligible overhead.
-index_in_constrained_primitives_ = static_cast<std::size_t>(-1);"""
-                )
-            )
-
-    errors = []  # type: List[Error]
-    for invariant in verificator_qualities.cls.invariants:
-        condition_expr, error = _transpile_class_invariant(
-            invariant=invariant, symbol_table=symbol_table, environment=environment
-        )
-        if error is not None:
-            errors.append(error)
-            continue
-
-        assert condition_expr is not None
-
-        # NOTE (mristin):
-        # We need to wrap the description in multiple literals as a single long
-        # string literal is often too much for the readability.
-        invariant_description_lines = wrap_text_into_lines(invariant.description)
-
-        invariant_description_literals_joined = "\n".join(
-            cpp_common.wstring_literal(line) for line in invariant_description_lines
-        )
-
-        flow.append(
-            yielding_flow.IfFalse(
-                condition_expr,
-                [
-                    yielding_flow.command_from_text(
-                        f"""\
-error_ = common::make_unique<Error>(
-{I}{indent_but_first_line(invariant_description_literals_joined, I)}
-);
-// No path is prepended as the error refers to the instance itself.
-++index_;"""
-                    ),
-                    yielding_flow.Yield(),
-                ],
-            )
-        )
-
-    for prop in verificator_qualities.constrained_primitive_properties:
-        type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-        property_enum = cpp_naming.enum_name(Identifier("Property"))
-        property_literal = cpp_naming.enum_literal_name(prop.name)
-
-        getter_name = cpp_naming.getter_name(prop.name)
-
-        getter_expr: Stripped
-        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            getter_expr = Stripped(f"*(instance_->{getter_name}())")
-        else:
-            getter_expr = Stripped(f"instance_->{getter_name}()")
-
-        flow_for_prop: List[yielding_flow.Node]
-
-        if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
-            raise AssertionError(
-                f"Expected only a type annotation for a property containing "
-                f"a constrained primitive, but got: {prop.type_annotation}"
-            )
-
-        elif isinstance(type_anno, intermediate.OurTypeAnnotation):
-            assert isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive)
-            constrained_primitive = type_anno.our_type
-
-            of_constrained_primitive = cpp_naming.class_name(
-                Identifier(f"Of_{constrained_primitive.name}")
-            )
-
-            # noinspection PyListCreation
-            flow_for_prop = []
-
-            # NOTE (mristin):
-            # We call ``append`` to avoid the double indention with ``extend([...])``.
-
-            flow_for_prop.append(
-                yielding_flow.command_from_text(
-                    f"""\
-constrained_primitive_verificator_ = (
-{I}common::make_unique<
-{II}constrained_primitive_verificator::{of_constrained_primitive}
-{I}>(
-{II}{indent_but_first_line(getter_expr, II)}
-{I})
-);
-constrained_primitive_verificator_->Start();"""
-                )
-            )
-            flow_for_prop.append(
-                yielding_flow.For(
-                    "!constrained_primitive_verificator_->Done()",
-                    "constrained_primitive_verificator_->Next();",
-                    [
-                        yielding_flow.command_from_text(
-                            f"""\
-// We intentionally take over the ownership of the errors' data members,
-// as we know the implementation in all the detail, and want to avoid a costly
-// copy.
-error_ = common::make_unique<Error>(
-{I}std::move(
-{II}constrained_primitive_verificator_->GetMutable()
-{I})
-);
-
-error_->path.segments.emplace_front(
-{I}common::make_unique<iteration::PropertySegment>(
-{II}iteration::{property_enum}::{property_literal}
-{I})
-);
-
-++index_;"""
-                        ),
-                        yielding_flow.Yield(),
-                    ],
-                )
-            )
-            flow_for_prop.append(
-                yielding_flow.command_from_text(
-                    "constrained_primitive_verificator_ = nullptr;"
-                )
-            )
-
-        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-            if not (
-                isinstance(type_anno.items, intermediate.OurTypeAnnotation)
-                and isinstance(
-                    type_anno.items.our_type, intermediate.ConstrainedPrimitive
-                )
-            ):
-                raise NotImplementedError(
-                    f"NOTE (mristin): We implemented only non-recursive verification of "
-                    f"lists of constrained primitives at the moment, "
-                    f"but we got: {prop.type_annotation}. "
-                    f"Please contact the developers if you need this feature."
-                )
-
-            of_constrained_primitive = cpp_naming.class_name(
-                Identifier(f"Of_{type_anno.items.our_type.name}")
-            )
-
-            # noinspection PyListCreation
-            flow_for_prop = []
-
-            # NOTE (mristin):
-            # We call ``append`` to avoid the double indention with ``extend([...])``.
-
-            flow_for_prop.append(
-                yielding_flow.command_from_text(
-                    """\
-index_in_constrained_primitives_ = 0;"""
-                )
-            )
-
-            at_expr = f"({getter_expr}).at(index_in_constrained_primitives_)"
-
-            flow_for_prop.append(
-                yielding_flow.For(
-                    f"index_in_constrained_primitives_ < ({getter_expr}).size()",
-                    "++index_in_constrained_primitives_;",
-                    [
-                        yielding_flow.command_from_text(
-                            f"""\
-constrained_primitive_verificator_ = (
-{I}common::make_unique<
-{II}constrained_primitive_verificator::{of_constrained_primitive}
-{I}>(
-{II}{indent_but_first_line(at_expr, II)}
-{I})
-);
-constrained_primitive_verificator_->Start();"""
-                        ),
-                        yielding_flow.For(
-                            "!constrained_primitive_verificator_->Done()",
-                            "constrained_primitive_verificator_->Next();",
-                            [
-                                yielding_flow.command_from_text(
-                                    f"""\
-// We intentionally take over the ownership of the errors' data members,
-// as we know the implementation in all the detail, and want to avoid a costly
-// copy.
-error_ = common::make_unique<Error>(
-{I}std::move(
-{II}constrained_primitive_verificator_->GetMutable()
-{I})
-);
-
-error_->path.segments.emplace_front(
-{I}common::make_unique<iteration::IndexSegment>(
-{II}index_in_constrained_primitives_
-{I})
-);
-
-error_->path.segments.emplace_front(
-{I}common::make_unique<iteration::PropertySegment>(
-{II}iteration::{property_enum}::{property_literal}
-{I})
-);
-
-++index_;"""
-                                ),
-                                yielding_flow.Yield(),
-                            ],
-                        ),
-                        yielding_flow.command_from_text(
-                            "constrained_primitive_verificator_ = nullptr;"
-                        ),
-                    ],
-                )
-            )
-
-        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            # NOTE (mristin):
-            # Unlike lists, tuples are heterogeneous and fixed-length, and different
-            # items might refer to different constrained primitives, so we generate
-            # a separate, statically indexed verificator invocation for every item
-            # which is annotated with a constrained primitive.
-            item_indices_and_constrained_primitives = [
-                (i, item_type_anno.our_type)
-                for i, item_type_anno in enumerate(type_anno.items)
-                if isinstance(item_type_anno, intermediate.OurTypeAnnotation)
-                and isinstance(
-                    item_type_anno.our_type, intermediate.ConstrainedPrimitive
-                )
-            ]
-            assert len(item_indices_and_constrained_primitives) > 0
-
-            # noinspection PyListCreation
-            flow_for_prop = []
-
-            for (
-                item_index,
-                item_constrained_primitive,
-            ) in item_indices_and_constrained_primitives:
-                item_of_constrained_primitive = cpp_naming.class_name(
-                    Identifier(f"Of_{item_constrained_primitive.name}")
-                )
-
-                item_getter_expr = Stripped(f"std::get<{item_index}>({getter_expr})")
-
-                flow_for_prop.append(
-                    yielding_flow.command_from_text(
-                        f"""\
-constrained_primitive_verificator_ = (
-{I}common::make_unique<
-{II}constrained_primitive_verificator::{item_of_constrained_primitive}
-{I}>(
-{II}{indent_but_first_line(item_getter_expr, II)}
-{I})
-);
-constrained_primitive_verificator_->Start();"""
-                    )
-                )
-                flow_for_prop.append(
-                    yielding_flow.For(
-                        "!constrained_primitive_verificator_->Done()",
-                        "constrained_primitive_verificator_->Next();",
-                        [
-                            yielding_flow.command_from_text(
-                                f"""\
-// We intentionally take over the ownership of the errors' data members,
-// as we know the implementation in all the detail, and want to avoid a costly
-// copy.
-error_ = common::make_unique<Error>(
-{I}std::move(
-{II}constrained_primitive_verificator_->GetMutable()
-{I})
-);
-
-error_->path.segments.emplace_front(
-{I}common::make_unique<iteration::IndexSegment>(
-{II}{item_index}
-{I})
-);
-
-error_->path.segments.emplace_front(
-{I}common::make_unique<iteration::PropertySegment>(
-{II}iteration::{property_enum}::{property_literal}
-{I})
-);
-
-++index_;"""
-                            ),
-                            yielding_flow.Yield(),
-                        ],
-                    )
-                )
-                flow_for_prop.append(
-                    yielding_flow.command_from_text(
-                        "constrained_primitive_verificator_ = nullptr;"
-                    )
-                )
-
-        elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
-            # NOTE (mristin):
-            # The constrained primitive is not the property's value itself, but
-            # the key of every member of the JSON object -- ``K`` is guaranteed
-            # to reduce to a string-like primitive (see
-            # ``intermediate._translate._verify_only_simple_type_patterns``), so
-            # every key, once converted to a ``std::wstring``, can be verified
-            # exactly like any other constrained string.
-            key_constrained_primitive = intermediate.try_constrained_primitive(
-                type_anno.key
-            )
-            assert key_constrained_primitive is not None, (
-                "A plain ``str`` key never ends up in "
-                "``constrained_primitive_properties`` in the first place -- "
-                "see ``_find_constrained_primitive``."
-            )
-
-            of_constrained_primitive = cpp_naming.class_name(
-                Identifier(f"Of_{key_constrained_primitive.name}")
-            )
-
-            # noinspection PyListCreation
-            flow_for_prop = []
-
-            # NOTE (mristin):
-            # We call ``append`` to avoid the double indention with ``extend([...])``.
-
-            flow_for_prop.append(
-                yielding_flow.command_from_text(
-                    f"""\
-json_object_it_ = ({getter_expr}).cbegin();"""
-                )
-            )
-
-            flow_for_prop.append(
-                yielding_flow.For(
-                    f"json_object_it_ != ({getter_expr}).cend()",
-                    "++json_object_it_;",
-                    [
-                        yielding_flow.command_from_text(
-                            f"""\
-current_json_object_key_ = common::make_optional<std::wstring>(
-{I}common::Utf8ToWstring(json_object_it_.key())
-);
-
-constrained_primitive_verificator_ = (
-{I}common::make_unique<
-{II}constrained_primitive_verificator::{of_constrained_primitive}
-{I}>(
-{II}*current_json_object_key_
-{I})
-);
-constrained_primitive_verificator_->Start();"""
-                        ),
-                        yielding_flow.For(
-                            "!constrained_primitive_verificator_->Done()",
-                            "constrained_primitive_verificator_->Next();",
-                            [
-                                yielding_flow.command_from_text(
-                                    f"""\
-// We intentionally take over the ownership of the errors' data members,
-// as we know the implementation in all the detail, and want to avoid a costly
-// copy.
-error_ = common::make_unique<Error>(
-{I}std::move(
-{II}constrained_primitive_verificator_->GetMutable()
-{I})
-);
-
-error_->path.segments.emplace_front(
-{I}common::make_unique<iteration::KeySegment>(
-{II}*current_json_object_key_
-{I})
-);
-
-error_->path.segments.emplace_front(
-{I}common::make_unique<iteration::PropertySegment>(
-{II}iteration::{property_enum}::{property_literal}
-{I})
-);
-
-++index_;"""
-                                ),
-                                yielding_flow.Yield(),
-                            ],
-                        ),
-                        yielding_flow.command_from_text(
-                            """\
-constrained_primitive_verificator_ = nullptr;
-current_json_object_key_ = common::nullopt;"""
-                        ),
-                    ],
-                )
-            )
-
-        elif isinstance(
-            type_anno,
-            (
-                intermediate.JsonValueTypeAnnotation,
-                intermediate.JsonArrayTypeAnnotation,
-            ),
-        ):
-            raise AssertionError(
-                f"Unexpected {type_anno} in constrained_primitive_properties -- "
-                f"neither has a key to be constrained, so "
-                f"_find_constrained_primitive should never have included this "
-                f"property in the first place."
-            )
-
-        else:
-            assert_never(type_anno)
-
-        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            flow_for_prop = [
-                yielding_flow.IfTrue(
-                    condition=f"instance_->{getter_name}().has_value()",
-                    body=flow_for_prop,
-                )
-            ]
-
-        flow.extend(flow_for_prop)
-
-    for prop in verificator_qualities.json_properties:
-        type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-        property_enum = cpp_naming.enum_name(Identifier("Property"))
-        property_literal = cpp_naming.enum_literal_name(prop.name)
-
-        getter_name = cpp_naming.getter_name(prop.name)
-
-        getter_expr = (
-            Stripped(f"*(instance_->{getter_name}())")
-            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
-            else Stripped(f"instance_->{getter_name}()")
-        )
-
-        if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
-            shape_literal = "kAny"
-        elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
-            shape_literal = "kArray"
-        elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
-            shape_literal = "kObject"
-        else:
-            raise AssertionError(
-                f"Expected a JSON-able type annotation, but got: {type_anno}"
-            )
-
-        flow_for_json_prop = [
-            yielding_flow.command_from_text(
-                f"""\
-json_value_verificator_ = (
-{I}common::make_unique<JsonValueVerificator>(
-{II}{indent_but_first_line(getter_expr, II)},
-{II}JsonValueShape::{shape_literal}
-{I})
-);
-json_value_verificator_->Start();"""
-            ),
-            yielding_flow.For(
-                "!json_value_verificator_->Done()",
-                "json_value_verificator_->Next();",
-                [
-                    yielding_flow.command_from_text(
-                        f"""\
-// We intentionally take over the ownership of the errors' data members,
-// as we know the implementation in all the detail, and want to avoid a costly
-// copy.
-error_ = common::make_unique<Error>(
-{I}std::move(
-{II}json_value_verificator_->GetMutable()
-{I})
-);
-
-error_->path.segments.emplace_front(
-{I}common::make_unique<iteration::PropertySegment>(
-{II}iteration::{property_enum}::{property_literal}
-{I})
-);
-
-++index_;"""
-                    ),
-                    yielding_flow.Yield(),
-                ],
-            ),
-            yielding_flow.command_from_text("json_value_verificator_ = nullptr;"),
-        ]  # type: List[yielding_flow.Node]
-
-        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            flow_for_json_prop = [
-                yielding_flow.IfTrue(
-                    condition=f"instance_->{getter_name}().has_value()",
-                    body=flow_for_json_prop,
-                )
-            ]
-
-        flow.extend(flow_for_json_prop)
-
-    flow.append(
-        yielding_flow.command_from_text(
-            """\
-done_ = true;
-error_ = nullptr;
-index_ = -1;"""
-        )
-    )
-
-    if len(errors) > 0:
-        return None, errors
-
-    code = cpp_yielding.generate_execute_body(
-        flow=flow, state_member=Identifier("state_")
-    )
-
-    of_cls = cpp_naming.class_name(Identifier(f"of_{verificator_qualities.cls.name}"))
-
-    return (
-        Stripped(
-            f"""\
-void {of_cls}::Execute() {{
-{I}{indent_but_first_line(code, I)}
-}}"""
-        ),
-        None,
-    )
-
-
-@require(lambda verificator_qualities: not verificator_qualities.is_noop)
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _generate_non_recursive_verificator_implementation(
-    verificator_qualities: VerificatorQualities,
-    symbol_table: intermediate.SymbolTable,
-    environment: intermediate_type_inference.Environment,
-) -> Tuple[Optional[List[Stripped]], Optional[Error]]:
-    """Generate the impl. of a non-recursive verificator for ``cls``."""
-    cls = verificator_qualities.cls
-
-    of_cls = cpp_naming.class_name(Identifier(f"Of_{cls.name}"))
-
-    interface_name = cpp_naming.interface_name(cls.name)
-
-    copy_data_members_snippet = Stripped(
-        """\
-instance_ = other.instance_;
-done_ = other.done_;
-index_ = other.index_;
-error_ = common::make_unique<Error>(*other.error_);
-state_ = other.state_;"""
-    )
-
-    move_data_members_snippet = Stripped(
-        """\
-instance_ = std::move(other.instance_);
-done_ = other.done_;
-index_ = other.index_;
-error_ = std::move(other.error_);
-state_ = other.state_;"""
-    )
-
-    if len(verificator_qualities.constrained_primitive_properties) > 0:
-        copy_data_members_snippet = Stripped(
-            f"""\
-{copy_data_members_snippet}
-constrained_primitive_verificator_ = (
-{I}other.constrained_primitive_verificator_->Clone()
-);"""
-        )
-
-        move_data_members_snippet = Stripped(
-            f"""\
-{move_data_members_snippet}
-constrained_primitive_verificator_ = std::move(
-{I}other.constrained_primitive_verificator_
-);"""
-        )
-
-    if len(verificator_qualities.json_properties) > 0:
-        copy_data_members_snippet = Stripped(
-            f"""\
-{copy_data_members_snippet}
-json_value_verificator_ = (
-{I}other.json_value_verificator_->Clone()
-);"""
-        )
-
-        move_data_members_snippet = Stripped(
-            f"""\
-{move_data_members_snippet}
-json_value_verificator_ = std::move(
-{I}other.json_value_verificator_
-);"""
-        )
-
-    blocks = [
-        Stripped(
-            f"""\
-{of_cls}::{of_cls}(
-{I}const std::shared_ptr<types::IClass>& instance
-) :
-{I}// NOTE (mristin)
-{I}// We cast here despite the cost of increasing the use count of the shared pointer.
-{I}// Otherwise, if we didn't cast, we would not be able to have a uniform interface
-{I}// for the verification functions based on the shared pointer.
-{I}instance_(
-{II}std::dynamic_pointer_cast<
-{III}types::{interface_name}
-{II}>(
-{III}instance
-{II})
-{I}) {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-{of_cls}::{of_cls}(
-{I}const {of_cls}& other
-) {{
-{I}{indent_but_first_line(copy_data_members_snippet, I)}
-}}"""
-        ),
-        Stripped(
-            f"""\
-{of_cls}::{of_cls}(
-{I}{of_cls}&& other
-) {{
-{I}{indent_but_first_line(move_data_members_snippet, I)}
-}}"""
-        ),
-        Stripped(
-            f"""\
-{of_cls}& {of_cls}::operator=(
-{I}const {of_cls}& other
-) {{
-{I}return *this = {of_cls}(other);
-}}"""
-        ),
-        Stripped(
-            f"""\
-{of_cls}& {of_cls}::operator=(
-{I}{of_cls}&& other
-) {{
-{I}if (this != &other) {{
-{II}{indent_but_first_line(move_data_members_snippet, II)}
-{I}}}
-{I}return *this;
-}}"""
-        ),
-        Stripped(
-            f"""\
-void {of_cls}::Start() {{
-{I}state_ = 0;
-{I}Execute();
-}}"""
-        ),
-        Stripped(
-            f"""\
-void {of_cls}::Next() {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to move a verificator {of_cls}, "
-{III}"but the verificator was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}Execute();
-}}"""
-        ),
-        Stripped(
-            f"""\
-bool {of_cls}::Done() const {{
-{I}return done_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-const Error& {of_cls}::Get() const {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to get from a verificator {of_cls}, "
-{III}"but the verificator was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}return *error_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-Error& {of_cls}::GetMutable() {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to get mutable from a verificator {of_cls}, "
-{III}"but the verificator was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}return *error_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-long {of_cls}::Index() const {{
-{I}#ifdef DEBUG
-{I}if (Done() && index_ != -1) {{
-{II}throw std::logic_error(
-{III}common::Concat(
-{IIII}"Expected index to be -1 "
-{IIII}"from a done verificator {of_cls}, "
-{IIII}"but got: ",
-{IIII}std::to_string(index_)
-{III})
-{II});
-{I}}}
-{I}#endif
-
-{I}return index_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-std::unique_ptr<impl::IVerificator> {of_cls}::Clone() const {{
-{I}return common::make_unique<
-{II}{of_cls}
-{I}>(*this);
-}}"""
-        ),
-    ]  # type: List[Stripped]
-
-    execute_block, execute_errors = _generate_non_recursive_verificator_execute(
-        verificator_qualities=verificator_qualities,
-        symbol_table=symbol_table,
-        environment=environment,
-    )
-    if execute_errors is not None:
-        return None, Error(
-            cls.parsed.node,
-            f"Failed to generate Execute() method as {of_cls!r}",
-            execute_errors,
-        )
-
-    assert execute_block is not None
-    blocks.append(execute_block)
-
-    return blocks, None
-
-
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _generate_non_recursive_verificator(
-    cls: intermediate.ConcreteClass,
-    symbol_table: intermediate.SymbolTable,
-    base_environment: intermediate_type_inference.Environment,
-) -> Tuple[Optional[List[Stripped]], Optional[Error]]:
-    """Generate the non-recursive verificator for the ``cls``."""
-    environment = intermediate_type_inference.MutableEnvironment(
-        parent=base_environment
-    )
-
-    assert environment.find(Identifier("self")) is None
-    environment.set(
-        identifier=Identifier("self"),
-        type_annotation=intermediate_type_inference.OurTypeAnnotation(our_type=cls),
-    )
-
-    verificator_qualities = VerificatorQualities(cls=cls)
-
-    if verificator_qualities.is_noop:
-        return (
-            _generate_empty_non_recursive_verificator(
-                verificator_qualities=verificator_qualities
-            ),
-            None,
-        )
-
-    of_cls = cpp_naming.class_name(Identifier(f"Of_{cls.name}"))
-
-    interface_name = cpp_naming.interface_name(cls.name)
-
-    private_data_members = [
-        Stripped(
-            f"""\
-std::shared_ptr<types::{interface_name}> instance_;
-bool done_;
-long index_;
-std::unique_ptr<Error> error_;
-std::uint32_t state_;"""
-        )
-    ]  # type: List[Stripped]
-
-    if len(verificator_qualities.constrained_primitive_properties) > 0:
-        private_data_members.append(
-            Stripped(
-                "std::unique_ptr<impl::IVerificator> "
-                "constrained_primitive_verificator_;"
-            )
-        )
-
-        for prop in verificator_qualities.constrained_primitive_properties:
-            prop_type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-            if isinstance(prop_type_anno, intermediate.ListTypeAnnotation):
-                # NOTE (mristin):
-                # Since there is a list of constrained primitives, we will have to
-                # iterate over it.
-                private_data_members.append(
-                    Stripped("std::size_t index_in_constrained_primitives_;")
-                )
-
-            elif isinstance(prop_type_anno, intermediate.JsonObjectTypeAnnotation):
-                # NOTE (mristin):
-                # The constrained primitive is not the property's value itself,
-                # but the key of every member of the JSON object, so we have to
-                # iterate over all its members. Unlike a list item, a JSON
-                # object's key is not already stored anywhere as a ``std::wstring``
-                # we could merely reference, so we have to also keep it alive here
-                # for as long as ``constrained_primitive_verificator_`` refers to
-                # it.
-                private_data_members.append(
-                    Stripped(
-                        "nlohmann::json::const_iterator json_object_it_;\n"
-                        "common::optional<std::wstring> current_json_object_key_;"
-                    )
-                )
-
-    if len(verificator_qualities.json_properties) > 0:
-        private_data_members.append(
-            Stripped("std::unique_ptr<impl::IVerificator> json_value_verificator_;")
-        )
-
-    private_data_members_joined = "\n".join(private_data_members)
-
-    blocks = [
-        Stripped(
-            f"""\
-class {of_cls} : public impl::IVerificator {{
- public:
-{I}{of_cls}(
-{II}const std::shared_ptr<types::IClass>& instance
-{I});
-
-{I}{of_cls}(
-{II}const {of_cls}& other
-{I});
-{I}{of_cls}(
-{II}{of_cls}&& other
-{I});
-{I}{of_cls}& operator=(
-{II}const {of_cls}& other
-{I});
-{I}{of_cls}& operator=(
-{II}{of_cls}&& other
-{I});
-
-{I}void Start() override;
-{I}void Next() override;
-{I}bool Done() const override;
-{I}const Error& Get() const override;
-{I}Error& GetMutable() override;
-{I}long Index() const override;
-
-{I}std::unique_ptr<impl::IVerificator> Clone() const override;
-
-{I}~{of_cls}() override = default;
-
- private:
-{I}{indent_but_first_line(private_data_members_joined, I)}
-
-{I}void Execute();
-}};  // class {of_cls}"""
-        )
-    ]  # type: List[Stripped]
-
-    impl_blocks, error = _generate_non_recursive_verificator_implementation(
-        verificator_qualities=verificator_qualities,
-        symbol_table=symbol_table,
-        environment=environment,
-    )
-    if error is not None:
-        return None, error
-
-    assert impl_blocks is not None
-    blocks.extend(impl_blocks)
-
-    return blocks, None
-
-
-def _generate_new_non_recursive_verificator_implementation(
-    symbol_table: intermediate.SymbolTable,
-) -> Stripped:
-    """Generate the factory of non-recursive verificators based on the model type."""
-    case_blocks = []  # type: List[Stripped]
-    for cls in symbol_table.concrete_classes:
-        enum_name = cpp_naming.enum_name(Identifier("Model_type"))
-        literal_name = cpp_naming.enum_literal_name(cls.name)
-        verificator_of_cls = cpp_naming.class_name(Identifier(f"Of_{cls.name}"))
-
-        case_blocks.append(
-            Stripped(
-                f"""\
-case types::{enum_name}::{literal_name}:
-{I}return common::make_unique<
-{II}non_recursive_verificator::{verificator_of_cls}
-{I}>(
-{II}instance
-{I});"""
-            )
-        )
-
-    case_blocks.append(
-        Stripped(
-            f"""\
-default:
-{I}throw std::logic_error(
-{II}common::Concat(
-{III}"Unexpected model type: ",
-{III}std::to_string(
-{IIII}static_cast<std::uint32_t>(instance->model_type())
-{III})
-{II})
-{I});"""
-        )
-    )
-
-    case_blocks_joined = "\n".join(case_blocks)
-
-    switch_stmt = Stripped(
-        f"""\
-switch (instance->model_type()) {{
-{I}{indent_but_first_line(case_blocks_joined, I)}
-}}"""
-    )
-
-    new_non_recursive_verificator = cpp_naming.function_name(
-        Identifier("new_non_recursive_verificator")
-    )
-
-    return Stripped(
-        f"""\
-std::unique_ptr<impl::IVerificator> {new_non_recursive_verificator}(
-{I}const std::shared_ptr<types::IClass>& instance
-) {{
-{I}{indent_but_first_line(switch_stmt, I)}
-}}"""
-    )
-
-
-def _generate_recursive_verificator_execute() -> Stripped:
-    """Generate the impl. of the ``Execute()`` method for recursive verificator."""
-    flow = [
-        yielding_flow.command_from_text(
-            """\
-error_ = nullptr;
-index_ = -1;
-done_ = false;
-
-verificator_ = NewNonRecursiveVerificator(*instance_);
-verificator_->Start();"""
-        ),
-        yielding_flow.For(
-            "!verificator_->Done()",
-            "verificator_->Next();",
-            [
-                yielding_flow.command_from_text(
-                    f"""\
-// We intentionally take over the ownership of the errors' data members,
-// as we know the implementation in all the detail, and want to avoid a costly
-// copy.
-error_ = common::make_unique<Error>(
-{I}std::move(
-{II}verificator_->GetMutable()
-{I})
-);
-// No path is prepended as the error refers to the instance itself.
-++index_;"""
-                ),
-                yielding_flow.Yield(),
-            ],
-        ),
-        yielding_flow.command_from_text(
-            f"""\
-verificator_ = nullptr;
-
-{{
-{I}// NOTE (mristin):
-{I}// We will not need descent, so we introduce it in the scope.
-{I}iteration::Descent descent(
-{II}*instance_
-{I});
-{I}iterator_ = descent.begin();
-
-{I}// NOTE (mristin):
-{I}// descent.end() is a constant reference, so we make an explicit
-{I}// copy here.
-{I}iterator_end_ = descent.end();
-}}"""
-        ),
-        yielding_flow.For(
-            "*iterator_ != *iterator_end_",
-            "++(*iterator_);",
-            [
-                yielding_flow.command_from_text(
-                    f"""\
-verificator_ = NewNonRecursiveVerificator(
-{I}*(*iterator_)
-);
-verificator_->Start();"""
-                ),
-                yielding_flow.For(
-                    "!verificator_->Done()",
-                    "verificator_->Next();",
-                    [
-                        yielding_flow.command_from_text(
-                            f"""\
-// We intentionally take over the ownership of the errors' data members,
-// as we know the implementation in all the detail, and want to avoid a costly
-// copy.
-error_ = common::make_unique<Error>(
-{I}std::move(
-{II}verificator_->GetMutable()
-{I})
-);
-
-error_->path = iteration::MaterializePath(
-{I}*iterator_
-);
-
-++index_;"""
-                        ),
-                        yielding_flow.Yield(),
-                    ],
-                ),
-                yielding_flow.command_from_text("verificator_ = nullptr;"),
-            ],
-        ),
-        yielding_flow.command_from_text(
-            """\
-iterator_.reset();
-iterator_end_.reset();
-done_ = true;
-index_ = -1;"""
-        ),
-    ]  # type: Sequence[yielding_flow.Node]
-
-    code = cpp_yielding.generate_execute_body(
-        flow=flow, state_member=Identifier("state_")
-    )
-
-    return Stripped(
-        f"""\
-void RecursiveVerificator::Execute() {{
-{I}{indent_but_first_line(code, I)}
-}}"""
-    )
-
-
-def _generate_recursive_verificator() -> List[Stripped]:
-    """Generate the impl. and definition of the recursive verificator."""
-    blocks = [
-        Stripped(
-            f"""\
-class RecursiveVerificator : public impl::IVerificator {{
- public:
-{I}RecursiveVerificator(
-{II}const std::shared_ptr<types::IClass>& instance
-{I});
-
-{I}RecursiveVerificator(const RecursiveVerificator& other);
-{I}RecursiveVerificator(RecursiveVerificator&& other);
-{I}RecursiveVerificator& operator=(const RecursiveVerificator& other);
-{I}RecursiveVerificator& operator=(RecursiveVerificator&& other);
-
-{I}void Start() override;
-{I}void Next() override;
-{I}bool Done() const override;
-{I}const Error& Get() const override;
-{I}Error& GetMutable() override;
-{I}long Index() const override;
-
-{I}std::unique_ptr<impl::IVerificator> Clone() const override;
-
-{I}~RecursiveVerificator() override = default;
-
- private:
-{I}// NOTE(mristin):
-{I}// We use a pointer to a shared pointer here so that we can implement
-{I}// copy-assignment and move-assignment. Otherwise, if we used a constant
-{I}// reference here, the assignments could not be implemented as C++ does not
-{I}// allow re-binding of constant references.
-{I}const std::shared_ptr<types::IClass>* instance_;
-
-{I}std::uint32_t state_;
-{I}std::unique_ptr<impl::IVerificator> verificator_;
-{I}bool done_;
-{I}long index_;
-{I}std::unique_ptr<Error> error_;
-{I}common::optional<iteration::Iterator> iterator_;
-{I}common::optional<iteration::Iterator> iterator_end_;
-
-{I}void Execute();
-}};  // class RecursiveVerificator"""
-        ),
-        Stripped(
-            f"""\
-RecursiveVerificator::RecursiveVerificator(
-{I}const std::shared_ptr<types::IClass>& instance
-) : instance_(&instance) {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-RecursiveVerificator::RecursiveVerificator(const RecursiveVerificator& other) {{
-{I}instance_ = other.instance_;
-{I}state_ = other.state_;
-{I}verificator_ = other.verificator_->Clone();
-{I}done_ = other.done_;
-{I}index_ = other.index_;
-{I}error_ = common::make_unique<Error>(*(other.error_));
-{I}iterator_ = other.iterator_;
-{I}iterator_end_ = other.iterator_end_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-RecursiveVerificator::RecursiveVerificator(RecursiveVerificator&& other) {{
-{I}instance_ = other.instance_;
-{I}state_ = other.state_;
-{I}verificator_ = std::move(other.verificator_);
-{I}done_ = other.done_;
-{I}index_ = other.index_;
-{I}error_ = std::move(other.error_);
-{I}iterator_ = std::move(other.iterator_);
-{I}iterator_end_ = std::move(other.iterator_end_);
-}}"""
-        ),
-        Stripped(
-            f"""\
-RecursiveVerificator& RecursiveVerificator::operator=(
-{I}const RecursiveVerificator& other
-) {{
-{I}return *this = RecursiveVerificator(other);
-}}"""
-        ),
-        Stripped(
-            f"""\
-RecursiveVerificator& RecursiveVerificator::operator=(RecursiveVerificator&& other) {{
-{I}if (this != &other) {{
-{II}instance_ = other.instance_;
-{II}state_ = other.state_;
-{II}verificator_ = std::move(other.verificator_);
-{II}done_ = other.done_;
-{II}index_ = other.index_;
-{II}error_ = std::move(other.error_);
-{II}iterator_ = std::move(other.iterator_);
-{II}iterator_end_ = std::move(other.iterator_end_);
-{I}}}
-
-{I}return *this;
-}}"""
-        ),
-        Stripped(
-            f"""\
-void RecursiveVerificator::Start() {{
-{I}state_ = 0;
-{I}Execute();
-}}"""
-        ),
-        Stripped(
-            f"""\
-void RecursiveVerificator::Next() {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to get from a RecursiveVerificator, "
-{III}"but the verificator was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}Execute();
-}}"""
-        ),
-        Stripped(
-            f"""\
-bool RecursiveVerificator::Done() const {{
-{I}return done_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-const Error& RecursiveVerificator::Get() const {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to get from a RecursiveVerificator, "
-{III}"but the verificator is done."
-{II});
-{I}}}
-{I}#endif
-
-{I}return *error_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-Error& RecursiveVerificator::GetMutable() {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to get mutable from a RecursiveVerificator, "
-{III}"but the verificator is done."
-{II});
-{I}}}
-{I}#endif
-
-{I}return *error_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-long RecursiveVerificator::Index() const {{
-{I}#ifdef DEBUG
-{I}if (Done() && index_ != -1) {{
-{II}throw std::logic_error(
-{III}common::Concat(
-{IIII}"Expected index to be -1 "
-{IIII}"from a done RecursiveVerificator, "
-{IIII}"but got: ",
-{IIII}std::to_string(index_)
-{III})
-{II});
-{I}}}
-{I}#endif
-
-{I}return index_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-std::unique_ptr<impl::IVerificator> RecursiveVerificator::Clone() const {{
-{I}return common::make_unique<RecursiveVerificator>(*this);
-}}"""
-        ),
-    ]  # type: List[Stripped]
-
-    execute_block = _generate_recursive_verificator_execute()
-    blocks.append(execute_block)
-
-    return blocks
 
 
 def _generate_pattern_verification_implementation(
@@ -2615,117 +793,14 @@ bool {function_name}(
     )
 
 
-@require(lambda constrained_primitive: len(constrained_primitive.invariants) == 0)
-def _generate_empty_constrained_primitive_verificator(
-    constrained_primitive: intermediate.ConstrainedPrimitive,
-) -> List[Stripped]:
+class _InvariantTranspiler(cpp_transpilation.Transpiler):
     """
-    Generate a constrained primitive verificator which is always done.
+    Transpile invariants of the classes and of the constrained primitives.
 
-    Though the implementation is a duplicate in logic of ``AlwaysDoneVerificator``,
-    the assertion error messages are different, so we generate a separate class.
+    The ``self`` is transpiled to ``that``. For a class, ``that`` is a pointer to
+    the instance, so that the members are accessed with ``->`` as for any other
+    instance. For a constrained primitive, ``that`` is a reference to the value.
     """
-    of_constrained_primitive = cpp_naming.class_name(
-        Identifier(f"Of_{constrained_primitive.name}")
-    )
-
-    value_type = cpp_common.generate_primitive_type_with_const_ref_if_applicable(
-        primitive_type=constrained_primitive.constrainee
-    )
-
-    return [
-        Stripped(
-            f"""\
-class {of_constrained_primitive} : public impl::IVerificator {{
- public:
-{I}{of_constrained_primitive}(
-{II}{value_type} value
-{I});
-
-{I}void Start() override;
-{I}void Next() override;
-{I}bool Done() const override;
-{I}const Error& Get() const override;
-{I}Error& GetMutable() override;
-{I}long Index() const override;
-
-{I}std::unique_ptr<impl::IVerificator> Clone() const override;
-
-{I}virtual ~{of_constrained_primitive}() = default;
-}};  // class {of_constrained_primitive}"""
-        ),
-        Stripped(
-            f"""\
-{of_constrained_primitive}::{of_constrained_primitive}(
-{I}{value_type}
-) {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-void {of_constrained_primitive}::Start() {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-void {of_constrained_primitive}::Next() {{
-{I}throw std::logic_error(
-{II}"You want to move "
-{II}"a verificator {of_constrained_primitive}, "
-{II}"but the verificator is always done as "
-{II}"there are no invariants defined for this constrained primitive."
-{I});
-}}"""
-        ),
-        Stripped(
-            f"""\
-bool {of_constrained_primitive}::Done() const {{
-{I}return true;
-}}"""
-        ),
-        Stripped(
-            f"""\
-const Error& {of_constrained_primitive}::Get() const {{
-{I}throw std::logic_error(
-{II}"You want to get from "
-{II}"a verificator {of_constrained_primitive}, "
-{II}"but the verificator is always done as "
-{II}"there are no invariants defined for this constrained primitive."
-{I});
-}}"""
-        ),
-        Stripped(
-            f"""\
-Error& {of_constrained_primitive}::GetMutable() {{
-{I}throw std::logic_error(
-{II}"You want to get mutable from "
-{II}"a verificator {of_constrained_primitive}, "
-{II}"but the verificator is always done as "
-{II}"there are no invariants defined for this constrained primitive."
-{I});
-}}"""
-        ),
-        Stripped(
-            f"""\
-long {of_constrained_primitive}::Index() const {{
-{I}return -1;
-}}"""
-        ),
-        Stripped(
-            f"""\
-std::unique_ptr<impl::IVerificator> {of_constrained_primitive}::Clone() const {{
-{I}return common::make_unique<
-{II}{of_constrained_primitive}
-{I}>(*this);
-}}"""
-        ),
-    ]
-
-
-class _ConstrainedPrimitiveInvariantTranspiler(cpp_transpilation.Transpiler):
-    """Transpile invariants of the constrained primitives."""
 
     def __init__(
         self,
@@ -2735,7 +810,6 @@ class _ConstrainedPrimitiveInvariantTranspiler(cpp_transpilation.Transpiler):
         is_optional_map: Mapping[parse_tree.Node, bool],
         environment: intermediate_type_inference.Environment,
         symbol_table: intermediate.SymbolTable,
-        constrained_primitive: intermediate.ConstrainedPrimitive,
     ) -> None:
         """Initialize with the given values."""
         cpp_transpilation.Transpiler.__init__(
@@ -2747,7 +821,6 @@ class _ConstrainedPrimitiveInvariantTranspiler(cpp_transpilation.Transpiler):
         )
 
         self._symbol_table = symbol_table
-        self._constrained_primitive = constrained_primitive
 
     def transform_name(
         self, node: parse_tree.Name
@@ -2756,13 +829,7 @@ class _ConstrainedPrimitiveInvariantTranspiler(cpp_transpilation.Transpiler):
             return Stripped(cpp_naming.variable_name(node.identifier)), None
 
         if node.identifier == "self":
-            # The ``value_`` refers to the value under verification.
-            if _constrained_primitive_verificator_value_is_pointer(
-                primitive_type=self._constrained_primitive.constrainee
-            ):
-                return Stripped("(*value_)"), None
-            else:
-                return Stripped("value_"), None
+            return Stripped("that"), None
 
         if node.identifier in self._symbol_table.constants_by_name:
             constant = cpp_naming.constant_name(node.identifier)
@@ -2790,19 +857,11 @@ class _ConstrainedPrimitiveInvariantTranspiler(cpp_transpilation.Transpiler):
         )
 
 
-# fmt: off
-@require(
-    lambda invariant, constrained_primitive:
-    intermediate.runtime_id(invariant)
-    in constrained_primitive.invariant_id_set
-)
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-# fmt: on
-def _transpile_constrained_primitive_invariant(
+def _transpile_invariant(
     invariant: intermediate.Invariant,
     symbol_table: intermediate.SymbolTable,
     environment: intermediate_type_inference.Environment,
-    constrained_primitive: intermediate.ConstrainedPrimitive,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Translate the invariant from the meta-model into a C++ condition."""
     # fmt: off
@@ -2833,12 +892,11 @@ def _transpile_constrained_primitive_invariant(
             optional_inferrer.errors,
         )
 
-    transpiler = _ConstrainedPrimitiveInvariantTranspiler(
+    transpiler = _InvariantTranspiler(
         type_map=type_map,
         is_optional_map=optional_inferrer.is_optional_map,
         environment=environment,
         symbol_table=symbol_table,
-        constrained_primitive=constrained_primitive,
     )
 
     expr, error = transpiler.transform(invariant.body)
@@ -2850,332 +908,2341 @@ def _transpile_constrained_primitive_invariant(
     return expr, None
 
 
-@require(lambda constrained_primitive: len(constrained_primitive.invariants) > 0)
-def _generate_constrained_primitive_verificator_execute(
-    constrained_primitive: intermediate.ConstrainedPrimitive,
-    symbol_table: intermediate.SymbolTable,
-    environment: intermediate_type_inference.Environment,
-) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
-    """Generate the ``Execute()`` in the constrained primitive verificator."""
-    flow = [
-        yielding_flow.command_from_text(
-            """\
-done_ = false;
-error_ = nullptr;
-index_ = -1;"""
+# region Hand-written C++
+
+# NOTE (mristin):
+# The code below is written once by hand, and emitted verbatim. We emit a combinator
+# only if the generated code uses it so that the compilers do not warn about unused
+# functions in the anonymous namespace.
+
+#: Define the check of a value, listed per shape in ``ChecksOf``.
+_CHECK_STRUCT = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Represent a single check of a value.
+ *
+ * The checks of a shape are listed in \\ref ChecksOf.
+ */
+struct Check {{
+{I}/**
+{I} * Check that the invariant holds for the value
+{I} */
+{I}bool (*holds)(const void* value);
+
+{I}/**
+{I} * Human-readable description of the invariant, reported if it does not hold
+{I} */
+{I}const wchar_t* message;
+}};  // struct Check"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the interface of the lazy iterators over the values to verify.
+_IITERATOR = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate lazily over the values to be verified.
+ *
+ * Every value comes with its \\ref Shape, which tells which checks apply to it.
+ *
+ * We build no paths while iterating. The path to the current value is built only
+ * when an error has been found, see \\ref AppendToPath.
+ *
+ * The iterators are combined out of the combinators below. They follow three rules
+ * so that we never build the iterators over the whole model up front:
+ * 1. \\ref ChainIterator starts a child only once the previous child is done.
+ * 2. \\ref OverIterator dispatches on the instance only in \\ref Start.
+ * 3. \\ref EachIterator builds the iterator over an item only once the iteration
+ *    reaches the item.
+ *
+ * Under these rules, every combinator is cheap to construct eagerly.
+ */
+class IIterator {{
+ public:
+{I}/**
+{I} * Position at the first value, or become done if there are no values.
+{I} */
+{I}virtual void Start() = 0;
+
+{I}/**
+{I} * Move to the next value, or become done if there are no more values.
+{I} */
+{I}virtual void Next() = 0;
+
+{I}virtual bool Done() const = 0;
+
+{I}/**
+{I} * \\brief Point to the current value.
+{I} *
+{I} * The pointer is valid only until the next call to \\ref Next.
+{I} */
+{I}virtual const void* Value() const = 0;
+
+{I}virtual Shape ShapeOf() const = 0;
+
+{I}/**
+{I} * \\brief Append the segments leading to the current value to the \\p path.
+{I} *
+{I} * Only called when an error is found, so the iteration itself builds no paths.
+{I} */
+{I}virtual void AppendToPath(iteration::Path& path) const = 0;
+
+{I}virtual std::unique_ptr<IIterator> Clone() const = 0;
+
+{I}virtual ~IIterator() = default;
+}};  // class IIterator"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over no values.
+_EMPTY = [
+    Stripped(
+        f"""\
+/**
+ * Iterate over no values at all.
+ */
+class EmptyIterator : public IIterator {{
+ public:
+{I}void Start() override {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Next() override {{
+{II}throw std::logic_error(
+{III}"You want to move an EmptyIterator, but it is always done."
+{II});
+{I}}}
+
+{I}bool Done() const override {{
+{II}return true;
+{I}}}
+
+{I}const void* Value() const override {{
+{II}throw std::logic_error(
+{III}"You want to get a value from an EmptyIterator, but it is always done."
+{II});
+{I}}}
+
+{I}Shape ShapeOf() const override {{
+{II}throw std::logic_error(
+{III}"You want to get a shape from an EmptyIterator, but it is always done."
+{II});
+{I}}}
+
+{I}void AppendToPath(iteration::Path&) const override {{
+{II}throw std::logic_error(
+{III}"You want to append the path of an EmptyIterator, but it is always done."
+{II});
+{I}}}
+
+{I}std::unique_ptr<IIterator> Clone() const override {{
+{II}return common::make_unique<EmptyIterator>(*this);
+{I}}}
+}};  // class EmptyIterator"""
+    ),
+    Stripped(
+        f"""\
+std::unique_ptr<IIterator> Empty() {{
+{I}return common::make_unique<EmptyIterator>();
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over a single value which lives in the model.
+_ONE = [
+    Stripped(
+        f"""\
+/**
+ * Iterate over a single value which lives in the model.
+ */
+class OneIterator : public IIterator {{
+ public:
+{I}OneIterator(
+{II}const void* value,
+{II}Shape shape
+{I}) :
+{II}value_(value),
+{II}shape_(shape),
+{II}done_(true) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}done_ = false;
+{I}}}
+
+{I}void Next() override {{
+{II}done_ = true;
+{I}}}
+
+{I}bool Done() const override {{
+{II}return done_;
+{I}}}
+
+{I}const void* Value() const override {{
+{II}return value_;
+{I}}}
+
+{I}Shape ShapeOf() const override {{
+{II}return shape_;
+{I}}}
+
+{I}void AppendToPath(iteration::Path&) const override {{
+{II}// Intentionally empty, as the value itself is the end of the path.
+{I}}}
+
+{I}std::unique_ptr<IIterator> Clone() const override {{
+{II}return common::make_unique<OneIterator>(*this);
+{I}}}
+
+ private:
+{I}const void* value_;
+{I}Shape shape_;
+{I}bool done_;
+}};  // class OneIterator"""
+    ),
+    Stripped(
+        f"""\
+std::unique_ptr<IIterator> One(
+{I}const void* value,
+{I}Shape shape
+) {{
+{I}return common::make_unique<OneIterator>(value, shape);
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over a single value of which we keep a copy.
+_ONE_BY_VALUE = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate over a single value which we keep a copy of.
+ *
+ * The getters of booleans, integers and floating-point numbers return by value,
+ * so these values have no address in the model which we could point to.
+ */
+template<typename T>
+class OneByValueIterator : public IIterator {{
+ public:
+{I}OneByValueIterator(
+{II}T value,
+{II}Shape shape
+{I}) :
+{II}value_(value),
+{II}shape_(shape),
+{II}done_(true) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}done_ = false;
+{I}}}
+
+{I}void Next() override {{
+{II}done_ = true;
+{I}}}
+
+{I}bool Done() const override {{
+{II}return done_;
+{I}}}
+
+{I}const void* Value() const override {{
+{II}return &value_;
+{I}}}
+
+{I}Shape ShapeOf() const override {{
+{II}return shape_;
+{I}}}
+
+{I}void AppendToPath(iteration::Path&) const override {{
+{II}// Intentionally empty, as the value itself is the end of the path.
+{I}}}
+
+{I}std::unique_ptr<IIterator> Clone() const override {{
+{II}return common::make_unique<OneByValueIterator<T> >(*this);
+{I}}}
+
+ private:
+{I}T value_;
+{I}Shape shape_;
+{I}bool done_;
+}};  // class OneByValueIterator"""
+    ),
+    Stripped(
+        f"""\
+template<typename T>
+std::unique_ptr<IIterator> OneByValue(
+{I}T value,
+{I}Shape shape
+) {{
+{I}return common::make_unique<OneByValueIterator<T> >(value, shape);
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over the children, one after another.
+_CHAIN = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate over the values of the children, one child after another.
+ *
+ * A child is started only once the previous child is done.
+ */
+class ChainIterator : public IIterator {{
+ public:
+{I}explicit ChainIterator(
+{II}std::vector<std::unique_ptr<IIterator> > children
+{I}) :
+{II}children_(std::move(children)),
+{II}active_(0) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}ChainIterator(const ChainIterator& other) :
+{II}active_(other.active_) {{
+{II}children_.reserve(other.children_.size());
+{II}for (const std::unique_ptr<IIterator>& child : other.children_) {{
+{III}children_.emplace_back(child->Clone());
+{II}}}
+{I}}}
+
+{I}void Start() override {{
+{II}active_ = 0;
+{II}if (!children_.empty()) {{
+{III}children_[0]->Start();
+{II}}}
+{II}SkipDoneChildren();
+{I}}}
+
+{I}void Next() override {{
+{II}children_[active_]->Next();
+{II}SkipDoneChildren();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return active_ >= children_.size();
+{I}}}
+
+{I}const void* Value() const override {{
+{II}return children_[active_]->Value();
+{I}}}
+
+{I}Shape ShapeOf() const override {{
+{II}return children_[active_]->ShapeOf();
+{I}}}
+
+{I}void AppendToPath(iteration::Path& path) const override {{
+{II}children_[active_]->AppendToPath(path);
+{I}}}
+
+{I}std::unique_ptr<IIterator> Clone() const override {{
+{II}return common::make_unique<ChainIterator>(*this);
+{I}}}
+
+ private:
+{I}std::vector<std::unique_ptr<IIterator> > children_;
+
+{I}/**
+{I} * Index of the child we currently iterate over
+{I} */
+{I}std::size_t active_;
+
+{I}/**
+{I} * Move on to the next children, and start them, until one is not done.
+{I} */
+{I}void SkipDoneChildren() {{
+{II}while (active_ < children_.size() && children_[active_]->Done()) {{
+{III}++active_;
+{III}if (active_ < children_.size()) {{
+{IIII}children_[active_]->Start();
+{III}}}
+{II}}}
+{I}}}
+}};  // class ChainIterator"""
+    ),
+    Stripped(
+        f"""\
+void CollectChildren(
+{I}std::vector<std::unique_ptr<IIterator> >&
+) {{
+{I}// Intentionally empty, as there are no more children to collect.
+}}"""
+    ),
+    Stripped(
+        f"""\
+template<typename... Rest>
+void CollectChildren(
+{I}std::vector<std::unique_ptr<IIterator> >& children,
+{I}std::unique_ptr<IIterator> first,
+{I}Rest... rest
+) {{
+{I}children.emplace_back(std::move(first));
+{I}CollectChildren(children, std::move(rest)...);
+}}"""
+    ),
+    Stripped(
+        f"""\
+// NOTE (mristin):
+// We can not use an initializer list here, as we can not move the unique pointers
+// out of it.
+template<typename... Children>
+std::unique_ptr<IIterator> Chain(
+{I}Children... children
+) {{
+{I}std::vector<std::unique_ptr<IIterator> > collected;
+{I}collected.reserve(sizeof...(Children));
+{I}CollectChildren(collected, std::move(children)...);
+
+{I}return common::make_unique<ChainIterator>(std::move(collected));
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over the values in a property.
+_IN_PROPERTY = [
+    Stripped(
+        f"""\
+/**
+ * Iterate over the values of the \\p child, which lives in a property.
+ */
+class InPropertyIterator : public IIterator {{
+ public:
+{I}InPropertyIterator(
+{II}iteration::Property property,
+{II}std::unique_ptr<IIterator> child
+{I}) :
+{II}property_(property),
+{II}child_(std::move(child)) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}InPropertyIterator(const InPropertyIterator& other) :
+{II}property_(other.property_),
+{II}child_(other.child_->Clone()) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}child_->Start();
+{I}}}
+
+{I}void Next() override {{
+{II}child_->Next();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return child_->Done();
+{I}}}
+
+{I}const void* Value() const override {{
+{II}return child_->Value();
+{I}}}
+
+{I}Shape ShapeOf() const override {{
+{II}return child_->ShapeOf();
+{I}}}
+
+{I}void AppendToPath(iteration::Path& path) const override {{
+{II}path.segments.emplace_back(
+{III}common::make_unique<iteration::PropertySegment>(property_)
+{II});
+{II}child_->AppendToPath(path);
+{I}}}
+
+{I}std::unique_ptr<IIterator> Clone() const override {{
+{II}return common::make_unique<InPropertyIterator>(*this);
+{I}}}
+
+ private:
+{I}iteration::Property property_;
+{I}std::unique_ptr<IIterator> child_;
+}};  // class InPropertyIterator"""
+    ),
+    Stripped(
+        f"""\
+std::unique_ptr<IIterator> InProperty(
+{I}iteration::Property property,
+{I}std::unique_ptr<IIterator> child
+) {{
+{I}return common::make_unique<InPropertyIterator>(property, std::move(child));
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over the values in a component of a tuple.
+_AT_INDEX = [
+    Stripped(
+        f"""\
+/**
+ * Iterate over the values of the \\p child, which lives in a component of a tuple.
+ */
+class AtIndexIterator : public IIterator {{
+ public:
+{I}AtIndexIterator(
+{II}std::size_t index,
+{II}std::unique_ptr<IIterator> child
+{I}) :
+{II}index_(index),
+{II}child_(std::move(child)) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}AtIndexIterator(const AtIndexIterator& other) :
+{II}index_(other.index_),
+{II}child_(other.child_->Clone()) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}child_->Start();
+{I}}}
+
+{I}void Next() override {{
+{II}child_->Next();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return child_->Done();
+{I}}}
+
+{I}const void* Value() const override {{
+{II}return child_->Value();
+{I}}}
+
+{I}Shape ShapeOf() const override {{
+{II}return child_->ShapeOf();
+{I}}}
+
+{I}void AppendToPath(iteration::Path& path) const override {{
+{II}path.segments.emplace_back(
+{III}common::make_unique<iteration::IndexSegment>(index_)
+{II});
+{II}child_->AppendToPath(path);
+{I}}}
+
+{I}std::unique_ptr<IIterator> Clone() const override {{
+{II}return common::make_unique<AtIndexIterator>(*this);
+{I}}}
+
+ private:
+{I}std::size_t index_;
+{I}std::unique_ptr<IIterator> child_;
+}};  // class AtIndexIterator"""
+    ),
+    Stripped(
+        f"""\
+std::unique_ptr<IIterator> AtIndex(
+{I}std::size_t index,
+{I}std::unique_ptr<IIterator> child
+) {{
+{I}return common::make_unique<AtIndexIterator>(index, std::move(child));
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over the items of a list.
+_EACH = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate over the values of every item of a list, one item after another.
+ *
+ * The iterator over an item is built only once the iteration reaches the item.
+ */
+template<typename T>
+class EachIterator : public IIterator {{
+ public:
+{I}/**
+{I} * Build the iterator over the values of an item
+{I} */
+{I}typedef std::unique_ptr<IIterator> (*OverItem)(const T& item, bool recursive);
+
+{I}EachIterator(
+{II}const std::vector<T>* items,
+{II}OverItem over_item,
+{II}bool recursive
+{I}) :
+{II}items_(items),
+{II}over_item_(over_item),
+{II}recursive_(recursive),
+{II}index_(0) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}EachIterator(const EachIterator<T>& other) :
+{II}items_(other.items_),
+{II}over_item_(other.over_item_),
+{II}recursive_(other.recursive_),
+{II}index_(other.index_),
+{II}item_(other.item_ == nullptr ? nullptr : other.item_->Clone()) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}index_ = 0;
+{II}item_ = nullptr;
+{II}SkipDoneItems();
+{I}}}
+
+{I}void Next() override {{
+{II}item_->Next();
+{II}SkipDoneItems();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return index_ >= items_->size();
+{I}}}
+
+{I}const void* Value() const override {{
+{II}return item_->Value();
+{I}}}
+
+{I}Shape ShapeOf() const override {{
+{II}return item_->ShapeOf();
+{I}}}
+
+{I}void AppendToPath(iteration::Path& path) const override {{
+{II}path.segments.emplace_back(
+{III}common::make_unique<iteration::IndexSegment>(index_)
+{II});
+{II}item_->AppendToPath(path);
+{I}}}
+
+{I}std::unique_ptr<IIterator> Clone() const override {{
+{II}return common::make_unique<EachIterator<T> >(*this);
+{I}}}
+
+ private:
+{I}const std::vector<T>* items_;
+{I}OverItem over_item_;
+{I}bool recursive_;
+
+{I}/**
+{I} * Index of the item we currently iterate over
+{I} */
+{I}std::size_t index_;
+
+{I}/**
+{I} * Iterator over the current item, built once we reached the item
+{I} */
+{I}std::unique_ptr<IIterator> item_;
+
+{I}/**
+{I} * Move on to the next items, and build their iterators, until one is not done.
+{I} */
+{I}void SkipDoneItems() {{
+{II}while (index_ < items_->size()) {{
+{III}if (item_ == nullptr) {{
+{IIII}item_ = over_item_((*items_)[index_], recursive_);
+{IIII}item_->Start();
+{III}}}
+
+{III}if (!item_->Done()) {{
+{IIII}return;
+{III}}}
+
+{III}item_ = nullptr;
+{III}++index_;
+{II}}}
+{I}}}
+}};  // class EachIterator"""
+    ),
+    Stripped(
+        f"""\
+template<typename T>
+std::unique_ptr<IIterator> Each(
+{I}const std::vector<T>& items,
+{I}std::unique_ptr<IIterator> (*over_item)(const T& item, bool recursive),
+{I}bool recursive
+) {{
+{I}return common::make_unique<EachIterator<T> >(&items, over_item, recursive);
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over the instances referenced from another one.
+_OVER = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate over the values of an instance, dispatched on its runtime type.
+ *
+ * Defined below, once all the classes have been covered.
+ */
+std::unique_ptr<IIterator> OverInstance(
+{I}const types::IClass& instance,
+{I}bool recursive
+);"""
+    ),
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate recursively over the values of an instance referenced from
+ * another instance.
+ *
+ * We dispatch on the runtime type of the instance only in \\ref Start so that
+ * we descend into the instance only once the iteration reaches it.
+ */
+class OverIterator : public IIterator {{
+ public:
+{I}explicit OverIterator(
+{II}const types::IClass* instance
+{I}) :
+{II}instance_(instance) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}OverIterator(const OverIterator& other) :
+{II}instance_(other.instance_),
+{II}child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}child_ = OverInstance(*instance_, true);
+{II}child_->Start();
+{I}}}
+
+{I}void Next() override {{
+{II}child_->Next();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return child_->Done();
+{I}}}
+
+{I}const void* Value() const override {{
+{II}return child_->Value();
+{I}}}
+
+{I}Shape ShapeOf() const override {{
+{II}return child_->ShapeOf();
+{I}}}
+
+{I}void AppendToPath(iteration::Path& path) const override {{
+{II}child_->AppendToPath(path);
+{I}}}
+
+{I}std::unique_ptr<IIterator> Clone() const override {{
+{II}return common::make_unique<OverIterator>(*this);
+{I}}}
+
+ private:
+{I}const types::IClass* instance_;
+{I}std::unique_ptr<IIterator> child_;
+}};  // class OverIterator"""
+    ),
+    Stripped(
+        f"""\
+std::unique_ptr<IIterator> Over(
+{I}const types::IClass& instance,
+{I}bool recursive
+) {{
+{I}if (!recursive) {{
+{II}// NOTE (mristin):
+{II}// In the non-recursive mode, we verify only the instance itself, but not
+{II}// the instances that it references.
+{II}return Empty();
+{I}}}
+
+{I}return common::make_unique<OverIterator>(&instance);
+}}"""
+    ),
+    Stripped(
+        f"""\
+template<typename T>
+std::unique_ptr<IIterator> OverPointer(
+{I}const std::shared_ptr<T>& instance,
+{I}bool recursive
+) {{
+{I}return Over(*instance, recursive);
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over the keys of a JSON-able object.
+_EACH_KEY = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate over the keys of a JSON-able object as values of the given shape.
+ *
+ * We iterate over nothing if the value is not an object, as the verification of
+ * the value itself is not the concern of this iterator.
+ */
+class EachKeyIterator : public IIterator {{
+ public:
+{I}EachKeyIterator(
+{II}const nlohmann::json* object,
+{II}Shape shape
+{I}) :
+{II}object_(object),
+{II}shape_(shape),
+{II}done_(true) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}if (!object_->is_object()) {{
+{III}done_ = true;
+{III}return;
+{II}}}
+
+{II}it_ = object_->cbegin();
+{II}ConvertKey();
+{I}}}
+
+{I}void Next() override {{
+{II}++it_;
+{II}ConvertKey();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return done_;
+{I}}}
+
+{I}const void* Value() const override {{
+{II}return &key_;
+{I}}}
+
+{I}Shape ShapeOf() const override {{
+{II}return shape_;
+{I}}}
+
+{I}void AppendToPath(iteration::Path& path) const override {{
+{II}path.segments.emplace_back(
+{III}common::make_unique<iteration::KeySegment>(key_)
+{II});
+{I}}}
+
+{I}std::unique_ptr<IIterator> Clone() const override {{
+{II}return common::make_unique<EachKeyIterator>(*this);
+{I}}}
+
+ private:
+{I}const nlohmann::json* object_;
+{I}Shape shape_;
+{I}bool done_;
+{I}nlohmann::json::const_iterator it_;
+
+{I}/**
+{I} * \\brief Current key, converted from UTF-8.
+{I} *
+{I} * The keys of a JSON-able object are UTF-8 strings, while the constrained
+{I} * primitives expect wide strings, so we convert one key at a time.
+{I} */
+{I}std::wstring key_;
+
+{I}/**
+{I} * Convert the key at the iterator, or become done at the end of the object.
+{I} */
+{I}void ConvertKey() {{
+{II}done_ = it_ == object_->cend();
+{II}if (!done_) {{
+{III}key_ = common::Utf8ToWstring(it_.key());
+{II}}}
+{I}}}
+}};  // class EachKeyIterator"""
+    ),
+    Stripped(
+        f"""\
+std::unique_ptr<IIterator> EachKey(
+{I}const nlohmann::json& object,
+{I}Shape shape
+) {{
+{I}return common::make_unique<EachKeyIterator>(&object, shape);
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the iterator over the errors, and its start and end.
+_ERROR_ITERATOR = [
+    Stripped(
+        f"""\
+/**
+ * \\brief Iterate over the errors of the values, one error at a time.
+ *
+ * For every value, we first run the checks of its shape, each reporting at most
+ * one error. Then we run the nested verification of the value, if its shape has
+ * one, which can report many errors, see \\ref NewNestedVerificator.
+ *
+ * We do only the work needed to find the next error, and build the path to
+ * the erroneous value only once an error has been found.
+ */
+class ErrorIterator : public impl::IVerificator {{
+ public:
+{I}explicit ErrorIterator(
+{II}std::unique_ptr<IIterator> values
+{I}) :
+{II}values_(std::move(values)),
+{II}check_(0),
+{II}nested_started_(false),
+{II}index_(-1) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}ErrorIterator(const ErrorIterator& other) :
+{II}values_(other.values_->Clone()),
+{II}check_(other.check_),
+{II}nested_started_(other.nested_started_),
+{II}nested_(other.nested_ == nullptr ? nullptr : other.nested_->Clone()),
+{II}error_(other.error_),
+{II}index_(other.index_) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}void Start() override {{
+{II}values_->Start();
+{II}check_ = 0;
+{II}nested_started_ = false;
+{II}nested_ = nullptr;
+{II}index_ = -1;
+
+{II}Advance();
+{I}}}
+
+{I}void Next() override {{
+{II}#ifdef DEBUG
+{II}if (Done()) {{
+{III}throw std::logic_error(
+{IIII}"You want to move an ErrorIterator, but it was done."
+{III});
+{II}}}
+{II}#endif
+
+{II}Advance();
+{I}}}
+
+{I}bool Done() const override {{
+{II}return values_->Done();
+{I}}}
+
+{I}const Error& Get() const override {{
+{II}#ifdef DEBUG
+{II}if (Done()) {{
+{III}throw std::logic_error(
+{IIII}"You want to get from an ErrorIterator, but it was done."
+{III});
+{II}}}
+{II}#endif
+
+{II}return *error_;
+{I}}}
+
+{I}Error& GetMutable() override {{
+{II}#ifdef DEBUG
+{II}if (Done()) {{
+{III}throw std::logic_error(
+{IIII}"You want to get mutable from an ErrorIterator, but it was done."
+{III});
+{II}}}
+{II}#endif
+
+{II}return *error_;
+{I}}}
+
+{I}long Index() const override {{
+{II}return index_;
+{I}}}
+
+{I}std::unique_ptr<impl::IVerificator> Clone() const override {{
+{II}return common::make_unique<ErrorIterator>(*this);
+{I}}}
+
+ private:
+{I}std::unique_ptr<IIterator> values_;
+
+{I}/**
+{I} * Index of the next check to run on the current value
+{I} */
+{I}std::size_t check_;
+
+{I}/**
+{I} * Set if we already started the nested verification of the current value
+{I} */
+{I}bool nested_started_;
+
+{I}/**
+{I} * Nested verification of the current value, if its shape has one
+{I} */
+{I}std::unique_ptr<impl::IVerificator> nested_;
+
+{I}common::optional<Error> error_;
+
+{I}/**
+{I} * Index of the current error, -1 if done
+{I} */
+{I}long index_;
+
+{I}/**
+{I} * Move on to the next error, or become done if there are no more errors.
+{I} */
+{I}void Advance() {{
+{II}while (!values_->Done()) {{
+{III}const void* value = values_->Value();
+{III}const Shape shape = values_->ShapeOf();
+
+{III}const std::vector<Check>& checks = ChecksOf(shape);
+{III}while (check_ < checks.size()) {{
+{IIII}const Check& check = checks[check_];
+{IIII}++check_;
+
+{IIII}if (!check.holds(value)) {{
+{IIIII}error_ = Error(check.message);
+{IIIII}values_->AppendToPath(error_->path);
+{IIIII}++index_;
+{IIIII}return;
+{IIII}}}
+{III}}}
+
+{III}// NOTE (mristin):
+{III}// All the checks of the value have been run. We now either start the nested
+{III}// verification of the value, or resume it where we stopped at its last error.
+{III}if (!nested_started_) {{
+{IIII}nested_started_ = true;
+{IIII}nested_ = NewNestedVerificator(shape, value);
+{IIII}if (nested_ != nullptr) {{
+{IIIII}nested_->Start();
+{IIII}}}
+{III}}} else if (nested_ != nullptr) {{
+{IIII}nested_->Next();
+{III}}}
+
+{III}if (nested_ != nullptr && !nested_->Done()) {{
+{IIII}// NOTE (mristin):
+{IIII}// The path of the nested error is relative to the value, so we prefix it
+{IIII}// with the path to the value. We take over the data members of the nested
+{IIII}// error to avoid a costly copy, as we move the nested verification on
+{IIII}// before we look at its error again.
+{IIII}Error& nested_error = nested_->GetMutable();
+
+{IIII}error_ = Error(std::move(nested_error.cause));
+{IIII}values_->AppendToPath(error_->path);
+{IIII}for (
+{IIIII}std::unique_ptr<iteration::ISegment>& segment
+{IIIII}: nested_error.path.segments
+{IIII}) {{
+{IIIII}error_->path.segments.emplace_back(std::move(segment));
+{IIII}}}
+
+{IIII}++index_;
+{IIII}return;
+{III}}}
+
+{III}values_->Next();
+{III}check_ = 0;
+{III}nested_started_ = false;
+{III}nested_ = nullptr;
+{II}}}
+
+{II}error_ = common::nullopt;
+{II}index_ = -1;
+{I}}}
+}};  // class ErrorIterator"""
+    ),
+    Stripped(
+        f"""\
+/**
+ * Start iterating over the errors of the \\p values.
+ */
+Iterator IterateErrors(
+{I}std::unique_ptr<IIterator> values
+) {{
+{I}std::unique_ptr<impl::IVerificator> verificator(
+{II}common::make_unique<ErrorIterator>(std::move(values))
+{I});
+{I}verificator->Start();
+
+{I}return Iterator(std::move(verificator));
+}}"""
+    ),
+    Stripped(
+        f"""\
+/**
+ * Give out the iterator past the last error, shared by all the verifications.
+ */
+const Iterator& PastLastError() {{
+{I}static const Iterator iterator(IterateErrors(Empty()));
+{I}return iterator;
+}}"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+
+#: Define the verification of the values given by an iterator.
+_VALUES_VERIFICATION = [
+    Stripped(
+        f"""\
+/**
+ * Verify the values given by the iterator, which we restart on every \\ref begin.
+ */
+class ValuesVerification : public IVerification {{
+ public:
+{I}explicit ValuesVerification(
+{II}std::unique_ptr<IIterator> values
+{I}) :
+{II}values_(std::move(values)) {{
+{II}// Intentionally empty.
+{I}}}
+
+{I}Iterator begin() const override {{
+{II}return IterateErrors(values_->Clone());
+{I}}}
+
+{I}const Iterator& end() const override {{
+{II}return PastLastError();
+{I}}}
+
+{I}~ValuesVerification() override = default;
+
+ private:
+{I}std::unique_ptr<IIterator> values_;
+}};  // class ValuesVerification"""
+    ),
+]  # type: Final[Sequence[Stripped]]
+
+# endregion Hand-written C++
+
+
+class _Analysis:
+    """Determine which values we have to verify at all."""
+
+    #: Constrained primitives with at least one invariant, including the inherited
+    #: ones, as runtime IDs
+    checked_constrained_primitive_id_set: Final[Set[int]]
+
+    #: Concrete classes whose instances have anything to verify, either themselves
+    #: or in the values they (recursively) reference, as runtime IDs
+    yielding_class_id_set: Final[Set[int]]
+
+    def __init__(self, symbol_table: intermediate.SymbolTable) -> None:
+        """Analyze the ``symbol_table``."""
+        self.checked_constrained_primitive_id_set = {
+            id(constrained_primitive)
+            for constrained_primitive in symbol_table.constrained_primitives
+            if len(constrained_primitive.invariants) > 0
+        }
+
+        self.yielding_class_id_set = set()
+
+        # NOTE (mristin):
+        # The classes can reference each other in cycles, so we compute the fixed
+        # point. The set can only grow, so the loop terminates.
+        changed = True
+        while changed:
+            changed = False
+            for cls in symbol_table.concrete_classes:
+                if id(cls) in self.yielding_class_id_set:
+                    continue
+
+                if len(cls.invariants) > 0 or any(
+                    self.yields(prop.type_annotation, descend=True)
+                    for prop in cls.properties
+                ):
+                    self.yielding_class_id_set.add(id(cls))
+                    changed = True
+
+    def yields(
+        self, type_annotation: intermediate.TypeAnnotationUnion, descend: bool
+    ) -> bool:
+        """
+        Check whether a value of ``type_annotation`` has anything to verify.
+
+        If ``descend`` is not set, we ignore the instances of classes, as in
+        the non-recursive verification.
+        """
+        if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
+            return False
+
+        elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
+            our_type = type_annotation.our_type
+
+            if isinstance(our_type, intermediate.Enumeration):
+                return False
+
+            elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+                return id(our_type) in self.checked_constrained_primitive_id_set
+
+            elif isinstance(our_type, intermediate.Class):
+                concrete_classes = list(our_type.concrete_descendants)
+                if isinstance(our_type, intermediate.ConcreteClass):
+                    concrete_classes.append(our_type)
+
+                return descend and any(
+                    id(cls) in self.yielding_class_id_set for cls in concrete_classes
+                )
+
+            elif isinstance(our_type, intermediate.NamedUnion):
+                return descend and any(
+                    id(cls) in self.yielding_class_id_set
+                    for cls in our_type.implementers
+                )
+
+            else:
+                assert_never(our_type)
+
+        elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
+            return self.yields(type_annotation.value, descend=descend)
+
+        elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
+            return self.yields(type_annotation.items, descend=descend)
+
+        elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+            return any(
+                self.yields(item, descend=descend) for item in type_annotation.items
+            )
+
+        elif isinstance(
+            type_annotation,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            return True
+
+        else:
+            assert_never(type_annotation)
+
+        raise AssertionError("Unexpected execution path")
+
+
+_JSON_SHAPE_LITERALS = (
+    Identifier("kJsonValue"),
+    Identifier("kJsonArray"),
+    Identifier("kJsonObject"),
+)
+
+
+def _shape_literal(
+    our_type: Union[intermediate.ConstrainedPrimitive, intermediate.ConcreteClass]
+) -> Identifier:
+    """Generate the literal of ``Shape`` for the values of ``our_type``."""
+    return cpp_naming.enum_literal_name(our_type.name)
+
+
+def _json_shape_literal(
+    type_annotation: Union[
+        intermediate.JsonValueTypeAnnotation,
+        intermediate.JsonArrayTypeAnnotation,
+        intermediate.JsonObjectTypeAnnotation,
+    ]
+) -> Identifier:
+    """Generate the literal of ``Shape`` for the JSON-able values."""
+    if isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        return _JSON_SHAPE_LITERALS[0]
+    elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        return _JSON_SHAPE_LITERALS[1]
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        return _JSON_SHAPE_LITERALS[2]
+    else:
+        assert_never(type_annotation)
+
+
+# region Iteration over the values
+
+# NOTE (mristin):
+# We generate the iteration over the values in two passes.
+#
+# C++11 has no generic lambdas, so we generate a named function for every list,
+# tuple and named union that we iterate over, and for every item of such a list.
+# For example, a property ``some_names: List[Name]`` needs:
+#
+#   std::unique_ptr<IIterator> OverName(const std::wstring& value, bool) {
+#     return One(&value, Shape::kName);
+#   }
+#
+#   std::unique_ptr<IIterator> OverListOf_Name(
+#     const ListOf_Name& value,
+#     bool recursive
+#   ) {
+#     return Each(value, &OverName, recursive);
+#   }
+#
+# In the first pass, ``_collect_function_types`` walks over the properties of
+# the classes, and collects the types which need such a function, e.g.,
+# ``[Name, List[Name]]``. It orders them so that every function comes after
+# the functions it calls, as C++ requires a function to be declared before it is
+# called. The helpers ``_referenced_function_types`` and ``_called_function_types``
+# tell which functions an expression and a function call, respectively.
+#
+# In the second pass, we generate the code, where each piece of code is generated
+# by a function without side effects. The name of a function follows from
+# the moniker of its type (``_over_function_name``), so an expression refers to
+# a function by its name without generating it. For example,
+# ``_generate_over_expression`` gives for the property above, where ``expr`` is
+# ``that.some_names()``:
+#
+#   OverListOf_Name(that.some_names(), recursive)
+#
+# ``_generate_over_function`` then gives the aliases and the functions over
+# the collected types, ``_generate_over_class`` the function over the instances of
+# a class, and ``_generate_over_instance`` the dispatch on the runtime type of
+# an instance.
+
+
+def _moniker(type_annotation: intermediate.TypeAnnotationUnion) -> str:
+    """
+    Determine the moniker of the ``type_annotation``.
+
+    A moniker of a composite type is a Polish notation over ``_``-separated tokens:
+    ``OptionalOf_{M}`` and ``ListOf_{M}`` take exactly one argument, and
+    ``TupleOf{N}_{M}...`` exactly ``N`` of them. As a leaf moniker never contains
+    an underscore, the monikers are unique by construction.
+    """
+    if isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
+        return f"OptionalOf_{_moniker(type_annotation.value)}"
+
+    elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
+        return f"ListOf_{_moniker(type_annotation.items)}"
+
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        monikers = "_".join(_moniker(item) for item in type_annotation.items)
+        return f"TupleOf{len(type_annotation.items)}_{monikers}"
+
+    elif isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
+        return {
+            intermediate.PrimitiveType.BOOL: "bool",
+            intermediate.PrimitiveType.INT: "int",
+            intermediate.PrimitiveType.FLOAT: "float",
+            intermediate.PrimitiveType.STR: "str",
+            intermediate.PrimitiveType.BYTEARRAY: "bytes",
+        }[type_annotation.a_type]
+
+    elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
+        our_type = type_annotation.our_type
+        if isinstance(our_type, intermediate.Enumeration):
+            return cpp_naming.enum_name(our_type.name)
+        elif isinstance(our_type, intermediate.NamedUnion):
+            return cpp_naming.union_name(our_type.name)
+        else:
+            return cpp_naming.class_name(our_type.name)
+
+    elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        return "JsonValue"
+
+    elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        return "JsonArray"
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        key_constrained_primitive = intermediate.try_constrained_primitive(
+            type_annotation.key
         )
-    ]  # type: List[yielding_flow.Node]
+        if key_constrained_primitive is None:
+            return "JsonObject"
+
+        return f"JsonObjectOf{cpp_naming.class_name(key_constrained_primitive.name)}"
+
+    else:
+        assert_never(type_annotation)
+
+    raise AssertionError("Unexpected execution path")
+
+
+def _generate_call(function: str, arguments: Sequence[str]) -> Stripped:
+    """Generate the call, on a single line if short, and one argument per line."""
+    single_line = f"{function}({', '.join(arguments)})"
+    if len(single_line) <= 60 and all("\n" not in arg for arg in arguments):
+        return Stripped(single_line)
+
+    arguments_joined = ",\n".join(arguments)
+    return Stripped(
+        f"""\
+{function}(
+{I}{indent_but_first_line(arguments_joined, I)}
+)"""
+    )
+
+
+_RECURSIVE_RE = re.compile(r"\brecursive\b")
+
+
+def _generate_recursive_parameter(body: str) -> str:
+    """Generate the ``recursive`` parameter, but leave it unnamed if unused."""
+    if _RECURSIVE_RE.search(body) is not None:
+        return "bool recursive"
+
+    return "bool"
+
+
+def _over_function_name(
+    type_annotation: intermediate.TypeAnnotationUnion,
+) -> Identifier:
+    """
+    Generate the name of the function over the values of ``type_annotation``.
+
+    The name follows from the moniker, so that an expression can refer to
+    the function without generating it. For example:
+
+    * ``List[Name]`` gives ``OverListOf_Name``,
+    * ``Tuple[str, Name]`` gives ``OverTupleOf2_str_Name``,
+    * ``Structural_union`` gives ``OverStructuralUnion``, and
+    * ``Name``, as an item of a list, gives ``OverName``.
+    """
+    return Identifier(f"Over{_moniker(type_annotation)}")
+
+
+def _over_class_function_name(cls: intermediate.ConcreteClass) -> Identifier:
+    """
+    Generate the name of the function over the values of an instance of ``cls``.
+
+    For example, ``Extension`` gives ``OverExtension``.
+    """
+    return Identifier(f"Over{cpp_naming.class_name(cls.name)}")
+
+
+def _referenced_function_types(
+    type_annotation: intermediate.TypeAnnotationUnion, analysis: _Analysis
+) -> List[intermediate.TypeAnnotationUnion]:
+    """
+    List the types whose functions the expression over ``type_annotation`` calls.
+
+    This mirrors :py:func:`_generate_over_expression`, which calls a function for
+    a list, a tuple and a named union, but inlines everything else. For example:
+
+    * ``Optional[List[Reference]]`` gives ``[List[Reference]]``, as the expression
+      is ``x.has_value() ? OverListOf_Reference((*x), recursive) : Empty()``,
+    * ``Name`` gives ``[]``, as the expression is ``One(&x, Shape::kName)``.
+    """
+    if not analysis.yields(type_annotation, descend=True):
+        return []
+
+    if isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
+        return _referenced_function_types(type_annotation.value, analysis)
+
+    if isinstance(
+        type_annotation,
+        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+    ):
+        return [type_annotation]
+
+    if isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
+        type_annotation.our_type, intermediate.NamedUnion
+    ):
+        return [type_annotation]
+
+    return []
+
+
+def _called_function_types(
+    type_annotation: intermediate.TypeAnnotationUnion, analysis: _Analysis
+) -> List[intermediate.TypeAnnotationUnion]:
+    """
+    List the types whose functions the function over ``type_annotation`` calls.
+
+    This mirrors :py:func:`_generate_over_function`. For example:
+
+    * ``List[Name]`` gives ``[Name]``, as it calls ``Each(value, &OverName, ...)``,
+    * ``List[Reference]`` gives ``[]``, as it calls the hand-written
+      ``Each(value, &OverPointer<types::IReference>, ...)``,
+    * ``Tuple[str, List[Name]]`` gives ``[List[Name]]``, as it calls
+      ``AtIndex(1, OverListOf_Name(std::get<1>(value), recursive))``.
+    """
+    if isinstance(type_annotation, intermediate.ListTypeAnnotation):
+        items = type_annotation.items
+        if isinstance(items, intermediate.OurTypeAnnotation) and isinstance(
+            items.our_type, intermediate.Class
+        ):
+            return []
+
+        return [items]
+
+    if isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        return [
+            called
+            for item in type_annotation.items
+            for called in _referenced_function_types(item, analysis)
+        ]
+
+    if isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
+        type_annotation.our_type, intermediate.NamedUnion
+    ):
+        return []
+
+    return _referenced_function_types(type_annotation, analysis)
+
+
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _collect_function_types(
+    symbol_table: intermediate.SymbolTable, analysis: _Analysis
+) -> Tuple[Optional[List[intermediate.TypeAnnotationUnion]], Optional[List[Error]]]:
+    """
+    Collect the types which need a function over their values.
+
+    We need a function for every list, tuple and named union reachable from
+    the classes, and for every item of such a list, so that the generated code
+    has no lambdas. For example, a class with a property ``some_names: List[Name]``
+    needs ``OverName`` and ``OverListOf_Name``.
+
+    The types are deduplicated by their function names, and ordered so that
+    every function comes after the functions it calls, as C++ requires.
+    """
+    function_types = []  # type: List[intermediate.TypeAnnotationUnion]
+
+    # NOTE (mristin):
+    # We also reserve the names of the functions over the classes so that we detect
+    # a clash with them, e.g., a class ``Json_value`` and the item ``JSONValue``.
+    descriptions_by_name = {
+        _over_class_function_name(cls): f"the class {cls.name}"
+        for cls in symbol_table.concrete_classes
+        if id(cls) in analysis.yielding_class_id_set
+    }  # type: MutableMapping[Identifier, str]
 
     errors = []  # type: List[Error]
-    for invariant in constrained_primitive.invariants:
-        condition_expr, error = _transpile_constrained_primitive_invariant(
+
+    def collect(type_annotation: intermediate.TypeAnnotationUnion) -> None:
+        """Collect the functions called by ``type_annotation``, and then its own."""
+        name = _over_function_name(type_annotation)
+        description = f"the type {type_annotation}"
+
+        other_description = descriptions_by_name.get(name, None)
+        if other_description is not None:
+            if other_description != description:
+                errors.append(
+                    Error(
+                        None,
+                        f"The name of the verification function {name!r} clashes "
+                        f"for {other_description} and {description}. Please "
+                        f"rename one of them, or contact the developers.",
+                    )
+                )
+            return
+
+        descriptions_by_name[name] = description
+
+        for called in _called_function_types(type_annotation, analysis):
+            collect(called)
+
+        function_types.append(type_annotation)
+
+    for cls in symbol_table.concrete_classes:
+        if id(cls) not in analysis.yielding_class_id_set:
+            continue
+
+        for prop in cls.properties:
+            for referenced in _referenced_function_types(
+                prop.type_annotation, analysis
+            ):
+                collect(referenced)
+
+    if len(errors) > 0:
+        return None, errors
+
+    return function_types, None
+
+
+_OVER_FUNCTION_NAME_RE = re.compile(r"\b(Over\w+)\b(?!<)")
+
+
+def _called_function_names(code: str, defined: str) -> Set[str]:
+    """
+    Find the names of the generated functions which the ``code`` refers to.
+
+    The ``defined`` is the name of the function which the ``code`` defines, so
+    that we ignore it. For example, ``return Each(value, &OverName, recursive);``
+    in the definition of ``OverListOf_Name`` gives ``{"OverName"}``, and
+    ``AtIndex(1, OverListOf_Name(std::get<1>(value), recursive))`` gives
+    ``{"OverListOf_Name"}``. The hand-written ``Over(...)`` and
+    ``OverPointer<...>`` are not matched.
+    """
+    return set(_OVER_FUNCTION_NAME_RE.findall(code)).difference([defined])
+
+
+# fmt: off
+@require(
+    lambda type_annotation, analysis, function_name_set:
+    all(
+        _over_function_name(referenced) in function_name_set
+        for referenced in _referenced_function_types(type_annotation, analysis)
+    ),
+    "The functions over the referenced types have been collected"
+)
+@ensure(
+    lambda function_name_set, result:
+    result is None
+    or _called_function_names(result, defined="").issubset(function_name_set),
+    "The expression calls only the collected functions"
+)
+# fmt: on
+def _generate_over_expression(
+    type_annotation: intermediate.TypeAnnotationUnion,
+    expr: str,
+    by_value: bool,
+    analysis: _Analysis,
+    function_name_set: AbstractSet[str],
+) -> Optional[Stripped]:
+    """
+    Generate the iterator over the values in ``expr`` of ``type_annotation``.
+
+    The ``expr`` is the C++ expression of the value, for example:
+
+    * ``that.some_names()`` for a property of the class (``that`` is the instance),
+    * ``(*that.semantic_id())`` for the value of an optional property,
+    * ``std::get<1>(value)`` for a component of a tuple, and
+    * ``value`` for an item of a list.
+
+    For example, we generate for a property ``name: Name_type``:
+
+    .. code-block:: cpp
+
+        One(&that.name(), Shape::kNameType)
+
+    for a property ``semantic_id: Optional[Reference]``:
+
+    .. code-block:: cpp
+
+        that.semantic_id().has_value()
+          ? Over(*(*that.semantic_id()), recursive)
+          : Empty()
+
+    and for a property ``some_names: List[Name]``:
+
+    .. code-block:: cpp
+
+        OverListOf_Name(that.some_names(), recursive)
+
+    If ``by_value`` is set, the ``expr`` has no address, as the getters return
+    booleans, integers and floating-point numbers by value, so we keep a copy:
+
+    .. code-block:: cpp
+
+        OneByValue(that.some_int(), Shape::kPositiveInt)
+
+    The ``function_name_set`` contains the names of the collected functions over
+    the lists, tuples and named unions, see :py:func:`_collect_function_types`.
+
+    Return ``None`` if there is nothing to verify in a value of
+    the ``type_annotation``.
+    """
+    if not analysis.yields(type_annotation, descend=True):
+        return None
+
+    if isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
+        inner = _generate_over_expression(
+            type_annotation=type_annotation.value,
+            expr=f"(*{expr})",
+            by_value=False,
+            analysis=analysis,
+            function_name_set=function_name_set,
+        )
+        assert inner is not None
+
+        return Stripped(
+            f"""\
+{expr}.has_value()
+{I}? {indent_but_first_line(inner, II)}
+{I}: Empty()"""
+        )
+
+    elif isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
+        raise AssertionError("Primitive values have nothing to verify")
+
+    elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
+        our_type = type_annotation.our_type
+
+        if isinstance(our_type, intermediate.Enumeration):
+            raise AssertionError("Enumeration literals have nothing to verify")
+
+        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+            shape = f"Shape::{_shape_literal(our_type)}"
+            if by_value:
+                return _generate_call("OneByValue", [expr, shape])
+
+            return _generate_call("One", [f"&{expr}", shape])
+
+        elif isinstance(our_type, intermediate.Class):
+            return _generate_call("Over", [f"*{expr}", "recursive"])
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            return _generate_call(
+                _over_function_name(type_annotation), [expr, "recursive"]
+            )
+
+        else:
+            assert_never(our_type)
+
+    elif isinstance(
+        type_annotation,
+        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+    ):
+        return _generate_call(_over_function_name(type_annotation), [expr, "recursive"])
+
+    elif isinstance(
+        type_annotation,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+        ),
+    ):
+        return _generate_call(
+            "One", [f"&{expr}", f"Shape::{_json_shape_literal(type_annotation)}"]
+        )
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        one = _generate_call(
+            "One", [f"&{expr}", f"Shape::{_json_shape_literal(type_annotation)}"]
+        )
+
+        key_constrained_primitive = intermediate.try_constrained_primitive(
+            type_annotation.key
+        )
+        if key_constrained_primitive is None or (
+            id(key_constrained_primitive)
+            not in analysis.checked_constrained_primitive_id_set
+        ):
+            return one
+
+        # NOTE (mristin):
+        # We first verify the object itself, which reports if it is not an object
+        # at all, and only then its keys.
+        each_key = _generate_call(
+            "EachKey", [expr, f"Shape::{_shape_literal(key_constrained_primitive)}"]
+        )
+        return _generate_call("Chain", [one, each_key])
+
+    else:
+        assert_never(type_annotation)
+
+    raise AssertionError("Unexpected execution path")
+
+
+# fmt: off
+@require(
+    lambda type_annotation, function_name_set:
+    _over_function_name(type_annotation) in function_name_set,
+    "The function over the type has been collected"
+)
+@require(
+    lambda type_annotation, analysis, function_name_set:
+    all(
+        _over_function_name(called) in function_name_set
+        for called in _called_function_types(type_annotation, analysis)
+    ),
+    "The functions called by the function over the type have been collected"
+)
+@ensure(
+    lambda type_annotation, function_name_set, result:
+    _called_function_names(
+        result[1], defined=_over_function_name(type_annotation)
+    ).issubset(function_name_set),
+    "The function calls only the collected functions"
+)
+# fmt: on
+def _generate_over_function(
+    type_annotation: intermediate.TypeAnnotationUnion,
+    analysis: _Analysis,
+    function_name_set: AbstractSet[str],
+) -> Tuple[Optional[Stripped], Stripped]:
+    """
+    Generate the function over the values of ``type_annotation``.
+
+    For example, we generate for ``List[Name]`` the alias and the function:
+
+    .. code-block:: cpp
+
+        using ListOf_Name = std::vector<std::wstring>;
+
+        std::unique_ptr<IIterator> OverListOf_Name(
+          const ListOf_Name& value,
+          bool recursive
+        ) {
+          return Each(value, &OverName, recursive);
+        }
+
+    and for ``Name``, as an item of that list, only the function:
+
+    .. code-block:: cpp
+
+        std::unique_ptr<IIterator> OverName(
+          const std::wstring& value,
+          bool
+        ) {
+          return One(&value, Shape::kName);
+        }
+
+    The ``function_name_set`` contains the names of the collected functions, see
+    :py:func:`_collect_function_types`.
+
+    Return the alias, if the type needs one, and the function.
+    """
+    name = _over_function_name(type_annotation)
+
+    value_type = cpp_common.generate_type(
+        type_annotation=type_annotation,
+        types_namespace=cpp_common.TYPES_NAMESPACE,
+    )
+
+    body: Stripped
+
+    if isinstance(type_annotation, intermediate.ListTypeAnnotation):
+        items = type_annotation.items
+
+        item_function: str
+        if isinstance(items, intermediate.OurTypeAnnotation) and isinstance(
+            items.our_type, intermediate.Class
+        ):
+            # NOTE (mristin):
+            # The items of a list of instances are shared pointers, which we pass on
+            # to the hand-written template.
+            interface_name = cpp_naming.interface_name(items.our_type.name)
+            item_function = f"OverPointer<types::{interface_name}>"
+        else:
+            item_function = _over_function_name(items)
+
+        body = Stripped(
+            f"return {_generate_call('Each', ['value', f'&{item_function}', 'recursive'])};"
+        )
+
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        components = []  # type: List[Stripped]
+        for i, item in enumerate(type_annotation.items):
+            item_expression = _generate_over_expression(
+                type_annotation=item,
+                expr=f"std::get<{i}>(value)",
+                by_value=False,
+                analysis=analysis,
+                function_name_set=function_name_set,
+            )
+            if item_expression is not None:
+                components.append(_generate_call("AtIndex", [str(i), item_expression]))
+
+        assert len(components) > 0
+        if len(components) == 1:
+            body = Stripped(f"return {components[0]};")
+        else:
+            body = Stripped(f"return {_generate_call('Chain', components)};")
+
+    elif isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
+        type_annotation.our_type, intermediate.NamedUnion
+    ):
+        named_union = type_annotation.our_type
+
+        # NOTE (mristin):
+        # The alternatives of the variant follow the implementers, see
+        # :py:func:`cpp_common.generate_named_union_variant_definition`.
+        case_blocks = [
+            Stripped(
+                f"""\
+case {i}:
+{I}return Over(*common::get<{i}>(value), recursive);"""
+            )
+            for i in range(len(named_union.implementers))
+        ]
+        case_blocks.append(
+            Stripped(
+                f"""\
+default:
+{I}throw std::logic_error("Invalid variant index");"""
+            )
+        )
+        case_blocks_joined = "\n".join(case_blocks)
+
+        body = Stripped(
+            f"""\
+switch (value.index()) {{
+{I}{indent_but_first_line(case_blocks_joined, I)}
+}}"""
+        )
+
+    else:
+        expression = _generate_over_expression(
+            type_annotation=type_annotation,
+            expr="value",
+            by_value=False,
+            analysis=analysis,
+            function_name_set=function_name_set,
+        )
+        assert expression is not None
+        body = Stripped(f"return {expression};")
+
+    alias = None  # type: Optional[Stripped]
+
+    if isinstance(
+        type_annotation,
+        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+    ):
+        alias_name = _moniker(type_annotation)
+        alias = Stripped(f"using {alias_name} = {value_type};")
+        value_type = Stripped(alias_name)
+
+        if not analysis.yields(type_annotation, descend=False):
+            # NOTE (mristin):
+            # The values can only come from the referenced instances, so we
+            # do not iterate at all in the non-recursive mode.
+            body = Stripped(
+                f"""\
+if (!recursive) {{
+{I}return Empty();
+}}
+
+{body}"""
+            )
+
+    function = Stripped(
+        f"""\
+std::unique_ptr<IIterator> {name}(
+{I}const {indent_but_first_line(value_type, I)}& value,
+{I}{_generate_recursive_parameter(body)}
+) {{
+{I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+    return alias, function
+
+
+# fmt: off
+@require(lambda cls, analysis: id(cls) in analysis.yielding_class_id_set)
+@require(
+    lambda cls, analysis, function_name_set:
+    all(
+        _over_function_name(referenced) in function_name_set
+        for prop in cls.properties
+        for referenced in _referenced_function_types(prop.type_annotation, analysis)
+    ),
+    "The functions over the types of the properties have been collected"
+)
+@ensure(
+    lambda cls, function_name_set, result:
+    _called_function_names(
+        result, defined=_over_class_function_name(cls)
+    ).issubset(function_name_set),
+    "The function calls only the collected functions"
+)
+# fmt: on
+def _generate_over_class(
+    cls: intermediate.ConcreteClass,
+    analysis: _Analysis,
+    function_name_set: AbstractSet[str],
+) -> Stripped:
+    """
+    Generate the function over the values of an instance of ``cls``.
+
+    For example, we generate for a class ``Something`` with an invariant and
+    a property ``some_names: List[Name]``:
+
+    .. code-block:: cpp
+
+        std::unique_ptr<IIterator> OverSomething(
+          const types::ISomething& that,
+          bool recursive
+        ) {
+          return Chain(
+            One(&that, Shape::kSomething),
+            InProperty(
+              iteration::Property::kSomeNames,
+              OverListOf_Name(that.some_names(), recursive)
+            )
+          );
+        }
+
+    The ``function_name_set`` contains the names of the collected functions, see
+    :py:func:`_collect_function_types`.
+    """
+    parts = []  # type: List[Stripped]
+
+    if len(cls.invariants) > 0:
+        parts.append(_generate_call("One", ["&that", f"Shape::{_shape_literal(cls)}"]))
+
+    for prop in cls.properties:
+        # NOTE (mristin):
+        # The getters return booleans, integers and floating-point numbers by value,
+        # unless they are optional.
+        constrained_primitive = (
+            intermediate.try_constrained_primitive(prop.type_annotation)
+            if isinstance(prop.type_annotation, intermediate.OurTypeAnnotation)
+            else None
+        )
+        by_value = (
+            constrained_primitive is not None
+            and not cpp_common.primitive_type_is_referencable(
+                constrained_primitive.constrainee
+            )
+        )
+
+        expression = _generate_over_expression(
+            type_annotation=prop.type_annotation,
+            expr=f"that.{cpp_naming.getter_name(prop.name)}()",
+            by_value=by_value,
+            analysis=analysis,
+            function_name_set=function_name_set,
+        )
+        if expression is None:
+            continue
+
+        property_literal = cpp_naming.enum_literal_name(prop.name)
+        parts.append(
+            _generate_call(
+                "InProperty", [f"iteration::Property::{property_literal}", expression]
+            )
+        )
+
+    assert len(parts) > 0, "Otherwise the class would not have anything to verify"
+
+    body = (
+        Stripped(f"return {parts[0]};")
+        if len(parts) == 1
+        else Stripped(f"return {_generate_call('Chain', parts)};")
+    )
+
+    interface_name = cpp_naming.interface_name(cls.name)
+    name = _over_class_function_name(cls)
+
+    return Stripped(
+        f"""\
+std::unique_ptr<IIterator> {name}(
+{I}const types::{interface_name}& that,
+{I}{_generate_recursive_parameter(body)}
+) {{
+{I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+
+def _generate_over_instance(
+    symbol_table: intermediate.SymbolTable, analysis: _Analysis
+) -> Stripped:
+    """Generate the dispatch over the values of an instance on its runtime type."""
+    case_blocks = []  # type: List[Stripped]
+    for cls in symbol_table.concrete_classes:
+        if id(cls) not in analysis.yielding_class_id_set:
+            continue
+
+        model_type_literal = cpp_naming.enum_literal_name(cls.name)
+        interface_name = cpp_naming.interface_name(cls.name)
+
+        case_blocks.append(
+            Stripped(
+                f"""\
+case types::ModelType::{model_type_literal}:
+{I}return {_over_class_function_name(cls)}(
+{II}dynamic_cast<const types::{interface_name}&>(instance),
+{II}recursive
+{I});"""
+            )
+        )
+
+    doc_comment = Stripped(
+        """\
+/**
+ * Iterate over the values of the \\p instance, dispatched on its runtime type.
+ */"""
+    )
+
+    if len(case_blocks) == 0:
+        return Stripped(
+            f"""\
+{doc_comment}
+std::unique_ptr<IIterator> OverInstance(
+{I}const types::IClass&,
+{I}bool
+) {{
+{I}// NOTE (mristin):
+{I}// The instances of no class have anything to verify.
+{I}return Empty();
+}}"""
+        )
+
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}// NOTE (mristin):
+{I}// The instances of the other classes have nothing to verify.
+{I}return Empty();"""
+        )
+    )
+
+    case_blocks_joined = "\n".join(case_blocks)
+
+    return Stripped(
+        f"""\
+{doc_comment}
+std::unique_ptr<IIterator> OverInstance(
+{I}const types::IClass& instance,
+{I}bool recursive
+) {{
+{I}switch (instance.model_type()) {{
+{II}{indent_but_first_line(case_blocks_joined, II)}
+{I}}}
+}}"""
+    )
+
+
+# endregion Iteration over the values
+
+
+def _generate_shape_enum(
+    symbol_table: intermediate.SymbolTable, uses_json: bool
+) -> Stripped:
+    """Generate the enumeration of the shapes of the values that we verify."""
+    literals = [
+        _shape_literal(constrained_primitive)
+        for constrained_primitive in symbol_table.constrained_primitives
+        if len(constrained_primitive.invariants) > 0
+    ]
+    literals.extend(
+        _shape_literal(cls)
+        for cls in symbol_table.concrete_classes
+        if len(cls.invariants) > 0
+    )
+    if uses_json:
+        literals.extend(_JSON_SHAPE_LITERALS)
+
+    literals_joined = ",\n".join(
+        f"{literal} = {i}" for i, literal in enumerate(literals)
+    )
+
+    return Stripped(
+        f"""\
+/**
+ * \\brief Enumerate the shapes of the values that we verify.
+ *
+ * A shape tells which checks apply to a value, see \\ref ChecksOf.
+ */
+enum class Shape : std::uint32_t {{
+{I}{indent_but_first_line(literals_joined, I)}
+}};  // enum class Shape"""
+    )
+
+
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _generate_checks(
+    our_type: Union[intermediate.ConstrainedPrimitive, intermediate.ConcreteClass],
+    symbol_table: intermediate.SymbolTable,
+    base_environment: intermediate_type_inference.Environment,
+) -> Tuple[Optional[Tuple[List[Stripped], Stripped]], Optional[Error]]:
+    """
+    Generate a check function per invariant of ``our_type``.
+
+    Return the functions, and the case of ``ChecksOf`` for ``our_type``.
+    """
+    environment = intermediate_type_inference.MutableEnvironment(
+        parent=base_environment
+    )
+
+    assert environment.find(Identifier("self")) is None
+    environment.set(
+        identifier=Identifier("self"),
+        type_annotation=intermediate_type_inference.OurTypeAnnotation(
+            our_type=our_type
+        ),
+    )
+
+    that_definition: Stripped
+    if isinstance(our_type, intermediate.ConstrainedPrimitive):
+        value_type = cpp_common.generate_primitive_type(our_type.constrainee)
+        that_definition = Stripped(
+            f"const {value_type}& that = *static_cast<const {value_type}*>(value);"
+        )
+    else:
+        interface_name = cpp_naming.interface_name(our_type.name)
+        that_definition = Stripped(
+            f"""\
+const types::{interface_name}* that = (
+{I}static_cast<const types::{interface_name}*>(value)
+);"""
+        )
+
+    functions = []  # type: List[Stripped]
+    checks = []  # type: List[Stripped]
+    errors = []  # type: List[Error]
+
+    for i, invariant in enumerate(our_type.invariants):
+        condition, error = _transpile_invariant(
             invariant=invariant,
             symbol_table=symbol_table,
             environment=environment,
-            constrained_primitive=constrained_primitive,
         )
         if error is not None:
             errors.append(error)
             continue
 
-        assert condition_expr is not None
+        assert condition is not None
+
+        name = f"{cpp_naming.class_name(our_type.name)}_{i}"
+
+        functions.append(
+            Stripped(
+                f"""\
+bool {name}(
+{I}const void* value
+) {{
+{I}{indent_but_first_line(that_definition, I)}
+{I}return {indent_but_first_line(condition, I)};
+}}"""
+            )
+        )
 
         # NOTE (mristin):
         # We need to wrap the description in multiple literals as a single long
         # string literal is often too much for the readability.
-        invariant_description_lines = wrap_text_into_lines(invariant.description)
-
-        invariant_description_literals_joined = "\n".join(
-            cpp_common.wstring_literal(line) for line in invariant_description_lines
+        message = "\n".join(
+            cpp_common.wstring_literal(line)
+            for line in wrap_text_into_lines(invariant.description)
         )
 
-        flow.append(
-            yielding_flow.IfFalse(
-                condition_expr,
-                [
-                    yielding_flow.command_from_text(
-                        f"""\
-error_ = common::make_unique<Error>(
-{I}{indent_but_first_line(invariant_description_literals_joined, I)}
-);
-// No path is prepended as the error refers to the value itself.
-++index_;"""
-                    ),
-                    yielding_flow.Yield(),
-                ],
+        checks.append(
+            Stripped(
+                f"""\
+{{
+{I}&{name},
+{I}{indent_but_first_line(message, I)}
+}}"""
             )
         )
 
-    flow.append(
-        yielding_flow.command_from_text(
-            """\
-done_ = true;
-error_ = nullptr;
-index_ = -1;"""
-        )
-    )
-
     if len(errors) > 0:
-        return None, errors
-
-    code = cpp_yielding.generate_execute_body(
-        flow=flow, state_member=Identifier("state_")
-    )
-
-    of_constrained_primitive = cpp_naming.class_name(
-        Identifier(f"of_{constrained_primitive.name}")
-    )
-
-    return (
-        Stripped(
-            f"""\
-void {of_constrained_primitive}::Execute() {{
-{I}{indent_but_first_line(code, I)}
-}}"""
-        ),
-        None,
-    )
-
-
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _generate_constrained_primitive_verificator(
-    constrained_primitive: intermediate.ConstrainedPrimitive,
-    symbol_table: intermediate.SymbolTable,
-    environment: intermediate_type_inference.Environment,
-) -> Tuple[Optional[List[Stripped]], Optional[Error]]:
-    """Generate the def. and impl. of a verificator for a constrained primitive."""
-    if len(constrained_primitive.invariants) == 0:
-        return (
-            _generate_empty_constrained_primitive_verificator(
-                constrained_primitive=constrained_primitive
-            ),
-            None,
-        )
-
-    of_constrained_primitive = cpp_naming.class_name(
-        Identifier(f"Of_{constrained_primitive.name}")
-    )
-
-    input_value_type = cpp_common.generate_primitive_type_with_const_ref_if_applicable(
-        primitive_type=constrained_primitive.constrainee
-    )
-
-    value_type = cpp_common.generate_primitive_type(constrained_primitive.constrainee)
-    if _constrained_primitive_verificator_value_is_pointer(
-        constrained_primitive.constrainee
-    ):
-        data_value_type = f"const {value_type}*"
-
-        constructor_init = "value_(&value)"
-
-    else:
-        data_value_type = value_type
-
-        constructor_init = "value_(value)"
-
-    move_snippet = Stripped(
-        """\
-value_ = other.value_;
-index_ = other.index_;
-error_ = std::move(other.error_);
-done_ = other.done_;
-state_ = other.state_;"""
-    )
-
-    blocks = [
-        Stripped(
-            f"""\
-class {of_constrained_primitive} : public impl::IVerificator {{
- public:
-{I}{of_constrained_primitive}(
-{II}{input_value_type} value
-{I});
-
-{I}{of_constrained_primitive}(
-{II}const {of_constrained_primitive}& other
-{I});
-{I}{of_constrained_primitive}(
-{II}{of_constrained_primitive}&& other
-{I});
-{I}{of_constrained_primitive}& operator=(
-{II}const {of_constrained_primitive}& other
-{I});
-{I}{of_constrained_primitive}& operator=(
-{II}{of_constrained_primitive}&& other
-{I});
-
-{I}void Start() override;
-{I}void Next() override;
-{I}bool Done() const override;
-{I}const Error& Get() const override;
-{I}Error& GetMutable() override;
-{I}long Index() const override;
-
-{I}std::unique_ptr<impl::IVerificator> Clone() const override;
-
-{I}~{of_constrained_primitive}() override = default;
-
- private:
-{I}{data_value_type} value_;
-{I}long index_;
-{I}std::unique_ptr<Error> error_;
-{I}bool done_;
-{I}std::uint32_t state_;
-
-{I}void Execute();
-}};  // class {of_constrained_primitive}"""
-        ),
-        Stripped(
-            f"""\
-{of_constrained_primitive}::{of_constrained_primitive}(
-{I}{input_value_type} value
-) : {constructor_init} {{
-{I}// Intentionally empty.
-}}"""
-        ),
-        Stripped(
-            f"""\
-{of_constrained_primitive}::{of_constrained_primitive}(
-{I}const {of_constrained_primitive}& other
-) {{
-{I}value_ = other.value_;
-{I}index_ = other.index_;
-{I}error_ = common::make_unique<Error>(*other.error_);
-{I}done_ = other.done_;
-{I}state_ = other.state_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-{of_constrained_primitive}::{of_constrained_primitive}(
-{I}{of_constrained_primitive}&& other
-) {{
-{I}{indent_but_first_line(move_snippet, I)}
-}}"""
-        ),
-        Stripped(
-            f"""\
-{of_constrained_primitive}& {of_constrained_primitive}::operator=(
-{I}const {of_constrained_primitive}& other
-) {{
-{I}return *this = {of_constrained_primitive}(other);
-}}"""
-        ),
-        Stripped(
-            f"""\
-{of_constrained_primitive}& {of_constrained_primitive}::operator=(
-{I}{of_constrained_primitive}&& other
-) {{
-{I}if (this != &other) {{
-{II}{indent_but_first_line(move_snippet, II)}
-{I}}}
-
-{I}return *this;
-}}"""
-        ),
-        Stripped(
-            f"""\
-void {of_constrained_primitive}::Start() {{
-{I}state_ = 0;
-{I}Execute();
-}}"""
-        ),
-        Stripped(
-            f"""\
-void {of_constrained_primitive}::Next() {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to move a verificator {of_constrained_primitive}, "
-{III}"but the verificator was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}Execute();
-}}"""
-        ),
-        Stripped(
-            f"""\
-bool {of_constrained_primitive}::Done() const {{
-{I}return done_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-const Error& {of_constrained_primitive}::Get() const {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to get from a verificator {of_constrained_primitive}, "
-{III}"but the verificator was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}return *error_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-Error& {of_constrained_primitive}::GetMutable() {{
-{I}#ifdef DEBUG
-{I}if (Done()) {{
-{II}throw std::logic_error(
-{III}"You want to get mutable from a verificator {of_constrained_primitive}, "
-{III}"but the verificator was done."
-{II});
-{I}}}
-{I}#endif
-
-{I}return *error_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-long {of_constrained_primitive}::Index() const {{
-{I}#ifdef DEBUG
-{I}if (Done() && index_ != -1) {{
-{II}throw std::logic_error(
-{III}common::Concat(
-{IIII}"Expected index to be -1 "
-{IIII}"from a done verificator {of_constrained_primitive}, "
-{IIII}"but got: ",
-{IIII}std::to_string(index_)
-{III})
-{II});
-{I}}}
-{I}#endif
-
-{I}return index_;
-}}"""
-        ),
-        Stripped(
-            f"""\
-std::unique_ptr<impl::IVerificator> {of_constrained_primitive}::Clone() const {{
-{I}return common::make_unique<
-{II}{of_constrained_primitive}
-{I}>(*this);
-}}"""
-        ),
-    ]  # type: List[Stripped]
-
-    execute_block, execute_errors = _generate_constrained_primitive_verificator_execute(
-        constrained_primitive=constrained_primitive,
-        symbol_table=symbol_table,
-        environment=environment,
-    )
-    if execute_errors is not None:
         return None, Error(
-            constrained_primitive.parsed.node,
-            f"Failed to generate Execute() method for {of_constrained_primitive!r}",
-            execute_errors,
+            our_type.parsed.node,
+            f"Failed to transpile the invariants of {our_type.name!r}",
+            errors,
         )
 
-    assert execute_block is not None
-    blocks.append(execute_block)
+    checks_joined = ",\n".join(checks)
 
-    return blocks, None
+    case_block = Stripped(
+        f"""\
+case Shape::{_shape_literal(our_type)}: {{
+{I}static const std::vector<Check> checks = {{
+{II}{indent_but_first_line(checks_joined, II)}
+{I}}};
+{I}return checks;
+}}"""
+    )
+
+    return (functions, case_block), None
+
+
+def _generate_checks_of(case_blocks: Sequence[Stripped], uses_json: bool) -> Stripped:
+    """Generate the function which gives out the checks of a shape."""
+    blocks = list(case_blocks)
+    no_checks = ""
+
+    if uses_json:
+        no_checks = f"{I}static const std::vector<Check> kNoChecks;\n\n"
+
+        json_cases = "\n".join(
+            f"case Shape::{literal}:" for literal in _JSON_SHAPE_LITERALS
+        )
+        blocks.append(
+            Stripped(
+                f"""\
+{json_cases}
+{I}// NOTE (mristin):
+{I}// The JSON-able values are verified by the nested verification.
+{I}return kNoChecks;"""
+            )
+        )
+
+    blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}throw std::logic_error(
+{II}common::Concat(
+{III}"Unexpected shape: ",
+{III}std::to_string(static_cast<std::uint32_t>(shape))
+{II})
+{I});"""
+        )
+    )
+
+    blocks_joined = "\n".join(blocks)
+
+    return Stripped(
+        f"""\
+/**
+ * Give out the checks of the values of the \\p shape.
+ */
+const std::vector<Check>& ChecksOf(Shape shape) {{
+{no_checks}\
+{I}switch (shape) {{
+{II}{indent_but_first_line(blocks_joined, II)}
+{I}}}
+}}"""
+    )
+
+
+def _generate_new_nested_verificator(uses_json: bool) -> Stripped:
+    """Generate the factory of the nested verifications of the values."""
+    doc_comment = Stripped(
+        """\
+/**
+ * \\brief Create the nested verification of the \\p value, if its \\p shape has one.
+ *
+ * \\return nullptr if the shape has no nested verification
+ */"""
+    )
+
+    if not uses_json:
+        return Stripped(
+            f"""\
+{doc_comment}
+std::unique_ptr<impl::IVerificator> NewNestedVerificator(
+{I}Shape,
+{I}const void*
+) {{
+{I}// NOTE (mristin):
+{I}// The meta-model uses no JSON-able values, so no value needs a nested
+{I}// verification.
+{I}return nullptr;
+}}"""
+        )
+
+    case_blocks = []  # type: List[Stripped]
+    for literal, json_value_shape in zip(
+        _JSON_SHAPE_LITERALS, ("kAny", "kArray", "kObject")
+    ):
+        case_blocks.append(
+            Stripped(
+                f"""\
+case Shape::{literal}:
+{I}return common::make_unique<JsonValueVerificator>(
+{II}*static_cast<const nlohmann::json*>(value),
+{II}JsonValueShape::{json_value_shape}
+{I});"""
+            )
+        )
+
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}return nullptr;"""
+        )
+    )
+
+    case_blocks_joined = "\n".join(case_blocks)
+
+    return Stripped(
+        f"""\
+{doc_comment}
+std::unique_ptr<impl::IVerificator> NewNestedVerificator(
+{I}Shape shape,
+{I}const void* value
+) {{
+{I}switch (shape) {{
+{II}{indent_but_first_line(case_blocks_joined, II)}
+{I}}}
+}}"""
+    )
 
 
 def _generate_implementation_of_verify_constrained_primitive(
@@ -3186,12 +3253,28 @@ def _generate_implementation_of_verify_constrained_primitive(
         Identifier(f"verify_{constrained_primitive.name}")
     )
 
-    of_constrained_primitive = cpp_naming.class_name(
-        Identifier(f"Of_{constrained_primitive.name}")
-    )
-
     value_type = cpp_common.generate_primitive_type_with_const_ref_if_applicable(
         primitive_type=constrained_primitive.constrainee
+    )
+
+    if len(constrained_primitive.invariants) == 0:
+        return Stripped(
+            f"""\
+std::unique_ptr<IVerification> {verify_name}(
+{I}{value_type}
+) {{
+{I}// NOTE (mristin):
+{I}// There are no invariants to verify.
+{I}return common::make_unique<ValuesVerification>(Empty());
+}}"""
+        )
+
+    shape = f"Shape::{_shape_literal(constrained_primitive)}"
+
+    values = (
+        _generate_call("One", ["&that", shape])
+        if cpp_common.primitive_type_is_referencable(constrained_primitive.constrainee)
+        else _generate_call("OneByValue", ["that", shape])
     )
 
     return Stripped(
@@ -3199,81 +3282,72 @@ def _generate_implementation_of_verify_constrained_primitive(
 std::unique_ptr<IVerification> {verify_name}(
 {I}{value_type} that
 ) {{
-{I}return common::make_unique<
-{II}constrained_primitive_verification::{of_constrained_primitive}
-{I}>(that);
+{I}return common::make_unique<ValuesVerification>(
+{II}{indent_but_first_line(values, II)}
+{I});
 }}"""
     )
 
 
-def _generate_constrained_primitive_verification(
-    constrained_primitive: intermediate.ConstrainedPrimitive,
-) -> List[Stripped]:
-    """Generate the verification class for the constrained primitive."""
-    of_constrained_primitive = cpp_naming.class_name(
-        Identifier(f"Of_{constrained_primitive.name}")
-    )
-
-    value_type = cpp_common.generate_primitive_type_with_const_ref_if_applicable(
-        primitive_type=constrained_primitive.constrainee
-    )
-
+def _generate_non_recursive_verification() -> List[Stripped]:
+    """Generate the ``NonRecursiveVerification`` class."""
     return [
-        Stripped(f"// region {of_constrained_primitive}"),
+        Stripped("// region NonRecursiveVerification"),
         Stripped(
             f"""\
-class {of_constrained_primitive} : public IVerification {{
- public:
-{I}{of_constrained_primitive}(
-{II}{value_type} value
-{I});
-
-{I}Iterator begin() const override;
-{I}const Iterator& end() const override;
-
-{I}~{of_constrained_primitive}() override = default;
- private:
-{I}{value_type} value_;
-}};  // class ConstrainedPrimitiveVerification"""
-        ),
-        Stripped(
-            f"""\
-{of_constrained_primitive}::{of_constrained_primitive}(
-{I}{value_type} value
-) : value_(value) {{
+NonRecursiveVerification::NonRecursiveVerification(
+{I}const std::shared_ptr<types::IClass>& instance
+) : instance_(instance) {{
 {I}// Intentionally empty.
 }}"""
         ),
         Stripped(
             f"""\
-Iterator {of_constrained_primitive}::begin() const {{
-{I}std::unique_ptr<impl::IVerificator> verificator(
-{II}common::make_unique<
-{III}constrained_primitive_verificator::{of_constrained_primitive}
-{II}>(value_)
-{I});
-
-{I}verificator->Start();
-
-{I}// NOTE(mristin):
-{I}// We short-circuit here for efficiency, as we can immediately dispose
-{I}// of the verificator.
-{I}if (verificator->Done()) {{
-{II}return Iterator(common::make_unique<AlwaysDoneVerificator>());
-{I}}}
-
-{I}return Iterator(std::move(verificator));
+Iterator NonRecursiveVerification::begin() const {{
+{I}return IterateErrors(OverInstance(*instance_, false));
 }}"""
         ),
         Stripped(
             f"""\
-const Iterator& {of_constrained_primitive}::end() const {{
-{I}static Iterator iterator(common::make_unique<AlwaysDoneVerificator>());
-{I}return iterator;
+const Iterator& NonRecursiveVerification::end() const {{
+{I}return PastLastError();
 }}"""
         ),
-        Stripped(f"// endregion {of_constrained_primitive}"),
+        Stripped("// endregion NonRecursiveVerification"),
     ]
+
+
+def _generate_recursive_verification() -> List[Stripped]:
+    """Generate the ``RecursiveVerification`` class."""
+    return [
+        Stripped("// region RecursiveVerification"),
+        Stripped(
+            f"""\
+RecursiveVerification::RecursiveVerification(
+{I}const std::shared_ptr<types::IClass>& instance
+) : instance_(instance) {{
+{I}// Intentionally empty.
+}}"""
+        ),
+        Stripped(
+            f"""\
+Iterator RecursiveVerification::begin() const {{
+{I}return IterateErrors(OverInstance(*instance_, true));
+}}"""
+        ),
+        Stripped(
+            f"""\
+const Iterator& RecursiveVerification::end() const {{
+{I}return PastLastError();
+}}"""
+        ),
+        Stripped("// endregion RecursiveVerification"),
+    ]
+
+
+def _is_used(function: str, code: str) -> bool:
+    """Check whether the ``function`` is called in the generated ``code``."""
+    return re.search(rf"\b{function}(\(|<)", code) is not None
 
 
 # fmt: off
@@ -3300,10 +3374,10 @@ def generate_implementation(
         symbol_table=symbol_table
     )
 
+    uses_json = intermediate.uses_json_types(symbol_table)
+
     json_value_verification_include = (
-        '#include "json_value_verification.hpp"\n\n'
-        if intermediate.uses_json_types(symbol_table)
-        else ""
+        '#include "json_value_verification.hpp"\n\n' if uses_json else ""
     )
 
     blocks = [
@@ -3321,11 +3395,11 @@ def generate_implementation(
 #pragma warning(push, 0)
 #include <map>
 #include <set>
+#include <vector>
 #pragma warning(pop)"""
         ),
         cpp_common.generate_namespace_opening(namespace),
         *_generate_error_implementation(),
-        *_generate_always_done_verificator(),
     ]  # type: List[Stripped]
 
     if len(symbol_table.verification_functions) > 0:
@@ -3382,92 +3456,163 @@ def generate_implementation(
 
         blocks.append(Stripped("// endregion Verification functions"))
 
+    # region Checks
+
+    constrained_primitives_and_classes = [
+        *symbol_table.constrained_primitives,
+        *symbol_table.concrete_classes,
+    ]  # type: List[Union[intermediate.ConstrainedPrimitive, intermediate.ConcreteClass]]
+
+    if uses_json:
+        taken_literal_set = {
+            _shape_literal(our_type) for our_type in constrained_primitives_and_classes
+        }
+        for literal in _JSON_SHAPE_LITERALS:
+            if literal in taken_literal_set:
+                errors.append(
+                    Error(
+                        None,
+                        f"The shape literal {literal!r} of JSON-able values clashes "
+                        f"with a class or a constrained primitive of the same name. "
+                        f"Please rename it, or contact the developers.",
+                    )
+                )
+
+    check_functions = []  # type: List[Stripped]
+    checks_of_case_blocks = []  # type: List[Stripped]
+
+    for our_type in constrained_primitives_and_classes:
+        if len(our_type.invariants) == 0:
+            continue
+
+        checks, error = _generate_checks(
+            our_type=our_type,
+            symbol_table=symbol_table,
+            base_environment=base_environment,
+        )
+        if error is not None:
+            errors.append(error)
+            continue
+
+        assert checks is not None
+        functions, case_block = checks
+        check_functions.extend(functions)
+        checks_of_case_blocks.append(case_block)
+
+    # endregion Checks
+
+    # region Iteration over the values
+
+    analysis = _Analysis(symbol_table=symbol_table)
+
+    # NOTE (mristin):
+    # We first collect the lists, tuples and named unions which need a function,
+    # and only then generate the functions, so that the generation itself has no
+    # state to keep.
+    function_types, collection_errors = _collect_function_types(
+        symbol_table=symbol_table, analysis=analysis
+    )
+
+    generated_over = []  # type: List[Stripped]
+
+    if collection_errors is not None:
+        errors.extend(collection_errors)
+    else:
+        assert function_types is not None
+
+        function_name_set = frozenset(
+            _over_function_name(function_type) for function_type in function_types
+        )
+
+        aliases_and_functions = [
+            _generate_over_function(
+                type_annotation=function_type,
+                analysis=analysis,
+                function_name_set=function_name_set,
+            )
+            for function_type in function_types
+        ]
+
+        generated_over.extend(
+            alias for alias, _ in aliases_and_functions if alias is not None
+        )
+        generated_over.extend(function for _, function in aliases_and_functions)
+
+        generated_over.extend(
+            _generate_over_class(
+                cls=cls, analysis=analysis, function_name_set=function_name_set
+            )
+            for cls in symbol_table.concrete_classes
+            if id(cls) in analysis.yielding_class_id_set
+        )
+
+        generated_over.append(
+            _generate_over_instance(symbol_table=symbol_table, analysis=analysis)
+        )
+
+    verify_constrained_primitives = [
+        _generate_implementation_of_verify_constrained_primitive(
+            constrained_primitive=constrained_primitive
+        )
+        for constrained_primitive in symbol_table.constrained_primitives
+    ]
+
+    generated_code = "\n".join([*generated_over, *verify_constrained_primitives])
+
+    combinators = [*_EMPTY]
+    for function, combinator in (
+        ("One", _ONE),
+        ("OneByValue", _ONE_BY_VALUE),
+        ("Chain", _CHAIN),
+        ("InProperty", _IN_PROPERTY),
+        ("AtIndex", _AT_INDEX),
+        ("Each", _EACH),
+        ("Over", _OVER),
+        ("OverPointer", _OVER),
+        ("EachKey", _EACH_KEY),
+    ):
+        if _is_used(function, generated_code) and combinator[0] not in combinators:
+            combinators.extend(combinator)
+
+    # endregion Iteration over the values
+
+    blocks.extend(
+        [
+            Stripped("namespace {"),
+            _generate_shape_enum(symbol_table=symbol_table, uses_json=uses_json),
+            *_CHECK_STRUCT,
+            Stripped("// region Checks"),
+            *check_functions,
+            _generate_checks_of(case_blocks=checks_of_case_blocks, uses_json=uses_json),
+            Stripped("// endregion Checks"),
+            _generate_new_nested_verificator(uses_json=uses_json),
+            Stripped("// region Iteration over the values"),
+            *_IITERATOR,
+            *combinators,
+            *generated_over,
+            Stripped("// endregion Iteration over the values"),
+            Stripped("// region Iteration over the errors"),
+            *_ERROR_ITERATOR,
+        ]
+    )
+
+    if len(symbol_table.constrained_primitives) > 0:
+        blocks.extend(_VALUES_VERIFICATION)
+
+    blocks.extend(
+        [
+            Stripped("// endregion Iteration over the errors"),
+            Stripped("}  // namespace"),
+        ]
+    )
+
     if len(symbol_table.constrained_primitives) > 0:
         blocks.append(Stripped("// region Verification of constrained primitives"))
-
-        blocks.append(Stripped("namespace constrained_primitive_verificator {"))
-
-        for constrained_primitive in symbol_table.constrained_primitives:
-            invariant_environment = intermediate_type_inference.MutableEnvironment(
-                parent=base_environment
-            )
-
-            assert invariant_environment.find(Identifier("self")) is None
-            invariant_environment.set(
-                identifier=Identifier("self"),
-                type_annotation=intermediate_type_inference.OurTypeAnnotation(
-                    our_type=constrained_primitive
-                ),
-            )
-
-            verificator_blocks, error = _generate_constrained_primitive_verificator(
-                constrained_primitive=constrained_primitive,
-                symbol_table=symbol_table,
-                environment=invariant_environment,
-            )
-
-            if error is not None:
-                errors.append(error)
-            else:
-                assert verificator_blocks is not None
-                blocks.extend(verificator_blocks)
-
-        blocks.append(Stripped("}  // namespace constrained_primitive_verificator"))
-
-        blocks.append(Stripped("namespace constrained_primitive_verification {"))
-
-        for constrained_primitive in symbol_table.constrained_primitives:
-            blocks.extend(
-                _generate_constrained_primitive_verification(
-                    constrained_primitive=constrained_primitive
-                )
-            )
-
-        blocks.append(Stripped("}  // namespace constrained_primitive_verification"))
-
-        for constrained_primitive in symbol_table.constrained_primitives:
-            blocks.append(
-                _generate_implementation_of_verify_constrained_primitive(
-                    constrained_primitive=constrained_primitive
-                )
-            )
-
+        blocks.extend(verify_constrained_primitives)
         blocks.append(Stripped("// endregion Verification of constrained primitives"))
 
     blocks.extend(
         [
-            _generate_new_non_recursive_verificator_definition(),
-            Stripped("// region Non-recursive verificators"),
-            Stripped("namespace non_recursive_verificator {"),
-        ]
-    )
-
-    for cls in symbol_table.concrete_classes:
-        nrv_blocks, nrv_error = _generate_non_recursive_verificator(
-            cls=cls, symbol_table=symbol_table, base_environment=base_environment
-        )
-        if nrv_error is not None:
-            errors.append(nrv_error)
-        else:
-            assert nrv_blocks is not None
-            blocks.extend(nrv_blocks)
-
-    blocks.append(Stripped("}  // namespace non_recursive_verificator"))
-
-    blocks.extend(
-        [
-            _generate_new_non_recursive_verificator_implementation(
-                symbol_table=symbol_table
-            ),
-            Stripped("// endregion Non-recursive verificators"),
-            Stripped("// region Recursive verificators"),
-        ]
-    )
-
-    blocks.extend(
-        [
-            *_generate_recursive_verificator(),
-            Stripped("// endregion Recursive verificators"),
             *_generate_non_recursive_verification(),
             *_generate_recursive_verification(),
             *_generate_iterator_implementation(),
