@@ -20,10 +20,11 @@ classes.
 # Do NOT edit or append.
 
 
+import collections
 import sys
 from typing import (
     Any,
-    List,
+    Deque,
     Mapping,
     Sequence,
     Union
@@ -151,7 +152,12 @@ class Path:
 
     def __init__(self) -> None:
         """Initialize as an empty path."""
-        self._segments = []  # type: List[Segment]
+        # NOTE (mristin):
+        # A path is built as the stack unwinds, so every segment is prepended and
+        # none is ever appended. A list would copy the whole path on each of them,
+        # which makes a path of depth *d* cost *d^2* to build, while a deque
+        # prepends in constant time.
+        self._segments = collections.deque()  # type: Deque[Segment]
 
     @property
     def segments(self) -> Sequence[Segment]:
@@ -160,7 +166,7 @@ class Path:
 
     def _prepend(self, segment: Segment) -> None:
         """Insert the :paramref:`segment` in front of other segments."""
-        self._segments.insert(0, segment)
+        self._segments.appendleft(segment)
 
     def __str__(self) -> str:
         return "".join(str(segment) for segment in self._segments)

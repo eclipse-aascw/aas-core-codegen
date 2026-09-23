@@ -57,10 +57,11 @@ def generate(qualified_module_name: python_common.QualifiedModuleName) -> str:
         python_common.WARNING,
         Stripped(
             f"""\
+import collections
 import sys
 from typing import (
 {I}Any,
-{I}List,
+{I}Deque,
 {I}Mapping,
 {I}Sequence,
 {I}Union
@@ -160,7 +161,12 @@ class Path:
 
 {I}def __init__(self) -> None:
 {II}\"\"\"Initialize as an empty path.\"\"\"
-{II}self._segments = []  # type: List[Segment]
+{II}# NOTE (mristin):
+{II}# A path is built as the stack unwinds, so every segment is prepended and
+{II}# none is ever appended. A list would copy the whole path on each of them,
+{II}# which makes a path of depth *d* cost *d^2* to build, while a deque
+{II}# prepends in constant time.
+{II}self._segments = collections.deque()  # type: Deque[Segment]
 
 {I}@property
 {I}def segments(self) -> Sequence[Segment]:
@@ -169,7 +175,7 @@ class Path:
 
 {I}def _prepend(self, segment: Segment) -> None:
 {II}\"\"\"Insert the :paramref:`segment` in front of other segments.\"\"\"
-{II}self._segments.insert(0, segment)
+{II}self._segments.appendleft(segment)
 
 {I}def __str__(self) -> str:
 {II}return "".join(str(segment) for segment in self._segments)"""
