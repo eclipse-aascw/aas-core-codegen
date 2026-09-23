@@ -295,11 +295,11 @@ def _generate_visit_named_union_switch(
     """
     Generate a ``switch`` calling ``Visit`` on whichever alternative is held.
 
-    A named union's value is a ``std::variant``, not a polymorphic pointer,
+    A named union's value is a ``common::variant``, not a polymorphic pointer,
     so it can not be passed to ``Visit`` (which expects
     ``shared_ptr<types::IClass>``) directly -- we switch on the variant's
     own ``index()`` and call ``Visit`` on the corresponding
-    ``std::get<i>(...)`` alternative, which upcasts to ``IClass`` like any
+    ``common::get<i>(...)`` alternative, which upcasts to ``IClass`` like any
     other class pointer.
     """
     case_blocks = []  # type: List[Stripped]
@@ -309,7 +309,7 @@ def _generate_visit_named_union_switch(
                 f"""\
 case {i}:
 {I}Visit(
-{II}std::get<{i}>(
+{II}common::get<{i}>(
 {III}{indent_but_first_line(union_value_expr, III)}
 {II})
 {I});

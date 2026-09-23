@@ -88,7 +88,7 @@ def _generate_wrap_for_named_union(named_union: intermediate.NamedUnion) -> Stri
     """
     Generate the ``Wrap`` overload implementation for a named union.
 
-    A named union's value is a ``std::variant``, not a polymorphic pointer,
+    A named union's value is a ``common::variant``, not a polymorphic pointer,
     so there is no need for the ``model_type()``/``dynamic_pointer_cast``
     dance that the per-class ``Wrap`` overloads need -- the variant already
     knows which alternative it holds through its own ``index()``. Each case
@@ -105,7 +105,7 @@ def _generate_wrap_for_named_union(named_union: intermediate.NamedUnion) -> Stri
 case {i}:
 {I}return types::{union_name}(
 {II}Wrap<E>(
-{III}std::get<{i}>(that),
+{III}common::get<{i}>(that),
 {III}factory
 {II})
 {I});"""

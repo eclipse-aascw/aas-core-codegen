@@ -2095,14 +2095,14 @@ types::StructuralUnion Wrap(
     case 0:
       return types::StructuralUnion(
         Wrap<E>(
-          std::get<0>(that),
+          common::get<0>(that),
           factory
         )
       );
     case 1:
       return types::StructuralUnion(
         Wrap<E>(
-          std::get<1>(that),
+          common::get<1>(that),
           factory
         )
       );
@@ -2124,35 +2124,35 @@ types::MixedUnion Wrap(
     case 0:
       return types::MixedUnion(
         Wrap<E>(
-          std::get<0>(that),
+          common::get<0>(that),
           factory
         )
       );
     case 1:
       return types::MixedUnion(
         Wrap<E>(
-          std::get<1>(that),
+          common::get<1>(that),
           factory
         )
       );
     case 2:
       return types::MixedUnion(
         Wrap<E>(
-          std::get<2>(that),
+          common::get<2>(that),
           factory
         )
       );
     case 3:
       return types::MixedUnion(
         Wrap<E>(
-          std::get<3>(that),
+          common::get<3>(that),
           factory
         )
       );
     case 4:
       return types::MixedUnion(
         Wrap<E>(
-          std::get<4>(that),
+          common::get<4>(that),
           factory
         )
       );
@@ -2174,14 +2174,14 @@ types::ModelTypedUnion Wrap(
     case 0:
       return types::ModelTypedUnion(
         Wrap<E>(
-          std::get<0>(that),
+          common::get<0>(that),
           factory
         )
       );
     case 1:
       return types::ModelTypedUnion(
         Wrap<E>(
-          std::get<1>(that),
+          common::get<1>(that),
           factory
         )
       );

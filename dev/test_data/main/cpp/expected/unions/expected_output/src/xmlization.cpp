@@ -1139,7 +1139,7 @@ std::pair<
  * Every implementer of a named union is de-serialized through its own
  * *FromSequence function, and the resulting
  * pair<optional<shared_ptr<T>>, ...> then needs to be wrapped into the
- * union's std::variant alternative matching its own interface.
+ * union's common::variant alternative matching its own interface.
  *
  * \param result the result of a de-serialization call for one implementer
  * \return the result wrapped as a variant, or the propagated error
@@ -5196,12 +5196,12 @@ common::optional<xml_common::SerializationError> SerializeStructuralUnionAsEleme
   switch (that.index()) {
     case 0:
       return SerializeStructuralFirstPtrAsElement(
-        std::get<0>(that),
+        common::get<0>(that),
         writer
       );
     case 1:
       return SerializeStructuralSecondPtrAsElement(
-        std::get<1>(that),
+        common::get<1>(that),
         writer
       );
     default:
@@ -5221,27 +5221,27 @@ common::optional<xml_common::SerializationError> SerializeMixedUnionAsElement(
   switch (that.index()) {
     case 0:
       return SerializeMixedAbstractDescendantOnePtrAsElement(
-        std::get<0>(that),
+        common::get<0>(that),
         writer
       );
     case 1:
       return SerializeMixedAbstractDescendantTwoPtrAsElement(
-        std::get<1>(that),
+        common::get<1>(that),
         writer
       );
     case 2:
       return SerializeMixedConcreteWithDescendantsChildPtrAsElement(
-        std::get<2>(that),
+        common::get<2>(that),
         writer
       );
     case 3:
       return SerializeMixedConcreteWithDescendantsPtrAsElement(
-        std::get<3>(that),
+        common::get<3>(that),
         writer
       );
     case 4:
       return SerializeMixedConcreteLeafPtrAsElement(
-        std::get<4>(that),
+        common::get<4>(that),
         writer
       );
     default:
@@ -5261,12 +5261,12 @@ common::optional<xml_common::SerializationError> SerializeModelTypedUnionAsEleme
   switch (that.index()) {
     case 0:
       return SerializeModelTypedFirstPtrAsElement(
-        std::get<0>(that),
+        common::get<0>(that),
         writer
       );
     case 1:
       return SerializeModelTypedSecondPtrAsElement(
-        std::get<1>(that),
+        common::get<1>(that),
         writer
       );
     default:
