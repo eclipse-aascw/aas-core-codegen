@@ -1551,6 +1551,7 @@ def generate_implementation(
         cpp_common.WARNING,
         Stripped(
             f'''\
+#include "{include_prefix_path}/constants.hpp"
 #include "{include_prefix_path}/types.hpp"'''
         ),
         cpp_common.generate_namespace_opening(namespace),

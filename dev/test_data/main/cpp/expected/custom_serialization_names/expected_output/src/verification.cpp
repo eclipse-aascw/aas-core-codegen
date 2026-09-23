@@ -5,6 +5,7 @@
 #include "dummy/constants.hpp"
 #include "dummy/pattern.hpp"
 #include "dummy/revm.hpp"
+#include "dummy/stringification.hpp"
 #include "dummy/verification.hpp"
 
 #pragma warning(push, 0)
@@ -408,7 +409,7 @@ void RecursiveVerificator::Execute() {
           iteration::Descent descent(
             *instance_
           );
-          iterator_ = std::move(descent.begin());
+          iterator_ = descent.begin();
 
           // NOTE (mristin):
           // descent.end() is a constant reference, so we make an explicit
@@ -444,10 +445,8 @@ void RecursiveVerificator::Execute() {
           )
         );
 
-        error_->path = std::move(
-          iteration::MaterializePath(
-            *iterator_
-          )
+        error_->path = iteration::MaterializePath(
+          *iterator_
         );
 
         ++index_;

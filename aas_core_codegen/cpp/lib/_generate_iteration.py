@@ -1169,10 +1169,8 @@ done_ = false;"""
                             yielding_flow.command_from_text(
                                 f"""\
 property_ = Property::{property_literal};
-item_ = std::move(
-{I}std::static_pointer_cast<types::IClass>(
-{II}*(casted_->{getter_name}())
-{I})
+item_ = std::static_pointer_cast<types::IClass>(
+{I}*(casted_->{getter_name}())
 );
 ++index_;"""
                             ),
@@ -1185,10 +1183,8 @@ item_ = std::move(
                     yielding_flow.command_from_text(
                         f"""\
 property_ = Property::{property_literal};
-item_ = std::move(
-{I}std::static_pointer_cast<types::IClass>(
-{II}casted_->{getter_name}()
-{I})
+item_ = std::static_pointer_cast<types::IClass>(
+{I}casted_->{getter_name}()
 );
 ++index_;"""
                     )
@@ -1210,10 +1206,8 @@ item_ = std::move(
                             yielding_flow.command_from_text(
                                 f"""\
 property_ = Property::{property_literal};
-item_ = std::move(
-{I}{extraction_function}(
-{II}*(casted_->{getter_name}())
-{I})
+item_ = {extraction_function}(
+{I}*(casted_->{getter_name}())
 );
 ++index_;"""
                             ),
@@ -1226,10 +1220,8 @@ item_ = std::move(
                     yielding_flow.command_from_text(
                         f"""\
 property_ = Property::{property_literal};
-item_ = std::move(
-{I}{extraction_function}(
-{II}casted_->{getter_name}()
-{I})
+item_ = {extraction_function}(
+{I}casted_->{getter_name}()
 );
 ++index_;"""
                     )
@@ -1291,9 +1283,7 @@ item_ = std::move(
 );
 const auto& item_value = {list_var}[*cursor_];
 
-item_ = std::move(
-{I}{indent_but_first_line(item_extract_expr, I)}
-);
+item_ = {item_extract_expr};
 ++index_;"""
                                     ),
                                     yielding_flow.Yield(),
@@ -1328,9 +1318,7 @@ item_ = std::move(
 );
 const auto& item_value = {list_var}[*cursor_];
 
-item_ = std::move(
-{I}{indent_but_first_line(item_extract_expr, I)}
-);
+item_ = {item_extract_expr};
 ++index_;"""
                             ),
                             yielding_flow.Yield(),
@@ -1405,9 +1393,7 @@ std::static_pointer_cast<types::IClass>(
                     yielding_flow.command_from_text(
                         f"""\
 cursor_ = {i};
-item_ = std::move(
-{I}{indent_but_first_line(extract_expr, I)}
-);
+item_ = {extract_expr};
 ++index_;"""
                     )
                 )
@@ -1469,11 +1455,6 @@ def _generate_iterator_over_cls(
     interface_name = cpp_naming.interface_name(cls.name)
 
     private_properties = [
-        Stripped(
-            """\
-// We make instance_ a pointer, so that we can follow the rule-of-zero.
-const std::shared_ptr<types::IClass>* instance_;"""
-        ),
         Stripped(
             f"""\
 // We make casted_ a pointer, so that we can follow the rule-of-zero.
@@ -1596,7 +1577,6 @@ class {iterator_name} : public impl::IIterator {{
 {iterator_name}::{iterator_name}(
 {I}const std::shared_ptr<types::IClass>& instance
 ) :
-{I}instance_(&instance),
 {I}// NOTE (mristin):
 {I}// The dynamic cast is necessary due to virtual inheritance. Otherwise,
 {I}// we would have used static cast.
@@ -1796,10 +1776,8 @@ item_ = &(non_recursive_iterator_->Get());
                 yielding_flow.Yield(),
                 yielding_flow.command_from_text(
                     f"""\
-recursive_iterator_ = std::move(
-{I}common::make_unique<RecursiveExclusiveIterator>(
-{II}*item_
-{I})
+recursive_iterator_ = common::make_unique<RecursiveExclusiveIterator>(
+{I}*item_
 );"""
                 ),
                 yielding_flow.For(
@@ -2032,7 +2010,7 @@ void RecursiveInclusiveIterator::Start() {{
 {II});
 {I}}}
 
-{I}if (Index() !== 0) {{
+{I}if (Index() != 0) {{
 {II}throw std::logic_error(
 {III}common::Concat(
 {IIII}"Expected RecursiveInclusiveIterator::Index() to be 0 on Start()"
@@ -2042,7 +2020,7 @@ void RecursiveInclusiveIterator::Start() {{
 {II});
 {I}}}
 
-{I}const std::shared_ptr<IClass>& current_item(Get());
+{I}const std::shared_ptr<types::IClass>& current_item(Get());
 {I}if (current_item == nullptr) {{
 {II}throw std::logic_error(
 {III}"Unexpected null pointer from Get() at the end of "
@@ -2050,16 +2028,11 @@ void RecursiveInclusiveIterator::Start() {{
 {II});
 {I}}}
 
-{I}if (current_item.get() != instance_.get()) {{
+{I}if (current_item.get() != instance_->get()) {{
 {II}throw std::logic_error(
-{III}common::Concat(
-{IIII}"Expected the current item to point to the instance "
-{IIII}"at the end of RecursiveInclusiveIterator::Start, "
-{IIII}"but got ",
-{IIII}std::to_string(current_item.get()),
-{IIII}" from Get() instead of ",
-{IIII}std::to_string(instance_.get())
-{III})
+{III}"Expected the current item to point to the instance "
+{III}"at the end of RecursiveInclusiveIterator::Start, "
+{III}"but Get() pointed to a different instance."
 {II});
 {I}}}
 {I}#endif
@@ -2270,9 +2243,7 @@ Descent::Descent(
 
 Iterator Descent::begin() const {{
 {I}std::unique_ptr<impl::IIterator> it_impl(
-{II}std::move(
-{III}common::make_unique<RecursiveExclusiveIterator>(instance_)
-{II})
+{II}common::make_unique<RecursiveExclusiveIterator>(instance_)
 {I});
 
 {I}it_impl->Start();
@@ -2318,7 +2289,7 @@ Iterator DescentOnce::begin() const {{
 {I}// NOTE(mristin):
 {I}// We short-circuit here for efficiency, as we can immediately dispose it_impl.
 {I}if (it_impl->Done()) {{
-{II}return Iterator(std::move(common::make_unique<AlwaysDoneIterator>()));
+{II}return Iterator(common::make_unique<AlwaysDoneIterator>());
 {I}}}
 
 {I}return Iterator(std::move(it_impl));

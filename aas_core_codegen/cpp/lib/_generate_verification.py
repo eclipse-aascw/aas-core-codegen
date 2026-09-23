@@ -2164,7 +2164,7 @@ verificator_ = nullptr;
 {I}iteration::Descent descent(
 {II}*instance_
 {I});
-{I}iterator_ = std::move(descent.begin());
+{I}iterator_ = descent.begin();
 
 {I}// NOTE (mristin):
 {I}// descent.end() is a constant reference, so we make an explicit
@@ -2198,10 +2198,8 @@ error_ = common::make_unique<Error>(
 {I})
 );
 
-error_->path = std::move(
-{I}iteration::MaterializePath(
-{II}*iterator_
-{I})
+error_->path = iteration::MaterializePath(
+{I}*iterator_
 );
 
 ++index_;"""
@@ -3317,6 +3315,7 @@ def generate_implementation(
 #include "{include_prefix_path}/constants.hpp"
 #include "{include_prefix_path}/pattern.hpp"
 #include "{include_prefix_path}/revm.hpp"
+#include "{include_prefix_path}/stringification.hpp"
 #include "{include_prefix_path}/verification.hpp"
 
 #pragma warning(push, 0)

@@ -494,7 +494,7 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  if (Index() !== 0) {
+  if (Index() != 0) {
     throw std::logic_error(
       common::Concat(
         "Expected RecursiveInclusiveIterator::Index() to be 0 on Start()"
@@ -504,7 +504,7 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  const std::shared_ptr<IClass>& current_item(Get());
+  const std::shared_ptr<types::IClass>& current_item(Get());
   if (current_item == nullptr) {
     throw std::logic_error(
       "Unexpected null pointer from Get() at the end of "
@@ -512,16 +512,11 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  if (current_item.get() != instance_.get()) {
+  if (current_item.get() != instance_->get()) {
     throw std::logic_error(
-      common::Concat(
-        "Expected the current item to point to the instance "
-        "at the end of RecursiveInclusiveIterator::Start, "
-        "but got ",
-        std::to_string(current_item.get()),
-        " from Get() instead of ",
-        std::to_string(instance_.get())
-      )
+      "Expected the current item to point to the instance "
+      "at the end of RecursiveInclusiveIterator::Start, "
+      "but Get() pointed to a different instance."
     );
   }
   #endif
@@ -643,10 +638,8 @@ void RecursiveInclusiveIterator::Execute() {
       }
 
       case 3: {
-        recursive_iterator_ = std::move(
-          common::make_unique<RecursiveExclusiveIterator>(
-            *item_
-          )
+        recursive_iterator_ = common::make_unique<RecursiveExclusiveIterator>(
+          *item_
         );
 
         recursive_iterator_->Start();
@@ -890,9 +883,7 @@ Descent::Descent(
 
 Iterator Descent::begin() const {
   std::unique_ptr<impl::IIterator> it_impl(
-    std::move(
-      common::make_unique<RecursiveExclusiveIterator>(instance_)
-    )
+    common::make_unique<RecursiveExclusiveIterator>(instance_)
   );
 
   it_impl->Start();
@@ -936,7 +927,7 @@ Iterator DescentOnce::begin() const {
   // NOTE(mristin):
   // We short-circuit here for efficiency, as we can immediately dispose it_impl.
   if (it_impl->Done()) {
-    return Iterator(std::move(common::make_unique<AlwaysDoneIterator>()));
+    return Iterator(common::make_unique<AlwaysDoneIterator>());
   }
 
   return Iterator(std::move(it_impl));

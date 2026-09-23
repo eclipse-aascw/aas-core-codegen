@@ -1907,11 +1907,12 @@ void SelfClosingWriter::StartElementInNoNamespace(
 {III}"You are trying to queue a start element with a SelfClosingWriter "
 {III}"which caught an error."
 {II});
+{I}}}
 {I}#endif
 
 {I}WritePendingStartElementIfAvailable();
 {I}if (error_.has_value()) {{
-{I}return;
+{II}return;
 {I}}}
 
 {I}pending_start_wo_text_ = std::move(name);
@@ -1955,11 +1956,12 @@ void SelfClosingWriter::StartElement(
 {III}"You are trying to queue a start element with a SelfClosingWriter "
 {III}"which caught an error."
 {II});
+{I}}}
 {I}#endif
 
 {I}WritePendingStartElementIfAvailable();
 {I}if (error_.has_value()) {{
-{I}return;
+{II}return;
 {I}}}
 
 {I}pending_start_wo_text_ = std::move(name);
@@ -1983,6 +1985,7 @@ void SelfClosingWriter::StopElement(
 {III}"You are trying to write a stop element with a SelfClosingWriter "
 {III}"which caught an error before."
 {II});
+{I}}}
 {I}#endif
 
 {I}if (pending_start_wo_text_.has_value()) {{
@@ -1994,7 +1997,7 @@ void SelfClosingWriter::StopElement(
 {IIIII}*pending_start_wo_text_,
 {IIIII}"> is pending for writing, "
 {IIIII}"but you are trying to write a stop element </",
-{IIIII}name
+{IIIII}name,
 {IIIII}">"
 {IIII})
 {III});
@@ -2511,6 +2514,7 @@ void SelfClosingWriter::WriteStringWithoutEscapingNorFlushing(
 {III}"You are trying to write to a SelfClosingWriter which "
 {III}"caught an error"
 {II});
+{I}}}
 {I}#endif
 
 {I}if (os_.bad()) {{
