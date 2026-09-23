@@ -1784,7 +1784,7 @@ std::pair<
 {I});
 
 {I}#ifdef DEBUG
-{I}if (node.kind() == xml_common::NodeKind::Error) {{
+{I}if (reader.node().kind() == xml_common::NodeKind::Error) {{
 {II}throw std::logic_error(
 {III}"Unexpected unhandled XML error in DeserializeDouble. "
 {III}"DeserializeDouble expects no error node."

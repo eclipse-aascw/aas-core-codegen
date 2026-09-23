@@ -383,8 +383,6 @@ class IteratorOverExtension : public impl::IIterator {
   ~IteratorOverExtension() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IExtension* casted_;
   std::uint32_t state_;
@@ -400,7 +398,6 @@ class IteratorOverExtension : public impl::IIterator {
 IteratorOverExtension::IteratorOverExtension(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -517,10 +514,8 @@ void IteratorOverExtension::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -554,9 +549,7 @@ void IteratorOverExtension::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 3;
@@ -598,9 +591,7 @@ void IteratorOverExtension::Execute() {
         );
         const auto& item_value = the_refers_to[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 7;
@@ -660,8 +651,6 @@ class IteratorOverAdministrativeInformation : public impl::IIterator {
   ~IteratorOverAdministrativeInformation() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IAdministrativeInformation* casted_;
   std::uint32_t state_;
@@ -677,7 +666,6 @@ class IteratorOverAdministrativeInformation : public impl::IIterator {
 IteratorOverAdministrativeInformation::IteratorOverAdministrativeInformation(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -815,9 +803,7 @@ void IteratorOverAdministrativeInformation::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -842,10 +828,8 @@ void IteratorOverAdministrativeInformation::Execute() {
         }
 
         property_ = Property::kCreator;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->creator())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->creator())
         );
         ++index_;
 
@@ -895,8 +879,6 @@ class IteratorOverQualifier : public impl::IIterator {
   ~IteratorOverQualifier() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IQualifier* casted_;
   std::uint32_t state_;
@@ -912,7 +894,6 @@ class IteratorOverQualifier : public impl::IIterator {
 IteratorOverQualifier::IteratorOverQualifier(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -1029,10 +1010,8 @@ void IteratorOverQualifier::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -1066,9 +1045,7 @@ void IteratorOverQualifier::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 3;
@@ -1093,10 +1070,8 @@ void IteratorOverQualifier::Execute() {
         }
 
         property_ = Property::kValueId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->value_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->value_id())
         );
         ++index_;
 
@@ -1146,8 +1121,6 @@ class IteratorOverAssetAdministrationShell : public impl::IIterator {
   ~IteratorOverAssetAdministrationShell() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IAssetAdministrationShell* casted_;
   std::uint32_t state_;
@@ -1163,7 +1136,6 @@ class IteratorOverAssetAdministrationShell : public impl::IIterator {
 IteratorOverAssetAdministrationShell::IteratorOverAssetAdministrationShell(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -1297,9 +1269,7 @@ void IteratorOverAssetAdministrationShell::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -1341,9 +1311,7 @@ void IteratorOverAssetAdministrationShell::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -1385,9 +1353,7 @@ void IteratorOverAssetAdministrationShell::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -1412,10 +1378,8 @@ void IteratorOverAssetAdministrationShell::Execute() {
         }
 
         property_ = Property::kAdministration;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->administration())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->administration())
         );
         ++index_;
 
@@ -1451,9 +1415,7 @@ void IteratorOverAssetAdministrationShell::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -1478,10 +1440,8 @@ void IteratorOverAssetAdministrationShell::Execute() {
         }
 
         property_ = Property::kDerivedFrom;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->derived_from())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->derived_from())
         );
         ++index_;
 
@@ -1491,10 +1451,8 @@ void IteratorOverAssetAdministrationShell::Execute() {
 
       case 18: {
         property_ = Property::kAssetInformation;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->asset_information()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->asset_information()
         );
         ++index_;
 
@@ -1526,9 +1484,7 @@ void IteratorOverAssetAdministrationShell::Execute() {
         );
         const auto& item_value = the_submodels[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 21;
@@ -1588,8 +1544,6 @@ class IteratorOverAssetInformation : public impl::IIterator {
   ~IteratorOverAssetInformation() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IAssetInformation* casted_;
   std::uint32_t state_;
@@ -1605,7 +1559,6 @@ class IteratorOverAssetInformation : public impl::IIterator {
 IteratorOverAssetInformation::IteratorOverAssetInformation(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -1739,9 +1692,7 @@ void IteratorOverAssetInformation::Execute() {
         );
         const auto& item_value = the_specific_asset_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -1766,10 +1717,8 @@ void IteratorOverAssetInformation::Execute() {
         }
 
         property_ = Property::kDefaultThumbnail;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->default_thumbnail())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->default_thumbnail())
         );
         ++index_;
 
@@ -1878,8 +1827,6 @@ class IteratorOverSpecificAssetId : public impl::IIterator {
   ~IteratorOverSpecificAssetId() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::ISpecificAssetId* casted_;
   std::uint32_t state_;
@@ -1895,7 +1842,6 @@ class IteratorOverSpecificAssetId : public impl::IIterator {
 IteratorOverSpecificAssetId::IteratorOverSpecificAssetId(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -2012,10 +1958,8 @@ void IteratorOverSpecificAssetId::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -2049,9 +1993,7 @@ void IteratorOverSpecificAssetId::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 3;
@@ -2076,10 +2018,8 @@ void IteratorOverSpecificAssetId::Execute() {
         }
 
         property_ = Property::kExternalSubjectId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->external_subject_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->external_subject_id())
         );
         ++index_;
 
@@ -2129,8 +2069,6 @@ class IteratorOverSubmodel : public impl::IIterator {
   ~IteratorOverSubmodel() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::ISubmodel* casted_;
   std::uint32_t state_;
@@ -2146,7 +2084,6 @@ class IteratorOverSubmodel : public impl::IIterator {
 IteratorOverSubmodel::IteratorOverSubmodel(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -2280,9 +2217,7 @@ void IteratorOverSubmodel::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -2324,9 +2259,7 @@ void IteratorOverSubmodel::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -2368,9 +2301,7 @@ void IteratorOverSubmodel::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -2395,10 +2326,8 @@ void IteratorOverSubmodel::Execute() {
         }
 
         property_ = Property::kAdministration;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->administration())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->administration())
         );
         ++index_;
 
@@ -2413,10 +2342,8 @@ void IteratorOverSubmodel::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -2450,9 +2377,7 @@ void IteratorOverSubmodel::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 16;
@@ -2494,9 +2419,7 @@ void IteratorOverSubmodel::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 20;
@@ -2542,9 +2465,7 @@ void IteratorOverSubmodel::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 24;
@@ -2586,9 +2507,7 @@ void IteratorOverSubmodel::Execute() {
         );
         const auto& item_value = the_submodel_elements[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 28;
@@ -2648,8 +2567,6 @@ class IteratorOverRelationshipElement : public impl::IIterator {
   ~IteratorOverRelationshipElement() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IRelationshipElement* casted_;
   std::uint32_t state_;
@@ -2665,7 +2582,6 @@ class IteratorOverRelationshipElement : public impl::IIterator {
 IteratorOverRelationshipElement::IteratorOverRelationshipElement(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -2799,9 +2715,7 @@ void IteratorOverRelationshipElement::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -2843,9 +2757,7 @@ void IteratorOverRelationshipElement::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -2887,9 +2799,7 @@ void IteratorOverRelationshipElement::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -2914,10 +2824,8 @@ void IteratorOverRelationshipElement::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -2951,9 +2859,7 @@ void IteratorOverRelationshipElement::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -2995,9 +2901,7 @@ void IteratorOverRelationshipElement::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -3043,9 +2947,7 @@ void IteratorOverRelationshipElement::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -3065,10 +2967,8 @@ void IteratorOverRelationshipElement::Execute() {
 
       case 25: {
         property_ = Property::kFirst;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->first()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->first()
         );
         ++index_;
 
@@ -3078,10 +2978,8 @@ void IteratorOverRelationshipElement::Execute() {
 
       case 26: {
         property_ = Property::kSecond;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->second()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->second()
         );
         ++index_;
 
@@ -3131,8 +3029,6 @@ class IteratorOverSubmodelElementList : public impl::IIterator {
   ~IteratorOverSubmodelElementList() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::ISubmodelElementList* casted_;
   std::uint32_t state_;
@@ -3148,7 +3044,6 @@ class IteratorOverSubmodelElementList : public impl::IIterator {
 IteratorOverSubmodelElementList::IteratorOverSubmodelElementList(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -3282,9 +3177,7 @@ void IteratorOverSubmodelElementList::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -3326,9 +3219,7 @@ void IteratorOverSubmodelElementList::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -3370,9 +3261,7 @@ void IteratorOverSubmodelElementList::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -3397,10 +3286,8 @@ void IteratorOverSubmodelElementList::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -3434,9 +3321,7 @@ void IteratorOverSubmodelElementList::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -3478,9 +3363,7 @@ void IteratorOverSubmodelElementList::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -3526,9 +3409,7 @@ void IteratorOverSubmodelElementList::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -3553,10 +3434,8 @@ void IteratorOverSubmodelElementList::Execute() {
         }
 
         property_ = Property::kSemanticIdListElement;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id_list_element())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id_list_element())
         );
         ++index_;
 
@@ -3588,9 +3467,7 @@ void IteratorOverSubmodelElementList::Execute() {
         );
         const auto& item_value = the_value[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 28;
@@ -3650,8 +3527,6 @@ class IteratorOverSubmodelElementCollection : public impl::IIterator {
   ~IteratorOverSubmodelElementCollection() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::ISubmodelElementCollection* casted_;
   std::uint32_t state_;
@@ -3667,7 +3542,6 @@ class IteratorOverSubmodelElementCollection : public impl::IIterator {
 IteratorOverSubmodelElementCollection::IteratorOverSubmodelElementCollection(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -3801,9 +3675,7 @@ void IteratorOverSubmodelElementCollection::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -3845,9 +3717,7 @@ void IteratorOverSubmodelElementCollection::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -3889,9 +3759,7 @@ void IteratorOverSubmodelElementCollection::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -3916,10 +3784,8 @@ void IteratorOverSubmodelElementCollection::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -3953,9 +3819,7 @@ void IteratorOverSubmodelElementCollection::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -3997,9 +3861,7 @@ void IteratorOverSubmodelElementCollection::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -4045,9 +3907,7 @@ void IteratorOverSubmodelElementCollection::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -4089,9 +3949,7 @@ void IteratorOverSubmodelElementCollection::Execute() {
         );
         const auto& item_value = the_value[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 27;
@@ -4151,8 +4009,6 @@ class IteratorOverProperty : public impl::IIterator {
   ~IteratorOverProperty() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IProperty* casted_;
   std::uint32_t state_;
@@ -4168,7 +4024,6 @@ class IteratorOverProperty : public impl::IIterator {
 IteratorOverProperty::IteratorOverProperty(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -4302,9 +4157,7 @@ void IteratorOverProperty::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -4346,9 +4199,7 @@ void IteratorOverProperty::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -4390,9 +4241,7 @@ void IteratorOverProperty::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -4417,10 +4266,8 @@ void IteratorOverProperty::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -4454,9 +4301,7 @@ void IteratorOverProperty::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -4498,9 +4343,7 @@ void IteratorOverProperty::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -4546,9 +4389,7 @@ void IteratorOverProperty::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -4573,10 +4414,8 @@ void IteratorOverProperty::Execute() {
         }
 
         property_ = Property::kValueId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->value_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->value_id())
         );
         ++index_;
 
@@ -4626,8 +4465,6 @@ class IteratorOverMultiLanguageProperty : public impl::IIterator {
   ~IteratorOverMultiLanguageProperty() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IMultiLanguageProperty* casted_;
   std::uint32_t state_;
@@ -4643,7 +4480,6 @@ class IteratorOverMultiLanguageProperty : public impl::IIterator {
 IteratorOverMultiLanguageProperty::IteratorOverMultiLanguageProperty(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -4777,9 +4613,7 @@ void IteratorOverMultiLanguageProperty::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -4821,9 +4655,7 @@ void IteratorOverMultiLanguageProperty::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -4865,9 +4697,7 @@ void IteratorOverMultiLanguageProperty::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -4892,10 +4722,8 @@ void IteratorOverMultiLanguageProperty::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -4929,9 +4757,7 @@ void IteratorOverMultiLanguageProperty::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -4973,9 +4799,7 @@ void IteratorOverMultiLanguageProperty::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -5021,9 +4845,7 @@ void IteratorOverMultiLanguageProperty::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -5065,9 +4887,7 @@ void IteratorOverMultiLanguageProperty::Execute() {
         );
         const auto& item_value = the_value[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 27;
@@ -5092,10 +4912,8 @@ void IteratorOverMultiLanguageProperty::Execute() {
         }
 
         property_ = Property::kValueId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->value_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->value_id())
         );
         ++index_;
 
@@ -5145,8 +4963,6 @@ class IteratorOverRange : public impl::IIterator {
   ~IteratorOverRange() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IRange* casted_;
   std::uint32_t state_;
@@ -5162,7 +4978,6 @@ class IteratorOverRange : public impl::IIterator {
 IteratorOverRange::IteratorOverRange(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -5296,9 +5111,7 @@ void IteratorOverRange::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -5340,9 +5153,7 @@ void IteratorOverRange::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -5384,9 +5195,7 @@ void IteratorOverRange::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -5411,10 +5220,8 @@ void IteratorOverRange::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -5448,9 +5255,7 @@ void IteratorOverRange::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -5492,9 +5297,7 @@ void IteratorOverRange::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -5540,9 +5343,7 @@ void IteratorOverRange::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -5602,8 +5403,6 @@ class IteratorOverReferenceElement : public impl::IIterator {
   ~IteratorOverReferenceElement() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IReferenceElement* casted_;
   std::uint32_t state_;
@@ -5619,7 +5418,6 @@ class IteratorOverReferenceElement : public impl::IIterator {
 IteratorOverReferenceElement::IteratorOverReferenceElement(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -5753,9 +5551,7 @@ void IteratorOverReferenceElement::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -5797,9 +5593,7 @@ void IteratorOverReferenceElement::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -5841,9 +5635,7 @@ void IteratorOverReferenceElement::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -5868,10 +5660,8 @@ void IteratorOverReferenceElement::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -5905,9 +5695,7 @@ void IteratorOverReferenceElement::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -5949,9 +5737,7 @@ void IteratorOverReferenceElement::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -5997,9 +5783,7 @@ void IteratorOverReferenceElement::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -6024,10 +5808,8 @@ void IteratorOverReferenceElement::Execute() {
         }
 
         property_ = Property::kValue;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->value())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->value())
         );
         ++index_;
 
@@ -6077,8 +5859,6 @@ class IteratorOverBlob : public impl::IIterator {
   ~IteratorOverBlob() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IBlob* casted_;
   std::uint32_t state_;
@@ -6094,7 +5874,6 @@ class IteratorOverBlob : public impl::IIterator {
 IteratorOverBlob::IteratorOverBlob(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -6228,9 +6007,7 @@ void IteratorOverBlob::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -6272,9 +6049,7 @@ void IteratorOverBlob::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -6316,9 +6091,7 @@ void IteratorOverBlob::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -6343,10 +6116,8 @@ void IteratorOverBlob::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -6380,9 +6151,7 @@ void IteratorOverBlob::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -6424,9 +6193,7 @@ void IteratorOverBlob::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -6472,9 +6239,7 @@ void IteratorOverBlob::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -6534,8 +6299,6 @@ class IteratorOverFile : public impl::IIterator {
   ~IteratorOverFile() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IFile* casted_;
   std::uint32_t state_;
@@ -6551,7 +6314,6 @@ class IteratorOverFile : public impl::IIterator {
 IteratorOverFile::IteratorOverFile(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -6685,9 +6447,7 @@ void IteratorOverFile::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -6729,9 +6489,7 @@ void IteratorOverFile::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -6773,9 +6531,7 @@ void IteratorOverFile::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -6800,10 +6556,8 @@ void IteratorOverFile::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -6837,9 +6591,7 @@ void IteratorOverFile::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -6881,9 +6633,7 @@ void IteratorOverFile::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -6929,9 +6679,7 @@ void IteratorOverFile::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -6991,8 +6739,6 @@ class IteratorOverAnnotatedRelationshipElement : public impl::IIterator {
   ~IteratorOverAnnotatedRelationshipElement() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IAnnotatedRelationshipElement* casted_;
   std::uint32_t state_;
@@ -7008,7 +6754,6 @@ class IteratorOverAnnotatedRelationshipElement : public impl::IIterator {
 IteratorOverAnnotatedRelationshipElement::IteratorOverAnnotatedRelationshipElement(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -7142,9 +6887,7 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -7186,9 +6929,7 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -7230,9 +6971,7 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -7257,10 +6996,8 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -7294,9 +7031,7 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -7338,9 +7073,7 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -7386,9 +7119,7 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -7408,10 +7139,8 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
 
       case 25: {
         property_ = Property::kFirst;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->first()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->first()
         );
         ++index_;
 
@@ -7421,10 +7150,8 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
 
       case 26: {
         property_ = Property::kSecond;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->second()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->second()
         );
         ++index_;
 
@@ -7456,9 +7183,7 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         );
         const auto& item_value = the_annotations[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 29;
@@ -7518,8 +7243,6 @@ class IteratorOverEntity : public impl::IIterator {
   ~IteratorOverEntity() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IEntity* casted_;
   std::uint32_t state_;
@@ -7535,7 +7258,6 @@ class IteratorOverEntity : public impl::IIterator {
 IteratorOverEntity::IteratorOverEntity(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -7669,9 +7391,7 @@ void IteratorOverEntity::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -7713,9 +7433,7 @@ void IteratorOverEntity::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -7757,9 +7475,7 @@ void IteratorOverEntity::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -7784,10 +7500,8 @@ void IteratorOverEntity::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -7821,9 +7535,7 @@ void IteratorOverEntity::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -7865,9 +7577,7 @@ void IteratorOverEntity::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -7913,9 +7623,7 @@ void IteratorOverEntity::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -7957,9 +7665,7 @@ void IteratorOverEntity::Execute() {
         );
         const auto& item_value = the_statements[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 27;
@@ -8001,9 +7707,7 @@ void IteratorOverEntity::Execute() {
         );
         const auto& item_value = the_specific_asset_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 31;
@@ -8063,8 +7767,6 @@ class IteratorOverEventPayload : public impl::IIterator {
   ~IteratorOverEventPayload() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IEventPayload* casted_;
   std::uint32_t state_;
@@ -8079,7 +7781,6 @@ class IteratorOverEventPayload : public impl::IIterator {
 IteratorOverEventPayload::IteratorOverEventPayload(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -8181,10 +7882,8 @@ void IteratorOverEventPayload::Execute() {
         done_ = false;
 
         property_ = Property::kSource;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->source()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->source()
         );
         ++index_;
 
@@ -8199,10 +7898,8 @@ void IteratorOverEventPayload::Execute() {
         }
 
         property_ = Property::kSourceSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->source_semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->source_semantic_id())
         );
         ++index_;
 
@@ -8212,10 +7909,8 @@ void IteratorOverEventPayload::Execute() {
 
       case 2: {
         property_ = Property::kObservableReference;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->observable_reference()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->observable_reference()
         );
         ++index_;
 
@@ -8230,10 +7925,8 @@ void IteratorOverEventPayload::Execute() {
         }
 
         property_ = Property::kObservableSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->observable_semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->observable_semantic_id())
         );
         ++index_;
 
@@ -8248,10 +7941,8 @@ void IteratorOverEventPayload::Execute() {
         }
 
         property_ = Property::kSubjectId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->subject_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->subject_id())
         );
         ++index_;
 
@@ -8301,8 +7992,6 @@ class IteratorOverBasicEventElement : public impl::IIterator {
   ~IteratorOverBasicEventElement() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IBasicEventElement* casted_;
   std::uint32_t state_;
@@ -8318,7 +8007,6 @@ class IteratorOverBasicEventElement : public impl::IIterator {
 IteratorOverBasicEventElement::IteratorOverBasicEventElement(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -8452,9 +8140,7 @@ void IteratorOverBasicEventElement::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -8496,9 +8182,7 @@ void IteratorOverBasicEventElement::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -8540,9 +8224,7 @@ void IteratorOverBasicEventElement::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -8567,10 +8249,8 @@ void IteratorOverBasicEventElement::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -8604,9 +8284,7 @@ void IteratorOverBasicEventElement::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -8648,9 +8326,7 @@ void IteratorOverBasicEventElement::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -8696,9 +8372,7 @@ void IteratorOverBasicEventElement::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -8718,10 +8392,8 @@ void IteratorOverBasicEventElement::Execute() {
 
       case 25: {
         property_ = Property::kObserved;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->observed()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->observed()
         );
         ++index_;
 
@@ -8736,10 +8408,8 @@ void IteratorOverBasicEventElement::Execute() {
         }
 
         property_ = Property::kMessageBroker;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->message_broker())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->message_broker())
         );
         ++index_;
 
@@ -8789,8 +8459,6 @@ class IteratorOverOperation : public impl::IIterator {
   ~IteratorOverOperation() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IOperation* casted_;
   std::uint32_t state_;
@@ -8806,7 +8474,6 @@ class IteratorOverOperation : public impl::IIterator {
 IteratorOverOperation::IteratorOverOperation(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -8940,9 +8607,7 @@ void IteratorOverOperation::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -8984,9 +8649,7 @@ void IteratorOverOperation::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -9028,9 +8691,7 @@ void IteratorOverOperation::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -9055,10 +8716,8 @@ void IteratorOverOperation::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -9092,9 +8751,7 @@ void IteratorOverOperation::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -9136,9 +8793,7 @@ void IteratorOverOperation::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -9184,9 +8839,7 @@ void IteratorOverOperation::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -9228,9 +8881,7 @@ void IteratorOverOperation::Execute() {
         );
         const auto& item_value = the_input_variables[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 27;
@@ -9272,9 +8923,7 @@ void IteratorOverOperation::Execute() {
         );
         const auto& item_value = the_output_variables[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 31;
@@ -9316,9 +8965,7 @@ void IteratorOverOperation::Execute() {
         );
         const auto& item_value = the_inoutput_variables[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 35;
@@ -9378,8 +9025,6 @@ class IteratorOverOperationVariable : public impl::IIterator {
   ~IteratorOverOperationVariable() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IOperationVariable* casted_;
   std::uint32_t state_;
@@ -9394,7 +9039,6 @@ class IteratorOverOperationVariable : public impl::IIterator {
 IteratorOverOperationVariable::IteratorOverOperationVariable(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -9496,10 +9140,8 @@ void IteratorOverOperationVariable::Execute() {
         done_ = false;
 
         property_ = Property::kValue;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->value()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->value()
         );
         ++index_;
 
@@ -9549,8 +9191,6 @@ class IteratorOverCapability : public impl::IIterator {
   ~IteratorOverCapability() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::ICapability* casted_;
   std::uint32_t state_;
@@ -9566,7 +9206,6 @@ class IteratorOverCapability : public impl::IIterator {
 IteratorOverCapability::IteratorOverCapability(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -9700,9 +9339,7 @@ void IteratorOverCapability::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -9744,9 +9381,7 @@ void IteratorOverCapability::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -9788,9 +9423,7 @@ void IteratorOverCapability::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -9815,10 +9448,8 @@ void IteratorOverCapability::Execute() {
         }
 
         property_ = Property::kSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->semantic_id())
         );
         ++index_;
 
@@ -9852,9 +9483,7 @@ void IteratorOverCapability::Execute() {
         );
         const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -9896,9 +9525,7 @@ void IteratorOverCapability::Execute() {
         );
         const auto& item_value = the_qualifiers[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -9944,9 +9571,7 @@ void IteratorOverCapability::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 23;
@@ -10006,8 +9631,6 @@ class IteratorOverConceptDescription : public impl::IIterator {
   ~IteratorOverConceptDescription() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IConceptDescription* casted_;
   std::uint32_t state_;
@@ -10023,7 +9646,6 @@ class IteratorOverConceptDescription : public impl::IIterator {
 IteratorOverConceptDescription::IteratorOverConceptDescription(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -10157,9 +9779,7 @@ void IteratorOverConceptDescription::Execute() {
         );
         const auto& item_value = the_extensions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -10201,9 +9821,7 @@ void IteratorOverConceptDescription::Execute() {
         );
         const auto& item_value = the_display_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -10245,9 +9863,7 @@ void IteratorOverConceptDescription::Execute() {
         );
         const auto& item_value = the_description[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -10272,10 +9888,8 @@ void IteratorOverConceptDescription::Execute() {
         }
 
         property_ = Property::kAdministration;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->administration())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->administration())
         );
         ++index_;
 
@@ -10311,9 +9925,7 @@ void IteratorOverConceptDescription::Execute() {
         );
         const auto& item_value = the_embedded_data_specifications[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 15;
@@ -10355,9 +9967,7 @@ void IteratorOverConceptDescription::Execute() {
         );
         const auto& item_value = the_is_case_of[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 19;
@@ -10417,8 +10027,6 @@ class IteratorOverReference : public impl::IIterator {
   ~IteratorOverReference() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IReference* casted_;
   std::uint32_t state_;
@@ -10434,7 +10042,6 @@ class IteratorOverReference : public impl::IIterator {
 IteratorOverReference::IteratorOverReference(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -10551,10 +10158,8 @@ void IteratorOverReference::Execute() {
         }
 
         property_ = Property::kReferredSemanticId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->referred_semantic_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->referred_semantic_id())
         );
         ++index_;
 
@@ -10581,9 +10186,7 @@ void IteratorOverReference::Execute() {
         );
         const auto& item_value = the_keys[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 3;
@@ -10818,8 +10421,6 @@ class IteratorOverEnvironment : public impl::IIterator {
   ~IteratorOverEnvironment() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IEnvironment* casted_;
   std::uint32_t state_;
@@ -10835,7 +10436,6 @@ class IteratorOverEnvironment : public impl::IIterator {
 IteratorOverEnvironment::IteratorOverEnvironment(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -10971,9 +10571,7 @@ void IteratorOverEnvironment::Execute() {
         );
         const auto& item_value = the_asset_administration_shells[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -11015,9 +10613,7 @@ void IteratorOverEnvironment::Execute() {
         );
         const auto& item_value = the_submodels[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 6;
@@ -11059,9 +10655,7 @@ void IteratorOverEnvironment::Execute() {
         );
         const auto& item_value = the_concept_descriptions[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -11121,8 +10715,6 @@ class IteratorOverEmbeddedDataSpecification : public impl::IIterator {
   ~IteratorOverEmbeddedDataSpecification() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IEmbeddedDataSpecification* casted_;
   std::uint32_t state_;
@@ -11137,7 +10729,6 @@ class IteratorOverEmbeddedDataSpecification : public impl::IIterator {
 IteratorOverEmbeddedDataSpecification::IteratorOverEmbeddedDataSpecification(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -11239,10 +10830,8 @@ void IteratorOverEmbeddedDataSpecification::Execute() {
         done_ = false;
 
         property_ = Property::kDataSpecification;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->data_specification()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->data_specification()
         );
         ++index_;
 
@@ -11252,10 +10841,8 @@ void IteratorOverEmbeddedDataSpecification::Execute() {
 
       case 1: {
         property_ = Property::kDataSpecificationContent;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->data_specification_content()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->data_specification_content()
         );
         ++index_;
 
@@ -11364,8 +10951,6 @@ class IteratorOverValueReferencePair : public impl::IIterator {
   ~IteratorOverValueReferencePair() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IValueReferencePair* casted_;
   std::uint32_t state_;
@@ -11380,7 +10965,6 @@ class IteratorOverValueReferencePair : public impl::IIterator {
 IteratorOverValueReferencePair::IteratorOverValueReferencePair(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -11482,10 +11066,8 @@ void IteratorOverValueReferencePair::Execute() {
         done_ = false;
 
         property_ = Property::kValueId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->value_id()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->value_id()
         );
         ++index_;
 
@@ -11535,8 +11117,6 @@ class IteratorOverValueList : public impl::IIterator {
   ~IteratorOverValueList() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IValueList* casted_;
   std::uint32_t state_;
@@ -11552,7 +11132,6 @@ class IteratorOverValueList : public impl::IIterator {
 IteratorOverValueList::IteratorOverValueList(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -11681,9 +11260,7 @@ void IteratorOverValueList::Execute() {
         );
         const auto& item_value = the_value_reference_pairs[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -11918,8 +11495,6 @@ class IteratorOverDataSpecificationIec61360 : public impl::IIterator {
   ~IteratorOverDataSpecificationIec61360() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IDataSpecificationIec61360* casted_;
   std::uint32_t state_;
@@ -11935,7 +11510,6 @@ class IteratorOverDataSpecificationIec61360 : public impl::IIterator {
 IteratorOverDataSpecificationIec61360::IteratorOverDataSpecificationIec61360(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -12064,9 +11638,7 @@ void IteratorOverDataSpecificationIec61360::Execute() {
         );
         const auto& item_value = the_preferred_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 2;
@@ -12106,9 +11678,7 @@ void IteratorOverDataSpecificationIec61360::Execute() {
         );
         const auto& item_value = the_short_name[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 5;
@@ -12133,10 +11703,8 @@ void IteratorOverDataSpecificationIec61360::Execute() {
         }
 
         property_ = Property::kUnitId;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->unit_id())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->unit_id())
         );
         ++index_;
 
@@ -12168,9 +11736,7 @@ void IteratorOverDataSpecificationIec61360::Execute() {
         );
         const auto& item_value = the_definition[*cursor_];
 
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(item_value)
-        );
+        item_ = std::static_pointer_cast<types::IClass>(item_value);
         ++index_;
 
         state_ = 10;
@@ -12195,10 +11761,8 @@ void IteratorOverDataSpecificationIec61360::Execute() {
         }
 
         property_ = Property::kValueList;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->value_list())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->value_list())
         );
         ++index_;
 
@@ -12213,10 +11777,8 @@ void IteratorOverDataSpecificationIec61360::Execute() {
         }
 
         property_ = Property::kLevelType;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            *(casted_->level_type())
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          *(casted_->level_type())
         );
         ++index_;
 
@@ -12641,7 +12203,7 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  if (Index() !== 0) {
+  if (Index() != 0) {
     throw std::logic_error(
       common::Concat(
         "Expected RecursiveInclusiveIterator::Index() to be 0 on Start()"
@@ -12651,7 +12213,7 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  const std::shared_ptr<IClass>& current_item(Get());
+  const std::shared_ptr<types::IClass>& current_item(Get());
   if (current_item == nullptr) {
     throw std::logic_error(
       "Unexpected null pointer from Get() at the end of "
@@ -12659,16 +12221,11 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  if (current_item.get() != instance_.get()) {
+  if (current_item.get() != instance_->get()) {
     throw std::logic_error(
-      common::Concat(
-        "Expected the current item to point to the instance "
-        "at the end of RecursiveInclusiveIterator::Start, "
-        "but got ",
-        std::to_string(current_item.get()),
-        " from Get() instead of ",
-        std::to_string(instance_.get())
-      )
+      "Expected the current item to point to the instance "
+      "at the end of RecursiveInclusiveIterator::Start, "
+      "but Get() pointed to a different instance."
     );
   }
   #endif
@@ -12790,10 +12347,8 @@ void RecursiveInclusiveIterator::Execute() {
       }
 
       case 3: {
-        recursive_iterator_ = std::move(
-          common::make_unique<RecursiveExclusiveIterator>(
-            *item_
-          )
+        recursive_iterator_ = common::make_unique<RecursiveExclusiveIterator>(
+          *item_
         );
 
         recursive_iterator_->Start();
@@ -13037,9 +12592,7 @@ Descent::Descent(
 
 Iterator Descent::begin() const {
   std::unique_ptr<impl::IIterator> it_impl(
-    std::move(
-      common::make_unique<RecursiveExclusiveIterator>(instance_)
-    )
+    common::make_unique<RecursiveExclusiveIterator>(instance_)
   );
 
   it_impl->Start();
@@ -13083,7 +12636,7 @@ Iterator DescentOnce::begin() const {
   // NOTE(mristin):
   // We short-circuit here for efficiency, as we can immediately dispose it_impl.
   if (it_impl->Done()) {
-    return Iterator(std::move(common::make_unique<AlwaysDoneIterator>()));
+    return Iterator(common::make_unique<AlwaysDoneIterator>());
   }
 
   return Iterator(std::move(it_impl));

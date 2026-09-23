@@ -1299,9 +1299,7 @@ nlohmann::json SerializeByteArray(
   const std::vector<std::uint8_t>& bytes
 ) {
   return nlohmann::json(
-    std::move(
-      stringification::Base64Encode(bytes)
-    )
+    stringification::Base64Encode(bytes)
   );
 }
 

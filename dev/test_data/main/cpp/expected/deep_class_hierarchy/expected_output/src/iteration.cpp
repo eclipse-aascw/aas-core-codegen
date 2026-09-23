@@ -401,8 +401,6 @@ class IteratorOverSomething : public impl::IIterator {
   ~IteratorOverSomething() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::ISomething* casted_;
   std::uint32_t state_;
@@ -417,7 +415,6 @@ class IteratorOverSomething : public impl::IIterator {
 IteratorOverSomething::IteratorOverSomething(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -519,10 +516,8 @@ void IteratorOverSomething::Execute() {
         done_ = false;
 
         property_ = Property::kSomeChoice;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->some_choice()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->some_choice()
         );
         ++index_;
 
@@ -532,10 +527,8 @@ void IteratorOverSomething::Execute() {
 
       case 1: {
         property_ = Property::kSomethingWithoutChoice;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->something_without_choice()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->something_without_choice()
         );
         ++index_;
 
@@ -585,8 +578,6 @@ class IteratorOverContainer : public impl::IIterator {
   ~IteratorOverContainer() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::IContainer* casted_;
   std::uint32_t state_;
@@ -601,7 +592,6 @@ class IteratorOverContainer : public impl::IIterator {
 IteratorOverContainer::IteratorOverContainer(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -703,10 +693,8 @@ void IteratorOverContainer::Execute() {
         done_ = false;
 
         property_ = Property::kNode;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->node()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->node()
         );
         ++index_;
 
@@ -716,10 +704,8 @@ void IteratorOverContainer::Execute() {
 
       case 1: {
         property_ = Property::kSomething;
-        item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            casted_->something()
-          )
+        item_ = std::static_pointer_cast<types::IClass>(
+          casted_->something()
         );
         ++index_;
 
@@ -1012,7 +998,7 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  if (Index() !== 0) {
+  if (Index() != 0) {
     throw std::logic_error(
       common::Concat(
         "Expected RecursiveInclusiveIterator::Index() to be 0 on Start()"
@@ -1022,7 +1008,7 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  const std::shared_ptr<IClass>& current_item(Get());
+  const std::shared_ptr<types::IClass>& current_item(Get());
   if (current_item == nullptr) {
     throw std::logic_error(
       "Unexpected null pointer from Get() at the end of "
@@ -1030,16 +1016,11 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  if (current_item.get() != instance_.get()) {
+  if (current_item.get() != instance_->get()) {
     throw std::logic_error(
-      common::Concat(
-        "Expected the current item to point to the instance "
-        "at the end of RecursiveInclusiveIterator::Start, "
-        "but got ",
-        std::to_string(current_item.get()),
-        " from Get() instead of ",
-        std::to_string(instance_.get())
-      )
+      "Expected the current item to point to the instance "
+      "at the end of RecursiveInclusiveIterator::Start, "
+      "but Get() pointed to a different instance."
     );
   }
   #endif
@@ -1161,10 +1142,8 @@ void RecursiveInclusiveIterator::Execute() {
       }
 
       case 3: {
-        recursive_iterator_ = std::move(
-          common::make_unique<RecursiveExclusiveIterator>(
-            *item_
-          )
+        recursive_iterator_ = common::make_unique<RecursiveExclusiveIterator>(
+          *item_
         );
 
         recursive_iterator_->Start();
@@ -1408,9 +1387,7 @@ Descent::Descent(
 
 Iterator Descent::begin() const {
   std::unique_ptr<impl::IIterator> it_impl(
-    std::move(
-      common::make_unique<RecursiveExclusiveIterator>(instance_)
-    )
+    common::make_unique<RecursiveExclusiveIterator>(instance_)
   );
 
   it_impl->Start();
@@ -1454,7 +1431,7 @@ Iterator DescentOnce::begin() const {
   // NOTE(mristin):
   // We short-circuit here for efficiency, as we can immediately dispose it_impl.
   if (it_impl->Done()) {
-    return Iterator(std::move(common::make_unique<AlwaysDoneIterator>()));
+    return Iterator(common::make_unique<AlwaysDoneIterator>());
   }
 
   return Iterator(std::move(it_impl));

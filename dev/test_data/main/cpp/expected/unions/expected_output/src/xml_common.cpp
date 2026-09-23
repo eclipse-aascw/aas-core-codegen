@@ -1065,11 +1065,12 @@ void SelfClosingWriter::StartElement(
       "You are trying to queue a start element with a SelfClosingWriter "
       "which caught an error."
     );
+  }
   #endif
 
   WritePendingStartElementIfAvailable();
   if (error_.has_value()) {
-  return;
+    return;
   }
 
   pending_start_wo_text_ = std::move(name);
@@ -1091,6 +1092,7 @@ void SelfClosingWriter::StopElement(
       "You are trying to write a stop element with a SelfClosingWriter "
       "which caught an error before."
     );
+  }
   #endif
 
   if (pending_start_wo_text_.has_value()) {
@@ -1102,7 +1104,7 @@ void SelfClosingWriter::StopElement(
           *pending_start_wo_text_,
           "> is pending for writing, "
           "but you are trying to write a stop element </",
-          name
+          name,
           ">"
         )
       );
@@ -1593,6 +1595,7 @@ void SelfClosingWriter::WriteStringWithoutEscapingNorFlushing(
       "You are trying to write to a SelfClosingWriter which "
       "caught an error"
     );
+  }
   #endif
 
   if (os_.bad()) {

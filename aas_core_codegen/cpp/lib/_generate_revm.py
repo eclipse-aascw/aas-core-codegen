@@ -718,13 +718,13 @@ class ThreadList {{
 {I} */
 {I}void Spawn(size_t program_counter) {{
 {II}#ifdef DEBUG
-{II}if (program_counter >= program_size_) {{
+{II}if (program_counter >= has_.size()) {{
 {III}throw std::invalid_argument(
 {IIII}common::Concat(
 {IIIII}"Unexpected spawning of a thread at the program counter ",
 {IIIII}std::to_string(program_counter),
 {IIIII}" since the program size was indicated to be ",
-{IIIII}std::to_string(program_size_)
+{IIIII}std::to_string(has_.size())
 {IIII})
 {III});
 {II}}}

@@ -820,8 +820,6 @@ class IteratorOverSomething : public impl::IIterator {
   ~IteratorOverSomething() override = default;
 
  private:
-  // We make instance_ a pointer, so that we can follow the rule-of-zero.
-  const std::shared_ptr<types::IClass>* instance_;
   // We make casted_ a pointer, so that we can follow the rule-of-zero.
   const types::ISomething* casted_;
   std::uint32_t state_;
@@ -837,7 +835,6 @@ class IteratorOverSomething : public impl::IIterator {
 IteratorOverSomething::IteratorOverSomething(
   const std::shared_ptr<types::IClass>& instance
 ) :
-  instance_(&instance),
   // NOTE (mristin):
   // The dynamic cast is necessary due to virtual inheritance. Otherwise,
   // we would have used static cast.
@@ -949,10 +946,8 @@ void IteratorOverSomething::Execute() {
         cursor_.reset();
 
         property_ = Property::kStructuralProperty;
-        item_ = std::move(
-          ExtractIClassFromStructuralUnion(
-            casted_->structural_property()
-          )
+        item_ = ExtractIClassFromStructuralUnion(
+          casted_->structural_property()
         );
         ++index_;
 
@@ -962,10 +957,8 @@ void IteratorOverSomething::Execute() {
 
       case 1: {
         property_ = Property::kMixedProperty;
-        item_ = std::move(
-          ExtractIClassFromMixedUnion(
-            casted_->mixed_property()
-          )
+        item_ = ExtractIClassFromMixedUnion(
+          casted_->mixed_property()
         );
         ++index_;
 
@@ -975,10 +968,8 @@ void IteratorOverSomething::Execute() {
 
       case 2: {
         property_ = Property::kModelTypedProperty;
-        item_ = std::move(
-          ExtractIClassFromModelTypedUnion(
-            casted_->model_typed_property()
-          )
+        item_ = ExtractIClassFromModelTypedUnion(
+          casted_->model_typed_property()
         );
         ++index_;
 
@@ -1005,9 +996,7 @@ void IteratorOverSomething::Execute() {
         );
         const auto& item_value = the_list_structural_property[*cursor_];
 
-        item_ = std::move(
-          ExtractIClassFromStructuralUnion(item_value)
-        );
+        item_ = ExtractIClassFromStructuralUnion(item_value);
         ++index_;
 
         state_ = 5;
@@ -1040,9 +1029,7 @@ void IteratorOverSomething::Execute() {
         );
         const auto& item_value = the_list_mixed_property[*cursor_];
 
-        item_ = std::move(
-          ExtractIClassFromMixedUnion(item_value)
-        );
+        item_ = ExtractIClassFromMixedUnion(item_value);
         ++index_;
 
         state_ = 8;
@@ -1077,9 +1064,7 @@ void IteratorOverSomething::Execute() {
         );
         const auto& item_value = the_list_model_typed_property[*cursor_];
 
-        item_ = std::move(
-          ExtractIClassFromModelTypedUnion(item_value)
-        );
+        item_ = ExtractIClassFromModelTypedUnion(item_value);
         ++index_;
 
         state_ = 11;
@@ -1099,10 +1084,8 @@ void IteratorOverSomething::Execute() {
         property_ = Property::kTupleProperty;
 
         cursor_ = 0;
-        item_ = std::move(
-          ExtractIClassFromStructuralUnion(
-            std::get<0>(casted_->tuple_property())
-          )
+        item_ = ExtractIClassFromStructuralUnion(
+          std::get<0>(casted_->tuple_property())
         );
         ++index_;
 
@@ -1112,10 +1095,8 @@ void IteratorOverSomething::Execute() {
 
       case 13: {
         cursor_ = 1;
-        item_ = std::move(
-          ExtractIClassFromMixedUnion(
-            std::get<1>(casted_->tuple_property())
-          )
+        item_ = ExtractIClassFromMixedUnion(
+          std::get<1>(casted_->tuple_property())
         );
         ++index_;
 
@@ -1125,10 +1106,8 @@ void IteratorOverSomething::Execute() {
 
       case 14: {
         cursor_ = 2;
-        item_ = std::move(
-          ExtractIClassFromModelTypedUnion(
-            std::get<2>(casted_->tuple_property())
-          )
+        item_ = ExtractIClassFromModelTypedUnion(
+          std::get<2>(casted_->tuple_property())
         );
         ++index_;
 
@@ -1147,10 +1126,8 @@ void IteratorOverSomething::Execute() {
         }
 
         property_ = Property::kOptionalStructuralProperty;
-        item_ = std::move(
-          ExtractIClassFromStructuralUnion(
-            *(casted_->optional_structural_property())
-          )
+        item_ = ExtractIClassFromStructuralUnion(
+          *(casted_->optional_structural_property())
         );
         ++index_;
 
@@ -1165,10 +1142,8 @@ void IteratorOverSomething::Execute() {
         }
 
         property_ = Property::kOptionalMixedProperty;
-        item_ = std::move(
-          ExtractIClassFromMixedUnion(
-            *(casted_->optional_mixed_property())
-          )
+        item_ = ExtractIClassFromMixedUnion(
+          *(casted_->optional_mixed_property())
         );
         ++index_;
 
@@ -1185,10 +1160,8 @@ void IteratorOverSomething::Execute() {
         }
 
         property_ = Property::kOptionalModelTypedProperty;
-        item_ = std::move(
-          ExtractIClassFromModelTypedUnion(
-            *(casted_->optional_model_typed_property())
-          )
+        item_ = ExtractIClassFromModelTypedUnion(
+          *(casted_->optional_model_typed_property())
         );
         ++index_;
 
@@ -1501,7 +1474,7 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  if (Index() !== 0) {
+  if (Index() != 0) {
     throw std::logic_error(
       common::Concat(
         "Expected RecursiveInclusiveIterator::Index() to be 0 on Start()"
@@ -1511,7 +1484,7 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  const std::shared_ptr<IClass>& current_item(Get());
+  const std::shared_ptr<types::IClass>& current_item(Get());
   if (current_item == nullptr) {
     throw std::logic_error(
       "Unexpected null pointer from Get() at the end of "
@@ -1519,16 +1492,11 @@ void RecursiveInclusiveIterator::Start() {
     );
   }
 
-  if (current_item.get() != instance_.get()) {
+  if (current_item.get() != instance_->get()) {
     throw std::logic_error(
-      common::Concat(
-        "Expected the current item to point to the instance "
-        "at the end of RecursiveInclusiveIterator::Start, "
-        "but got ",
-        std::to_string(current_item.get()),
-        " from Get() instead of ",
-        std::to_string(instance_.get())
-      )
+      "Expected the current item to point to the instance "
+      "at the end of RecursiveInclusiveIterator::Start, "
+      "but Get() pointed to a different instance."
     );
   }
   #endif
@@ -1650,10 +1618,8 @@ void RecursiveInclusiveIterator::Execute() {
       }
 
       case 3: {
-        recursive_iterator_ = std::move(
-          common::make_unique<RecursiveExclusiveIterator>(
-            *item_
-          )
+        recursive_iterator_ = common::make_unique<RecursiveExclusiveIterator>(
+          *item_
         );
 
         recursive_iterator_->Start();
@@ -1897,9 +1863,7 @@ Descent::Descent(
 
 Iterator Descent::begin() const {
   std::unique_ptr<impl::IIterator> it_impl(
-    std::move(
-      common::make_unique<RecursiveExclusiveIterator>(instance_)
-    )
+    common::make_unique<RecursiveExclusiveIterator>(instance_)
   );
 
   it_impl->Start();
@@ -1943,7 +1907,7 @@ Iterator DescentOnce::begin() const {
   // NOTE(mristin):
   // We short-circuit here for efficiency, as we can immediately dispose it_impl.
   if (it_impl->Done()) {
-    return Iterator(std::move(common::make_unique<AlwaysDoneIterator>()));
+    return Iterator(common::make_unique<AlwaysDoneIterator>());
   }
 
   return Iterator(std::move(it_impl));
