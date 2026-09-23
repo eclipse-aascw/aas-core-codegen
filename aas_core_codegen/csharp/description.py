@@ -315,6 +315,17 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
             None,
         )
 
+    def transform_reference_to_verification_function_in_doc(
+        self, element: intermediate_doc.ReferenceToVerificationFunction
+    ) -> Tuple[Optional[_NodeUnion], Optional[List[str]]]:
+        method_name = csharp_naming.method_name(element.verification.name)
+        cref = f"Aas.Verification.{method_name}"
+
+        return (
+            _Element(name="see", attrs=collections.OrderedDict([("cref", cref)])),
+            None,
+        )
+
     def transform_literal(
         self, element: docutils.nodes.literal
     ) -> Tuple[Optional[_NodeUnion], Optional[List[str]]]:

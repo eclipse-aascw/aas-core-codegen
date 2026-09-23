@@ -171,6 +171,18 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
 
         return result, None
 
+    def transform_reference_to_verification_function_in_doc(
+        self, element: intermediate_doc.ReferenceToVerificationFunction
+    ) -> Tuple[Optional[str], Optional[List[str]]]:
+        name = typescript_naming.function_name(element.verification.name)
+
+        if self.context.module == typescript_common.VERIFICATION_MODULE:
+            result = f"{{@link {name}}}"
+        else:
+            result = f"{{@link {typescript_common.VERIFICATION_MODULE}!{name}}}"
+
+        return result, None
+
     def transform_literal(
         self, element: docutils.nodes.literal
     ) -> Tuple[Optional[str], Optional[List[str]]]:

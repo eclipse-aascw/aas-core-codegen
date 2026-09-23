@@ -141,6 +141,73 @@ __xml_namespace__ = "https://dummy.com"
             ["AAS-001"], list(some_class.description.constraints_by_identifier.keys())
         )
 
+    def test_verification_function_reference(self) -> None:
+        source = '''\
+@verification
+def matches_something(text: str) -> bool:
+    """Check that :paramref:`text` is something."""
+    return match("^something$", text) is not None
+
+
+class Some_class:
+    """
+    This is some documentation.
+
+    See :func:`matches_something`.
+    """
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
+
+        symbol_table, error = tests.common.translate_source_to_intermediate(
+            source=source
+        )
+        assert error is None, tests.common.most_underlying_messages(error)
+
+        assert symbol_table is not None
+
+        some_class = symbol_table.must_find_class(Identifier("Some_class"))
+
+        assert some_class.description is not None
+        assert len(some_class.description.remarks) == 1
+
+        references_to_verifications = list(
+            some_class.description.remarks[0].findall(
+                condition=intermediate_doc.ReferenceToVerificationFunction
+            )
+        )
+
+        self.assertEqual(1, len(references_to_verifications))
+        self.assertIs(
+            symbol_table.verification_functions_by_name[
+                Identifier("matches_something")
+            ],
+            references_to_verifications[0].verification,
+        )
+
+    def test_dangling_verification_function_reference(self) -> None:
+        source = '''\
+class Some_class:
+    """
+    This is some documentation.
+
+    See :func:`matches_nothing`.
+    """
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
+
+        _, error = tests.common.translate_source_to_intermediate(source=source)
+        assert error is not None
+
+        self.assertEqual(
+            "The identifier of the reference to a verification function "
+            "could not be found in the symbol table: matches_nothing",
+            tests.common.most_underlying_messages(error),
+        )
+
 
 class Test_against_recorded(unittest.TestCase):
     def test_cases(self) -> None:

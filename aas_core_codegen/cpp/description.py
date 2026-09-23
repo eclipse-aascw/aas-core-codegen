@@ -86,6 +86,11 @@ class _IsSingleParagrapher(intermediate_doc.DocutilsElementTransformer[bool]):
     ) -> Tuple[Optional[bool], Optional[List[str]]]:
         return True, None
 
+    def transform_reference_to_verification_function_in_doc(
+        self, element: intermediate_doc.ReferenceToVerificationFunction
+    ) -> Tuple[Optional[bool], Optional[List[str]]]:
+        return True, None
+
     def transform_literal(
         self, element: docutils.nodes.literal
     ) -> Tuple[Optional[bool], Optional[List[str]]]:
@@ -292,6 +297,18 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
             result = f"{name}"
         else:
             result = f"{cpp_common.CONSTANTS_NAMESPACE}::{name}"
+
+        return result, None
+
+    def transform_reference_to_verification_function_in_doc(
+        self, element: intermediate_doc.ReferenceToVerificationFunction
+    ) -> Tuple[Optional[str], Optional[List[str]]]:
+        name = cpp_naming.function_name(element.verification.name)
+
+        if self.context.namespace == cpp_common.VERIFICATION_NAMESPACE:
+            result = f"{name}"
+        else:
+            result = f"{cpp_common.VERIFICATION_NAMESPACE}::{name}"
 
         return result, None
 

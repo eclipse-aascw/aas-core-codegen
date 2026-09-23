@@ -184,6 +184,18 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
 
         return result, None
 
+    def transform_reference_to_verification_function_in_doc(
+        self, element: intermediate_doc.ReferenceToVerificationFunction
+    ) -> Tuple[Optional[str], Optional[List[str]]]:
+        name = python_naming.function_name(element.verification.name)
+
+        if self.context.module == "verification":
+            result = f":py:func:`{name}`"
+        else:
+            result = f":py:func:`.verification.{name}`"
+
+        return result, None
+
     def transform_literal(
         self, element: docutils.nodes.literal
     ) -> Tuple[Optional[str], Optional[List[str]]]:

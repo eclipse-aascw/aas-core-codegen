@@ -15,6 +15,7 @@ from aas_core_codegen.intermediate._types import (
     EnumerationLiteral,
     ClassUnion,
     ConstantUnion,
+    VerificationUnion,
     runtime_id,
 )
 
@@ -148,6 +149,30 @@ class ReferenceToConstant(
         )
 
 
+class ReferenceToVerificationFunction(
+    docutils.nodes.Inline, docutils.nodes.TextElement  # type: ignore
+):
+    """
+    Represent a reference in the documentation to a verification function.
+
+    The verification function, in this context, refers to the role ``:func:``.
+    """
+
+    def __init__(  # type: ignore
+        self,
+        verification: VerificationUnion,
+        rawsource="",
+        text="",
+        *children,
+        **attributes,
+    ) -> None:
+        """Initialize with the given verification and propagate the rest to the parent."""
+        self.verification = verification
+        docutils.nodes.TextElement.__init__(
+            self, rawsource, text, *children, **attributes
+        )
+
+
 T = TypeVar("T")
 
 
@@ -189,6 +214,9 @@ class DocutilsElementTransformer(Generic[T], DBC):
 
         elif isinstance(element, ReferenceToConstant):
             return self.transform_reference_to_constant_in_doc(element)
+
+        elif isinstance(element, ReferenceToVerificationFunction):
+            return self.transform_reference_to_verification_function_in_doc(element)
 
         elif isinstance(element, docutils.nodes.literal):
             return self.transform_literal(element)
@@ -272,6 +300,14 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: ReferenceToConstant
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a reference to a constant into something."""
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_reference_to_verification_function_in_doc(
+        self, element: ReferenceToVerificationFunction
+    ) -> Tuple[Optional[T], Optional[List[str]]]:
+        """Transform a reference to a verification function into something."""
         raise NotImplementedError()
 
     @abc.abstractmethod

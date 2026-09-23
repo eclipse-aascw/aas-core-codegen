@@ -181,6 +181,18 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
 
         return result, None
 
+    def transform_reference_to_verification_function_in_doc(
+        self, element: intermediate_doc.ReferenceToVerificationFunction
+    ) -> Tuple[Optional[str], Optional[List[str]]]:
+        name = golang_naming.function_name(element.verification.name)
+
+        if self.context.package == golang_common.VERIFICATION_PACKAGE:
+            result = f"[{name}]"
+        else:
+            result = f"[{golang_common.VERIFICATION_PACKAGE}.{name}]"
+
+        return result, None
+
     def transform_literal(
         self, element: docutils.nodes.literal
     ) -> Tuple[Optional[str], Optional[List[str]]]:

@@ -109,6 +109,7 @@ from aas_core_codegen.intermediate._types import (
     ConstantSetOfEnumerationLiterals,
     Constant,
     TranspilableVerification,
+    Verification,
     type_annotations_equal,
     runtime_id,
     IdOfClass,
@@ -348,6 +349,54 @@ def _role_reference_to_constant(  # type: ignore
     return [node], []
 
 
+class _PlaceholderReferenceToVerificationFunction:
+    """
+    Represent a placeholder object masking a proper reference to a verification.
+
+    This placeholder needs to be used till we create the symbol table in full, so that
+    we can properly de-reference the verification functions.
+    """
+
+    def __init__(self, name: str) -> None:
+        """Initialize with the given values."""
+        self.name = name
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(name={self.name!r})"
+
+
+# noinspection PyUnusedLocal
+def _role_reference_to_verification_function(  # type: ignore
+    role, rawtext, text, lineno, inliner, options=None, content=None
+) -> Any:
+    """Create a reference in the documentation to a verification function."""
+    # See: https://docutils.sourceforge.io/docs/howto/rst-roles.html
+    if content is None:
+        content = []
+
+    if options is None:
+        options = {}
+
+    name = _strip_sphinx_formatting_directives_from_reference(text)
+
+    # NOTE (mristin):
+    # We need to create a placeholder as the symbol table might not be fully created
+    # at the point when we translate the documentation.
+    #
+    # We have to resolve the placeholders in the second pass of the translation with
+    # the actual references to the symbol table.
+
+    # noinspection PyTypeChecker
+    node = doc.ReferenceToVerificationFunction(
+        _PlaceholderReferenceToVerificationFunction(name=name),  # type: ignore
+        rawtext,
+        docutils.utils.unescape(text),
+        refuri=text,
+        **options,
+    )
+    return [node], []
+
+
 # pylint: enable=unused-argument
 
 # The global registration is unfortunate since it is unpredictable and might affect
@@ -366,6 +415,10 @@ docutils.parsers.rst.roles.register_local_role(
 )
 # noinspection PyUnresolvedReferences
 docutils.parsers.rst.roles.register_local_role("const", _role_reference_to_constant)
+# noinspection PyUnresolvedReferences
+docutils.parsers.rst.roles.register_local_role(
+    "func", _role_reference_to_verification_function
+)
 
 
 # region Descriptions
@@ -2708,6 +2761,73 @@ def _second_pass_to_resolve_references_to_constants_in_the_descriptions_in_place
     return errors
 
 
+def _second_pass_to_resolve_references_to_verification_functions_in_place(
+    symbol_table: SymbolTable,
+) -> List[Error]:
+    """Resolve the references to verification functions in the descriptions in-place."""
+    errors = []  # type: List[Error]
+
+    for ref_to_verification_in_doc, description, _ in _find_all_in_descriptions(
+        element_type=doc.ReferenceToVerificationFunction, symbol_table=symbol_table
+    ):
+        # NOTE (mristin):
+        # References to verification functions can be repeated as docutils will cache
+        # them, so we need to skip them, and translate only the placeholders.
+        if not isinstance(
+            ref_to_verification_in_doc.verification,
+            _PlaceholderReferenceToVerificationFunction,
+        ):
+            assert isinstance(ref_to_verification_in_doc.verification, Verification), (
+                f"Unexpected type of the verification function "
+                f"in case when it is not a placeholder: "
+                f"{type(ref_to_verification_in_doc.verification)}; "
+                f"the value was: {ref_to_verification_in_doc.verification}"
+            )
+            continue
+
+        raw_identifier = ref_to_verification_in_doc.verification.name
+
+        if raw_identifier.startswith("."):
+            errors.append(
+                Error(
+                    description.parsed.node,
+                    f"The references with relaxed qualified names to verification "
+                    f"functions are not allowed as we can not resolve references "
+                    f"outside of the meta-model: {raw_identifier}",
+                )
+            )
+            continue
+
+        if not IDENTIFIER_RE.match(raw_identifier):
+            errors.append(
+                Error(
+                    description.parsed.node,
+                    f"The identifier in the reference to a verification function "
+                    f"is invalid: {raw_identifier}",
+                )
+            )
+            continue
+
+        identifier = Identifier(raw_identifier)
+
+        referenced_verification = symbol_table.verification_functions_by_name.get(
+            identifier, None
+        )
+        if referenced_verification is None:
+            errors.append(
+                Error(
+                    description.parsed.node,
+                    f"The identifier of the reference to a verification function "
+                    f"could not be found in the symbol table: {identifier}",
+                )
+            )
+            continue
+
+        ref_to_verification_in_doc.verification = referenced_verification
+
+    return errors
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _fill_in_default_placeholder(
     default: _DefaultPlaceholder, symbol_table: SymbolTable
@@ -4721,6 +4841,11 @@ def _verify_description_rendering_with_smoke(symbol_table: SymbolTable) -> List[
         ) -> Tuple[Optional[bool], Optional[List[str]]]:
             return True, None
 
+        def transform_reference_to_verification_function_in_doc(
+            self, element: doc.ReferenceToVerificationFunction
+        ) -> Tuple[Optional[bool], Optional[List[str]]]:
+            return True, None
+
         def transform_literal(
             self, element: docutils.nodes.literal
         ) -> Tuple[Optional[bool], Optional[List[str]]]:
@@ -5545,6 +5670,12 @@ def translate(
 
     underlying_errors.extend(
         _second_pass_to_resolve_references_to_constants_in_the_descriptions_in_place(
+            symbol_table=symbol_table
+        )
+    )
+
+    underlying_errors.extend(
+        _second_pass_to_resolve_references_to_verification_functions_in_place(
             symbol_table=symbol_table
         )
     )
