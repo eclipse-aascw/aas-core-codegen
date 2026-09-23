@@ -67,121 +67,6 @@ public class Xmlization {
     }
 
     /**
-     * Drop every whitespace character of {@code text}.
-     *
-     * <p>This is what {@code xs:base64Binary} needs: it allows whitespace
-     * between the characters and not only around them, so collapsing is not
-     * enough -- the decoder accepts none of it.
-     */
-    private static String removeWhitespace(String text) {
-      return XmlCommon.WHITESPACE_RUN.matcher(text).replaceAll("");
-    }
-
-    /**
-     * Tell whether {@code text} is a lexical form of {@code xs:base64Binary}.
-     *
-     * <p>The whitespace is expected to be gone already. What is left has to match
-     * {@code (B64 B64 B64 B64)* ((B64 B64 B64 B64) | (B64 B64 B16 '=')
-     * | (B64 B04 '=='))?} -- a length which is a multiple of four,
-     * the alphabet and nothing else, an equals sign only at the very end, and,
-     * easily missed, a constrained character <i>before</i> the padding, as
-     * the bits which the padding drops have to be zero.
-     *
-     * <p>The decoders do not agree on any of this. Base64.getDecoder() reads
-     * {@code SGk} although it is three characters long, where the Go and
-     * the Python SDKs refuse it. Hence this check, so that every target refuses
-     * the same texts.
-     *
-     * <p>See: https://www.w3.org/TR/xmlschema-2/#base64Binary
-     */
-    private static boolean matchesXsBase64Binary(String text) {
-      if (text.length() % 4 != 0) {
-        return false;
-      }
-
-      if (text.isEmpty()) {
-        return true;
-      }
-
-      int pads = 0;
-      if (text.charAt(text.length() - 1) == '=') {
-        pads = 1;
-        if (text.charAt(text.length() - 2) == '=') {
-          pads = 2;
-        }
-      }
-
-      for (int i = 0; i < text.length() - pads; i++) {
-        final char character = text.charAt(i);
-        final boolean inAlphabet =
-          (character >= 'A' && character <= 'Z')
-            || (character >= 'a' && character <= 'z')
-            || (character >= '0' && character <= '9')
-            || character == '+'
-            || character == '/';
-        if (!inAlphabet) {
-          return false;
-        }
-      }
-
-      // NOTE (mristin):
-      // Only these sixteen characters leave the two dropped bits at zero, and
-      // only these four leave the four dropped bits at zero.
-      if (pads == 1) {
-        return "AEIMQUYcgkosw048".indexOf(text.charAt(text.length() - 2)) >= 0;
-      }
-
-      if (pads == 2) {
-        return "AQgw".indexOf(text.charAt(text.length() - 3)) >= 0;
-      }
-
-      return true;
-    }
-
-    private static Boolean readContentAsBool(XMLEventReader reader) throws XMLStreamException {
-      final StringBuilder content = new StringBuilder();
-
-      while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
-        if (reader.peek().isCharacters()) {
-          content.append(reader.peek().asCharacters().getData());
-        }
-        reader.nextEvent();
-      }
-      final String text = XmlCommon.collapseWhitespace(content.toString());
-
-      // NOTE (mristin):
-      // ``xs:boolean`` spells the two values in four ways, not two, so ``1`` and
-      // ``0`` have to be read as well. Boolean.valueOf is of no use here: it
-      // answers ``false`` to anything which is not ``true``, so it would take
-      // ``0`` and ``banana`` alike, and silently.
-      //
-      // See: https://www.w3.org/TR/xmlschema-2/#boolean
-      if (text.equals("true") || text.equals("1")) {
-        return Boolean.TRUE;
-      }
-
-      if (text.equals("false") || text.equals("0")) {
-        return Boolean.FALSE;
-      }
-
-      throw new IllegalStateException(
-        "Expected a value as xs:boolean, but got: " + text);
-    }
-
-    private static Long readContentAsLong(XMLEventReader reader) throws XMLStreamException {
-      final StringBuilder content = new StringBuilder();
-
-      while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
-        if (reader.peek().isCharacters()) {
-          content.append(reader.peek().asCharacters().getData());
-        }
-        reader.nextEvent();
-      }
-
-      return Long.valueOf(XmlCommon.collapseWhitespace(content.toString()));
-    }
-
-    /**
      * Match the lexical space of {@code xs:double}.
      *
      * <p>See: https://www.w3.org/TR/xmlschema-2/#double
@@ -230,46 +115,6 @@ public class Xmlization {
       }
 
       return Double.valueOf(text);
-    }
-
-    /**
-     * Read the whole content of an element into memory.
-     */
-    private static byte[] readContentAsBase64(
-      XMLEventReader reader) throws XMLStreamException {
-      final StringBuilder content = new StringBuilder();
-      while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
-        if (reader.peek().isCharacters()) {
-          content.append(reader.peek().asCharacters().getData());
-        }
-        reader.nextEvent();
-      }
-
-      // NOTE (mristin):
-      // ``xs:base64Binary`` allows whitespace *between* the characters, not only
-      // around them -- its grammar admits a space after every one -- while
-      // Base64.getDecoder() refuses all of it. So every whitespace character is
-      // dropped, and not merely collapsed.
-      //
-      // See: https://www.w3.org/TR/xmlschema-2/#base64Binary
-      String encodedData = removeWhitespace(content.toString());
-
-      if (!matchesXsBase64Binary(encodedData)) {
-        throw new XMLStreamException(
-          "Expected a text as base64-encoded bytes, but got: " + encodedData);
-      }
-      final byte[] decodedData;
-      Base64.Decoder decoder = Base64.getDecoder();
-
-      try {
-        decodedData = decoder.decode(encodedData);
-      } catch (IllegalArgumentException exception) {
-        throw new XMLStreamException(
-          "Failed to read base64 encoded data: " +
-          exception.getMessage());
-      }
-
-      return decodedData;
     }
 
     /**
@@ -362,6 +207,43 @@ public class Xmlization {
     }
 
     /**
+     * Read a tuple of 2 item(s), each with the corresponding
+     * {@code readItemI}.
+     */
+    private static <T1, T2> Reporting.Result<Tuple2<T1, T2>> readTuple2(
+      XMLEventReader reader,
+      boolean isEmpty,
+      XmlCommon.ElementReader<T1> readItem1,
+      XmlCommon.ElementReader<T2> readItem2) {
+      if (isEmpty) {
+        final Reporting.Error error = new Reporting.Error(
+          "Expected exactly 2 item(s), but got a self-closing element");
+        return Reporting.Result.failure(error);
+      }
+
+      final Reporting.Result<? extends T1> item1Result =
+        readItem1.read(reader);
+      if (item1Result.isError()) {
+        item1Result.getError()
+          .prependSegment(new Reporting.IndexSegment(0));
+        return Reporting.Result.failure(item1Result.getError());
+      }
+
+      final Reporting.Result<? extends T2> item2Result =
+        readItem2.read(reader);
+      if (item2Result.isError()) {
+        item2Result.getError()
+          .prependSegment(new Reporting.IndexSegment(1));
+        return Reporting.Result.failure(item2Result.getError());
+      }
+
+      return Reporting.Result.success(
+        new Tuple2<>(
+          item1Result.getResult(),
+          item2Result.getResult()));
+    }
+
+    /**
      * Check whether the sequence of the properties has ended.
      *
      * <p>Only the end tag of the enclosing element concludes a sequence. Reaching
@@ -404,36 +286,6 @@ public class Xmlization {
         "in the XML representation of an instance of class " + className));
     }
 
-    private static Reporting.Result<Boolean> readTextAs_bool(
-      XMLEventReader reader, boolean isEmpty) {
-      return readText(
-        reader,
-        isEmpty,
-        _DeserializeImplementation::readContentAsBool,
-        "Boolean");
-    }
-
-    private static Reporting.Result<List<Boolean>> readListOf_bool(
-      XMLEventReader reader, boolean isEmpty) {
-      return readList(
-        reader, isEmpty, _DeserializeImplementation::readAtV_bool);
-    }
-
-    private static Reporting.Result<Long> readTextAs_long(
-      XMLEventReader reader, boolean isEmpty) {
-      return readText(
-        reader,
-        isEmpty,
-        _DeserializeImplementation::readContentAsLong,
-        "Long");
-    }
-
-    private static Reporting.Result<List<Long>> readListOf_long(
-      XMLEventReader reader, boolean isEmpty) {
-      return readList(
-        reader, isEmpty, _DeserializeImplementation::readAtV_long);
-    }
-
     private static Reporting.Result<Double> readTextAs_double(
       XMLEventReader reader, boolean isEmpty) {
       return readText(
@@ -459,42 +311,13 @@ public class Xmlization {
         "");
     }
 
-    private static Reporting.Result<List<String>> readListOf_string(
+    private static Reporting.Result<Tuple2<String, Double>> readTupleOf2_string_double(
       XMLEventReader reader, boolean isEmpty) {
-      return readList(
-        reader, isEmpty, _DeserializeImplementation::readAtV_string);
-    }
-
-    private static Reporting.Result<byte[]> readTextAs_bytes(
-      XMLEventReader reader, boolean isEmpty) {
-      return readText(
+      return readTuple2(
         reader,
         isEmpty,
-        _DeserializeImplementation::readContentAsBase64,
-        "base64-encoded bytes",
-        new byte[0]);
-    }
-
-    private static Reporting.Result<List<byte[]>> readListOf_bytes(
-      XMLEventReader reader, boolean isEmpty) {
-      return readList(
-        reader, isEmpty, _DeserializeImplementation::readAtV_bytes);
-    }
-
-    private static Reporting.Result<? extends Boolean> readAtV_bool(
-      XMLEventReader reader) {
-      return XmlCommon.readNamedElement(
-        reader,
-        "v",
-        _DeserializeImplementation::readTextAs_bool);
-    }
-
-    private static Reporting.Result<? extends Long> readAtV_long(
-      XMLEventReader reader) {
-      return XmlCommon.readNamedElement(
-        reader,
-        "v",
-        _DeserializeImplementation::readTextAs_long);
+        _DeserializeImplementation::readAtV1_string,
+        _DeserializeImplementation::readAtV2_double);
     }
 
     private static Reporting.Result<? extends Double> readAtV_double(
@@ -505,20 +328,20 @@ public class Xmlization {
         _DeserializeImplementation::readTextAs_double);
     }
 
-    private static Reporting.Result<? extends String> readAtV_string(
+    private static Reporting.Result<? extends String> readAtV1_string(
       XMLEventReader reader) {
       return XmlCommon.readNamedElement(
         reader,
-        "v",
+        "v1",
         _DeserializeImplementation::readTextAs_string);
     }
 
-    private static Reporting.Result<? extends byte[]> readAtV_bytes(
+    private static Reporting.Result<? extends Double> readAtV2_double(
       XMLEventReader reader) {
       return XmlCommon.readNamedElement(
         reader,
-        "v",
-        _DeserializeImplementation::readTextAs_bytes);
+        "v2",
+        _DeserializeImplementation::readTextAs_double);
     }
 
     /**
@@ -531,11 +354,10 @@ public class Xmlization {
     private static Reporting.Result<Something> readSomethingFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
-      List<Boolean> theSomeBools = null;
-      List<Long> theSomeInts = null;
+      Double theSomeFloat = null;
+      Double theSomeOptionalFloat = null;
       List<Double> theSomeFloats = null;
-      List<String> theSomeStrings = null;
-      List<byte[]> theSomeBytes = null;
+      Tuple2<String, Double> theSomePair = null;
 
       if (!isEmptySequence) {
         while (!atEndOfSequence(reader)) {
@@ -550,33 +372,33 @@ public class Xmlization {
           Reporting.Error valueError = null;
 
           switch (elementName) {
-            case "someBools": {
-              if (theSomeBools != null) {
+            case "someFloat": {
+              if (theSomeFloat != null) {
                 valueError = duplicatePropertyError(elementName);
                 break;
               }
 
-              final Reporting.Result<List<Boolean>> value =
-                readListOf_bool(reader, isEmptyProperty);
+              final Reporting.Result<Double> value =
+                readTextAs_double(reader, isEmptyProperty);
               if (value.isError()) {
                 valueError = value.getError();
               } else {
-                theSomeBools = value.getResult();
+                theSomeFloat = value.getResult();
               }
               break;
             }
-            case "someInts": {
-              if (theSomeInts != null) {
+            case "someOptionalFloat": {
+              if (theSomeOptionalFloat != null) {
                 valueError = duplicatePropertyError(elementName);
                 break;
               }
 
-              final Reporting.Result<List<Long>> value =
-                readListOf_long(reader, isEmptyProperty);
+              final Reporting.Result<Double> value =
+                readTextAs_double(reader, isEmptyProperty);
               if (value.isError()) {
                 valueError = value.getError();
               } else {
-                theSomeInts = value.getResult();
+                theSomeOptionalFloat = value.getResult();
               }
               break;
             }
@@ -595,33 +417,18 @@ public class Xmlization {
               }
               break;
             }
-            case "someStrings": {
-              if (theSomeStrings != null) {
+            case "somePair": {
+              if (theSomePair != null) {
                 valueError = duplicatePropertyError(elementName);
                 break;
               }
 
-              final Reporting.Result<List<String>> value =
-                readListOf_string(reader, isEmptyProperty);
+              final Reporting.Result<Tuple2<String, Double>> value =
+                readTupleOf2_string_double(reader, isEmptyProperty);
               if (value.isError()) {
                 valueError = value.getError();
               } else {
-                theSomeStrings = value.getResult();
-              }
-              break;
-            }
-            case "someBytes": {
-              if (theSomeBytes != null) {
-                valueError = duplicatePropertyError(elementName);
-                break;
-              }
-
-              final Reporting.Result<List<byte[]>> value =
-                readListOf_bytes(reader, isEmptyProperty);
-              if (value.isError()) {
-                valueError = value.getError();
-              } else {
-                theSomeBytes = value.getResult();
+                theSomePair = value.getResult();
               }
               break;
             }
@@ -643,32 +450,23 @@ public class Xmlization {
         }
       }
 
-      if (theSomeBools == null) {
-        return missingRequiredProperty("someBools", "Something");
-      }
-
-      if (theSomeInts == null) {
-        return missingRequiredProperty("someInts", "Something");
+      if (theSomeFloat == null) {
+        return missingRequiredProperty("someFloat", "Something");
       }
 
       if (theSomeFloats == null) {
         return missingRequiredProperty("someFloats", "Something");
       }
 
-      if (theSomeStrings == null) {
-        return missingRequiredProperty("someStrings", "Something");
-      }
-
-      if (theSomeBytes == null) {
-        return missingRequiredProperty("someBytes", "Something");
+      if (theSomePair == null) {
+        return missingRequiredProperty("somePair", "Something");
       }
 
       return Reporting.Result.success(new Something(
-        theSomeBools,
-        theSomeInts,
+        theSomeFloat,
         theSomeFloats,
-        theSomeStrings,
-        theSomeBytes));
+        theSomePair,
+        theSomeOptionalFloat));
     }
 
     /**
@@ -788,31 +586,23 @@ public class Xmlization {
     }
 
     /**
-     * Write {@code that} as base64-encoded XML content.
+     * Write {@code that} as the XML element of a property called
+     * {@code name} if it has been given, and write nothing at all otherwise.
      *
-     * <p>This is the {@link ContentWriter} of every {@code byte[]}-typed
-     * value, be it a property, a list item or a tuple item.
+     * <p>The {@link Optional} is taken apart here, once, instead of at every
+     * optional property: asking it and then unwrapping it at the call site
+     * would call the getter twice, and every call allocates an
+     * {@link Optional} of its own.
      */
-    private static void writeByteArrayContent(
-      byte[] that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(
-        Base64.getEncoder().encodeToString(that));
-    }
-
-    private static void writeListOf_stringified(
-      List<?> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (Object item : that) {
-          writeAtV_stringified(item, writer);
-          index++;
-        }
-      } catch (XmlCommon.SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
+    private static <T> void writeOptionalProperty(
+      String name,
+      String getterName,
+      Optional<T> that,
+      XMLStreamWriter writer,
+      XmlCommon.ContentWriter<? super T> writeContent) {
+      final T value = that.orElse(null);
+      if (value != null) {
+        writeProperty(name, getterName, value, writer, writeContent);
       }
     }
 
@@ -832,30 +622,19 @@ public class Xmlization {
       }
     }
 
-    private static void writeListOf_bytes(
-      List<byte[]> that,
+    private static void writeTupleOf2_stringified_double(
+      Tuple2<?, ? extends Double> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (byte[] item : that) {
-          writeAtV_bytes(item, writer);
-          index++;
-        }
+        writeAtV1_stringified(that.item1(), writer);
+        index = 1;
+        writeAtV2_double(that.item2(), writer);
       } catch (XmlCommon.SerializeFailure failure) {
         failure.getError().prependSegment(
           new Reporting.IndexSegment(index));
         throw failure;
       }
-    }
-
-    private static void writeAtV_stringified(
-      Object that,
-      XMLStreamWriter writer) {
-      XmlCommon.writeElement(
-        "v",
-        that,
-        writer,
-        XmlCommon::writeStringifiedContent);
     }
 
     private static void writeAtV_double(
@@ -868,32 +647,42 @@ public class Xmlization {
         XmlCommon::writeDoubleContent);
     }
 
-    private static void writeAtV_bytes(
-      byte[] that,
+    private static void writeAtV1_stringified(
+      Object that,
       XMLStreamWriter writer) {
       XmlCommon.writeElement(
-        "v",
+        "v1",
         that,
         writer,
-        _VisitorWithWriter::writeByteArrayContent);
+        XmlCommon::writeStringifiedContent);
+    }
+
+    private static void writeAtV2_double(
+      Double that,
+      XMLStreamWriter writer) {
+      XmlCommon.writeElement(
+        "v2",
+        that,
+        writer,
+        XmlCommon::writeDoubleContent);
     }
 
     private static void writeSomethingAsSequence(
       ISomething that,
       XMLStreamWriter writer) {
       writeProperty(
-        "someBools",
-        "getSomeBools()",
-        that.getSomeBools(),
+        "someFloat",
+        "getSomeFloat()",
+        that.getSomeFloat(),
         writer,
-        _VisitorWithWriter::writeListOf_stringified);
+        XmlCommon::writeDoubleContent);
 
-      writeProperty(
-        "someInts",
-        "getSomeInts()",
-        that.getSomeInts(),
+      writeOptionalProperty(
+        "someOptionalFloat",
+        "getSomeOptionalFloat()",
+        that.getSomeOptionalFloat(),
         writer,
-        _VisitorWithWriter::writeListOf_stringified);
+        XmlCommon::writeDoubleContent);
 
       writeProperty(
         "someFloats",
@@ -903,18 +692,11 @@ public class Xmlization {
         _VisitorWithWriter::writeListOf_double);
 
       writeProperty(
-        "someStrings",
-        "getSomeStrings()",
-        that.getSomeStrings(),
+        "somePair",
+        "getSomePair()",
+        that.getSomePair(),
         writer,
-        _VisitorWithWriter::writeListOf_stringified);
-
-      writeProperty(
-        "someBytes",
-        "getSomeBytes()",
-        that.getSomeBytes(),
-        writer,
-        _VisitorWithWriter::writeListOf_bytes);
+        _VisitorWithWriter::writeTupleOf2_stringified_double);
     }
 
     @Override
