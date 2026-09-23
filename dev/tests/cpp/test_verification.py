@@ -93,7 +93,7 @@ __xml_namespace__ = "https://dummy.com"
         # the function as-is. This is intentional.
         self.assertEqual(
             """\
-CheckSomething(
+verification::CheckSomething(
   that->value()
 )""",
             blocks[0],
@@ -181,7 +181,7 @@ __xml_namespace__ = "https://dummy.com"
             """\
 (
   (!(that->value().has_value()))
-  || CheckSomething(
+  || verification::CheckSomething(
     (*(that->value()))
   )
 )""",

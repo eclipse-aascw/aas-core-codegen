@@ -2324,7 +2324,7 @@ bool XmlSerializableString_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2333,7 +2333,7 @@ bool NonEmptyXmlSerializableString_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2349,7 +2349,7 @@ bool DateTimeUtc_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXsDateTimeUtc(
+  return verification::MatchesXsDateTimeUtc(
     that
   );
 }
@@ -2358,7 +2358,7 @@ bool DateTimeUtc_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return IsXsDateTimeUtc(
+  return verification::IsXsDateTimeUtc(
     that
   );
 }
@@ -2367,7 +2367,7 @@ bool Duration_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXsDuration(
+  return verification::MatchesXsDuration(
     that
   );
 }
@@ -2376,7 +2376,7 @@ bool Identifier_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2399,7 +2399,7 @@ bool ValueTypeIec61360_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2422,7 +2422,7 @@ bool NameType_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2445,7 +2445,7 @@ bool VersionType_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2461,7 +2461,7 @@ bool VersionType_2(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesVersionType(
+  return verification::MatchesVersionType(
     that
   );
 }
@@ -2477,7 +2477,7 @@ bool RevisionType_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2493,7 +2493,7 @@ bool RevisionType_2(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesRevisionType(
+  return verification::MatchesRevisionType(
     that
   );
 }
@@ -2509,7 +2509,7 @@ bool LabelType_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2532,7 +2532,7 @@ bool MessageTopicType_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2555,7 +2555,7 @@ bool Bcp47LanguageTag_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesBcp47(
+  return verification::MatchesBcp47(
     that
   );
 }
@@ -2564,7 +2564,7 @@ bool ContentType_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2587,7 +2587,7 @@ bool ContentType_3(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesMimeType(
+  return verification::MatchesMimeType(
     that
   );
 }
@@ -2596,7 +2596,7 @@ bool PathType_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2619,7 +2619,7 @@ bool QualifierType_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2642,7 +2642,7 @@ bool ValueDataType_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2651,7 +2651,7 @@ bool IdShortType_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesXmlSerializableString(
+  return verification::MatchesXmlSerializableString(
     that
   );
 }
@@ -2674,7 +2674,7 @@ bool IdShortType_3(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return MatchesIdShort(
+  return verification::MatchesIdShort(
     that
   );
 }
@@ -2716,7 +2716,7 @@ bool Extension_3(
     static_cast<const types::IExtension*>(value)
   );
   return !(that->value().has_value())
-  || ValueConsistentWithXsdType(
+  || verification::ValueConsistentWithXsdType(
     (*(that->value())),
     that->ValueTypeOrDefault()
   );
@@ -2769,7 +2769,7 @@ bool Qualifier_2(
     static_cast<const types::IQualifier*>(value)
   );
   return !(that->value().has_value())
-  || ValueConsistentWithXsdType(
+  || verification::ValueConsistentWithXsdType(
     (*(that->value())),
     that->value_type()
   );
@@ -2792,7 +2792,7 @@ bool AssetAdministrationShell_1(
     static_cast<const types::IAssetAdministrationShell*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -2814,7 +2814,7 @@ bool AssetAdministrationShell_3(
     static_cast<const types::IAssetAdministrationShell*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -2836,7 +2836,7 @@ bool AssetAdministrationShell_5(
     static_cast<const types::IAssetAdministrationShell*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -2868,7 +2868,7 @@ bool AssetAdministrationShell_8(
     static_cast<const types::IAssetAdministrationShell*>(value)
   );
   return !(that->derived_from().has_value())
-  || IsModelReferenceTo(
+  || verification::IsModelReferenceTo(
     (*(that->derived_from())),
     types::KeyTypes::kAssetAdministrationShell
   );
@@ -2883,7 +2883,7 @@ bool AssetAdministrationShell_9(
   return !(that->submodels().has_value())
   || common::All(
     [&](const std::shared_ptr<types::IReference>& reference) -> bool {
-      return IsModelReferenceTo(
+      return verification::IsModelReferenceTo(
         reference,
         types::KeyTypes::kSubmodel
       );
@@ -2993,7 +2993,7 @@ bool Submodel_1(
     static_cast<const types::ISubmodel*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -3015,7 +3015,7 @@ bool Submodel_3(
     static_cast<const types::ISubmodel*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -3037,7 +3037,7 @@ bool Submodel_5(
     static_cast<const types::ISubmodel*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -3079,7 +3079,7 @@ bool Submodel_9(
     static_cast<const types::ISubmodel*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -3126,7 +3126,7 @@ bool Submodel_13(
     static_cast<const types::ISubmodel*>(value)
   );
   return !(that->submodel_elements().has_value())
-  || IdShortsAreUnique(
+  || verification::IdShortsAreUnique(
     (*(that->submodel_elements()))
   );
 }
@@ -3186,7 +3186,7 @@ bool RelationshipElement_1(
     static_cast<const types::IRelationshipElement*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -3208,7 +3208,7 @@ bool RelationshipElement_3(
     static_cast<const types::IRelationshipElement*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -3230,7 +3230,7 @@ bool RelationshipElement_5(
     static_cast<const types::IRelationshipElement*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -3272,7 +3272,7 @@ bool RelationshipElement_9(
     static_cast<const types::IRelationshipElement*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -3304,7 +3304,7 @@ bool SubmodelElementList_1(
     static_cast<const types::ISubmodelElementList*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -3326,7 +3326,7 @@ bool SubmodelElementList_3(
     static_cast<const types::ISubmodelElementList*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -3348,7 +3348,7 @@ bool SubmodelElementList_5(
     static_cast<const types::ISubmodelElementList*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -3390,7 +3390,7 @@ bool SubmodelElementList_9(
     static_cast<const types::ISubmodelElementList*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -3428,7 +3428,7 @@ bool SubmodelElementList_12(
   || common::All(
     [&](const std::shared_ptr<types::ISubmodelElement>& child) -> bool {
       return !(child->semantic_id().has_value())
-      || ReferenceKeyValuesEqual(
+      || verification::ReferenceKeyValuesEqual(
         (*(child->semantic_id())),
         (*(that->semantic_id_list_element()))
       );
@@ -3444,7 +3444,7 @@ bool SubmodelElementList_13(
     static_cast<const types::ISubmodelElementList*>(value)
   );
   return !(that->value().has_value())
-  || SubmodelElementsHaveIdenticalSemanticIds(
+  || verification::SubmodelElementsHaveIdenticalSemanticIds(
     (*(that->value()))
   );
 }
@@ -3458,7 +3458,7 @@ bool SubmodelElementList_14(
   return !(that->value().has_value())
   || common::All(
     [&](const std::shared_ptr<types::ISubmodelElement>& element) -> bool {
-      return SubmodelElementIsOfType(
+      return verification::SubmodelElementIsOfType(
         element,
         that->type_value_list_element()
       );
@@ -3482,7 +3482,7 @@ bool SubmodelElementList_15(
     && (
       (
         (!(that->value().has_value()))
-        || PropertiesOrRangesHaveValueType(
+        || verification::PropertiesOrRangesHaveValueType(
           (*(that->value())),
           (*(that->value_type_list_element()))
         )
@@ -3523,7 +3523,7 @@ bool SubmodelElementCollection_1(
     static_cast<const types::ISubmodelElementCollection*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -3545,7 +3545,7 @@ bool SubmodelElementCollection_3(
     static_cast<const types::ISubmodelElementCollection*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -3567,7 +3567,7 @@ bool SubmodelElementCollection_5(
     static_cast<const types::ISubmodelElementCollection*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -3609,7 +3609,7 @@ bool SubmodelElementCollection_9(
     static_cast<const types::ISubmodelElementCollection*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -3656,7 +3656,7 @@ bool SubmodelElementCollection_13(
     static_cast<const types::ISubmodelElementCollection*>(value)
   );
   return !(that->value().has_value())
-  || IdShortsAreUnique(
+  || verification::IdShortsAreUnique(
     (*(that->value()))
   );
 }
@@ -3678,7 +3678,7 @@ bool Property_1(
     static_cast<const types::IProperty*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -3700,7 +3700,7 @@ bool Property_3(
     static_cast<const types::IProperty*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -3722,7 +3722,7 @@ bool Property_5(
     static_cast<const types::IProperty*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -3764,7 +3764,7 @@ bool Property_9(
     static_cast<const types::IProperty*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -3799,7 +3799,7 @@ bool Property_12(
     static_cast<const types::IProperty*>(value)
   );
   return !(that->value().has_value())
-  || ValueConsistentWithXsdType(
+  || verification::ValueConsistentWithXsdType(
     (*(that->value())),
     that->value_type()
   );
@@ -3822,7 +3822,7 @@ bool MultiLanguageProperty_1(
     static_cast<const types::IMultiLanguageProperty*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -3844,7 +3844,7 @@ bool MultiLanguageProperty_3(
     static_cast<const types::IMultiLanguageProperty*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -3866,7 +3866,7 @@ bool MultiLanguageProperty_5(
     static_cast<const types::IMultiLanguageProperty*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -3908,7 +3908,7 @@ bool MultiLanguageProperty_9(
     static_cast<const types::IMultiLanguageProperty*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -3943,7 +3943,7 @@ bool MultiLanguageProperty_12(
     static_cast<const types::IMultiLanguageProperty*>(value)
   );
   return !(that->value().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->value()))
   );
 }
@@ -3975,7 +3975,7 @@ bool Range_1(
     static_cast<const types::IRange*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -3997,7 +3997,7 @@ bool Range_3(
     static_cast<const types::IRange*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -4019,7 +4019,7 @@ bool Range_5(
     static_cast<const types::IRange*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -4061,7 +4061,7 @@ bool Range_9(
     static_cast<const types::IRange*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -4096,7 +4096,7 @@ bool Range_12(
     static_cast<const types::IRange*>(value)
   );
   return !(that->max().has_value())
-  || ValueConsistentWithXsdType(
+  || verification::ValueConsistentWithXsdType(
     (*(that->max())),
     that->value_type()
   );
@@ -4109,7 +4109,7 @@ bool Range_13(
     static_cast<const types::IRange*>(value)
   );
   return !(that->min().has_value())
-  || ValueConsistentWithXsdType(
+  || verification::ValueConsistentWithXsdType(
     (*(that->min())),
     that->value_type()
   );
@@ -4132,7 +4132,7 @@ bool ReferenceElement_1(
     static_cast<const types::IReferenceElement*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -4154,7 +4154,7 @@ bool ReferenceElement_3(
     static_cast<const types::IReferenceElement*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -4176,7 +4176,7 @@ bool ReferenceElement_5(
     static_cast<const types::IReferenceElement*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -4218,7 +4218,7 @@ bool ReferenceElement_9(
     static_cast<const types::IReferenceElement*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -4263,7 +4263,7 @@ bool Blob_1(
     static_cast<const types::IBlob*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -4285,7 +4285,7 @@ bool Blob_3(
     static_cast<const types::IBlob*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -4307,7 +4307,7 @@ bool Blob_5(
     static_cast<const types::IBlob*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -4349,7 +4349,7 @@ bool Blob_9(
     static_cast<const types::IBlob*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -4394,7 +4394,7 @@ bool File_1(
     static_cast<const types::IFile*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -4416,7 +4416,7 @@ bool File_3(
     static_cast<const types::IFile*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -4438,7 +4438,7 @@ bool File_5(
     static_cast<const types::IFile*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -4480,7 +4480,7 @@ bool File_9(
     static_cast<const types::IFile*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -4525,7 +4525,7 @@ bool AnnotatedRelationshipElement_1(
     static_cast<const types::IAnnotatedRelationshipElement*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -4547,7 +4547,7 @@ bool AnnotatedRelationshipElement_3(
     static_cast<const types::IAnnotatedRelationshipElement*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -4569,7 +4569,7 @@ bool AnnotatedRelationshipElement_5(
     static_cast<const types::IAnnotatedRelationshipElement*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -4611,7 +4611,7 @@ bool AnnotatedRelationshipElement_9(
     static_cast<const types::IAnnotatedRelationshipElement*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -4668,7 +4668,7 @@ bool Entity_1(
     static_cast<const types::IEntity*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -4690,7 +4690,7 @@ bool Entity_3(
     static_cast<const types::IEntity*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -4712,7 +4712,7 @@ bool Entity_5(
     static_cast<const types::IEntity*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -4754,7 +4754,7 @@ bool Entity_9(
     static_cast<const types::IEntity*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -4850,11 +4850,11 @@ bool EventPayload_0(
     static_cast<const types::IEventPayload*>(value)
   );
   return (
-    IsModelReferenceTo(
+    verification::IsModelReferenceTo(
       that->source(),
       types::KeyTypes::kEventElement
     )
-    || IsModelReferenceTo(
+    || verification::IsModelReferenceTo(
       that->source(),
       types::KeyTypes::kBasicEventElement
     )
@@ -4867,7 +4867,7 @@ bool EventPayload_1(
   const types::IEventPayload* that = (
     static_cast<const types::IEventPayload*>(value)
   );
-  return IsModelReferenceToReferable(
+  return verification::IsModelReferenceToReferable(
     that->observable_reference()
   );
 }
@@ -4889,7 +4889,7 @@ bool BasicEventElement_1(
     static_cast<const types::IBasicEventElement*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -4911,7 +4911,7 @@ bool BasicEventElement_3(
     static_cast<const types::IBasicEventElement*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -4933,7 +4933,7 @@ bool BasicEventElement_5(
     static_cast<const types::IBasicEventElement*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -4975,7 +4975,7 @@ bool BasicEventElement_9(
     static_cast<const types::IBasicEventElement*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -5006,7 +5006,7 @@ bool BasicEventElement_12(
   const types::IBasicEventElement* that = (
     static_cast<const types::IBasicEventElement*>(value)
   );
-  return IsModelReferenceToReferable(
+  return verification::IsModelReferenceToReferable(
     that->observed()
   );
 }
@@ -5018,7 +5018,7 @@ bool BasicEventElement_13(
     static_cast<const types::IBasicEventElement*>(value)
   );
   return !(that->message_broker().has_value())
-  || IsModelReferenceToReferable(
+  || verification::IsModelReferenceToReferable(
     (*(that->message_broker()))
   );
 }
@@ -5040,7 +5040,7 @@ bool Operation_1(
     static_cast<const types::IOperation*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -5062,7 +5062,7 @@ bool Operation_3(
     static_cast<const types::IOperation*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -5084,7 +5084,7 @@ bool Operation_5(
     static_cast<const types::IOperation*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -5126,7 +5126,7 @@ bool Operation_9(
     static_cast<const types::IOperation*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -5147,7 +5147,7 @@ bool Operation_11(
   const types::IOperation* that = (
     static_cast<const types::IOperation*>(value)
   );
-  return IdShortsOfVariablesAreUnique(
+  return verification::IdShortsOfVariablesAreUnique(
     that->input_variables(),
     that->output_variables(),
     that->inoutput_variables()
@@ -5210,7 +5210,7 @@ bool Capability_1(
     static_cast<const types::ICapability*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -5232,7 +5232,7 @@ bool Capability_3(
     static_cast<const types::ICapability*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -5254,7 +5254,7 @@ bool Capability_5(
     static_cast<const types::ICapability*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -5296,7 +5296,7 @@ bool Capability_9(
     static_cast<const types::ICapability*>(value)
   );
   return !(that->qualifiers().has_value())
-  || QualifierTypesAreUnique(
+  || verification::QualifierTypesAreUnique(
     (*(that->qualifiers()))
   );
 }
@@ -5328,7 +5328,7 @@ bool ConceptDescription_1(
     static_cast<const types::IConceptDescription*>(value)
   );
   return !(that->extensions().has_value())
-  || ExtensionNamesAreUnique(
+  || verification::ExtensionNamesAreUnique(
     (*(that->extensions()))
   );
 }
@@ -5350,7 +5350,7 @@ bool ConceptDescription_3(
     static_cast<const types::IConceptDescription*>(value)
   );
   return !(that->description().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->description()))
   );
 }
@@ -5372,7 +5372,7 @@ bool ConceptDescription_5(
     static_cast<const types::IConceptDescription*>(value)
   );
   return !(that->display_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->display_name()))
   );
 }
@@ -5405,10 +5405,10 @@ bool ConceptDescription_8(
   );
   return !(that->embedded_data_specifications().has_value())
   || ((
-    DataSpecificationIec61360sHaveDefinitionAtLeastInEnglish(
+    verification::DataSpecificationIec61360sHaveDefinitionAtLeastInEnglish(
       (*(that->embedded_data_specifications()))
     )
-    || DataSpecificationIec61360sHaveValue(
+    || verification::DataSpecificationIec61360sHaveValue(
       (*(that->embedded_data_specifications()))
     )
   ));
@@ -5425,7 +5425,7 @@ bool ConceptDescription_9(
     && (*(that->category())) == L"QUALIFIER_TYPE"
     && (that->embedded_data_specifications().has_value())
   ))
-  || DataSpecificationIec61360sHaveDataType(
+  || verification::DataSpecificationIec61360sHaveDataType(
     (*(that->embedded_data_specifications()))
   );
 }
@@ -5441,7 +5441,7 @@ bool ConceptDescription_10(
     && (*(that->category())) == L"DOCUMENT"
     && (that->embedded_data_specifications().has_value())
   ))
-  || DataSpecificationIec61360sForDocumentHaveAppropriateDataType(
+  || verification::DataSpecificationIec61360sForDocumentHaveAppropriateDataType(
     (*(that->embedded_data_specifications()))
   );
 }
@@ -5457,7 +5457,7 @@ bool ConceptDescription_11(
     && (*(that->category())) == L"REFERENCE"
     && (that->embedded_data_specifications().has_value())
   ))
-  || DataSpecificationIec61360sForReferenceHaveAppropriateDataType(
+  || verification::DataSpecificationIec61360sForReferenceHaveAppropriateDataType(
     (*(that->embedded_data_specifications()))
   );
 }
@@ -5478,7 +5478,7 @@ bool ConceptDescription_12(
     )
     && (that->embedded_data_specifications().has_value())
   ))
-  || DataSpecificationIec61360sForPropertyOrValueHaveAppropriateDataType(
+  || verification::DataSpecificationIec61360sForPropertyOrValueHaveAppropriateDataType(
     (*(that->embedded_data_specifications()))
   );
 }
@@ -5633,7 +5633,7 @@ bool Reference_8(
   || common::AllRange(
     [&](size_t i) -> bool {
       return !(that->keys().at(i)->type() == types::KeyTypes::kSubmodelElementList)
-      || MatchesXsNonNegativeInteger(
+      || verification::MatchesXsNonNegativeInteger(
         that->keys().at(i + (1))->value()
       );
     },
@@ -5774,7 +5774,7 @@ bool DataSpecificationIec61360_3(
     static_cast<const types::IDataSpecificationIec61360*>(value)
   );
   return !(that->definition().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->definition()))
   );
 }
@@ -5796,7 +5796,7 @@ bool DataSpecificationIec61360_5(
     static_cast<const types::IDataSpecificationIec61360*>(value)
   );
   return !(that->short_name().has_value())
-  || LangStringsHaveUniqueLanguages(
+  || verification::LangStringsHaveUniqueLanguages(
     (*(that->short_name()))
   );
 }
@@ -5816,7 +5816,7 @@ bool DataSpecificationIec61360_7(
   const types::IDataSpecificationIec61360* that = (
     static_cast<const types::IDataSpecificationIec61360*>(value)
   );
-  return LangStringsHaveUniqueLanguages(
+  return verification::LangStringsHaveUniqueLanguages(
     that->preferred_name()
   );
 }
@@ -5829,7 +5829,7 @@ bool DataSpecificationIec61360_8(
   );
   return common::Some(
     [&](const std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>& lang_string) -> bool {
-      return IsBcp47ForEnglish(
+      return verification::IsBcp47ForEnglish(
         lang_string->language()
       );
     },
@@ -7663,7 +7663,7 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
  * The iterators are combined out of the combinators below. They follow three rules
  * so that we never build the iterators over the whole model up front:
  * 1. \ref ChainIterator starts a child only once the previous child is done.
- * 2. \ref OverIterator dispatches on the instance only in \ref Start.
+ * 2. \ref DispatchingIterator dispatches on the instance only in \ref Start.
  * 3. \ref EachIterator builds the iterator over an item only once the iteration
  *    reaches the item.
  *
@@ -8093,7 +8093,7 @@ std::unique_ptr<IIterator> Each(
  *
  * Defined below, once all the classes have been covered.
  */
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
   const types::IClass& instance,
   bool recursive
 );
@@ -8105,23 +8105,23 @@ std::unique_ptr<IIterator> OverInstance(
  * We dispatch on the runtime type of the instance only in \ref Start so that
  * we descend into the instance only once the iteration reaches it.
  */
-class OverIterator : public IIterator {
+class DispatchingIterator : public IIterator {
  public:
-  explicit OverIterator(
+  explicit DispatchingIterator(
     const types::IClass* instance
   ) :
     instance_(instance) {
     // Intentionally empty.
   }
 
-  OverIterator(const OverIterator& other) :
+  DispatchingIterator(const DispatchingIterator& other) :
     instance_(other.instance_),
     child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {
     // Intentionally empty.
   }
 
   void Start() override {
-    child_ = OverInstance(*instance_, true);
+    child_ = DispatchOnModelType(*instance_, true);
     child_->Start();
   }
 
@@ -8146,13 +8146,13 @@ class OverIterator : public IIterator {
   }
 
   std::unique_ptr<IIterator> Clone() const override {
-    return common::make_unique<OverIterator>(*this);
+    return common::make_unique<DispatchingIterator>(*this);
   }
 
  private:
   const types::IClass* instance_;
   std::unique_ptr<IIterator> child_;
-};  // class OverIterator
+};  // class DispatchingIterator
 
 std::unique_ptr<IIterator> Over(
   const types::IClass& instance,
@@ -8165,128 +8165,102 @@ std::unique_ptr<IIterator> Over(
     return Empty();
   }
 
-  return common::make_unique<OverIterator>(&instance);
+  return common::make_unique<DispatchingIterator>(&instance);
 }
 
 template<typename T>
-std::unique_ptr<IIterator> OverPointer(
+std::unique_ptr<IIterator> ThroughPointer(
   const std::shared_ptr<T>& instance,
   bool recursive
 ) {
   return Over(*instance, recursive);
 }
 
-using ListOf_Reference = std::vector<
+using listOf_Reference = std::vector<
   std::shared_ptr<types::IReference>
 >;
 
-using ListOf_EmbeddedDataSpecification = std::vector<
+using listOf_EmbeddedDataSpecification = std::vector<
   std::shared_ptr<types::IEmbeddedDataSpecification>
 >;
 
-using ListOf_Extension = std::vector<
+using listOf_Extension = std::vector<
   std::shared_ptr<types::IExtension>
 >;
 
-using ListOf_LangStringNameType = std::vector<
+using listOf_LangStringNameType = std::vector<
   std::shared_ptr<types::ILangStringNameType>
 >;
 
-using ListOf_LangStringTextType = std::vector<
+using listOf_LangStringTextType = std::vector<
   std::shared_ptr<types::ILangStringTextType>
 >;
 
-using ListOf_SpecificAssetId = std::vector<
+using listOf_SpecificAssetId = std::vector<
   std::shared_ptr<types::ISpecificAssetId>
 >;
 
-using ListOf_Qualifier = std::vector<
+using listOf_Qualifier = std::vector<
   std::shared_ptr<types::IQualifier>
 >;
 
-using ListOf_SubmodelElement = std::vector<
+using listOf_SubmodelElement = std::vector<
   std::shared_ptr<types::ISubmodelElement>
 >;
 
-using ListOf_DataElement = std::vector<
+using listOf_DataElement = std::vector<
   std::shared_ptr<types::IDataElement>
 >;
 
-using ListOf_OperationVariable = std::vector<
+using listOf_OperationVariable = std::vector<
   std::shared_ptr<types::IOperationVariable>
 >;
 
-using ListOf_Key = std::vector<
+using listOf_Key = std::vector<
   std::shared_ptr<types::IKey>
 >;
 
-using ListOf_AssetAdministrationShell = std::vector<
+using listOf_AssetAdministrationShell = std::vector<
   std::shared_ptr<types::IAssetAdministrationShell>
 >;
 
-using ListOf_Submodel = std::vector<
+using listOf_Submodel = std::vector<
   std::shared_ptr<types::ISubmodel>
 >;
 
-using ListOf_ConceptDescription = std::vector<
+using listOf_ConceptDescription = std::vector<
   std::shared_ptr<types::IConceptDescription>
 >;
 
-using ListOf_ValueReferencePair = std::vector<
+using listOf_ValueReferencePair = std::vector<
   std::shared_ptr<types::IValueReferencePair>
 >;
 
-using ListOf_LangStringPreferredNameTypeIec61360 = std::vector<
+using listOf_LangStringPreferredNameTypeIec61360 = std::vector<
   std::shared_ptr<types::ILangStringPreferredNameTypeIec61360>
 >;
 
-using ListOf_LangStringShortNameTypeIec61360 = std::vector<
+using listOf_LangStringShortNameTypeIec61360 = std::vector<
   std::shared_ptr<types::ILangStringShortNameTypeIec61360>
 >;
 
-using ListOf_LangStringDefinitionTypeIec61360 = std::vector<
+using listOf_LangStringDefinitionTypeIec61360 = std::vector<
   std::shared_ptr<types::ILangStringDefinitionTypeIec61360>
 >;
 
-std::unique_ptr<IIterator> OverListOf_Reference(
-  const ListOf_Reference& value,
+std::unique_ptr<IIterator> Over_listOf_Reference(
+  const listOf_Reference& value,
   bool recursive
 ) {
   if (!recursive) {
     return Empty();
   }
 
-  return Each(value, &OverPointer<types::IReference>, recursive);
+  return Each(value, &ThroughPointer<types::IReference>, recursive);
 }
 
-std::unique_ptr<IIterator> OverListOf_EmbeddedDataSpecification(
-  const ListOf_EmbeddedDataSpecification& value,
-  bool recursive
-) {
-  if (!recursive) {
-    return Empty();
-  }
-
-  return Each(
-    value,
-    &OverPointer<types::IEmbeddedDataSpecification>,
-    recursive
-  );
-}
-
-std::unique_ptr<IIterator> OverListOf_Extension(
-  const ListOf_Extension& value,
-  bool recursive
-) {
-  if (!recursive) {
-    return Empty();
-  }
-
-  return Each(value, &OverPointer<types::IExtension>, recursive);
-}
-
-std::unique_ptr<IIterator> OverListOf_LangStringNameType(
-  const ListOf_LangStringNameType& value,
+std::unique_ptr<IIterator> Over_listOf_EmbeddedDataSpecification(
+  const listOf_EmbeddedDataSpecification& value,
   bool recursive
 ) {
   if (!recursive) {
@@ -8295,13 +8269,24 @@ std::unique_ptr<IIterator> OverListOf_LangStringNameType(
 
   return Each(
     value,
-    &OverPointer<types::ILangStringNameType>,
+    &ThroughPointer<types::IEmbeddedDataSpecification>,
     recursive
   );
 }
 
-std::unique_ptr<IIterator> OverListOf_LangStringTextType(
-  const ListOf_LangStringTextType& value,
+std::unique_ptr<IIterator> Over_listOf_Extension(
+  const listOf_Extension& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &ThroughPointer<types::IExtension>, recursive);
+}
+
+std::unique_ptr<IIterator> Over_listOf_LangStringNameType(
+  const listOf_LangStringNameType& value,
   bool recursive
 ) {
   if (!recursive) {
@@ -8310,13 +8295,13 @@ std::unique_ptr<IIterator> OverListOf_LangStringTextType(
 
   return Each(
     value,
-    &OverPointer<types::ILangStringTextType>,
+    &ThroughPointer<types::ILangStringNameType>,
     recursive
   );
 }
 
-std::unique_ptr<IIterator> OverListOf_SpecificAssetId(
-  const ListOf_SpecificAssetId& value,
+std::unique_ptr<IIterator> Over_listOf_LangStringTextType(
+  const listOf_LangStringTextType& value,
   bool recursive
 ) {
   if (!recursive) {
@@ -8325,24 +8310,13 @@ std::unique_ptr<IIterator> OverListOf_SpecificAssetId(
 
   return Each(
     value,
-    &OverPointer<types::ISpecificAssetId>,
+    &ThroughPointer<types::ILangStringTextType>,
     recursive
   );
 }
 
-std::unique_ptr<IIterator> OverListOf_Qualifier(
-  const ListOf_Qualifier& value,
-  bool recursive
-) {
-  if (!recursive) {
-    return Empty();
-  }
-
-  return Each(value, &OverPointer<types::IQualifier>, recursive);
-}
-
-std::unique_ptr<IIterator> OverListOf_SubmodelElement(
-  const ListOf_SubmodelElement& value,
+std::unique_ptr<IIterator> Over_listOf_SpecificAssetId(
+  const listOf_SpecificAssetId& value,
   bool recursive
 ) {
   if (!recursive) {
@@ -8351,24 +8325,24 @@ std::unique_ptr<IIterator> OverListOf_SubmodelElement(
 
   return Each(
     value,
-    &OverPointer<types::ISubmodelElement>,
+    &ThroughPointer<types::ISpecificAssetId>,
     recursive
   );
 }
 
-std::unique_ptr<IIterator> OverListOf_DataElement(
-  const ListOf_DataElement& value,
+std::unique_ptr<IIterator> Over_listOf_Qualifier(
+  const listOf_Qualifier& value,
   bool recursive
 ) {
   if (!recursive) {
     return Empty();
   }
 
-  return Each(value, &OverPointer<types::IDataElement>, recursive);
+  return Each(value, &ThroughPointer<types::IQualifier>, recursive);
 }
 
-std::unique_ptr<IIterator> OverListOf_OperationVariable(
-  const ListOf_OperationVariable& value,
+std::unique_ptr<IIterator> Over_listOf_SubmodelElement(
+  const listOf_SubmodelElement& value,
   bool recursive
 ) {
   if (!recursive) {
@@ -8377,24 +8351,24 @@ std::unique_ptr<IIterator> OverListOf_OperationVariable(
 
   return Each(
     value,
-    &OverPointer<types::IOperationVariable>,
+    &ThroughPointer<types::ISubmodelElement>,
     recursive
   );
 }
 
-std::unique_ptr<IIterator> OverListOf_Key(
-  const ListOf_Key& value,
+std::unique_ptr<IIterator> Over_listOf_DataElement(
+  const listOf_DataElement& value,
   bool recursive
 ) {
   if (!recursive) {
     return Empty();
   }
 
-  return Each(value, &OverPointer<types::IKey>, recursive);
+  return Each(value, &ThroughPointer<types::IDataElement>, recursive);
 }
 
-std::unique_ptr<IIterator> OverListOf_AssetAdministrationShell(
-  const ListOf_AssetAdministrationShell& value,
+std::unique_ptr<IIterator> Over_listOf_OperationVariable(
+  const listOf_OperationVariable& value,
   bool recursive
 ) {
   if (!recursive) {
@@ -8403,39 +8377,24 @@ std::unique_ptr<IIterator> OverListOf_AssetAdministrationShell(
 
   return Each(
     value,
-    &OverPointer<types::IAssetAdministrationShell>,
+    &ThroughPointer<types::IOperationVariable>,
     recursive
   );
 }
 
-std::unique_ptr<IIterator> OverListOf_Submodel(
-  const ListOf_Submodel& value,
+std::unique_ptr<IIterator> Over_listOf_Key(
+  const listOf_Key& value,
   bool recursive
 ) {
   if (!recursive) {
     return Empty();
   }
 
-  return Each(value, &OverPointer<types::ISubmodel>, recursive);
+  return Each(value, &ThroughPointer<types::IKey>, recursive);
 }
 
-std::unique_ptr<IIterator> OverListOf_ConceptDescription(
-  const ListOf_ConceptDescription& value,
-  bool recursive
-) {
-  if (!recursive) {
-    return Empty();
-  }
-
-  return Each(
-    value,
-    &OverPointer<types::IConceptDescription>,
-    recursive
-  );
-}
-
-std::unique_ptr<IIterator> OverListOf_ValueReferencePair(
-  const ListOf_ValueReferencePair& value,
+std::unique_ptr<IIterator> Over_listOf_AssetAdministrationShell(
+  const listOf_AssetAdministrationShell& value,
   bool recursive
 ) {
   if (!recursive) {
@@ -8444,13 +8403,24 @@ std::unique_ptr<IIterator> OverListOf_ValueReferencePair(
 
   return Each(
     value,
-    &OverPointer<types::IValueReferencePair>,
+    &ThroughPointer<types::IAssetAdministrationShell>,
     recursive
   );
 }
 
-std::unique_ptr<IIterator> OverListOf_LangStringPreferredNameTypeIec61360(
-  const ListOf_LangStringPreferredNameTypeIec61360& value,
+std::unique_ptr<IIterator> Over_listOf_Submodel(
+  const listOf_Submodel& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &ThroughPointer<types::ISubmodel>, recursive);
+}
+
+std::unique_ptr<IIterator> Over_listOf_ConceptDescription(
+  const listOf_ConceptDescription& value,
   bool recursive
 ) {
   if (!recursive) {
@@ -8459,13 +8429,13 @@ std::unique_ptr<IIterator> OverListOf_LangStringPreferredNameTypeIec61360(
 
   return Each(
     value,
-    &OverPointer<types::ILangStringPreferredNameTypeIec61360>,
+    &ThroughPointer<types::IConceptDescription>,
     recursive
   );
 }
 
-std::unique_ptr<IIterator> OverListOf_LangStringShortNameTypeIec61360(
-  const ListOf_LangStringShortNameTypeIec61360& value,
+std::unique_ptr<IIterator> Over_listOf_ValueReferencePair(
+  const listOf_ValueReferencePair& value,
   bool recursive
 ) {
   if (!recursive) {
@@ -8474,13 +8444,13 @@ std::unique_ptr<IIterator> OverListOf_LangStringShortNameTypeIec61360(
 
   return Each(
     value,
-    &OverPointer<types::ILangStringShortNameTypeIec61360>,
+    &ThroughPointer<types::IValueReferencePair>,
     recursive
   );
 }
 
-std::unique_ptr<IIterator> OverListOf_LangStringDefinitionTypeIec61360(
-  const ListOf_LangStringDefinitionTypeIec61360& value,
+std::unique_ptr<IIterator> Over_listOf_LangStringPreferredNameTypeIec61360(
+  const listOf_LangStringPreferredNameTypeIec61360& value,
   bool recursive
 ) {
   if (!recursive) {
@@ -8489,12 +8459,42 @@ std::unique_ptr<IIterator> OverListOf_LangStringDefinitionTypeIec61360(
 
   return Each(
     value,
-    &OverPointer<types::ILangStringDefinitionTypeIec61360>,
+    &ThroughPointer<types::ILangStringPreferredNameTypeIec61360>,
     recursive
   );
 }
 
-std::unique_ptr<IIterator> OverExtension(
+std::unique_ptr<IIterator> Over_listOf_LangStringShortNameTypeIec61360(
+  const listOf_LangStringShortNameTypeIec61360& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &ThroughPointer<types::ILangStringShortNameTypeIec61360>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> Over_listOf_LangStringDefinitionTypeIec61360(
+  const listOf_LangStringDefinitionTypeIec61360& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(
+    value,
+    &ThroughPointer<types::ILangStringDefinitionTypeIec61360>,
+    recursive
+  );
+}
+
+std::unique_ptr<IIterator> Over_Extension(
   const types::IExtension& that,
   bool recursive
 ) {
@@ -8509,7 +8509,7 @@ std::unique_ptr<IIterator> OverExtension(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -8528,13 +8528,13 @@ std::unique_ptr<IIterator> OverExtension(
     InProperty(
       iteration::Property::kRefersTo,
       that.refers_to().has_value()
-        ? OverListOf_Reference((*that.refers_to()), recursive)
+        ? Over_listOf_Reference((*that.refers_to()), recursive)
         : Empty()
     )
   );
 }
 
-std::unique_ptr<IIterator> OverAdministrativeInformation(
+std::unique_ptr<IIterator> Over_AdministrativeInformation(
   const types::IAdministrativeInformation& that,
   bool recursive
 ) {
@@ -8543,7 +8543,7 @@ std::unique_ptr<IIterator> OverAdministrativeInformation(
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -8576,7 +8576,7 @@ std::unique_ptr<IIterator> OverAdministrativeInformation(
   );
 }
 
-std::unique_ptr<IIterator> OverQualifier(
+std::unique_ptr<IIterator> Over_Qualifier(
   const types::IQualifier& that,
   bool recursive
 ) {
@@ -8591,7 +8591,7 @@ std::unique_ptr<IIterator> OverQualifier(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -8616,7 +8616,7 @@ std::unique_ptr<IIterator> OverQualifier(
   );
 }
 
-std::unique_ptr<IIterator> OverAssetAdministrationShell(
+std::unique_ptr<IIterator> Over_AssetAdministrationShell(
   const types::IAssetAdministrationShell& that,
   bool recursive
 ) {
@@ -8625,7 +8625,7 @@ std::unique_ptr<IIterator> OverAssetAdministrationShell(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -8643,7 +8643,7 @@ std::unique_ptr<IIterator> OverAssetAdministrationShell(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -8652,7 +8652,7 @@ std::unique_ptr<IIterator> OverAssetAdministrationShell(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -8671,7 +8671,7 @@ std::unique_ptr<IIterator> OverAssetAdministrationShell(
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -8690,13 +8690,13 @@ std::unique_ptr<IIterator> OverAssetAdministrationShell(
     InProperty(
       iteration::Property::kSubmodels,
       that.submodels().has_value()
-        ? OverListOf_Reference((*that.submodels()), recursive)
+        ? Over_listOf_Reference((*that.submodels()), recursive)
         : Empty()
     )
   );
 }
 
-std::unique_ptr<IIterator> OverAssetInformation(
+std::unique_ptr<IIterator> Over_AssetInformation(
   const types::IAssetInformation& that,
   bool recursive
 ) {
@@ -8711,7 +8711,7 @@ std::unique_ptr<IIterator> OverAssetInformation(
     InProperty(
       iteration::Property::kSpecificAssetIds,
       that.specific_asset_ids().has_value()
-        ? OverListOf_SpecificAssetId(
+        ? Over_listOf_SpecificAssetId(
             (*that.specific_asset_ids()),
             recursive
           )
@@ -8732,7 +8732,7 @@ std::unique_ptr<IIterator> OverAssetInformation(
   );
 }
 
-std::unique_ptr<IIterator> OverResource(
+std::unique_ptr<IIterator> Over_Resource(
   const types::IResource& that,
   bool
 ) {
@@ -8750,7 +8750,7 @@ std::unique_ptr<IIterator> OverResource(
   );
 }
 
-std::unique_ptr<IIterator> OverSpecificAssetId(
+std::unique_ptr<IIterator> Over_SpecificAssetId(
   const types::ISpecificAssetId& that,
   bool recursive
 ) {
@@ -8765,7 +8765,7 @@ std::unique_ptr<IIterator> OverSpecificAssetId(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -8788,7 +8788,7 @@ std::unique_ptr<IIterator> OverSpecificAssetId(
   );
 }
 
-std::unique_ptr<IIterator> OverSubmodel(
+std::unique_ptr<IIterator> Over_Submodel(
   const types::ISubmodel& that,
   bool recursive
 ) {
@@ -8797,7 +8797,7 @@ std::unique_ptr<IIterator> OverSubmodel(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -8815,7 +8815,7 @@ std::unique_ptr<IIterator> OverSubmodel(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -8824,7 +8824,7 @@ std::unique_ptr<IIterator> OverSubmodel(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -8849,7 +8849,7 @@ std::unique_ptr<IIterator> OverSubmodel(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -8858,13 +8858,13 @@ std::unique_ptr<IIterator> OverSubmodel(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -8873,7 +8873,7 @@ std::unique_ptr<IIterator> OverSubmodel(
     InProperty(
       iteration::Property::kSubmodelElements,
       that.submodel_elements().has_value()
-        ? OverListOf_SubmodelElement(
+        ? Over_listOf_SubmodelElement(
             (*that.submodel_elements()),
             recursive
           )
@@ -8882,7 +8882,7 @@ std::unique_ptr<IIterator> OverSubmodel(
   );
 }
 
-std::unique_ptr<IIterator> OverRelationshipElement(
+std::unique_ptr<IIterator> Over_RelationshipElement(
   const types::IRelationshipElement& that,
   bool recursive
 ) {
@@ -8891,7 +8891,7 @@ std::unique_ptr<IIterator> OverRelationshipElement(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -8909,7 +8909,7 @@ std::unique_ptr<IIterator> OverRelationshipElement(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -8918,7 +8918,7 @@ std::unique_ptr<IIterator> OverRelationshipElement(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -8933,7 +8933,7 @@ std::unique_ptr<IIterator> OverRelationshipElement(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -8942,13 +8942,13 @@ std::unique_ptr<IIterator> OverRelationshipElement(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -8965,7 +8965,7 @@ std::unique_ptr<IIterator> OverRelationshipElement(
   );
 }
 
-std::unique_ptr<IIterator> OverSubmodelElementList(
+std::unique_ptr<IIterator> Over_SubmodelElementList(
   const types::ISubmodelElementList& that,
   bool recursive
 ) {
@@ -8974,7 +8974,7 @@ std::unique_ptr<IIterator> OverSubmodelElementList(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -8992,7 +8992,7 @@ std::unique_ptr<IIterator> OverSubmodelElementList(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -9001,7 +9001,7 @@ std::unique_ptr<IIterator> OverSubmodelElementList(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -9016,7 +9016,7 @@ std::unique_ptr<IIterator> OverSubmodelElementList(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -9025,13 +9025,13 @@ std::unique_ptr<IIterator> OverSubmodelElementList(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -9046,13 +9046,13 @@ std::unique_ptr<IIterator> OverSubmodelElementList(
     InProperty(
       iteration::Property::kValue,
       that.value().has_value()
-        ? OverListOf_SubmodelElement((*that.value()), recursive)
+        ? Over_listOf_SubmodelElement((*that.value()), recursive)
         : Empty()
     )
   );
 }
 
-std::unique_ptr<IIterator> OverSubmodelElementCollection(
+std::unique_ptr<IIterator> Over_SubmodelElementCollection(
   const types::ISubmodelElementCollection& that,
   bool recursive
 ) {
@@ -9061,7 +9061,7 @@ std::unique_ptr<IIterator> OverSubmodelElementCollection(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9079,7 +9079,7 @@ std::unique_ptr<IIterator> OverSubmodelElementCollection(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -9088,7 +9088,7 @@ std::unique_ptr<IIterator> OverSubmodelElementCollection(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -9103,7 +9103,7 @@ std::unique_ptr<IIterator> OverSubmodelElementCollection(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -9112,13 +9112,13 @@ std::unique_ptr<IIterator> OverSubmodelElementCollection(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -9127,13 +9127,13 @@ std::unique_ptr<IIterator> OverSubmodelElementCollection(
     InProperty(
       iteration::Property::kValue,
       that.value().has_value()
-        ? OverListOf_SubmodelElement((*that.value()), recursive)
+        ? Over_listOf_SubmodelElement((*that.value()), recursive)
         : Empty()
     )
   );
 }
 
-std::unique_ptr<IIterator> OverProperty(
+std::unique_ptr<IIterator> Over_Property(
   const types::IProperty& that,
   bool recursive
 ) {
@@ -9142,7 +9142,7 @@ std::unique_ptr<IIterator> OverProperty(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9160,7 +9160,7 @@ std::unique_ptr<IIterator> OverProperty(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -9169,7 +9169,7 @@ std::unique_ptr<IIterator> OverProperty(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -9184,7 +9184,7 @@ std::unique_ptr<IIterator> OverProperty(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -9193,13 +9193,13 @@ std::unique_ptr<IIterator> OverProperty(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -9220,7 +9220,7 @@ std::unique_ptr<IIterator> OverProperty(
   );
 }
 
-std::unique_ptr<IIterator> OverMultiLanguageProperty(
+std::unique_ptr<IIterator> Over_MultiLanguageProperty(
   const types::IMultiLanguageProperty& that,
   bool recursive
 ) {
@@ -9229,7 +9229,7 @@ std::unique_ptr<IIterator> OverMultiLanguageProperty(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9247,7 +9247,7 @@ std::unique_ptr<IIterator> OverMultiLanguageProperty(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -9256,7 +9256,7 @@ std::unique_ptr<IIterator> OverMultiLanguageProperty(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -9271,7 +9271,7 @@ std::unique_ptr<IIterator> OverMultiLanguageProperty(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -9280,13 +9280,13 @@ std::unique_ptr<IIterator> OverMultiLanguageProperty(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -9295,7 +9295,7 @@ std::unique_ptr<IIterator> OverMultiLanguageProperty(
     InProperty(
       iteration::Property::kValue,
       that.value().has_value()
-        ? OverListOf_LangStringTextType((*that.value()), recursive)
+        ? Over_listOf_LangStringTextType((*that.value()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9307,7 +9307,7 @@ std::unique_ptr<IIterator> OverMultiLanguageProperty(
   );
 }
 
-std::unique_ptr<IIterator> OverRange(
+std::unique_ptr<IIterator> Over_Range(
   const types::IRange& that,
   bool recursive
 ) {
@@ -9316,7 +9316,7 @@ std::unique_ptr<IIterator> OverRange(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9334,7 +9334,7 @@ std::unique_ptr<IIterator> OverRange(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -9343,7 +9343,7 @@ std::unique_ptr<IIterator> OverRange(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -9358,7 +9358,7 @@ std::unique_ptr<IIterator> OverRange(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -9367,13 +9367,13 @@ std::unique_ptr<IIterator> OverRange(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -9394,7 +9394,7 @@ std::unique_ptr<IIterator> OverRange(
   );
 }
 
-std::unique_ptr<IIterator> OverReferenceElement(
+std::unique_ptr<IIterator> Over_ReferenceElement(
   const types::IReferenceElement& that,
   bool recursive
 ) {
@@ -9403,7 +9403,7 @@ std::unique_ptr<IIterator> OverReferenceElement(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9421,7 +9421,7 @@ std::unique_ptr<IIterator> OverReferenceElement(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -9430,7 +9430,7 @@ std::unique_ptr<IIterator> OverReferenceElement(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -9445,7 +9445,7 @@ std::unique_ptr<IIterator> OverReferenceElement(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -9454,13 +9454,13 @@ std::unique_ptr<IIterator> OverReferenceElement(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -9475,7 +9475,7 @@ std::unique_ptr<IIterator> OverReferenceElement(
   );
 }
 
-std::unique_ptr<IIterator> OverBlob(
+std::unique_ptr<IIterator> Over_Blob(
   const types::IBlob& that,
   bool recursive
 ) {
@@ -9484,7 +9484,7 @@ std::unique_ptr<IIterator> OverBlob(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9502,7 +9502,7 @@ std::unique_ptr<IIterator> OverBlob(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -9511,7 +9511,7 @@ std::unique_ptr<IIterator> OverBlob(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -9526,7 +9526,7 @@ std::unique_ptr<IIterator> OverBlob(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -9535,13 +9535,13 @@ std::unique_ptr<IIterator> OverBlob(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -9554,7 +9554,7 @@ std::unique_ptr<IIterator> OverBlob(
   );
 }
 
-std::unique_ptr<IIterator> OverFile(
+std::unique_ptr<IIterator> Over_File(
   const types::IFile& that,
   bool recursive
 ) {
@@ -9563,7 +9563,7 @@ std::unique_ptr<IIterator> OverFile(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9581,7 +9581,7 @@ std::unique_ptr<IIterator> OverFile(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -9590,7 +9590,7 @@ std::unique_ptr<IIterator> OverFile(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -9605,7 +9605,7 @@ std::unique_ptr<IIterator> OverFile(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -9614,13 +9614,13 @@ std::unique_ptr<IIterator> OverFile(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -9639,7 +9639,7 @@ std::unique_ptr<IIterator> OverFile(
   );
 }
 
-std::unique_ptr<IIterator> OverAnnotatedRelationshipElement(
+std::unique_ptr<IIterator> Over_AnnotatedRelationshipElement(
   const types::IAnnotatedRelationshipElement& that,
   bool recursive
 ) {
@@ -9648,7 +9648,7 @@ std::unique_ptr<IIterator> OverAnnotatedRelationshipElement(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9666,7 +9666,7 @@ std::unique_ptr<IIterator> OverAnnotatedRelationshipElement(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -9675,7 +9675,7 @@ std::unique_ptr<IIterator> OverAnnotatedRelationshipElement(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -9690,7 +9690,7 @@ std::unique_ptr<IIterator> OverAnnotatedRelationshipElement(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -9699,13 +9699,13 @@ std::unique_ptr<IIterator> OverAnnotatedRelationshipElement(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -9722,13 +9722,13 @@ std::unique_ptr<IIterator> OverAnnotatedRelationshipElement(
     InProperty(
       iteration::Property::kAnnotations,
       that.annotations().has_value()
-        ? OverListOf_DataElement((*that.annotations()), recursive)
+        ? Over_listOf_DataElement((*that.annotations()), recursive)
         : Empty()
     )
   );
 }
 
-std::unique_ptr<IIterator> OverEntity(
+std::unique_ptr<IIterator> Over_Entity(
   const types::IEntity& that,
   bool recursive
 ) {
@@ -9737,7 +9737,7 @@ std::unique_ptr<IIterator> OverEntity(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9755,7 +9755,7 @@ std::unique_ptr<IIterator> OverEntity(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -9764,7 +9764,7 @@ std::unique_ptr<IIterator> OverEntity(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -9779,7 +9779,7 @@ std::unique_ptr<IIterator> OverEntity(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -9788,13 +9788,13 @@ std::unique_ptr<IIterator> OverEntity(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -9803,7 +9803,7 @@ std::unique_ptr<IIterator> OverEntity(
     InProperty(
       iteration::Property::kStatements,
       that.statements().has_value()
-        ? OverListOf_SubmodelElement((*that.statements()), recursive)
+        ? Over_listOf_SubmodelElement((*that.statements()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9815,7 +9815,7 @@ std::unique_ptr<IIterator> OverEntity(
     InProperty(
       iteration::Property::kSpecificAssetIds,
       that.specific_asset_ids().has_value()
-        ? OverListOf_SpecificAssetId(
+        ? Over_listOf_SpecificAssetId(
             (*that.specific_asset_ids()),
             recursive
           )
@@ -9824,7 +9824,7 @@ std::unique_ptr<IIterator> OverEntity(
   );
 }
 
-std::unique_ptr<IIterator> OverEventPayload(
+std::unique_ptr<IIterator> Over_EventPayload(
   const types::IEventPayload& that,
   bool recursive
 ) {
@@ -9869,7 +9869,7 @@ std::unique_ptr<IIterator> OverEventPayload(
   );
 }
 
-std::unique_ptr<IIterator> OverBasicEventElement(
+std::unique_ptr<IIterator> Over_BasicEventElement(
   const types::IBasicEventElement& that,
   bool recursive
 ) {
@@ -9878,7 +9878,7 @@ std::unique_ptr<IIterator> OverBasicEventElement(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -9896,7 +9896,7 @@ std::unique_ptr<IIterator> OverBasicEventElement(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -9905,7 +9905,7 @@ std::unique_ptr<IIterator> OverBasicEventElement(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -9920,7 +9920,7 @@ std::unique_ptr<IIterator> OverBasicEventElement(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -9929,13 +9929,13 @@ std::unique_ptr<IIterator> OverBasicEventElement(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -9978,7 +9978,7 @@ std::unique_ptr<IIterator> OverBasicEventElement(
   );
 }
 
-std::unique_ptr<IIterator> OverOperation(
+std::unique_ptr<IIterator> Over_Operation(
   const types::IOperation& that,
   bool recursive
 ) {
@@ -9987,7 +9987,7 @@ std::unique_ptr<IIterator> OverOperation(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -10005,7 +10005,7 @@ std::unique_ptr<IIterator> OverOperation(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -10014,7 +10014,7 @@ std::unique_ptr<IIterator> OverOperation(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -10029,7 +10029,7 @@ std::unique_ptr<IIterator> OverOperation(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -10038,13 +10038,13 @@ std::unique_ptr<IIterator> OverOperation(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -10053,7 +10053,7 @@ std::unique_ptr<IIterator> OverOperation(
     InProperty(
       iteration::Property::kInputVariables,
       that.input_variables().has_value()
-        ? OverListOf_OperationVariable(
+        ? Over_listOf_OperationVariable(
             (*that.input_variables()),
             recursive
           )
@@ -10062,7 +10062,7 @@ std::unique_ptr<IIterator> OverOperation(
     InProperty(
       iteration::Property::kOutputVariables,
       that.output_variables().has_value()
-        ? OverListOf_OperationVariable(
+        ? Over_listOf_OperationVariable(
             (*that.output_variables()),
             recursive
           )
@@ -10071,7 +10071,7 @@ std::unique_ptr<IIterator> OverOperation(
     InProperty(
       iteration::Property::kInoutputVariables,
       that.inoutput_variables().has_value()
-        ? OverListOf_OperationVariable(
+        ? Over_listOf_OperationVariable(
             (*that.inoutput_variables()),
             recursive
           )
@@ -10080,7 +10080,7 @@ std::unique_ptr<IIterator> OverOperation(
   );
 }
 
-std::unique_ptr<IIterator> OverOperationVariable(
+std::unique_ptr<IIterator> Over_OperationVariable(
   const types::IOperationVariable& that,
   bool recursive
 ) {
@@ -10093,7 +10093,7 @@ std::unique_ptr<IIterator> OverOperationVariable(
   );
 }
 
-std::unique_ptr<IIterator> OverCapability(
+std::unique_ptr<IIterator> Over_Capability(
   const types::ICapability& that,
   bool recursive
 ) {
@@ -10102,7 +10102,7 @@ std::unique_ptr<IIterator> OverCapability(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -10120,7 +10120,7 @@ std::unique_ptr<IIterator> OverCapability(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -10129,7 +10129,7 @@ std::unique_ptr<IIterator> OverCapability(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -10144,7 +10144,7 @@ std::unique_ptr<IIterator> OverCapability(
     InProperty(
       iteration::Property::kSupplementalSemanticIds,
       that.supplemental_semantic_ids().has_value()
-        ? OverListOf_Reference(
+        ? Over_listOf_Reference(
             (*that.supplemental_semantic_ids()),
             recursive
           )
@@ -10153,13 +10153,13 @@ std::unique_ptr<IIterator> OverCapability(
     InProperty(
       iteration::Property::kQualifiers,
       that.qualifiers().has_value()
-        ? OverListOf_Qualifier((*that.qualifiers()), recursive)
+        ? Over_listOf_Qualifier((*that.qualifiers()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -10168,7 +10168,7 @@ std::unique_ptr<IIterator> OverCapability(
   );
 }
 
-std::unique_ptr<IIterator> OverConceptDescription(
+std::unique_ptr<IIterator> Over_ConceptDescription(
   const types::IConceptDescription& that,
   bool recursive
 ) {
@@ -10177,7 +10177,7 @@ std::unique_ptr<IIterator> OverConceptDescription(
     InProperty(
       iteration::Property::kExtensions,
       that.extensions().has_value()
-        ? OverListOf_Extension((*that.extensions()), recursive)
+        ? Over_listOf_Extension((*that.extensions()), recursive)
         : Empty()
     ),
     InProperty(
@@ -10195,7 +10195,7 @@ std::unique_ptr<IIterator> OverConceptDescription(
     InProperty(
       iteration::Property::kDisplayName,
       that.display_name().has_value()
-        ? OverListOf_LangStringNameType(
+        ? Over_listOf_LangStringNameType(
             (*that.display_name()),
             recursive
           )
@@ -10204,7 +10204,7 @@ std::unique_ptr<IIterator> OverConceptDescription(
     InProperty(
       iteration::Property::kDescription,
       that.description().has_value()
-        ? OverListOf_LangStringTextType(
+        ? Over_listOf_LangStringTextType(
             (*that.description()),
             recursive
           )
@@ -10223,7 +10223,7 @@ std::unique_ptr<IIterator> OverConceptDescription(
     InProperty(
       iteration::Property::kEmbeddedDataSpecifications,
       that.embedded_data_specifications().has_value()
-        ? OverListOf_EmbeddedDataSpecification(
+        ? Over_listOf_EmbeddedDataSpecification(
             (*that.embedded_data_specifications()),
             recursive
           )
@@ -10232,13 +10232,13 @@ std::unique_ptr<IIterator> OverConceptDescription(
     InProperty(
       iteration::Property::kIsCaseOf,
       that.is_case_of().has_value()
-        ? OverListOf_Reference((*that.is_case_of()), recursive)
+        ? Over_listOf_Reference((*that.is_case_of()), recursive)
         : Empty()
     )
   );
 }
 
-std::unique_ptr<IIterator> OverReference(
+std::unique_ptr<IIterator> Over_Reference(
   const types::IReference& that,
   bool recursive
 ) {
@@ -10252,12 +10252,12 @@ std::unique_ptr<IIterator> OverReference(
     ),
     InProperty(
       iteration::Property::kKeys,
-      OverListOf_Key(that.keys(), recursive)
+      Over_listOf_Key(that.keys(), recursive)
     )
   );
 }
 
-std::unique_ptr<IIterator> OverKey(
+std::unique_ptr<IIterator> Over_Key(
   const types::IKey& that,
   bool
 ) {
@@ -10267,7 +10267,7 @@ std::unique_ptr<IIterator> OverKey(
   );
 }
 
-std::unique_ptr<IIterator> OverLangStringNameType(
+std::unique_ptr<IIterator> Over_LangStringNameType(
   const types::ILangStringNameType& that,
   bool
 ) {
@@ -10284,7 +10284,7 @@ std::unique_ptr<IIterator> OverLangStringNameType(
   );
 }
 
-std::unique_ptr<IIterator> OverLangStringTextType(
+std::unique_ptr<IIterator> Over_LangStringTextType(
   const types::ILangStringTextType& that,
   bool
 ) {
@@ -10301,7 +10301,7 @@ std::unique_ptr<IIterator> OverLangStringTextType(
   );
 }
 
-std::unique_ptr<IIterator> OverEnvironment(
+std::unique_ptr<IIterator> Over_Environment(
   const types::IEnvironment& that,
   bool recursive
 ) {
@@ -10310,7 +10310,7 @@ std::unique_ptr<IIterator> OverEnvironment(
     InProperty(
       iteration::Property::kAssetAdministrationShells,
       that.asset_administration_shells().has_value()
-        ? OverListOf_AssetAdministrationShell(
+        ? Over_listOf_AssetAdministrationShell(
             (*that.asset_administration_shells()),
             recursive
           )
@@ -10319,13 +10319,13 @@ std::unique_ptr<IIterator> OverEnvironment(
     InProperty(
       iteration::Property::kSubmodels,
       that.submodels().has_value()
-        ? OverListOf_Submodel((*that.submodels()), recursive)
+        ? Over_listOf_Submodel((*that.submodels()), recursive)
         : Empty()
     ),
     InProperty(
       iteration::Property::kConceptDescriptions,
       that.concept_descriptions().has_value()
-        ? OverListOf_ConceptDescription(
+        ? Over_listOf_ConceptDescription(
             (*that.concept_descriptions()),
             recursive
           )
@@ -10334,7 +10334,7 @@ std::unique_ptr<IIterator> OverEnvironment(
   );
 }
 
-std::unique_ptr<IIterator> OverEmbeddedDataSpecification(
+std::unique_ptr<IIterator> Over_EmbeddedDataSpecification(
   const types::IEmbeddedDataSpecification& that,
   bool recursive
 ) {
@@ -10350,7 +10350,7 @@ std::unique_ptr<IIterator> OverEmbeddedDataSpecification(
   );
 }
 
-std::unique_ptr<IIterator> OverValueReferencePair(
+std::unique_ptr<IIterator> Over_ValueReferencePair(
   const types::IValueReferencePair& that,
   bool recursive
 ) {
@@ -10366,7 +10366,7 @@ std::unique_ptr<IIterator> OverValueReferencePair(
   );
 }
 
-std::unique_ptr<IIterator> OverValueList(
+std::unique_ptr<IIterator> Over_ValueList(
   const types::IValueList& that,
   bool recursive
 ) {
@@ -10374,7 +10374,7 @@ std::unique_ptr<IIterator> OverValueList(
     One(&that, Shape::kValueList),
     InProperty(
       iteration::Property::kValueReferencePairs,
-      OverListOf_ValueReferencePair(
+      Over_listOf_ValueReferencePair(
         that.value_reference_pairs(),
         recursive
       )
@@ -10382,7 +10382,7 @@ std::unique_ptr<IIterator> OverValueList(
   );
 }
 
-std::unique_ptr<IIterator> OverLangStringPreferredNameTypeIec61360(
+std::unique_ptr<IIterator> Over_LangStringPreferredNameTypeIec61360(
   const types::ILangStringPreferredNameTypeIec61360& that,
   bool
 ) {
@@ -10399,7 +10399,7 @@ std::unique_ptr<IIterator> OverLangStringPreferredNameTypeIec61360(
   );
 }
 
-std::unique_ptr<IIterator> OverLangStringShortNameTypeIec61360(
+std::unique_ptr<IIterator> Over_LangStringShortNameTypeIec61360(
   const types::ILangStringShortNameTypeIec61360& that,
   bool
 ) {
@@ -10416,7 +10416,7 @@ std::unique_ptr<IIterator> OverLangStringShortNameTypeIec61360(
   );
 }
 
-std::unique_ptr<IIterator> OverLangStringDefinitionTypeIec61360(
+std::unique_ptr<IIterator> Over_LangStringDefinitionTypeIec61360(
   const types::ILangStringDefinitionTypeIec61360& that,
   bool
 ) {
@@ -10433,7 +10433,7 @@ std::unique_ptr<IIterator> OverLangStringDefinitionTypeIec61360(
   );
 }
 
-std::unique_ptr<IIterator> OverDataSpecificationIec61360(
+std::unique_ptr<IIterator> Over_DataSpecificationIec61360(
   const types::IDataSpecificationIec61360& that,
   bool recursive
 ) {
@@ -10441,7 +10441,7 @@ std::unique_ptr<IIterator> OverDataSpecificationIec61360(
     One(&that, Shape::kDataSpecificationIec61360),
     InProperty(
       iteration::Property::kPreferredName,
-      OverListOf_LangStringPreferredNameTypeIec61360(
+      Over_listOf_LangStringPreferredNameTypeIec61360(
         that.preferred_name(),
         recursive
       )
@@ -10449,7 +10449,7 @@ std::unique_ptr<IIterator> OverDataSpecificationIec61360(
     InProperty(
       iteration::Property::kShortName,
       that.short_name().has_value()
-        ? OverListOf_LangStringShortNameTypeIec61360(
+        ? Over_listOf_LangStringShortNameTypeIec61360(
             (*that.short_name()),
             recursive
           )
@@ -10488,7 +10488,7 @@ std::unique_ptr<IIterator> OverDataSpecificationIec61360(
     InProperty(
       iteration::Property::kDefinition,
       that.definition().has_value()
-        ? OverListOf_LangStringDefinitionTypeIec61360(
+        ? Over_listOf_LangStringDefinitionTypeIec61360(
             (*that.definition()),
             recursive
           )
@@ -10521,193 +10521,193 @@ std::unique_ptr<IIterator> OverDataSpecificationIec61360(
 /**
  * Iterate over the values of the \p instance, dispatched on its runtime type.
  */
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
   const types::IClass& instance,
   bool recursive
 ) {
   switch (instance.model_type()) {
     case types::ModelType::kExtension:
-      return OverExtension(
+      return Over_Extension(
         dynamic_cast<const types::IExtension&>(instance),
         recursive
       );
     case types::ModelType::kAdministrativeInformation:
-      return OverAdministrativeInformation(
+      return Over_AdministrativeInformation(
         dynamic_cast<const types::IAdministrativeInformation&>(instance),
         recursive
       );
     case types::ModelType::kQualifier:
-      return OverQualifier(
+      return Over_Qualifier(
         dynamic_cast<const types::IQualifier&>(instance),
         recursive
       );
     case types::ModelType::kAssetAdministrationShell:
-      return OverAssetAdministrationShell(
+      return Over_AssetAdministrationShell(
         dynamic_cast<const types::IAssetAdministrationShell&>(instance),
         recursive
       );
     case types::ModelType::kAssetInformation:
-      return OverAssetInformation(
+      return Over_AssetInformation(
         dynamic_cast<const types::IAssetInformation&>(instance),
         recursive
       );
     case types::ModelType::kResource:
-      return OverResource(
+      return Over_Resource(
         dynamic_cast<const types::IResource&>(instance),
         recursive
       );
     case types::ModelType::kSpecificAssetId:
-      return OverSpecificAssetId(
+      return Over_SpecificAssetId(
         dynamic_cast<const types::ISpecificAssetId&>(instance),
         recursive
       );
     case types::ModelType::kSubmodel:
-      return OverSubmodel(
+      return Over_Submodel(
         dynamic_cast<const types::ISubmodel&>(instance),
         recursive
       );
     case types::ModelType::kRelationshipElement:
-      return OverRelationshipElement(
+      return Over_RelationshipElement(
         dynamic_cast<const types::IRelationshipElement&>(instance),
         recursive
       );
     case types::ModelType::kSubmodelElementList:
-      return OverSubmodelElementList(
+      return Over_SubmodelElementList(
         dynamic_cast<const types::ISubmodelElementList&>(instance),
         recursive
       );
     case types::ModelType::kSubmodelElementCollection:
-      return OverSubmodelElementCollection(
+      return Over_SubmodelElementCollection(
         dynamic_cast<const types::ISubmodelElementCollection&>(instance),
         recursive
       );
     case types::ModelType::kProperty:
-      return OverProperty(
+      return Over_Property(
         dynamic_cast<const types::IProperty&>(instance),
         recursive
       );
     case types::ModelType::kMultiLanguageProperty:
-      return OverMultiLanguageProperty(
+      return Over_MultiLanguageProperty(
         dynamic_cast<const types::IMultiLanguageProperty&>(instance),
         recursive
       );
     case types::ModelType::kRange:
-      return OverRange(
+      return Over_Range(
         dynamic_cast<const types::IRange&>(instance),
         recursive
       );
     case types::ModelType::kReferenceElement:
-      return OverReferenceElement(
+      return Over_ReferenceElement(
         dynamic_cast<const types::IReferenceElement&>(instance),
         recursive
       );
     case types::ModelType::kBlob:
-      return OverBlob(
+      return Over_Blob(
         dynamic_cast<const types::IBlob&>(instance),
         recursive
       );
     case types::ModelType::kFile:
-      return OverFile(
+      return Over_File(
         dynamic_cast<const types::IFile&>(instance),
         recursive
       );
     case types::ModelType::kAnnotatedRelationshipElement:
-      return OverAnnotatedRelationshipElement(
+      return Over_AnnotatedRelationshipElement(
         dynamic_cast<const types::IAnnotatedRelationshipElement&>(instance),
         recursive
       );
     case types::ModelType::kEntity:
-      return OverEntity(
+      return Over_Entity(
         dynamic_cast<const types::IEntity&>(instance),
         recursive
       );
     case types::ModelType::kEventPayload:
-      return OverEventPayload(
+      return Over_EventPayload(
         dynamic_cast<const types::IEventPayload&>(instance),
         recursive
       );
     case types::ModelType::kBasicEventElement:
-      return OverBasicEventElement(
+      return Over_BasicEventElement(
         dynamic_cast<const types::IBasicEventElement&>(instance),
         recursive
       );
     case types::ModelType::kOperation:
-      return OverOperation(
+      return Over_Operation(
         dynamic_cast<const types::IOperation&>(instance),
         recursive
       );
     case types::ModelType::kOperationVariable:
-      return OverOperationVariable(
+      return Over_OperationVariable(
         dynamic_cast<const types::IOperationVariable&>(instance),
         recursive
       );
     case types::ModelType::kCapability:
-      return OverCapability(
+      return Over_Capability(
         dynamic_cast<const types::ICapability&>(instance),
         recursive
       );
     case types::ModelType::kConceptDescription:
-      return OverConceptDescription(
+      return Over_ConceptDescription(
         dynamic_cast<const types::IConceptDescription&>(instance),
         recursive
       );
     case types::ModelType::kReference:
-      return OverReference(
+      return Over_Reference(
         dynamic_cast<const types::IReference&>(instance),
         recursive
       );
     case types::ModelType::kKey:
-      return OverKey(
+      return Over_Key(
         dynamic_cast<const types::IKey&>(instance),
         recursive
       );
     case types::ModelType::kLangStringNameType:
-      return OverLangStringNameType(
+      return Over_LangStringNameType(
         dynamic_cast<const types::ILangStringNameType&>(instance),
         recursive
       );
     case types::ModelType::kLangStringTextType:
-      return OverLangStringTextType(
+      return Over_LangStringTextType(
         dynamic_cast<const types::ILangStringTextType&>(instance),
         recursive
       );
     case types::ModelType::kEnvironment:
-      return OverEnvironment(
+      return Over_Environment(
         dynamic_cast<const types::IEnvironment&>(instance),
         recursive
       );
     case types::ModelType::kEmbeddedDataSpecification:
-      return OverEmbeddedDataSpecification(
+      return Over_EmbeddedDataSpecification(
         dynamic_cast<const types::IEmbeddedDataSpecification&>(instance),
         recursive
       );
     case types::ModelType::kValueReferencePair:
-      return OverValueReferencePair(
+      return Over_ValueReferencePair(
         dynamic_cast<const types::IValueReferencePair&>(instance),
         recursive
       );
     case types::ModelType::kValueList:
-      return OverValueList(
+      return Over_ValueList(
         dynamic_cast<const types::IValueList&>(instance),
         recursive
       );
     case types::ModelType::kLangStringPreferredNameTypeIec61360:
-      return OverLangStringPreferredNameTypeIec61360(
+      return Over_LangStringPreferredNameTypeIec61360(
         dynamic_cast<const types::ILangStringPreferredNameTypeIec61360&>(instance),
         recursive
       );
     case types::ModelType::kLangStringShortNameTypeIec61360:
-      return OverLangStringShortNameTypeIec61360(
+      return Over_LangStringShortNameTypeIec61360(
         dynamic_cast<const types::ILangStringShortNameTypeIec61360&>(instance),
         recursive
       );
     case types::ModelType::kLangStringDefinitionTypeIec61360:
-      return OverLangStringDefinitionTypeIec61360(
+      return Over_LangStringDefinitionTypeIec61360(
         dynamic_cast<const types::ILangStringDefinitionTypeIec61360&>(instance),
         recursive
       );
     case types::ModelType::kDataSpecificationIec61360:
-      return OverDataSpecificationIec61360(
+      return Over_DataSpecificationIec61360(
         dynamic_cast<const types::IDataSpecificationIec61360&>(instance),
         recursive
       );
@@ -11112,7 +11112,7 @@ NonRecursiveVerification::NonRecursiveVerification(
 }
 
 Iterator NonRecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, false));
+  return IterateErrors(DispatchOnModelType(*instance_, false));
 }
 
 const Iterator& NonRecursiveVerification::end() const {
@@ -11130,7 +11130,7 @@ RecursiveVerification::RecursiveVerification(
 }
 
 Iterator RecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, true));
+  return IterateErrors(DispatchOnModelType(*instance_, true));
 }
 
 const Iterator& RecursiveVerification::end() const {

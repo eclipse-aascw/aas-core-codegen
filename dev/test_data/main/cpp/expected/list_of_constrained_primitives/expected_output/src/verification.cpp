@@ -128,7 +128,7 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
  * The iterators are combined out of the combinators below. They follow three rules
  * so that we never build the iterators over the whole model up front:
  * 1. \ref ChainIterator starts a child only once the previous child is done.
- * 2. \ref OverIterator dispatches on the instance only in \ref Start.
+ * 2. \ref DispatchingIterator dispatches on the instance only in \ref Start.
  * 3. \ref EachIterator builds the iterator over an item only once the iteration
  *    reaches the item.
  *
@@ -446,42 +446,42 @@ std::unique_ptr<IIterator> Each(
   return common::make_unique<EachIterator<T> >(&items, over_item, recursive);
 }
 
-using ListOf_Name = std::vector<std::wstring>;
+using listOf_Name = std::vector<std::wstring>;
 
-std::unique_ptr<IIterator> OverName(
+std::unique_ptr<IIterator> Over_Name(
   const std::wstring& value,
   bool
 ) {
   return One(&value, Shape::kName);
 }
 
-std::unique_ptr<IIterator> OverListOf_Name(
-  const ListOf_Name& value,
+std::unique_ptr<IIterator> Over_listOf_Name(
+  const listOf_Name& value,
   bool recursive
 ) {
-  return Each(value, &OverName, recursive);
+  return Each(value, &Over_Name, recursive);
 }
 
-std::unique_ptr<IIterator> OverSomething(
+std::unique_ptr<IIterator> Over_Something(
   const types::ISomething& that,
   bool recursive
 ) {
   return InProperty(
     iteration::Property::kSomeNames,
-    OverListOf_Name(that.some_names(), recursive)
+    Over_listOf_Name(that.some_names(), recursive)
   );
 }
 
 /**
  * Iterate over the values of the \p instance, dispatched on its runtime type.
  */
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
   const types::IClass& instance,
   bool recursive
 ) {
   switch (instance.model_type()) {
     case types::ModelType::kSomething:
-      return OverSomething(
+      return Over_Something(
         dynamic_cast<const types::ISomething&>(instance),
         recursive
       );
@@ -750,7 +750,7 @@ NonRecursiveVerification::NonRecursiveVerification(
 }
 
 Iterator NonRecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, false));
+  return IterateErrors(DispatchOnModelType(*instance_, false));
 }
 
 const Iterator& NonRecursiveVerification::end() const {
@@ -768,7 +768,7 @@ RecursiveVerification::RecursiveVerification(
 }
 
 Iterator RecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, true));
+  return IterateErrors(DispatchOnModelType(*instance_, true));
 }
 
 const Iterator& RecursiveVerification::end() const {

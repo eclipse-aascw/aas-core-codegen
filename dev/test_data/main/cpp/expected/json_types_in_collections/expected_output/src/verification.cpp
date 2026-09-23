@@ -47,9 +47,9 @@ namespace {
  * A shape tells which checks apply to a value, see \ref ChecksOf.
  */
 enum class Shape : std::uint32_t {
-  kJsonValue = 0,
-  kJsonArray = 1,
-  kJsonObject = 2
+  kJSONValue = 0,
+  kJSONArray = 1,
+  kJSONObject = 2
 };  // enum class Shape
 
 /**
@@ -78,9 +78,9 @@ const std::vector<Check>& ChecksOf(Shape shape) {
   static const std::vector<Check> kNoChecks;
 
   switch (shape) {
-    case Shape::kJsonValue:
-    case Shape::kJsonArray:
-    case Shape::kJsonObject:
+    case Shape::kJSONValue:
+    case Shape::kJSONArray:
+    case Shape::kJSONObject:
       // NOTE (mristin):
       // The JSON-able values are verified by the nested verification.
       return kNoChecks;
@@ -106,17 +106,17 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
   const void* value
 ) {
   switch (shape) {
-    case Shape::kJsonValue:
+    case Shape::kJSONValue:
       return common::make_unique<JsonValueVerificator>(
         *static_cast<const nlohmann::json*>(value),
         JsonValueShape::kAny
       );
-    case Shape::kJsonArray:
+    case Shape::kJSONArray:
       return common::make_unique<JsonValueVerificator>(
         *static_cast<const nlohmann::json*>(value),
         JsonValueShape::kArray
       );
-    case Shape::kJsonObject:
+    case Shape::kJSONObject:
       return common::make_unique<JsonValueVerificator>(
         *static_cast<const nlohmann::json*>(value),
         JsonValueShape::kObject
@@ -139,7 +139,7 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
  * The iterators are combined out of the combinators below. They follow three rules
  * so that we never build the iterators over the whole model up front:
  * 1. \ref ChainIterator starts a child only once the previous child is done.
- * 2. \ref OverIterator dispatches on the instance only in \ref Start.
+ * 2. \ref DispatchingIterator dispatches on the instance only in \ref Start.
  * 3. \ref EachIterator builds the iterator over an item only once the iteration
  *    reaches the item.
  *
@@ -627,52 +627,52 @@ std::unique_ptr<IIterator> Each(
   return common::make_unique<EachIterator<T> >(&items, over_item, recursive);
 }
 
-using ListOf_JsonValue = std::vector<nlohmann::json>;
+using listOf_jsonValue = std::vector<nlohmann::json>;
 
-using TupleOf4_str_JsonValue_JsonArray_JsonObject = std::tuple<
+using tupleOf4_str_jsonValue_jsonArray_jsonObjectOf_str = std::tuple<
   std::wstring,
   nlohmann::json,
   nlohmann::json,
   nlohmann::json
 >;
 
-std::unique_ptr<IIterator> OverJsonValue(
+std::unique_ptr<IIterator> Over_jsonValue(
   const nlohmann::json& value,
   bool
 ) {
-  return One(&value, Shape::kJsonValue);
+  return One(&value, Shape::kJSONValue);
 }
 
-std::unique_ptr<IIterator> OverListOf_JsonValue(
-  const ListOf_JsonValue& value,
+std::unique_ptr<IIterator> Over_listOf_jsonValue(
+  const listOf_jsonValue& value,
   bool recursive
 ) {
-  return Each(value, &OverJsonValue, recursive);
+  return Each(value, &Over_jsonValue, recursive);
 }
 
-std::unique_ptr<IIterator> OverTupleOf4_str_JsonValue_JsonArray_JsonObject(
-  const TupleOf4_str_JsonValue_JsonArray_JsonObject& value,
+std::unique_ptr<IIterator> Over_tupleOf4_str_jsonValue_jsonArray_jsonObjectOf_str(
+  const tupleOf4_str_jsonValue_jsonArray_jsonObjectOf_str& value,
   bool
 ) {
   return Chain(
-    AtIndex(1, One(&std::get<1>(value), Shape::kJsonValue)),
-    AtIndex(2, One(&std::get<2>(value), Shape::kJsonArray)),
-    AtIndex(3, One(&std::get<3>(value), Shape::kJsonObject))
+    AtIndex(1, One(&std::get<1>(value), Shape::kJSONValue)),
+    AtIndex(2, One(&std::get<2>(value), Shape::kJSONArray)),
+    AtIndex(3, One(&std::get<3>(value), Shape::kJSONObject))
   );
 }
 
-std::unique_ptr<IIterator> OverSomething(
+std::unique_ptr<IIterator> Over_Something(
   const types::ISomething& that,
   bool recursive
 ) {
   return Chain(
     InProperty(
       iteration::Property::kValues,
-      OverListOf_JsonValue(that.values(), recursive)
+      Over_listOf_jsonValue(that.values(), recursive)
     ),
     InProperty(
       iteration::Property::kTupleWithJson,
-      OverTupleOf4_str_JsonValue_JsonArray_JsonObject(
+      Over_tupleOf4_str_jsonValue_jsonArray_jsonObjectOf_str(
         that.tuple_with_json(),
         recursive
       )
@@ -683,13 +683,13 @@ std::unique_ptr<IIterator> OverSomething(
 /**
  * Iterate over the values of the \p instance, dispatched on its runtime type.
  */
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
   const types::IClass& instance,
   bool recursive
 ) {
   switch (instance.model_type()) {
     case types::ModelType::kSomething:
-      return OverSomething(
+      return Over_Something(
         dynamic_cast<const types::ISomething&>(instance),
         recursive
       );
@@ -920,7 +920,7 @@ NonRecursiveVerification::NonRecursiveVerification(
 }
 
 Iterator NonRecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, false));
+  return IterateErrors(DispatchOnModelType(*instance_, false));
 }
 
 const Iterator& NonRecursiveVerification::end() const {
@@ -938,7 +938,7 @@ RecursiveVerification::RecursiveVerification(
 }
 
 Iterator RecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, true));
+  return IterateErrors(DispatchOnModelType(*instance_, true));
 }
 
 const Iterator& RecursiveVerification::end() const {
