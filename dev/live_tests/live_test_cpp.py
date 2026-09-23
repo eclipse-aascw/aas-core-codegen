@@ -49,7 +49,9 @@ def _cmake_target_prefix(namespace: Stripped) -> Stripped:
     return Stripped("_".join([part.lower() for part in namespace_parts]))
 
 
-def _generate_cmake_lists(namespace: Stripped, uses_xml_rpc: bool) -> Stripped:
+def _generate_cmake_lists(
+    namespace: Stripped, uses_xml_rpc: bool, uses_variant: bool
+) -> Stripped:
     project_name = _cmake_project_name(namespace)
     variable_prefix = _cmake_variable_prefix(namespace)
     target_prefix = _cmake_target_prefix(namespace)
@@ -85,6 +87,14 @@ def _generate_cmake_lists(namespace: Stripped, uses_xml_rpc: bool) -> Stripped:
         if uses_xml_rpc
         else ""
     )
+
+    find_variant_line = (
+        "find_package(mpark_variant 1 CONFIG REQUIRED)\n" if uses_variant else ""
+    )
+
+    variant_link_line = "        mpark_variant\n" if uses_variant else ""
+
+    variant_link_line_in_tests = "            mpark_variant\n" if uses_variant else ""
 
     # pylint: disable=line-too-long
     return Stripped(
@@ -130,7 +140,7 @@ find_package(nlohmann_json 3 CONFIG REQUIRED)
 find_package(expat 2 CONFIG REQUIRED)
 find_package(tl-optional 1 CONFIG REQUIRED)
 find_package(tl-expected 1 CONFIG REQUIRED)
-
+{find_variant_line}
 # NOTE (mristin):
 # Since there is a lot of source code, we have to compile to large object files
 # with MSVC; otherwise the error C1128 is raised.
@@ -219,7 +229,7 @@ target_link_libraries({target_prefix}_static
         nlohmann_json::nlohmann_json
         tl::optional
         tl::expected
-        )
+{variant_link_line}        )
 
 add_library({target_prefix} SHARED ${{HEADER}} ${{SRC}})
 
@@ -242,7 +252,7 @@ target_link_libraries({target_prefix}
         nlohmann_json::nlohmann_json
         tl::optional
         tl::expected
-        )
+{variant_link_line}        )
 
 # Testing
 OPTION(BUILD_TESTS "Build tests for {project_name}" FALSE)
@@ -254,6 +264,36 @@ if (${{BUILD_TESTS}})
 
     include(CTest)
     enable_testing()
+
+    # region C++11 compatibility check
+    # NOTE (mristin):
+    # The library must compile as C++11, but the tests need C++17 for
+    # the <filesystem>. We can not link the tests against the library compiled
+    # as C++11, since common.hpp picks the standard structures (such as
+    # std::optional) or their polyfills (such as tl::optional) depending on
+    # the standard of whoever includes it, so the tests and the library would
+    # disagree on the types. Instead, we compile the library once more as C++11
+    # in this dedicated target. Nothing links against it, and no test runs it,
+    # but any construct beyond C++11 breaks the build.
+    add_library({target_prefix}_cpp11_compatibility_check OBJECT ${{HEADER}} ${{SRC}})
+    set_target_properties({target_prefix}_cpp11_compatibility_check
+            PROPERTIES
+            CXX_STANDARD 11
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF
+            )
+    target_include_directories({target_prefix}_cpp11_compatibility_check
+            PRIVATE
+            ${{CMAKE_CURRENT_SOURCE_DIR}}/include
+            )
+    target_link_libraries({target_prefix}_cpp11_compatibility_check
+            PRIVATE
+            expat::expat
+            nlohmann_json::nlohmann_json
+            tl::optional
+            tl::expected
+{variant_link_line_in_tests}            )
+    # endregion C++11 compatibility check
 
     include_directories(${{CMAKE_CURRENT_SOURCE_DIR}}/test-external)
 
@@ -446,10 +486,16 @@ if (${{BUILD_TESTS}})
     )
 
 
-def _generate_vcpkg_json(namespace: Stripped) -> Stripped:
+def _generate_vcpkg_json(namespace: Stripped, uses_variant: bool) -> Stripped:
     project_name = "-".join(
         part.replace("_", "-").lower() for part in namespace.split("::")
     )
+
+    # NOTE (mristin):
+    # We can not constrain the version of mpark-variant, since the baseline
+    # records it with a scheme which vcpkg can not compare against ``version>=``.
+    # The baseline pins it to 1.4.0 anyway.
+    variant_dependency = ',\n    "mpark-variant"' if uses_variant else ""
 
     return Stripped(
         f"""\
@@ -480,7 +526,7 @@ def _generate_vcpkg_json(namespace: Stripped) -> Stripped:
     {{
       "name": "tl-expected",
       "version>=": "1.1.0"
-    }}
+    }}{variant_dependency}
   ],
   "builtin-baseline": "91b17dd72add5718332e9a2bf55497e2b126b0a0"
 }}"""
@@ -614,15 +660,33 @@ def main() -> int:
                 case_dir / "expected_output" / "src" / "xml_rpc.hpp"
             ).exists()
 
+            # NOTE (mristin):
+            # Likewise, we check whether the generator relies on a variant
+            # (only for the named unions) in what it actually wrote.
+            common_hpp_path = (
+                case_dir
+                / "expected_output"
+                / "include"
+                / namespace.replace("::", "/")
+                / "common.hpp"
+            )
+            uses_variant = "mpark/variant.hpp" in common_hpp_path.read_text(
+                encoding="utf-8"
+            )
+
             cmake_lists_text = _generate_cmake_lists(
-                namespace=namespace, uses_xml_rpc=uses_xml_rpc
+                namespace=namespace,
+                uses_xml_rpc=uses_xml_rpc,
+                uses_variant=uses_variant,
             )
             (project_dir / "CMakeLists.txt").write_text(
                 cmake_lists_text, encoding="utf-8"
             )
 
             print(f"Generating vcpkg.json in {project_dir} ...")
-            vcpkg_json_text = _generate_vcpkg_json(namespace=namespace)
+            vcpkg_json_text = _generate_vcpkg_json(
+                namespace=namespace, uses_variant=uses_variant
+            )
             (project_dir / "vcpkg.json").write_text(vcpkg_json_text, encoding="utf-8")
 
             expected_output_dir = case_dir / "expected_output"

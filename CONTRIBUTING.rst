@@ -308,8 +308,10 @@ Each script requires the corresponding language toolchain to be installed and av
 
 *C++*
     ``cmake`` and a C++ compiler.
-    Dependencies (``nlohmann-json``, ``expat``, ``tl-optional``, ``tl-expected``) are managed via `vcpkg`_.
+    Dependencies (``nlohmann-json``, ``expat``, ``tl-optional``, ``tl-expected``, and ``mpark-variant`` for the meta-models with named unions) are managed via `vcpkg`_.
     The ``VCPKG_ROOT`` environment variable must point to the root of a vcpkg installation.
+
+    The tests need C++17 for ``<filesystem>``, so the script compiles the libraries and the tests as C++17. Since the generated code must stay C++11-compatible, the script additionally compiles the library as C++11 in a dedicated target, ``*_cpp11_compatibility_check``, which nothing links against.
 
     .. _vcpkg: https://github.com/microsoft/vcpkg
 

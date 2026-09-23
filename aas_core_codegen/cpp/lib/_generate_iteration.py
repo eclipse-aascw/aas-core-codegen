@@ -1089,10 +1089,10 @@ def _generate_extract_iclass_from_named_union(
     """
     Generate a helper to extract the ``shared_ptr<IClass>`` held in a union.
 
-    A named union's value is a ``std::variant``, not a polymorphic pointer,
+    A named union's value is a ``common::variant``, not a polymorphic pointer,
     so it can not be ``static_pointer_cast`` directly -- we switch on the
     variant's own ``index()`` and return the corresponding
-    ``std::get<i>(...)`` alternative, which upcasts to ``IClass`` like any
+    ``common::get<i>(...)`` alternative, which upcasts to ``IClass`` like any
     other class pointer. We generate this once per union and reference it
     by name wherever a union-typed property/item is iterated (single
     property, list item, tuple item).
@@ -1106,7 +1106,7 @@ def _generate_extract_iclass_from_named_union(
             Stripped(
                 f"""\
 case {i}:
-{I}return std::get<{i}>(that);"""
+{I}return common::get<{i}>(that);"""
             )
         )
 

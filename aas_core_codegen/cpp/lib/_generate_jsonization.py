@@ -3073,7 +3073,7 @@ def _generate_wrap_deserialized_as_variant_function() -> Stripped:
 
     Every implementer of a named union is de-serialized through its own
     canonical entry point (bypassing the union), and the resulting pointer
-    then needs to be wrapped into the union's ``std::variant`` alternative
+    then needs to be wrapped into the union's ``common::variant`` alternative
     matching its own interface -- no upcasting is involved, since the
     variant is spelled out over the implementers' own interfaces directly.
     This shape is identical for every implementer of every union (only the
@@ -3089,7 +3089,7 @@ def _generate_wrap_deserialized_as_variant_function() -> Stripped:
  *
  * Every implementer of a named union is de-serialized through its own
  * canonical entry point (bypassing the union), and the resulting pointer
- * then needs to be wrapped into the union's std::variant alternative
+ * then needs to be wrapped into the union's common::variant alternative
  * matching its own interface -- no upcasting is involved, since the
  * variant is spelled out over the implementers' own interfaces directly.
  *
@@ -3134,7 +3134,7 @@ def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
     Generate the snippet to de-serialize a single implementer and wrap it.
 
     The resulting ``pair<optional<shared_ptr<T>>, ...>`` is wrapped into
-    the union's ``std::variant`` in one call via
+    the union's ``common::variant`` in one call via
     :py:func:`_generate_wrap_deserialized_as_variant_function`.
 
     We go straight to the property loop. The union has checked that the JSON
@@ -4879,7 +4879,7 @@ def _generate_serialize_named_union_implementation(
     """
     Generate the function to serialize a named union, once per union.
 
-    This switches on the ``std::variant``'s own ``index()`` -- the variant
+    This switches on the ``common::variant``'s own ``index()`` -- the variant
     already knows which alternative it holds, so neither a ``model_type()``
     nor a dynamic cast is needed.
     """
@@ -4895,7 +4895,7 @@ def _generate_serialize_named_union_implementation(
             Identifier(f"serialize_{implementer.name}")
         )
 
-        call = Stripped(f"{serialize_function}(*std::get<{i}>(that))")
+        call = Stripped(f"{serialize_function}(*common::get<{i}>(that))")
 
         if (
             fallible

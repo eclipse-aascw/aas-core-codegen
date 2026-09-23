@@ -229,9 +229,9 @@ std::shared_ptr<types::IClass> ExtractIClassFromStructuralUnion(
 ) {
   switch (that.index()) {
     case 0:
-      return std::get<0>(that);
+      return common::get<0>(that);
     case 1:
-      return std::get<1>(that);
+      return common::get<1>(that);
     default:
       throw std::logic_error("Invalid variant index");
   }
@@ -242,15 +242,15 @@ std::shared_ptr<types::IClass> ExtractIClassFromMixedUnion(
 ) {
   switch (that.index()) {
     case 0:
-      return std::get<0>(that);
+      return common::get<0>(that);
     case 1:
-      return std::get<1>(that);
+      return common::get<1>(that);
     case 2:
-      return std::get<2>(that);
+      return common::get<2>(that);
     case 3:
-      return std::get<3>(that);
+      return common::get<3>(that);
     case 4:
-      return std::get<4>(that);
+      return common::get<4>(that);
     default:
       throw std::logic_error("Invalid variant index");
   }
@@ -261,9 +261,9 @@ std::shared_ptr<types::IClass> ExtractIClassFromModelTypedUnion(
 ) {
   switch (that.index()) {
     case 0:
-      return std::get<0>(that);
+      return common::get<0>(that);
     case 1:
-      return std::get<1>(that);
+      return common::get<1>(that);
     default:
       throw std::logic_error("Invalid variant index");
   }

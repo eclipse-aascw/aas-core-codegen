@@ -7,6 +7,7 @@ from typing import List
 
 from icontract import ensure
 
+from aas_core_codegen import intermediate
 from aas_core_codegen.common import (
     Stripped,
     indent_but_first_line,
@@ -150,7 +151,9 @@ def _generate_concatenate_implementations_for_2_parts_and_above() -> List[Stripp
     "Trailing newline mandatory for valid end-of-files"
 )
 # fmt: on
-def generate_header(library_namespace: Stripped) -> str:
+def generate_header(
+    symbol_table: intermediate.SymbolTable, library_namespace: Stripped
+) -> str:
     """Generate header of common functionality."""
     namespace = Stripped(f"{library_namespace}")
 
@@ -250,17 +253,66 @@ std::unique_ptr<T> make_unique(
 #pragma warning(pop)
 #endif"""
         ),
-        cpp_common.generate_namespace_opening(library_namespace),
-        Stripped(
-            f"""\
+    ]  # type: List[Stripped]
+
+    # NOTE (mristin):
+    # Only the named unions need a variant, so we do not burden the users of
+    # the other meta-models with an additional dependency in C++11 and C++14.
+    uses_variant = len(symbol_table.named_unions) > 0
+
+    if uses_variant:
+        blocks.append(
+            Stripped(
+                """\
+// NOTE (mristin):
+// See: https://stackoverflow.com/questions/2324658/how-to-determine-the-version-of-the-c-standard-used-by-the-compiler
+#if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || __cplusplus >= 201703L)
+// NOTE (mristin):
+// Standard library provides std::variant in C++17 and above.
+#pragma warning(push, 0)
+#include <variant>
+#pragma warning(pop)
+#else
+// NOTE (mristin):
+// We rely on https://github.com/mpark/variant for variant structure.
+#pragma warning(push, 0)
+#include <mpark/variant.hpp>
+#pragma warning(pop)
+#endif"""
+            )
+        )
+
+    variant_aliases = (
+        [
+            Stripped(
+                """\
+// Please keep in sync with the preprocessing directives above in the include block.
+#if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || __cplusplus >= 201703L)
+using std::variant;
+using std::get;
+#else
+using mpark::variant;
+using mpark::get;
+#endif"""
+            )
+        ]
+        if uses_variant
+        else []
+    )  # type: List[Stripped]
+
+    blocks.extend(
+        [
+            cpp_common.generate_namespace_opening(library_namespace),
+            Stripped(
+                f"""\
 /**
  * \\defgroup common Common functionality used throughout the library
  * @{{
  */
 namespace {cpp_common.COMMON_NAMESPACE} {{"""
-        ),
-        Stripped(
-            """\
+            ),
+            Stripped(
+                """\
 // Please keep in sync with the preprocessing directives above in the include block.
 #if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || __cplusplus >= 201703L)
 // Standard library provides std::optional in C++17 and above.
@@ -272,9 +324,9 @@ using tl::optional;
 using tl::nullopt;
 using tl::make_optional;
 #endif"""
-        ),
-        Stripped(
-            """\
+            ),
+            Stripped(
+                """\
 // Please keep in sync with the preprocessing directives above in the include block.
 #if ((defined(_MSVC_LANG) && _MSVC_LANG > 202002L) || __cplusplus > 202002L)
 using std::expected;
@@ -285,9 +337,10 @@ using tl::expected;
 using tl::unexpected;
 using tl::make_unexpected;
 #endif"""
-        ),
-        Stripped(
-            f"""\
+            ),
+            *variant_aliases,
+            Stripped(
+                f"""\
 // Please keep in sync with the preprocessing directives above in the include block.
 // Standard library provides std::make_unique in C++14 and above.
 #if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201402L) || __cplusplus >= 201402L)
@@ -297,10 +350,10 @@ using std::make_unique;
 // https://stackoverflow.com/questions/12547983/is-there-a-way-to-write-make-unique-in-vs2012
 {make_uniques_joined}
 #endif"""
-        ),
-        *_generate_concatenate_definitions_for_2_parts_and_above(),
-        Stripped(
-            f"""\
+            ),
+            *_generate_concatenate_definitions_for_2_parts_and_above(),
+            Stripped(
+                f"""\
 /**
  * Check if all the elements satisfy the \\p condition.
  *
@@ -320,9 +373,9 @@ bool All(
 {I}}}
 {I}return true;
 }}"""
-        ),
-        Stripped(
-            f"""\
+            ),
+            Stripped(
+                f"""\
 /**
  * Check if any of the elements satisfy the \\p condition.
  *
@@ -342,9 +395,9 @@ bool Some(
 {I}}}
 {I}return false;
 }}"""
-        ),
-        Stripped(
-            f"""\
+            ),
+            Stripped(
+                f"""\
 /**
  * Check if all the numbers in the range `[start, end)` satisfy the \\p condition.
  *
@@ -369,9 +422,9 @@ bool AllRange(
 {I}}}
 {I}return true;
 }}"""
-        ),
-        Stripped(
-            f"""\
+            ),
+            Stripped(
+                f"""\
 /**
  * Check if any number in the range `[start, end)` satisfy the \\p condition.
  *
@@ -396,9 +449,9 @@ bool SomeRange(
 {I}}}
 {I}return false;
 }}"""
-        ),
-        Stripped(
-            f"""\
+            ),
+            Stripped(
+                f"""\
 /**
  * Check if the \\p container contains the \\p value.
  *
@@ -419,9 +472,9 @@ bool Contains(
 {II}value
 {I}) != container_end;
 }}"""
-        ),
-        Stripped(
-            """\
+            ),
+            Stripped(
+                """\
 /**
  * Convert platform-independent the wide string to a UTF-8 string.
  *
@@ -429,9 +482,9 @@ bool Contains(
  * \\return UTF-8 encoded \\p text
  */
 std::string WstringToUtf8(const std::wstring& text);"""
-        ),
-        Stripped(
-            f"""\
+            ),
+            Stripped(
+                f"""\
 /**
  * Convert platform-independent the UTF-8 encoded string to a wide string.
  *
@@ -445,9 +498,9 @@ std::wstring Utf8ToWstring(
 {I}const char* utf8_text,
 {I}size_t utf8_text_size = std::string::npos
 );"""
-        ),
-        Stripped(
-            """\
+            ),
+            Stripped(
+                """\
 /**
  * Convert platform-independent the UTF-8 encoded string to a wide string.
  *
@@ -455,16 +508,17 @@ std::wstring Utf8ToWstring(
  * \\return wide string
  */
 std::wstring Utf8ToWstring(const std::string& utf8_text);"""
-        ),
-        Stripped(
-            f"""\
+            ),
+            Stripped(
+                f"""\
 }}  // namespace {cpp_common.COMMON_NAMESPACE}
 /**@}}*/"""
-        ),
-        cpp_common.generate_namespace_closing(library_namespace),
-        cpp_common.WARNING,
-        Stripped(f"#endif  // {include_guard_var}"),
-    ]
+            ),
+            cpp_common.generate_namespace_closing(library_namespace),
+            cpp_common.WARNING,
+            Stripped(f"#endif  // {include_guard_var}"),
+        ]
+    )
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

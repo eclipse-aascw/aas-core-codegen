@@ -100,7 +100,10 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
         (
             include_dir / "common.hpp",
             lambda: (
-                cpp_lib.generate_common_header(library_namespace=library_namespace),
+                cpp_lib.generate_common_header(
+                    symbol_table=context.symbol_table,
+                    library_namespace=library_namespace,
+                ),
                 None,
             ),
         ),

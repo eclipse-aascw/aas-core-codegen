@@ -175,14 +175,14 @@ void PassThroughVisitor::VisitSomething(
   ) {
     case 0:
       Visit(
-        std::get<0>(
+        common::get<0>(
           that->mutable_structural_property()
         )
       );
       break;
     case 1:
       Visit(
-        std::get<1>(
+        common::get<1>(
           that->mutable_structural_property()
         )
       );
@@ -197,35 +197,35 @@ void PassThroughVisitor::VisitSomething(
   ) {
     case 0:
       Visit(
-        std::get<0>(
+        common::get<0>(
           that->mutable_mixed_property()
         )
       );
       break;
     case 1:
       Visit(
-        std::get<1>(
+        common::get<1>(
           that->mutable_mixed_property()
         )
       );
       break;
     case 2:
       Visit(
-        std::get<2>(
+        common::get<2>(
           that->mutable_mixed_property()
         )
       );
       break;
     case 3:
       Visit(
-        std::get<3>(
+        common::get<3>(
           that->mutable_mixed_property()
         )
       );
       break;
     case 4:
       Visit(
-        std::get<4>(
+        common::get<4>(
           that->mutable_mixed_property()
         )
       );
@@ -240,14 +240,14 @@ void PassThroughVisitor::VisitSomething(
   ) {
     case 0:
       Visit(
-        std::get<0>(
+        common::get<0>(
           that->mutable_model_typed_property()
         )
       );
       break;
     case 1:
       Visit(
-        std::get<1>(
+        common::get<1>(
           that->mutable_model_typed_property()
         )
       );
@@ -266,14 +266,14 @@ void PassThroughVisitor::VisitSomething(
     ) {
       case 0:
         Visit(
-          std::get<0>(
+          common::get<0>(
             item
           )
         );
         break;
       case 1:
         Visit(
-          std::get<1>(
+          common::get<1>(
             item
           )
         );
@@ -293,35 +293,35 @@ void PassThroughVisitor::VisitSomething(
     ) {
       case 0:
         Visit(
-          std::get<0>(
+          common::get<0>(
             item
           )
         );
         break;
       case 1:
         Visit(
-          std::get<1>(
+          common::get<1>(
             item
           )
         );
         break;
       case 2:
         Visit(
-          std::get<2>(
+          common::get<2>(
             item
           )
         );
         break;
       case 3:
         Visit(
-          std::get<3>(
+          common::get<3>(
             item
           )
         );
         break;
       case 4:
         Visit(
-          std::get<4>(
+          common::get<4>(
             item
           )
         );
@@ -341,14 +341,14 @@ void PassThroughVisitor::VisitSomething(
     ) {
       case 0:
         Visit(
-          std::get<0>(
+          common::get<0>(
             item
           )
         );
         break;
       case 1:
         Visit(
-          std::get<1>(
+          common::get<1>(
             item
           )
         );
@@ -366,7 +366,7 @@ void PassThroughVisitor::VisitSomething(
   ) {
     case 0:
       Visit(
-        std::get<0>(
+        common::get<0>(
           std::get<0>(
             that->mutable_tuple_property()
           )
@@ -375,7 +375,7 @@ void PassThroughVisitor::VisitSomething(
       break;
     case 1:
       Visit(
-        std::get<1>(
+        common::get<1>(
           std::get<0>(
             that->mutable_tuple_property()
           )
@@ -392,7 +392,7 @@ void PassThroughVisitor::VisitSomething(
   ) {
     case 0:
       Visit(
-        std::get<0>(
+        common::get<0>(
           std::get<1>(
             that->mutable_tuple_property()
           )
@@ -401,7 +401,7 @@ void PassThroughVisitor::VisitSomething(
       break;
     case 1:
       Visit(
-        std::get<1>(
+        common::get<1>(
           std::get<1>(
             that->mutable_tuple_property()
           )
@@ -410,7 +410,7 @@ void PassThroughVisitor::VisitSomething(
       break;
     case 2:
       Visit(
-        std::get<2>(
+        common::get<2>(
           std::get<1>(
             that->mutable_tuple_property()
           )
@@ -419,7 +419,7 @@ void PassThroughVisitor::VisitSomething(
       break;
     case 3:
       Visit(
-        std::get<3>(
+        common::get<3>(
           std::get<1>(
             that->mutable_tuple_property()
           )
@@ -428,7 +428,7 @@ void PassThroughVisitor::VisitSomething(
       break;
     case 4:
       Visit(
-        std::get<4>(
+        common::get<4>(
           std::get<1>(
             that->mutable_tuple_property()
           )
@@ -445,7 +445,7 @@ void PassThroughVisitor::VisitSomething(
   ) {
     case 0:
       Visit(
-        std::get<0>(
+        common::get<0>(
           std::get<2>(
             that->mutable_tuple_property()
           )
@@ -454,7 +454,7 @@ void PassThroughVisitor::VisitSomething(
       break;
     case 1:
       Visit(
-        std::get<1>(
+        common::get<1>(
           std::get<2>(
             that->mutable_tuple_property()
           )
@@ -475,14 +475,14 @@ void PassThroughVisitor::VisitSomething(
     ) {
       case 0:
         Visit(
-          std::get<0>(
+          common::get<0>(
             maybe_optional_structural_property.value()
           )
         );
         break;
       case 1:
         Visit(
-          std::get<1>(
+          common::get<1>(
             maybe_optional_structural_property.value()
           )
         );
@@ -503,35 +503,35 @@ void PassThroughVisitor::VisitSomething(
     ) {
       case 0:
         Visit(
-          std::get<0>(
+          common::get<0>(
             maybe_optional_mixed_property.value()
           )
         );
         break;
       case 1:
         Visit(
-          std::get<1>(
+          common::get<1>(
             maybe_optional_mixed_property.value()
           )
         );
         break;
       case 2:
         Visit(
-          std::get<2>(
+          common::get<2>(
             maybe_optional_mixed_property.value()
           )
         );
         break;
       case 3:
         Visit(
-          std::get<3>(
+          common::get<3>(
             maybe_optional_mixed_property.value()
           )
         );
         break;
       case 4:
         Visit(
-          std::get<4>(
+          common::get<4>(
             maybe_optional_mixed_property.value()
           )
         );
@@ -552,14 +552,14 @@ void PassThroughVisitor::VisitSomething(
     ) {
       case 0:
         Visit(
-          std::get<0>(
+          common::get<0>(
             maybe_optional_model_typed_property.value()
           )
         );
         break;
       case 1:
         Visit(
-          std::get<1>(
+          common::get<1>(
             maybe_optional_model_typed_property.value()
           )
         );

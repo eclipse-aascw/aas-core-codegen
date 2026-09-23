@@ -573,7 +573,7 @@ enum class {enum_name} : std::uint32_t {{
 
 def _generate_named_union_alias(named_union: intermediate.NamedUnion) -> Stripped:
     """
-    Generate the ``using`` alias declaring the named union as a ``std::variant``.
+    Generate the ``using`` alias declaring the named union as a ``common::variant``.
 
     We reference the flattened implementers' interfaces by their bare name
     (no ``types::`` prefix) since this alias is itself declared inside
@@ -1025,10 +1025,6 @@ def generate_header(
 
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    variant_include = (
-        "#include <variant>\n" if len(symbol_table.named_unions) > 0 else ""
-    )
-
     nlohmann_json_include = (
         "#include <nlohmann/json.hpp>\n\n"
         if intermediate.uses_json_types(symbol_table)
@@ -1052,7 +1048,6 @@ def generate_header(
 #include <cstdint>
 #include <memory>
 #include <string>
-{variant_include}\
 #include <vector>
 #pragma warning(pop)"""
         ),

@@ -11,7 +11,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <variant>
 #include <vector>
 #pragma warning(pop)
 
@@ -90,7 +89,7 @@ class IClass {
 /**
  * Represent a union of classes.
  */
-using StructuralUnion = std::variant<
+using StructuralUnion = common::variant<
     std::shared_ptr<IStructuralFirst>,
     std::shared_ptr<IStructuralSecond>
   >;
@@ -98,7 +97,7 @@ using StructuralUnion = std::variant<
 /**
  * Represent a union of classes.
  */
-using MixedUnion = std::variant<
+using MixedUnion = common::variant<
     std::shared_ptr<IMixedAbstractDescendantOne>,
     std::shared_ptr<IMixedAbstractDescendantTwo>,
     std::shared_ptr<IMixedConcreteWithDescendantsChild>,
@@ -109,7 +108,7 @@ using MixedUnion = std::variant<
 /**
  * Represent a union of classes.
  */
-using ModelTypedUnion = std::variant<
+using ModelTypedUnion = common::variant<
     std::shared_ptr<IModelTypedFirst>,
     std::shared_ptr<IModelTypedSecond>
   >;

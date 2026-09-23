@@ -406,9 +406,9 @@ def generate_named_union_variant_definition(
     types_namespace: Optional[Identifier] = None,
 ) -> Stripped:
     """
-    Generate the right-hand side ``std::variant`` type for a named union.
+    Generate the right-hand side ``common::variant`` type for a named union.
 
-    This is the ``std::variant`` spelled out over the union's flattened
+    This is the ``common::variant`` spelled out over the union's flattened
     ``implementers`` (one alternative per concrete class) that goes into
     the ``using {UnionName} = ...;`` alias declared once per named union
     (see ``_generate_types.py``); call sites elsewhere should reference
@@ -431,7 +431,7 @@ def generate_named_union_variant_definition(
 
     return Stripped(
         f"""\
-std::variant<
+common::variant<
 {INDENT}{indent_but_first_line(item_types_joined, INDENT)}
 >"""
     )
@@ -486,7 +486,7 @@ def generate_type(
         elif isinstance(our_type, intermediate.NamedUnion):
             # NOTE (mristin):
             # A named union is declared once as a ``using {UnionName} =
-            # std::variant<...>;`` alias (see ``_generate_types.py``), so we
+            # common::variant<...>;`` alias (see ``_generate_types.py``), so we
             # only reference that alias here by name -- there is no marker
             # interface and no change to the class hierarchy, so the same
             # representation would extend cleanly if primitive types are

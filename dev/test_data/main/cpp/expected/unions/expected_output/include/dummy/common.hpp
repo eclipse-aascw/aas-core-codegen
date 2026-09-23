@@ -47,6 +47,22 @@
 #pragma warning(pop)
 #endif
 
+// NOTE (mristin):
+// See: https://stackoverflow.com/questions/2324658/how-to-determine-the-version-of-the-c-standard-used-by-the-compiler
+#if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || __cplusplus >= 201703L)
+// NOTE (mristin):
+// Standard library provides std::variant in C++17 and above.
+#pragma warning(push, 0)
+#include <variant>
+#pragma warning(pop)
+#else
+// NOTE (mristin):
+// We rely on https://github.com/mpark/variant for variant structure.
+#pragma warning(push, 0)
+#include <mpark/variant.hpp>
+#pragma warning(pop)
+#endif
+
 namespace dummy {
 
 /**
@@ -76,6 +92,15 @@ using std::make_unexpected;
 using tl::expected;
 using tl::unexpected;
 using tl::make_unexpected;
+#endif
+
+// Please keep in sync with the preprocessing directives above in the include block.
+#if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || __cplusplus >= 201703L)
+using std::variant;
+using std::get;
+#else
+using mpark::variant;
+using mpark::get;
 #endif
 
 // Please keep in sync with the preprocessing directives above in the include block.

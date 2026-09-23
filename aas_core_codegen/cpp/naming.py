@@ -60,7 +60,7 @@ def union_name(identifier: Identifier) -> Identifier:
     """
     Generate a C++ name for a named union based on its meta-model ``identifier``.
 
-    The name is used for a ``using`` alias to a ``std::variant``, so it follows
+    The name is used for a ``using`` alias to a ``common::variant``, so it follows
     the same convention as :py:func:`class_name`/:py:func:`enum_name`, without
     the ``I``-prefix used by :py:func:`interface_name` -- a named union is
     not an interface.

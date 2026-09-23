@@ -1079,7 +1079,7 @@ def _generate_deserialize_from_element_generic() -> Stripped:
     interface or union.
 
     We deliberately make the function generic in the *value* type instead of in
-    the interface: a named union de-serializes into a ``std::variant``, and not
+    the interface: a named union de-serializes into a ``common::variant``, and not
     into a ``shared_ptr``-wrapped interface, but the framing around the value is
     the very same, and every error factory it calls is already generic in
     the value type.
@@ -1419,7 +1419,7 @@ def _generate_wrap_deserialized_as_variant_function() -> Stripped:
     Every implementer of a named union is de-serialized through its own
     ``*FromSequence`` function, and the resulting
     ``pair<optional<shared_ptr<T>>, ...>`` then needs to be wrapped into
-    the union's ``std::variant`` alternative matching its own interface.
+    the union's ``common::variant`` alternative matching its own interface.
     This shape is identical for every implementer of every union (only the
     types differ), so we factor it out into a single generic function
     instead of unrolling it at each dispatch case, mirroring how
@@ -1434,7 +1434,7 @@ def _generate_wrap_deserialized_as_variant_function() -> Stripped:
  * Every implementer of a named union is de-serialized through its own
  * *FromSequence function, and the resulting
  * pair<optional<shared_ptr<T>>, ...> then needs to be wrapped into the
- * union's std::variant alternative matching its own interface.
+ * union's common::variant alternative matching its own interface.
  *
  * \\param result the result of a de-serialization call for one implementer
  * \\return the result wrapped as a variant, or the propagated error
@@ -1479,7 +1479,7 @@ def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
     The implementer's own properties are read directly through its
     ``*FromSequence`` function (no separate start/stop element -- the outer
     ``DeserializeFromElement`` already consumed those), and the
-    resulting pair is wrapped into the union's ``std::variant`` in one call
+    resulting pair is wrapped into the union's ``common::variant`` in one call
     via :py:func:`_generate_wrap_deserialized_as_variant_function`.
     """
     from_sequence_name = cpp_naming.function_name(
@@ -3381,7 +3381,7 @@ def _generate_deserialize_from(
     names/the value type instead, in order to be able to generate the
     function both for the most abstract ``IClass``, the classes defined in
     the symbol table, and the named unions (whose value type is a
-    ``std::variant``, not a ``shared_ptr``-wrapped interface).
+    ``common::variant``, not a ``shared_ptr``-wrapped interface).
     """
     return Stripped(
         f"""\
@@ -4140,7 +4140,7 @@ def _xml_write_own_element_expr(
     if isinstance(type_anno.our_type, intermediate.NamedUnion):
         # NOTE (mristin):
         # A named union has no ``*PtrAsElement`` counterpart -- its own value is
-        # already a ``std::variant``, not a pointer -- so we reference its
+        # already a ``common::variant``, not a pointer -- so we reference its
         # ``*AsElement`` function directly.
         return Stripped(
             cpp_naming.function_name(
@@ -4416,7 +4416,7 @@ def _generate_serialize_named_union_as_element_definition(
     Generate the def. to serialize a named union to an XML element.
 
     Unlike a class, a named union has no ``*PtrAsElement`` counterpart --
-    the union's own value is already a ``std::variant``, not a pointer, so
+    the union's own value is already a ``common::variant``, not a pointer, so
     a single by-const-ref function suffices for every use site (property,
     list item, tuple item).
     """
@@ -4659,7 +4659,7 @@ def _generate_dispatching_serialize_named_union_as_element(
     Generate the impl. for a dispatching serialization for a named union.
 
     Unlike :py:func:`_generate_dispatching_serialize_cls_as_element`, the
-    value here is a ``std::variant``, not a polymorphic pointer, so there is
+    value here is a ``common::variant``, not a polymorphic pointer, so there is
     no ``model_type()``/``dynamic_cast`` dance -- the variant already knows
     which alternative it holds through its own ``index()``, so we switch on
     that directly and delegate to the corresponding implementer's own
@@ -4679,7 +4679,7 @@ def _generate_dispatching_serialize_named_union_as_element(
                 f"""\
 case {i}:
 {I}return {serialize_ptr_as_element}(
-{II}std::get<{i}>(that),
+{II}common::get<{i}>(that),
 {II}writer
 {I});"""
             )
@@ -5189,7 +5189,7 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
         # XML dispatch is always by the element's own tag name -- unlike JSON,
         # there is no distinction between a ``modelType``-dispatched and
         # a structurally-dispatched implementer here. However, a named union
-        # is a ``std::variant``, not a polymorphic pointer, so we still need
+        # is a ``common::variant``, not a polymorphic pointer, so we still need
         # our own dispatch function to construct the right alternative.
         blocks.append(_generate_named_union_from_element(named_union=named_union))
 

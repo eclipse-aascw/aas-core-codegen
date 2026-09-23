@@ -630,7 +630,7 @@ common::optional<types::ModelType> ModelTypeFromModelTypeString(
  *
  * Every implementer of a named union is de-serialized through its own
  * canonical entry point (bypassing the union), and the resulting pointer
- * then needs to be wrapped into the union's std::variant alternative
+ * then needs to be wrapped into the union's common::variant alternative
  * matching its own interface -- no upcasting is involved, since the
  * variant is spelled out over the implementers' own interfaces directly.
  *
@@ -4671,9 +4671,9 @@ nlohmann::json SerializeStructuralUnion(
 ) {
   switch (that.index()) {
     case 0:
-      return SerializeStructuralFirst(*std::get<0>(that));
+      return SerializeStructuralFirst(*common::get<0>(that));
     case 1:
-      return SerializeStructuralSecond(*std::get<1>(that));
+      return SerializeStructuralSecond(*common::get<1>(that));
     default:
       throw std::logic_error(
         common::Concat(
@@ -4689,15 +4689,15 @@ nlohmann::json SerializeMixedUnion(
 ) {
   switch (that.index()) {
     case 0:
-      return SerializeMixedAbstractDescendantOne(*std::get<0>(that));
+      return SerializeMixedAbstractDescendantOne(*common::get<0>(that));
     case 1:
-      return SerializeMixedAbstractDescendantTwo(*std::get<1>(that));
+      return SerializeMixedAbstractDescendantTwo(*common::get<1>(that));
     case 2:
-      return SerializeMixedConcreteWithDescendantsChild(*std::get<2>(that));
+      return SerializeMixedConcreteWithDescendantsChild(*common::get<2>(that));
     case 3:
-      return SerializeMixedConcreteWithDescendants(*std::get<3>(that));
+      return SerializeMixedConcreteWithDescendants(*common::get<3>(that));
     case 4:
-      return SerializeMixedConcreteLeaf(*std::get<4>(that));
+      return SerializeMixedConcreteLeaf(*common::get<4>(that));
     default:
       throw std::logic_error(
         common::Concat(
@@ -4713,9 +4713,9 @@ nlohmann::json SerializeModelTypedUnion(
 ) {
   switch (that.index()) {
     case 0:
-      return SerializeModelTypedFirst(*std::get<0>(that));
+      return SerializeModelTypedFirst(*common::get<0>(that));
     case 1:
-      return SerializeModelTypedSecond(*std::get<1>(that));
+      return SerializeModelTypedSecond(*common::get<1>(that));
     default:
       throw std::logic_error(
         common::Concat(
