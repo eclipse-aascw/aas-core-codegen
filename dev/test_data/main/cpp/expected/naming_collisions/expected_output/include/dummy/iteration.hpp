@@ -149,10 +149,13 @@ class IIterator {
   virtual void Next() = 0;
   virtual bool Done() const = 0;
   virtual const std::shared_ptr<types::IClass>& Get() const = 0;
-  virtual long Index() const = 0;
 
-  /// Prepend the segments to the path reflecting where this iterator points to.
-  virtual void PrependToPath(Path* path) const = 0;
+  /**
+   * \brief Append the segments leading to the current instance to the \p path.
+   *
+   * Only called on request, so the iteration itself builds no paths.
+   */
+  virtual void AppendToPath(Path& path) const = 0;
 
   virtual std::unique_ptr<IIterator> Clone() const = 0;
 
@@ -165,8 +168,8 @@ class IIterator {
  * \brief Iterate over an AAS instance.
  *
  * Unlike STL, this is <em>not</em> a light-weight iterator. We implement
- * a "yielding" iterator by leveraging code generation so that we always keep
- * the model stack as well as the properties iterated thus far.
+ * a "yielding" iterator by composing iterators over the properties so that we
+ * always keep the model stack as well as the properties iterated thus far.
  *
  * This means that copy-construction and equality comparisons are much more heavy-weight
  * than you'd usually expect from an STL iterator. For example, if you want to sort
@@ -246,11 +249,18 @@ class Iterator {
   explicit Iterator(
     std::unique_ptr<impl::IIterator> implementation
   ) :
-    implementation_(std::move(implementation)) {
-      // Intentionally empty.
+    implementation_(std::move(implementation)),
+    index_(implementation_->Done() ? -1 : 0) {
+    // Intentionally empty.
   }
 
   std::unique_ptr<impl::IIterator> implementation_;
+
+  /**
+   * Count the instances iterated thus far so that we can compare the iterators,
+   * or -1 if the iteration is done.
+   */
+  long index_;
 };
 
 bool operator==(const Iterator& a, const Iterator& b);

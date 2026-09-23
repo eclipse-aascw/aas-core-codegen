@@ -93,7 +93,6 @@ The repository is organized as follows:
     │   ├── parse/              Parsing meta-model source files into an AST
     │   ├── intermediate/       Intermediate Representation (IR)
     │   ├── infer_for_schema/   Schema-constraint inference from the IR
-    │   ├── yielding/           Linearized yielding for languages without yield
     │   ├── smoke/              Verify a model by running a smoke-test transpilation
     │   ├── cpp/                C++ SDK generator
     │   ├── csharp/             C# SDK generator
@@ -181,12 +180,6 @@ The ``infer_for_schema`` module walks the constraint ASTs and matches structural
 The result is a set of ``LenConstraint``, ``PatternConstraint``, *etc.* objects that the schema generators consume directly.
 The matching logic lives in ``infer_for_schema/match.py``.
 
-``yielding/`` -- Linearized Yielding
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Some target languages (most notably C++) lack a native ``yield`` / generator construct.
-For those languages, code that would naturally be written as a generator must instead be linearized into an explicit state machine.
-The ``yielding`` module transforms a control-flow graph that uses ``yield`` into a sequence of coroutine-compatible steps that can be rendered as a ``while``/``switch`` loop in the target language.
-
 Language SDK Generators
 -----------------------
 Each supported language has its own generator package under ``aas_core_codegen/<language>/``.
@@ -259,7 +252,7 @@ These inferences live in dedicated modules at the top level of the generator pac
 * ``golang/pointering.py`` -- determines which IR nodes correspond to Go pointer (``*T``) types versus value types.
   Go distinguishes them at the syntax level, so the generator must resolve nullability before rendering any expression.
 * ``cpp/optionaling.py`` -- analogous to ``pointering.py`` for C++: determines which nodes carry ``std::optional<T>`` types.
-* ``cpp/yielding.py`` -- emits the linearized coroutine steps produced by ``aas_core_codegen.yielding`` into C++ syntax (``while``/``switch`` state machines).
+* ``cpp/over.py`` -- names and collects the functions which the C++ verification and iteration generate over the values of the classes, lists, tuples and named unions, as C++11 has no generic lambdas to compose the lazy iterators with.
 * ``java/optional.py`` -- determines which nodes use ``Optional<T>`` versus bare types in Java.
 
 Live Tests

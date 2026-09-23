@@ -9,7 +9,6 @@ from typing import (
     Union,
     Sequence,
     Mapping,
-    MutableMapping,
     Set,
     Final,
 )
@@ -32,6 +31,7 @@ from aas_core_codegen.cpp import (
     description as cpp_description,
     transpilation as cpp_transpilation,
     optionaling as cpp_optionaling,
+    over as cpp_over,
 )
 from aas_core_codegen.cpp.common import (
     INDENT as I,
@@ -2131,6 +2131,12 @@ class _Analysis:
 
         raise AssertionError("Unexpected execution path")
 
+    def yields_recursively(
+        self, type_annotation: intermediate.TypeAnnotationUnion
+    ) -> bool:
+        """Check whether a value of ``type_annotation`` has anything to verify."""
+        return self.yields(type_annotation, descend=True)
+
 
 # NOTE (mristin):
 # The literals of our types come from :py:func:`cpp_naming.enum_literal_name`,
@@ -2173,384 +2179,24 @@ def _json_shape_literal(
 # region Iteration over the values
 
 # NOTE (mristin):
-# We generate the iteration over the values in two passes.
-#
-# C++11 has no generic lambdas, so we generate a named function for every list,
-# tuple and named union that we iterate over, and for every item of such a list.
-# For example, a property ``some_names: List[Name]`` needs:
-#
-#   std::unique_ptr<IIterator> Over_Name(const std::wstring& value, bool) {
-#     return One(&value, Shape::kName);
-#   }
-#
-#   std::unique_ptr<IIterator> Over_listOf_Name(
-#     const listOf_Name& value,
-#     bool recursive
-#   ) {
-#     return Each(value, &Over_Name, recursive);
-#   }
-#
-# In the first pass, ``_collect_function_types`` walks over the properties of
-# the classes, and collects the types which need such a function, e.g.,
-# ``[Name, List[Name]]``. It orders them so that every function comes after
-# the functions it calls, as C++ requires a function to be declared before it is
-# called. The helpers ``_referenced_function_types`` and ``_called_function_types``
-# tell which functions an expression and a function call, respectively.
-#
-# In the second pass, we generate the code, where each piece of code is generated
-# by a function without side effects. The name of a function follows from
-# the moniker of its type (``_over_function_name``), so an expression refers to
-# a function by its name without generating it. For example,
-# ``_generate_over_expression`` gives for the property above, where ``expr`` is
-# ``that.some_names()``:
-#
-#   Over_listOf_Name(that.some_names(), recursive)
-#
-# ``_generate_over_function`` then gives the aliases and the functions over
-# the collected types, ``_generate_over_class`` the function over the instances of
-# a class, and ``_generate_over_instance`` the dispatch on the runtime type of
-# an instance.
-#
-# The name of a generated function is ``Over_`` followed by the moniker of its type
-# (see the note on the monikers below). The names of the hand-written helpers must
-# not start with ``Over_``, lest they clash with the generated functions.
-
-
-# NOTE (mristin):
-# The moniker of a type is a Polish notation over ``_``-separated tokens.
-# A composite type is spelled as a head followed by its arguments, where
-# the heads ``optionalOf`` and ``listOf`` take exactly one argument,
-# ``jsonObjectOf`` exactly one (the moniker of its keys), and ``tupleOf{N}``
-# exactly ``N`` of them. For example, ``Tuple[List[A], B, C]`` gives
-# ``tupleOf3_listOf_A_B_C``.
-#
-# Such a notation can be read back in exactly one way if no token contains
-# an underscore, and if every token tells on its own how many arguments it
-# takes. This is why every built-in token, be it a head or a leaf such as ``str``
-# or ``jsonValue``, is *lower-case*, while the leaves of our types all go
-# through ``capitalized_camel_case`` and hence always start *upper-case*.
-# Were the heads upper-case, say ``ListOf`` and ``TupleOf2``, a class ``List_of``
-# would give the leaf ``ListOf`` as well, and ``TupleOf2_ListOf_ListOf_A`` could
-# be read both as ``Tuple[List[ListOf], A]`` and ``Tuple[ListOf, List[A]]``.
-#
-# Therefore, the monikers are unique by construction, whatever names
-# the meta-model uses.
-
-
-# fmt: off
-@ensure(
-    lambda result: len(result) > 0 and "_" not in result,
-    "A leaf token contains no underscore, see the note above"
-)
-@ensure(
-    lambda type_annotation, result:
-    isinstance(type_annotation, intermediate.OurTypeAnnotation)
-    == result[0].isupper(),
-    "Only the leaves of our types start upper-case, see the note above"
-)
-# fmt: on
-def _leaf_moniker(
-    type_annotation: Union[
-        intermediate.PrimitiveTypeAnnotation,
-        intermediate.OurTypeAnnotation,
-        intermediate.JsonValueTypeAnnotation,
-        intermediate.JsonArrayTypeAnnotation,
-    ]
-) -> str:
-    """Determine the moniker of a type which takes no arguments."""
-    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
-        return {
-            intermediate.PrimitiveType.BOOL: "bool",
-            intermediate.PrimitiveType.INT: "int",
-            intermediate.PrimitiveType.FLOAT: "float",
-            intermediate.PrimitiveType.STR: "str",
-            intermediate.PrimitiveType.BYTEARRAY: "bytes",
-        }[type_annotation.a_type]
-
-    elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
-        our_type = type_annotation.our_type
-        if isinstance(our_type, intermediate.Enumeration):
-            return cpp_naming.enum_name(our_type.name)
-        elif isinstance(our_type, intermediate.NamedUnion):
-            return cpp_naming.union_name(our_type.name)
-        else:
-            return cpp_naming.class_name(our_type.name)
-
-    elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
-        return "jsonValue"
-
-    elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
-        return "jsonArray"
-
-    else:
-        assert_never(type_annotation)
-
-    raise AssertionError("Unexpected execution path")
-
-
-@ensure(
-    lambda result: all(len(token) > 0 for token in result.split("_")),
-    "The tokens are separated by single underscores, see the note above",
-)
-def _moniker(type_annotation: intermediate.TypeAnnotationUnion) -> str:
-    """
-    Determine the moniker of the ``type_annotation``.
-
-    See the note above for why the monikers are unique by construction.
-    """
-    if isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
-        return f"optionalOf_{_moniker(type_annotation.value)}"
-
-    elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
-        return f"listOf_{_moniker(type_annotation.items)}"
-
-    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
-        monikers = "_".join(_moniker(item) for item in type_annotation.items)
-        return f"tupleOf{len(type_annotation.items)}_{monikers}"
-
-    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
-        return f"jsonObjectOf_{_moniker(type_annotation.key)}"
-
-    elif isinstance(
-        type_annotation,
-        (
-            intermediate.PrimitiveTypeAnnotation,
-            intermediate.OurTypeAnnotation,
-            intermediate.JsonValueTypeAnnotation,
-            intermediate.JsonArrayTypeAnnotation,
-        ),
-    ):
-        return _leaf_moniker(type_annotation)
-
-    else:
-        assert_never(type_annotation)
-
-    raise AssertionError("Unexpected execution path")
-
-
-def _generate_call(function: str, arguments: Sequence[str]) -> Stripped:
-    """Generate the call, on a single line if short, and one argument per line."""
-    single_line = f"{function}({', '.join(arguments)})"
-    if len(single_line) <= 60 and all("\n" not in arg for arg in arguments):
-        return Stripped(single_line)
-
-    arguments_joined = ",\n".join(arguments)
-    return Stripped(
-        f"""\
-{function}(
-{I}{indent_but_first_line(arguments_joined, I)}
-)"""
-    )
-
-
-_RECURSIVE_RE = re.compile(r"\brecursive\b")
-
-
-def _generate_recursive_parameter(body: str) -> str:
-    """Generate the ``recursive`` parameter, but leave it unnamed if unused."""
-    if _RECURSIVE_RE.search(body) is not None:
-        return "bool recursive"
-
-    return "bool"
-
-
-def _over_function_name(
-    type_annotation: intermediate.TypeAnnotationUnion,
-) -> Identifier:
-    """
-    Generate the name of the function over the values of ``type_annotation``.
-
-    The name follows from the moniker, so that an expression can refer to
-    the function without generating it. For example:
-
-    * ``List[Name]`` gives ``Over_listOf_Name``,
-    * ``Tuple[str, Name]`` gives ``Over_tupleOf2_str_Name``,
-    * ``Structural_union`` gives ``Over_StructuralUnion``, and
-    * ``Name``, as an item of a list, gives ``Over_Name``.
-    """
-    return Identifier(f"Over_{_moniker(type_annotation)}")
-
-
-def _over_class_function_name(cls: intermediate.ConcreteClass) -> Identifier:
-    """
-    Generate the name of the function over the values of an instance of ``cls``.
-
-    For example, ``Extension`` gives ``Over_Extension``.
-    """
-    return Identifier(f"Over_{cpp_naming.class_name(cls.name)}")
-
-
-def _referenced_function_types(
-    type_annotation: intermediate.TypeAnnotationUnion, analysis: _Analysis
-) -> List[intermediate.TypeAnnotationUnion]:
-    """
-    List the types whose functions the expression over ``type_annotation`` calls.
-
-    This mirrors :py:func:`_generate_over_expression`, which calls a function for
-    a list, a tuple and a named union, but inlines everything else. For example:
-
-    * ``Optional[List[Reference]]`` gives ``[List[Reference]]``, as the expression
-      is ``x.has_value() ? Over_listOf_Reference((*x), recursive) : Empty()``,
-    * ``Name`` gives ``[]``, as the expression is ``One(&x, Shape::kName)``.
-    """
-    if not analysis.yields(type_annotation, descend=True):
-        return []
-
-    if isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
-        return _referenced_function_types(type_annotation.value, analysis)
-
-    if isinstance(
-        type_annotation,
-        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
-    ):
-        return [type_annotation]
-
-    if isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
-        type_annotation.our_type, intermediate.NamedUnion
-    ):
-        return [type_annotation]
-
-    return []
-
-
-def _called_function_types(
-    type_annotation: intermediate.TypeAnnotationUnion, analysis: _Analysis
-) -> List[intermediate.TypeAnnotationUnion]:
-    """
-    List the types whose functions the function over ``type_annotation`` calls.
-
-    This mirrors :py:func:`_generate_over_function`. For example:
-
-    * ``List[Name]`` gives ``[Name]``, as it calls ``Each(value, &Over_Name, ...)``,
-    * ``List[Reference]`` gives ``[]``, as it calls the hand-written
-      ``Each(value, &ThroughPointer<types::IReference>, ...)``,
-    * ``Tuple[str, List[Name]]`` gives ``[List[Name]]``, as it calls
-      ``AtIndex(1, Over_listOf_Name(std::get<1>(value), recursive))``.
-    """
-    if isinstance(type_annotation, intermediate.ListTypeAnnotation):
-        items = type_annotation.items
-        if isinstance(items, intermediate.OurTypeAnnotation) and isinstance(
-            items.our_type, intermediate.Class
-        ):
-            return []
-
-        return [items]
-
-    if isinstance(type_annotation, intermediate.TupleTypeAnnotation):
-        return [
-            called
-            for item in type_annotation.items
-            for called in _referenced_function_types(item, analysis)
-        ]
-
-    if isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
-        type_annotation.our_type, intermediate.NamedUnion
-    ):
-        return []
-
-    return _referenced_function_types(type_annotation, analysis)
-
-
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _collect_function_types(
-    symbol_table: intermediate.SymbolTable, analysis: _Analysis
-) -> Tuple[Optional[List[intermediate.TypeAnnotationUnion]], Optional[List[Error]]]:
-    """
-    Collect the types which need a function over their values.
-
-    We need a function for every list, tuple and named union reachable from
-    the classes, and for every item of such a list, so that the generated code
-    has no lambdas. For example, a class with a property ``some_names: List[Name]``
-    needs ``Over_Name`` and ``Over_listOf_Name``.
-
-    The types are deduplicated by their function names, and ordered so that
-    every function comes after the functions it calls, as C++ requires.
-    """
-    function_types = []  # type: List[intermediate.TypeAnnotationUnion]
-
-    # NOTE (mristin):
-    # We also reserve the names of the functions over the classes so that we detect
-    # a clash with them. The monikers should make such a clash impossible (see
-    # :py:func:`_moniker`), but we double-check as a clash would not compile.
-    descriptions_by_name = {
-        _over_class_function_name(cls): f"the class {cls.name}"
-        for cls in symbol_table.concrete_classes
-        if id(cls) in analysis.yielding_class_id_set
-    }  # type: MutableMapping[Identifier, str]
-
-    errors = []  # type: List[Error]
-
-    def collect(type_annotation: intermediate.TypeAnnotationUnion) -> None:
-        """Collect the functions called by ``type_annotation``, and then its own."""
-        name = _over_function_name(type_annotation)
-        description = f"the type {type_annotation}"
-
-        other_description = descriptions_by_name.get(name, None)
-        if other_description is not None:
-            if other_description != description:
-                errors.append(
-                    Error(
-                        None,
-                        f"The name of the verification function {name!r} clashes "
-                        f"for {other_description} and {description}. Please "
-                        f"rename one of them, or contact the developers.",
-                    )
-                )
-            return
-
-        descriptions_by_name[name] = description
-
-        for called in _called_function_types(type_annotation, analysis):
-            collect(called)
-
-        function_types.append(type_annotation)
-
-    for cls in symbol_table.concrete_classes:
-        if id(cls) not in analysis.yielding_class_id_set:
-            continue
-
-        for prop in cls.properties:
-            for referenced in _referenced_function_types(
-                prop.type_annotation, analysis
-            ):
-                collect(referenced)
-
-    if len(errors) > 0:
-        return None, errors
-
-    return function_types, None
-
-
-_OVER_FUNCTION_NAME_RE = re.compile(r"\b(Over_\w+)\b")
-
-
-def _called_function_names(code: str, defined: str) -> Set[str]:
-    """
-    Find the names of the generated functions which the ``code`` refers to.
-
-    The ``defined`` is the name of the function which the ``code`` defines, so
-    that we ignore it. For example, ``return Each(value, &Over_Name, recursive);``
-    in the definition of ``Over_listOf_Name`` gives ``{"Over_Name"}``, and
-    ``AtIndex(1, Over_listOf_Name(std::get<1>(value), recursive))`` gives
-    ``{"Over_listOf_Name"}``. The hand-written ``Over(...)`` and
-    ``ThroughPointer<...>`` are not matched.
-    """
-    return set(_OVER_FUNCTION_NAME_RE.findall(code)).difference([defined])
+# We generate the iteration over the values in two passes, see the module
+# :py:mod:`aas_core_codegen.cpp.over` for the naming and the collection of
+# the generated functions.
 
 
 # fmt: off
 @require(
     lambda type_annotation, analysis, function_name_set:
     all(
-        _over_function_name(referenced) in function_name_set
-        for referenced in _referenced_function_types(type_annotation, analysis)
+        cpp_over.over_function_name(referenced) in function_name_set
+        for referenced in cpp_over.referenced_function_types(type_annotation, analysis.yields_recursively)
     ),
     "The functions over the referenced types have been collected"
 )
 @ensure(
     lambda function_name_set, result:
     result is None
-    or _called_function_names(result, defined="").issubset(function_name_set),
+    or cpp_over.called_function_names(result, defined="").issubset(function_name_set),
     "The expression calls only the collected functions"
 )
 # fmt: on
@@ -2599,7 +2245,7 @@ def _generate_over_expression(
         OneByValue(that.some_int(), Shape::kPositiveInt)
 
     The ``function_name_set`` contains the names of the collected functions over
-    the lists, tuples and named unions, see :py:func:`_collect_function_types`.
+    the lists, tuples and named unions, see :py:func:`cpp_over.collect_function_types`.
 
     Return ``None`` if there is nothing to verify in a value of
     the ``type_annotation``.
@@ -2636,16 +2282,16 @@ def _generate_over_expression(
         elif isinstance(our_type, intermediate.ConstrainedPrimitive):
             shape = f"Shape::{_shape_literal(our_type)}"
             if by_value:
-                return _generate_call("OneByValue", [expr, shape])
+                return cpp_over.generate_call("OneByValue", [expr, shape])
 
-            return _generate_call("One", [f"&{expr}", shape])
+            return cpp_over.generate_call("One", [f"&{expr}", shape])
 
         elif isinstance(our_type, intermediate.Class):
-            return _generate_call("Over", [f"*{expr}", "recursive"])
+            return cpp_over.generate_call("Over", [f"*{expr}", "recursive"])
 
         elif isinstance(our_type, intermediate.NamedUnion):
-            return _generate_call(
-                _over_function_name(type_annotation), [expr, "recursive"]
+            return cpp_over.generate_call(
+                cpp_over.over_function_name(type_annotation), [expr, "recursive"]
             )
 
         else:
@@ -2655,7 +2301,9 @@ def _generate_over_expression(
         type_annotation,
         (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
     ):
-        return _generate_call(_over_function_name(type_annotation), [expr, "recursive"])
+        return cpp_over.generate_call(
+            cpp_over.over_function_name(type_annotation), [expr, "recursive"]
+        )
 
     elif isinstance(
         type_annotation,
@@ -2664,12 +2312,12 @@ def _generate_over_expression(
             intermediate.JsonArrayTypeAnnotation,
         ),
     ):
-        return _generate_call(
+        return cpp_over.generate_call(
             "One", [f"&{expr}", f"Shape::{_json_shape_literal(type_annotation)}"]
         )
 
     elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
-        one = _generate_call(
+        one = cpp_over.generate_call(
             "One", [f"&{expr}", f"Shape::{_json_shape_literal(type_annotation)}"]
         )
 
@@ -2685,10 +2333,10 @@ def _generate_over_expression(
         # NOTE (mristin):
         # We first verify the object itself, which reports if it is not an object
         # at all, and only then its keys.
-        each_key = _generate_call(
+        each_key = cpp_over.generate_call(
             "EachKey", [expr, f"Shape::{_shape_literal(key_constrained_primitive)}"]
         )
-        return _generate_call("Chain", [one, each_key])
+        return cpp_over.generate_call("Chain", [one, each_key])
 
     else:
         assert_never(type_annotation)
@@ -2699,21 +2347,21 @@ def _generate_over_expression(
 # fmt: off
 @require(
     lambda type_annotation, function_name_set:
-    _over_function_name(type_annotation) in function_name_set,
+    cpp_over.over_function_name(type_annotation) in function_name_set,
     "The function over the type has been collected"
 )
 @require(
     lambda type_annotation, analysis, function_name_set:
     all(
-        _over_function_name(called) in function_name_set
-        for called in _called_function_types(type_annotation, analysis)
+        cpp_over.over_function_name(called) in function_name_set
+        for called in cpp_over.called_function_types(type_annotation, analysis.yields_recursively)
     ),
     "The functions called by the function over the type have been collected"
 )
 @ensure(
     lambda type_annotation, function_name_set, result:
-    _called_function_names(
-        result[1], defined=_over_function_name(type_annotation)
+    cpp_over.called_function_names(
+        result[1], defined=cpp_over.over_function_name(type_annotation)
     ).issubset(function_name_set),
     "The function calls only the collected functions"
 )
@@ -2751,11 +2399,11 @@ def _generate_over_function(
         }
 
     The ``function_name_set`` contains the names of the collected functions, see
-    :py:func:`_collect_function_types`.
+    :py:func:`cpp_over.collect_function_types`.
 
     Return the alias, if the type needs one, and the function.
     """
-    name = _over_function_name(type_annotation)
+    name = cpp_over.over_function_name(type_annotation)
 
     value_type = cpp_common.generate_type(
         type_annotation=type_annotation,
@@ -2777,10 +2425,10 @@ def _generate_over_function(
             interface_name = cpp_naming.interface_name(items.our_type.name)
             item_function = f"ThroughPointer<types::{interface_name}>"
         else:
-            item_function = _over_function_name(items)
+            item_function = cpp_over.over_function_name(items)
 
         body = Stripped(
-            f"return {_generate_call('Each', ['value', f'&{item_function}', 'recursive'])};"
+            f"return {cpp_over.generate_call('Each', ['value', f'&{item_function}', 'recursive'])};"
         )
 
     elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
@@ -2794,13 +2442,15 @@ def _generate_over_function(
                 function_name_set=function_name_set,
             )
             if item_expression is not None:
-                components.append(_generate_call("AtIndex", [str(i), item_expression]))
+                components.append(
+                    cpp_over.generate_call("AtIndex", [str(i), item_expression])
+                )
 
         assert len(components) > 0
         if len(components) == 1:
             body = Stripped(f"return {components[0]};")
         else:
-            body = Stripped(f"return {_generate_call('Chain', components)};")
+            body = Stripped(f"return {cpp_over.generate_call('Chain', components)};")
 
     elif isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
         type_annotation.our_type, intermediate.NamedUnion
@@ -2851,7 +2501,7 @@ switch (value.index()) {{
         type_annotation,
         (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
     ):
-        alias_name = _moniker(type_annotation)
+        alias_name = cpp_over.moniker(type_annotation)
         alias = Stripped(f"using {alias_name} = {value_type};")
         value_type = Stripped(alias_name)
 
@@ -2872,7 +2522,7 @@ if (!recursive) {{
         f"""\
 std::unique_ptr<IIterator> {name}(
 {I}const {indent_but_first_line(value_type, I)}& value,
-{I}{_generate_recursive_parameter(body)}
+{I}{cpp_over.generate_recursive_parameter(body)}
 ) {{
 {I}{indent_but_first_line(body, I)}
 }}"""
@@ -2886,16 +2536,16 @@ std::unique_ptr<IIterator> {name}(
 @require(
     lambda cls, analysis, function_name_set:
     all(
-        _over_function_name(referenced) in function_name_set
+        cpp_over.over_function_name(referenced) in function_name_set
         for prop in cls.properties
-        for referenced in _referenced_function_types(prop.type_annotation, analysis)
+        for referenced in cpp_over.referenced_function_types(prop.type_annotation, analysis.yields_recursively)
     ),
     "The functions over the types of the properties have been collected"
 )
 @ensure(
     lambda cls, function_name_set, result:
-    _called_function_names(
-        result, defined=_over_class_function_name(cls)
+    cpp_over.called_function_names(
+        result, defined=cpp_over.over_class_function_name(cls)
     ).issubset(function_name_set),
     "The function calls only the collected functions"
 )
@@ -2927,12 +2577,14 @@ def _generate_over_class(
         }
 
     The ``function_name_set`` contains the names of the collected functions, see
-    :py:func:`_collect_function_types`.
+    :py:func:`cpp_over.collect_function_types`.
     """
     parts = []  # type: List[Stripped]
 
     if len(cls.invariants) > 0:
-        parts.append(_generate_call("One", ["&that", f"Shape::{_shape_literal(cls)}"]))
+        parts.append(
+            cpp_over.generate_call("One", ["&that", f"Shape::{_shape_literal(cls)}"])
+        )
 
     for prop in cls.properties:
         # NOTE (mristin):
@@ -2962,7 +2614,7 @@ def _generate_over_class(
 
         property_literal = cpp_naming.enum_literal_name(prop.name)
         parts.append(
-            _generate_call(
+            cpp_over.generate_call(
                 "InProperty", [f"iteration::Property::{property_literal}", expression]
             )
         )
@@ -2972,17 +2624,17 @@ def _generate_over_class(
     body = (
         Stripped(f"return {parts[0]};")
         if len(parts) == 1
-        else Stripped(f"return {_generate_call('Chain', parts)};")
+        else Stripped(f"return {cpp_over.generate_call('Chain', parts)};")
     )
 
     interface_name = cpp_naming.interface_name(cls.name)
-    name = _over_class_function_name(cls)
+    name = cpp_over.over_class_function_name(cls)
 
     return Stripped(
         f"""\
 std::unique_ptr<IIterator> {name}(
 {I}const types::{interface_name}& that,
-{I}{_generate_recursive_parameter(body)}
+{I}{cpp_over.generate_recursive_parameter(body)}
 ) {{
 {I}{indent_but_first_line(body, I)}
 }}"""
@@ -3005,7 +2657,7 @@ def _generate_over_instance(
             Stripped(
                 f"""\
 case types::ModelType::{model_type_literal}:
-{I}return {_over_class_function_name(cls)}(
+{I}return {cpp_over.over_class_function_name(cls)}(
 {II}dynamic_cast<const types::{interface_name}&>(instance),
 {II}recursive
 {I});"""
@@ -3346,9 +2998,9 @@ std::unique_ptr<IVerification> {verify_name}(
     shape = f"Shape::{_shape_literal(constrained_primitive)}"
 
     values = (
-        _generate_call("One", ["&that", shape])
+        cpp_over.generate_call("One", ["&that", shape])
         if cpp_common.primitive_type_is_referencable(constrained_primitive.constrainee)
-        else _generate_call("OneByValue", ["that", shape])
+        else cpp_over.generate_call("OneByValue", ["that", shape])
     )
 
     return Stripped(
@@ -3583,8 +3235,13 @@ def generate_implementation(
     # We first collect the lists, tuples and named unions which need a function,
     # and only then generate the functions, so that the generation itself has no
     # state to keep.
-    function_types, collection_errors = _collect_function_types(
-        symbol_table=symbol_table, analysis=analysis
+    function_types, collection_errors = cpp_over.collect_function_types(
+        classes=[
+            cls
+            for cls in symbol_table.concrete_classes
+            if id(cls) in analysis.yielding_class_id_set
+        ],
+        yields=analysis.yields_recursively,
     )
 
     generated_over = []  # type: List[Stripped]
@@ -3595,7 +3252,8 @@ def generate_implementation(
         assert function_types is not None
 
         function_name_set = frozenset(
-            _over_function_name(function_type) for function_type in function_types
+            cpp_over.over_function_name(function_type)
+            for function_type in function_types
         )
 
         aliases_and_functions = [
