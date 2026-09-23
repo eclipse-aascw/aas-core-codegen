@@ -71,7 +71,7 @@ __xml_namespace__ = "https://dummy.com"
             (
                 condition_expr,
                 error,
-            ) = cpp_lib_generate_verification._transpile_class_invariant(
+            ) = cpp_lib_generate_verification._transpile_invariant(
                 invariant=invariant, symbol_table=symbol_table, environment=environment
             )
             assert error is None, (
@@ -94,7 +94,7 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(
             """\
 CheckSomething(
-  instance_->value()
+  that->value()
 )""",
             blocks[0],
         )
@@ -159,7 +159,7 @@ __xml_namespace__ = "https://dummy.com"
             (
                 condition_expr,
                 error,
-            ) = cpp_lib_generate_verification._transpile_class_invariant(
+            ) = cpp_lib_generate_verification._transpile_invariant(
                 invariant=invariant, symbol_table=symbol_table, environment=environment
             )
             assert error is None, (
@@ -180,9 +180,9 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(
             """\
 (
-  (!(instance_->value().has_value()))
+  (!(that->value().has_value()))
   || CheckSomething(
-    (*(instance_->value()))
+    (*(that->value()))
   )
 )""",
             blocks[0],

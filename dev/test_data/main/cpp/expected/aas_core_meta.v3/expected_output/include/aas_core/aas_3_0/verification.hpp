@@ -56,8 +56,8 @@ struct Error {
  * processed.
  *
  * Unlike STL, this is <em>not</em> a light-weight iterator. We implement
- * a "yielding" iterator by leveraging code generation so that we always keep
- * the model stack as well as the properties verified thus far.
+ * a "yielding" iterator which keeps where it stopped in the model, so that
+ * it looks for the next error only when you move it.
  *
  * This means that copy-construction and equality comparisons are much more heavy-weight
  * than you'd usually expect from an STL iterator. For example, if you want to sort
