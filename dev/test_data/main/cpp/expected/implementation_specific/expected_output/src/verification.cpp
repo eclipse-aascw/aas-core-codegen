@@ -134,7 +134,7 @@ bool Box_0(
   const types::IBox* that = (
     static_cast<const types::IBox*>(value)
   );
-  return HasBalancedBrackets(
+  return verification::HasBalancedBrackets(
     that->label()
   );
 }
@@ -145,7 +145,7 @@ bool Bag_0(
   const types::IBag* that = (
     static_cast<const types::IBag*>(value)
   );
-  return HasBalancedBrackets(
+  return verification::HasBalancedBrackets(
     that->label()
   );
 }
@@ -156,7 +156,7 @@ bool Container_0(
   const types::IContainer* that = (
     static_cast<const types::IContainer*>(value)
   );
-  return ItemsHaveUniqueLabels(
+  return verification::ItemsHaveUniqueLabels(
     that->items()
   );
 }
@@ -167,7 +167,7 @@ bool Container_1(
   const types::IContainer* that = (
     static_cast<const types::IContainer*>(value)
   );
-  return TextsAreUnique(
+  return verification::TextsAreUnique(
     that->names()
   );
 }
@@ -248,7 +248,7 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
  * The iterators are combined out of the combinators below. They follow three rules
  * so that we never build the iterators over the whole model up front:
  * 1. \ref ChainIterator starts a child only once the previous child is done.
- * 2. \ref OverIterator dispatches on the instance only in \ref Start.
+ * 2. \ref DispatchingIterator dispatches on the instance only in \ref Start.
  * 3. \ref EachIterator builds the iterator over an item only once the iteration
  *    reaches the item.
  *
@@ -678,7 +678,7 @@ std::unique_ptr<IIterator> Each(
  *
  * Defined below, once all the classes have been covered.
  */
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
   const types::IClass& instance,
   bool recursive
 );
@@ -690,23 +690,23 @@ std::unique_ptr<IIterator> OverInstance(
  * We dispatch on the runtime type of the instance only in \ref Start so that
  * we descend into the instance only once the iteration reaches it.
  */
-class OverIterator : public IIterator {
+class DispatchingIterator : public IIterator {
  public:
-  explicit OverIterator(
+  explicit DispatchingIterator(
     const types::IClass* instance
   ) :
     instance_(instance) {
     // Intentionally empty.
   }
 
-  OverIterator(const OverIterator& other) :
+  DispatchingIterator(const DispatchingIterator& other) :
     instance_(other.instance_),
     child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {
     // Intentionally empty.
   }
 
   void Start() override {
-    child_ = OverInstance(*instance_, true);
+    child_ = DispatchOnModelType(*instance_, true);
     child_->Start();
   }
 
@@ -731,13 +731,13 @@ class OverIterator : public IIterator {
   }
 
   std::unique_ptr<IIterator> Clone() const override {
-    return common::make_unique<OverIterator>(*this);
+    return common::make_unique<DispatchingIterator>(*this);
   }
 
  private:
   const types::IClass* instance_;
   std::unique_ptr<IIterator> child_;
-};  // class OverIterator
+};  // class DispatchingIterator
 
 std::unique_ptr<IIterator> Over(
   const types::IClass& instance,
@@ -750,47 +750,47 @@ std::unique_ptr<IIterator> Over(
     return Empty();
   }
 
-  return common::make_unique<OverIterator>(&instance);
+  return common::make_unique<DispatchingIterator>(&instance);
 }
 
 template<typename T>
-std::unique_ptr<IIterator> OverPointer(
+std::unique_ptr<IIterator> ThroughPointer(
   const std::shared_ptr<T>& instance,
   bool recursive
 ) {
   return Over(*instance, recursive);
 }
 
-using ListOf_Item = std::vector<
+using listOf_Item = std::vector<
   std::shared_ptr<types::IItem>
 >;
 
-std::unique_ptr<IIterator> OverListOf_Item(
-  const ListOf_Item& value,
+std::unique_ptr<IIterator> Over_listOf_Item(
+  const listOf_Item& value,
   bool recursive
 ) {
   if (!recursive) {
     return Empty();
   }
 
-  return Each(value, &OverPointer<types::IItem>, recursive);
+  return Each(value, &ThroughPointer<types::IItem>, recursive);
 }
 
-std::unique_ptr<IIterator> OverBox(
+std::unique_ptr<IIterator> Over_Box(
   const types::IBox& that,
   bool
 ) {
   return One(&that, Shape::kBox);
 }
 
-std::unique_ptr<IIterator> OverBag(
+std::unique_ptr<IIterator> Over_Bag(
   const types::IBag& that,
   bool
 ) {
   return One(&that, Shape::kBag);
 }
 
-std::unique_ptr<IIterator> OverContainer(
+std::unique_ptr<IIterator> Over_Container(
   const types::IContainer& that,
   bool recursive
 ) {
@@ -798,7 +798,7 @@ std::unique_ptr<IIterator> OverContainer(
     One(&that, Shape::kContainer),
     InProperty(
       iteration::Property::kItems,
-      OverListOf_Item(that.items(), recursive)
+      Over_listOf_Item(that.items(), recursive)
     )
   );
 }
@@ -806,23 +806,23 @@ std::unique_ptr<IIterator> OverContainer(
 /**
  * Iterate over the values of the \p instance, dispatched on its runtime type.
  */
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
   const types::IClass& instance,
   bool recursive
 ) {
   switch (instance.model_type()) {
     case types::ModelType::kBox:
-      return OverBox(
+      return Over_Box(
         dynamic_cast<const types::IBox&>(instance),
         recursive
       );
     case types::ModelType::kBag:
-      return OverBag(
+      return Over_Bag(
         dynamic_cast<const types::IBag&>(instance),
         recursive
       );
     case types::ModelType::kContainer:
-      return OverContainer(
+      return Over_Container(
         dynamic_cast<const types::IContainer&>(instance),
         recursive
       );
@@ -1053,7 +1053,7 @@ NonRecursiveVerification::NonRecursiveVerification(
 }
 
 Iterator NonRecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, false));
+  return IterateErrors(DispatchOnModelType(*instance_, false));
 }
 
 const Iterator& NonRecursiveVerification::end() const {
@@ -1071,7 +1071,7 @@ RecursiveVerification::RecursiveVerification(
 }
 
 Iterator RecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, true));
+  return IterateErrors(DispatchOnModelType(*instance_, true));
 }
 
 const Iterator& RecursiveVerification::end() const {

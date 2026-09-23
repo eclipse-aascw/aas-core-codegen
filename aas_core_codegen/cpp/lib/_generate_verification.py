@@ -836,7 +836,16 @@ class _InvariantTranspiler(cpp_transpilation.Transpiler):
             return Stripped(f"{cpp_common.CONSTANTS_NAMESPACE}::{constant}"), None
 
         if node.identifier in self._symbol_table.verification_functions_by_name:
-            return Stripped(cpp_naming.function_name(node.identifier)), None
+            # NOTE (mristin):
+            # The invariants are checked in the anonymous namespace, where
+            # the hand-written and the generated helpers would hide a verification
+            # function of the same name, e.g., a verification function ``each``
+            # would be hidden by the combinator ``Each``. Hence, we qualify.
+            function_name = cpp_naming.function_name(node.identifier)
+            return (
+                Stripped(f"{cpp_common.VERIFICATION_NAMESPACE}::{function_name}"),
+                None,
+            )
 
         our_type = self._symbol_table.find_our_type(name=node.identifier)
         if isinstance(our_type, intermediate.Enumeration):
@@ -954,7 +963,7 @@ _IITERATOR = [
  * The iterators are combined out of the combinators below. They follow three rules
  * so that we never build the iterators over the whole model up front:
  * 1. \\ref ChainIterator starts a child only once the previous child is done.
- * 2. \\ref OverIterator dispatches on the instance only in \\ref Start.
+ * 2. \\ref DispatchingIterator dispatches on the instance only in \\ref Start.
  * 3. \\ref EachIterator builds the iterator over an item only once the iteration
  *    reaches the item.
  *
@@ -1582,7 +1591,7 @@ _OVER = [
  *
  * Defined below, once all the classes have been covered.
  */
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
 {I}const types::IClass& instance,
 {I}bool recursive
 );"""
@@ -1596,23 +1605,23 @@ std::unique_ptr<IIterator> OverInstance(
  * We dispatch on the runtime type of the instance only in \\ref Start so that
  * we descend into the instance only once the iteration reaches it.
  */
-class OverIterator : public IIterator {{
+class DispatchingIterator : public IIterator {{
  public:
-{I}explicit OverIterator(
+{I}explicit DispatchingIterator(
 {II}const types::IClass* instance
 {I}) :
 {II}instance_(instance) {{
 {II}// Intentionally empty.
 {I}}}
 
-{I}OverIterator(const OverIterator& other) :
+{I}DispatchingIterator(const DispatchingIterator& other) :
 {II}instance_(other.instance_),
 {II}child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {{
 {II}// Intentionally empty.
 {I}}}
 
 {I}void Start() override {{
-{II}child_ = OverInstance(*instance_, true);
+{II}child_ = DispatchOnModelType(*instance_, true);
 {II}child_->Start();
 {I}}}
 
@@ -1637,13 +1646,13 @@ class OverIterator : public IIterator {{
 {I}}}
 
 {I}std::unique_ptr<IIterator> Clone() const override {{
-{II}return common::make_unique<OverIterator>(*this);
+{II}return common::make_unique<DispatchingIterator>(*this);
 {I}}}
 
  private:
 {I}const types::IClass* instance_;
 {I}std::unique_ptr<IIterator> child_;
-}};  // class OverIterator"""
+}};  // class DispatchingIterator"""
     ),
     Stripped(
         f"""\
@@ -1658,13 +1667,13 @@ std::unique_ptr<IIterator> Over(
 {II}return Empty();
 {I}}}
 
-{I}return common::make_unique<OverIterator>(&instance);
+{I}return common::make_unique<DispatchingIterator>(&instance);
 }}"""
     ),
     Stripped(
         f"""\
 template<typename T>
-std::unique_ptr<IIterator> OverPointer(
+std::unique_ptr<IIterator> ThroughPointer(
 {I}const std::shared_ptr<T>& instance,
 {I}bool recursive
 ) {{
@@ -2123,10 +2132,16 @@ class _Analysis:
         raise AssertionError("Unexpected execution path")
 
 
+# NOTE (mristin):
+# The literals of our types come from :py:func:`cpp_naming.enum_literal_name`,
+# which capitalizes only the first letter of every part of a name. The literals
+# of JSON-able values contain an upper-case abbreviation, so that they never
+# clash with the literals of our types by construction, even though the parser
+# reserves names such as ``Json_object`` anyhow.
 _JSON_SHAPE_LITERALS = (
-    Identifier("kJsonValue"),
-    Identifier("kJsonArray"),
-    Identifier("kJsonObject"),
+    Identifier("kJSONValue"),
+    Identifier("kJSONArray"),
+    Identifier("kJSONObject"),
 )
 
 
@@ -2164,15 +2179,15 @@ def _json_shape_literal(
 # tuple and named union that we iterate over, and for every item of such a list.
 # For example, a property ``some_names: List[Name]`` needs:
 #
-#   std::unique_ptr<IIterator> OverName(const std::wstring& value, bool) {
+#   std::unique_ptr<IIterator> Over_Name(const std::wstring& value, bool) {
 #     return One(&value, Shape::kName);
 #   }
 #
-#   std::unique_ptr<IIterator> OverListOf_Name(
-#     const ListOf_Name& value,
+#   std::unique_ptr<IIterator> Over_listOf_Name(
+#     const listOf_Name& value,
 #     bool recursive
 #   ) {
-#     return Each(value, &OverName, recursive);
+#     return Each(value, &Over_Name, recursive);
 #   }
 #
 # In the first pass, ``_collect_function_types`` walks over the properties of
@@ -2189,34 +2204,61 @@ def _json_shape_literal(
 # ``_generate_over_expression`` gives for the property above, where ``expr`` is
 # ``that.some_names()``:
 #
-#   OverListOf_Name(that.some_names(), recursive)
+#   Over_listOf_Name(that.some_names(), recursive)
 #
 # ``_generate_over_function`` then gives the aliases and the functions over
 # the collected types, ``_generate_over_class`` the function over the instances of
 # a class, and ``_generate_over_instance`` the dispatch on the runtime type of
 # an instance.
+#
+# The name of a generated function is ``Over_`` followed by the moniker of its type
+# (see the note on the monikers below). The names of the hand-written helpers must
+# not start with ``Over_``, lest they clash with the generated functions.
 
 
-def _moniker(type_annotation: intermediate.TypeAnnotationUnion) -> str:
-    """
-    Determine the moniker of the ``type_annotation``.
+# NOTE (mristin):
+# The moniker of a type is a Polish notation over ``_``-separated tokens.
+# A composite type is spelled as a head followed by its arguments, where
+# the heads ``optionalOf`` and ``listOf`` take exactly one argument,
+# ``jsonObjectOf`` exactly one (the moniker of its keys), and ``tupleOf{N}``
+# exactly ``N`` of them. For example, ``Tuple[List[A], B, C]`` gives
+# ``tupleOf3_listOf_A_B_C``.
+#
+# Such a notation can be read back in exactly one way if no token contains
+# an underscore, and if every token tells on its own how many arguments it
+# takes. This is why every built-in token, be it a head or a leaf such as ``str``
+# or ``jsonValue``, is *lower-case*, while the leaves of our types all go
+# through ``capitalized_camel_case`` and hence always start *upper-case*.
+# Were the heads upper-case, say ``ListOf`` and ``TupleOf2``, a class ``List_of``
+# would give the leaf ``ListOf`` as well, and ``TupleOf2_ListOf_ListOf_A`` could
+# be read both as ``Tuple[List[ListOf], A]`` and ``Tuple[ListOf, List[A]]``.
+#
+# Therefore, the monikers are unique by construction, whatever names
+# the meta-model uses.
 
-    A moniker of a composite type is a Polish notation over ``_``-separated tokens:
-    ``OptionalOf_{M}`` and ``ListOf_{M}`` take exactly one argument, and
-    ``TupleOf{N}_{M}...`` exactly ``N`` of them. As a leaf moniker never contains
-    an underscore, the monikers are unique by construction.
-    """
-    if isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
-        return f"OptionalOf_{_moniker(type_annotation.value)}"
 
-    elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
-        return f"ListOf_{_moniker(type_annotation.items)}"
-
-    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
-        monikers = "_".join(_moniker(item) for item in type_annotation.items)
-        return f"TupleOf{len(type_annotation.items)}_{monikers}"
-
-    elif isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
+# fmt: off
+@ensure(
+    lambda result: len(result) > 0 and "_" not in result,
+    "A leaf token contains no underscore, see the note above"
+)
+@ensure(
+    lambda type_annotation, result:
+    isinstance(type_annotation, intermediate.OurTypeAnnotation)
+    == result[0].isupper(),
+    "Only the leaves of our types start upper-case, see the note above"
+)
+# fmt: on
+def _leaf_moniker(
+    type_annotation: Union[
+        intermediate.PrimitiveTypeAnnotation,
+        intermediate.OurTypeAnnotation,
+        intermediate.JsonValueTypeAnnotation,
+        intermediate.JsonArrayTypeAnnotation,
+    ]
+) -> str:
+    """Determine the moniker of a type which takes no arguments."""
+    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
         return {
             intermediate.PrimitiveType.BOOL: "bool",
             intermediate.PrimitiveType.INT: "int",
@@ -2235,19 +2277,50 @@ def _moniker(type_annotation: intermediate.TypeAnnotationUnion) -> str:
             return cpp_naming.class_name(our_type.name)
 
     elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
-        return "JsonValue"
+        return "jsonValue"
 
     elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
-        return "JsonArray"
+        return "jsonArray"
+
+    else:
+        assert_never(type_annotation)
+
+    raise AssertionError("Unexpected execution path")
+
+
+@ensure(
+    lambda result: all(len(token) > 0 for token in result.split("_")),
+    "The tokens are separated by single underscores, see the note above",
+)
+def _moniker(type_annotation: intermediate.TypeAnnotationUnion) -> str:
+    """
+    Determine the moniker of the ``type_annotation``.
+
+    See the note above for why the monikers are unique by construction.
+    """
+    if isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
+        return f"optionalOf_{_moniker(type_annotation.value)}"
+
+    elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
+        return f"listOf_{_moniker(type_annotation.items)}"
+
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        monikers = "_".join(_moniker(item) for item in type_annotation.items)
+        return f"tupleOf{len(type_annotation.items)}_{monikers}"
 
     elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
-        key_constrained_primitive = intermediate.try_constrained_primitive(
-            type_annotation.key
-        )
-        if key_constrained_primitive is None:
-            return "JsonObject"
+        return f"jsonObjectOf_{_moniker(type_annotation.key)}"
 
-        return f"JsonObjectOf{cpp_naming.class_name(key_constrained_primitive.name)}"
+    elif isinstance(
+        type_annotation,
+        (
+            intermediate.PrimitiveTypeAnnotation,
+            intermediate.OurTypeAnnotation,
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+        ),
+    ):
+        return _leaf_moniker(type_annotation)
 
     else:
         assert_never(type_annotation)
@@ -2290,21 +2363,21 @@ def _over_function_name(
     The name follows from the moniker, so that an expression can refer to
     the function without generating it. For example:
 
-    * ``List[Name]`` gives ``OverListOf_Name``,
-    * ``Tuple[str, Name]`` gives ``OverTupleOf2_str_Name``,
-    * ``Structural_union`` gives ``OverStructuralUnion``, and
-    * ``Name``, as an item of a list, gives ``OverName``.
+    * ``List[Name]`` gives ``Over_listOf_Name``,
+    * ``Tuple[str, Name]`` gives ``Over_tupleOf2_str_Name``,
+    * ``Structural_union`` gives ``Over_StructuralUnion``, and
+    * ``Name``, as an item of a list, gives ``Over_Name``.
     """
-    return Identifier(f"Over{_moniker(type_annotation)}")
+    return Identifier(f"Over_{_moniker(type_annotation)}")
 
 
 def _over_class_function_name(cls: intermediate.ConcreteClass) -> Identifier:
     """
     Generate the name of the function over the values of an instance of ``cls``.
 
-    For example, ``Extension`` gives ``OverExtension``.
+    For example, ``Extension`` gives ``Over_Extension``.
     """
-    return Identifier(f"Over{cpp_naming.class_name(cls.name)}")
+    return Identifier(f"Over_{cpp_naming.class_name(cls.name)}")
 
 
 def _referenced_function_types(
@@ -2317,7 +2390,7 @@ def _referenced_function_types(
     a list, a tuple and a named union, but inlines everything else. For example:
 
     * ``Optional[List[Reference]]`` gives ``[List[Reference]]``, as the expression
-      is ``x.has_value() ? OverListOf_Reference((*x), recursive) : Empty()``,
+      is ``x.has_value() ? Over_listOf_Reference((*x), recursive) : Empty()``,
     * ``Name`` gives ``[]``, as the expression is ``One(&x, Shape::kName)``.
     """
     if not analysis.yields(type_annotation, descend=True):
@@ -2348,11 +2421,11 @@ def _called_function_types(
 
     This mirrors :py:func:`_generate_over_function`. For example:
 
-    * ``List[Name]`` gives ``[Name]``, as it calls ``Each(value, &OverName, ...)``,
+    * ``List[Name]`` gives ``[Name]``, as it calls ``Each(value, &Over_Name, ...)``,
     * ``List[Reference]`` gives ``[]``, as it calls the hand-written
-      ``Each(value, &OverPointer<types::IReference>, ...)``,
+      ``Each(value, &ThroughPointer<types::IReference>, ...)``,
     * ``Tuple[str, List[Name]]`` gives ``[List[Name]]``, as it calls
-      ``AtIndex(1, OverListOf_Name(std::get<1>(value), recursive))``.
+      ``AtIndex(1, Over_listOf_Name(std::get<1>(value), recursive))``.
     """
     if isinstance(type_annotation, intermediate.ListTypeAnnotation):
         items = type_annotation.items
@@ -2388,7 +2461,7 @@ def _collect_function_types(
     We need a function for every list, tuple and named union reachable from
     the classes, and for every item of such a list, so that the generated code
     has no lambdas. For example, a class with a property ``some_names: List[Name]``
-    needs ``OverName`` and ``OverListOf_Name``.
+    needs ``Over_Name`` and ``Over_listOf_Name``.
 
     The types are deduplicated by their function names, and ordered so that
     every function comes after the functions it calls, as C++ requires.
@@ -2397,7 +2470,8 @@ def _collect_function_types(
 
     # NOTE (mristin):
     # We also reserve the names of the functions over the classes so that we detect
-    # a clash with them, e.g., a class ``Json_value`` and the item ``JSONValue``.
+    # a clash with them. The monikers should make such a clash impossible (see
+    # :py:func:`_moniker`), but we double-check as a clash would not compile.
     descriptions_by_name = {
         _over_class_function_name(cls): f"the class {cls.name}"
         for cls in symbol_table.concrete_classes
@@ -2447,7 +2521,7 @@ def _collect_function_types(
     return function_types, None
 
 
-_OVER_FUNCTION_NAME_RE = re.compile(r"\b(Over\w+)\b(?!<)")
+_OVER_FUNCTION_NAME_RE = re.compile(r"\b(Over_\w+)\b")
 
 
 def _called_function_names(code: str, defined: str) -> Set[str]:
@@ -2455,11 +2529,11 @@ def _called_function_names(code: str, defined: str) -> Set[str]:
     Find the names of the generated functions which the ``code`` refers to.
 
     The ``defined`` is the name of the function which the ``code`` defines, so
-    that we ignore it. For example, ``return Each(value, &OverName, recursive);``
-    in the definition of ``OverListOf_Name`` gives ``{"OverName"}``, and
-    ``AtIndex(1, OverListOf_Name(std::get<1>(value), recursive))`` gives
-    ``{"OverListOf_Name"}``. The hand-written ``Over(...)`` and
-    ``OverPointer<...>`` are not matched.
+    that we ignore it. For example, ``return Each(value, &Over_Name, recursive);``
+    in the definition of ``Over_listOf_Name`` gives ``{"Over_Name"}``, and
+    ``AtIndex(1, Over_listOf_Name(std::get<1>(value), recursive))`` gives
+    ``{"Over_listOf_Name"}``. The hand-written ``Over(...)`` and
+    ``ThroughPointer<...>`` are not matched.
     """
     return set(_OVER_FUNCTION_NAME_RE.findall(code)).difference([defined])
 
@@ -2515,7 +2589,7 @@ def _generate_over_expression(
 
     .. code-block:: cpp
 
-        OverListOf_Name(that.some_names(), recursive)
+        Over_listOf_Name(that.some_names(), recursive)
 
     If ``by_value`` is set, the ``expr`` has no address, as the getters return
     booleans, integers and floating-point numbers by value, so we keep a copy:
@@ -2656,20 +2730,20 @@ def _generate_over_function(
 
     .. code-block:: cpp
 
-        using ListOf_Name = std::vector<std::wstring>;
+        using listOf_Name = std::vector<std::wstring>;
 
-        std::unique_ptr<IIterator> OverListOf_Name(
-          const ListOf_Name& value,
+        std::unique_ptr<IIterator> Over_listOf_Name(
+          const listOf_Name& value,
           bool recursive
         ) {
-          return Each(value, &OverName, recursive);
+          return Each(value, &Over_Name, recursive);
         }
 
     and for ``Name``, as an item of that list, only the function:
 
     .. code-block:: cpp
 
-        std::unique_ptr<IIterator> OverName(
+        std::unique_ptr<IIterator> Over_Name(
           const std::wstring& value,
           bool
         ) {
@@ -2701,7 +2775,7 @@ def _generate_over_function(
             # The items of a list of instances are shared pointers, which we pass on
             # to the hand-written template.
             interface_name = cpp_naming.interface_name(items.our_type.name)
-            item_function = f"OverPointer<types::{interface_name}>"
+            item_function = f"ThroughPointer<types::{interface_name}>"
         else:
             item_function = _over_function_name(items)
 
@@ -2839,7 +2913,7 @@ def _generate_over_class(
 
     .. code-block:: cpp
 
-        std::unique_ptr<IIterator> OverSomething(
+        std::unique_ptr<IIterator> Over_Something(
           const types::ISomething& that,
           bool recursive
         ) {
@@ -2847,7 +2921,7 @@ def _generate_over_class(
             One(&that, Shape::kSomething),
             InProperty(
               iteration::Property::kSomeNames,
-              OverListOf_Name(that.some_names(), recursive)
+              Over_listOf_Name(that.some_names(), recursive)
             )
           );
         }
@@ -2949,7 +3023,7 @@ case types::ModelType::{model_type_literal}:
         return Stripped(
             f"""\
 {doc_comment}
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
 {I}const types::IClass&,
 {I}bool
 ) {{
@@ -2974,7 +3048,7 @@ default:
     return Stripped(
         f"""\
 {doc_comment}
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
 {I}const types::IClass& instance,
 {I}bool recursive
 ) {{
@@ -3304,7 +3378,7 @@ NonRecursiveVerification::NonRecursiveVerification(
         Stripped(
             f"""\
 Iterator NonRecursiveVerification::begin() const {{
-{I}return IterateErrors(OverInstance(*instance_, false));
+{I}return IterateErrors(DispatchOnModelType(*instance_, false));
 }}"""
         ),
         Stripped(
@@ -3332,7 +3406,7 @@ RecursiveVerification::RecursiveVerification(
         Stripped(
             f"""\
 Iterator RecursiveVerification::begin() const {{
-{I}return IterateErrors(OverInstance(*instance_, true));
+{I}return IterateErrors(DispatchOnModelType(*instance_, true));
 }}"""
         ),
         Stripped(
@@ -3568,7 +3642,7 @@ def generate_implementation(
         ("AtIndex", _AT_INDEX),
         ("Each", _EACH),
         ("Over", _OVER),
-        ("OverPointer", _OVER),
+        ("ThroughPointer", _OVER),
         ("EachKey", _EACH_KEY),
     ):
         if _is_used(function, generated_code) and combinator[0] not in combinators:

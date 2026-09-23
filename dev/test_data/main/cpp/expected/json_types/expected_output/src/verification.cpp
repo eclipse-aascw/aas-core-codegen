@@ -48,9 +48,9 @@ namespace {
  */
 enum class Shape : std::uint32_t {
   kNonEmptyString = 0,
-  kJsonValue = 1,
-  kJsonArray = 2,
-  kJsonObject = 3
+  kJSONValue = 1,
+  kJSONArray = 2,
+  kJSONObject = 3
 };  // enum class Shape
 
 /**
@@ -95,9 +95,9 @@ const std::vector<Check>& ChecksOf(Shape shape) {
       };
       return checks;
     }
-    case Shape::kJsonValue:
-    case Shape::kJsonArray:
-    case Shape::kJsonObject:
+    case Shape::kJSONValue:
+    case Shape::kJSONArray:
+    case Shape::kJSONObject:
       // NOTE (mristin):
       // The JSON-able values are verified by the nested verification.
       return kNoChecks;
@@ -123,17 +123,17 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
   const void* value
 ) {
   switch (shape) {
-    case Shape::kJsonValue:
+    case Shape::kJSONValue:
       return common::make_unique<JsonValueVerificator>(
         *static_cast<const nlohmann::json*>(value),
         JsonValueShape::kAny
       );
-    case Shape::kJsonArray:
+    case Shape::kJSONArray:
       return common::make_unique<JsonValueVerificator>(
         *static_cast<const nlohmann::json*>(value),
         JsonValueShape::kArray
       );
-    case Shape::kJsonObject:
+    case Shape::kJSONObject:
       return common::make_unique<JsonValueVerificator>(
         *static_cast<const nlohmann::json*>(value),
         JsonValueShape::kObject
@@ -156,7 +156,7 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
  * The iterators are combined out of the combinators below. They follow three rules
  * so that we never build the iterators over the whole model up front:
  * 1. \ref ChainIterator starts a child only once the previous child is done.
- * 2. \ref OverIterator dispatches on the instance only in \ref Start.
+ * 2. \ref DispatchingIterator dispatches on the instance only in \ref Start.
  * 3. \ref EachIterator builds the iterator over an item only once the iteration
  *    reaches the item.
  *
@@ -556,29 +556,29 @@ std::unique_ptr<IIterator> EachKey(
   return common::make_unique<EachKeyIterator>(&object, shape);
 }
 
-std::unique_ptr<IIterator> OverSomething(
+std::unique_ptr<IIterator> Over_Something(
   const types::ISomething& that,
   bool
 ) {
   return Chain(
     InProperty(
       iteration::Property::kValue,
-      One(&that.value(), Shape::kJsonValue)
+      One(&that.value(), Shape::kJSONValue)
     ),
     InProperty(
       iteration::Property::kValues,
-      One(&that.values(), Shape::kJsonArray)
+      One(&that.values(), Shape::kJSONArray)
     ),
     InProperty(
       iteration::Property::kMapping,
-      One(&that.mapping(), Shape::kJsonObject)
+      One(&that.mapping(), Shape::kJSONObject)
     ),
     InProperty(
       iteration::Property::kMappingWithConstrainedKey,
       Chain(
         One(
           &that.mapping_with_constrained_key(),
-          Shape::kJsonObject
+          Shape::kJSONObject
         ),
         EachKey(
           that.mapping_with_constrained_key(),
@@ -589,19 +589,19 @@ std::unique_ptr<IIterator> OverSomething(
     InProperty(
       iteration::Property::kOptionalValue,
       that.optional_value().has_value()
-        ? One(&(*that.optional_value()), Shape::kJsonValue)
+        ? One(&(*that.optional_value()), Shape::kJSONValue)
         : Empty()
     ),
     InProperty(
       iteration::Property::kOptionalValues,
       that.optional_values().has_value()
-        ? One(&(*that.optional_values()), Shape::kJsonArray)
+        ? One(&(*that.optional_values()), Shape::kJSONArray)
         : Empty()
     ),
     InProperty(
       iteration::Property::kOptionalMapping,
       that.optional_mapping().has_value()
-        ? One(&(*that.optional_mapping()), Shape::kJsonObject)
+        ? One(&(*that.optional_mapping()), Shape::kJSONObject)
         : Empty()
     )
   );
@@ -610,13 +610,13 @@ std::unique_ptr<IIterator> OverSomething(
 /**
  * Iterate over the values of the \p instance, dispatched on its runtime type.
  */
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
   const types::IClass& instance,
   bool recursive
 ) {
   switch (instance.model_type()) {
     case types::ModelType::kSomething:
-      return OverSomething(
+      return Over_Something(
         dynamic_cast<const types::ISomething&>(instance),
         recursive
       );
@@ -885,7 +885,7 @@ NonRecursiveVerification::NonRecursiveVerification(
 }
 
 Iterator NonRecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, false));
+  return IterateErrors(DispatchOnModelType(*instance_, false));
 }
 
 const Iterator& NonRecursiveVerification::end() const {
@@ -903,7 +903,7 @@ RecursiveVerification::RecursiveVerification(
 }
 
 Iterator RecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, true));
+  return IterateErrors(DispatchOnModelType(*instance_, true));
 }
 
 const Iterator& RecursiveVerification::end() const {

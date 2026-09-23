@@ -327,6 +327,11 @@ class Test_cpp(_TestCase):
             target=aas_core_codegen.main.Target.CPP, case_name="list_of_primitives"
         )
 
+    def test_expected_naming_collisions(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CPP, case_name="naming_collisions"
+        )
+
     def test_expected_optional_lists(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.CPP, case_name="optional_lists"

@@ -295,7 +295,7 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
  * The iterators are combined out of the combinators below. They follow three rules
  * so that we never build the iterators over the whole model up front:
  * 1. \ref ChainIterator starts a child only once the previous child is done.
- * 2. \ref OverIterator dispatches on the instance only in \ref Start.
+ * 2. \ref DispatchingIterator dispatches on the instance only in \ref Start.
  * 3. \ref EachIterator builds the iterator over an item only once the iteration
  *    reaches the item.
  *
@@ -788,7 +788,7 @@ std::unique_ptr<IIterator> Each(
  *
  * Defined below, once all the classes have been covered.
  */
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
   const types::IClass& instance,
   bool recursive
 );
@@ -800,23 +800,23 @@ std::unique_ptr<IIterator> OverInstance(
  * We dispatch on the runtime type of the instance only in \ref Start so that
  * we descend into the instance only once the iteration reaches it.
  */
-class OverIterator : public IIterator {
+class DispatchingIterator : public IIterator {
  public:
-  explicit OverIterator(
+  explicit DispatchingIterator(
     const types::IClass* instance
   ) :
     instance_(instance) {
     // Intentionally empty.
   }
 
-  OverIterator(const OverIterator& other) :
+  DispatchingIterator(const DispatchingIterator& other) :
     instance_(other.instance_),
     child_(other.child_ == nullptr ? nullptr : other.child_->Clone()) {
     // Intentionally empty.
   }
 
   void Start() override {
-    child_ = OverInstance(*instance_, true);
+    child_ = DispatchOnModelType(*instance_, true);
     child_->Start();
   }
 
@@ -841,13 +841,13 @@ class OverIterator : public IIterator {
   }
 
   std::unique_ptr<IIterator> Clone() const override {
-    return common::make_unique<OverIterator>(*this);
+    return common::make_unique<DispatchingIterator>(*this);
   }
 
  private:
   const types::IClass* instance_;
   std::unique_ptr<IIterator> child_;
-};  // class OverIterator
+};  // class DispatchingIterator
 
 std::unique_ptr<IIterator> Over(
   const types::IClass& instance,
@@ -860,30 +860,30 @@ std::unique_ptr<IIterator> Over(
     return Empty();
   }
 
-  return common::make_unique<OverIterator>(&instance);
+  return common::make_unique<DispatchingIterator>(&instance);
 }
 
 template<typename T>
-std::unique_ptr<IIterator> OverPointer(
+std::unique_ptr<IIterator> ThroughPointer(
   const std::shared_ptr<T>& instance,
   bool recursive
 ) {
   return Over(*instance, recursive);
 }
 
-using ListOf_StructuralUnion = std::vector<types::StructuralUnion>;
+using listOf_StructuralUnion = std::vector<types::StructuralUnion>;
 
-using ListOf_MixedUnion = std::vector<types::MixedUnion>;
+using listOf_MixedUnion = std::vector<types::MixedUnion>;
 
-using ListOf_ModelTypedUnion = std::vector<types::ModelTypedUnion>;
+using listOf_ModelTypedUnion = std::vector<types::ModelTypedUnion>;
 
-using TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion = std::tuple<
+using tupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion = std::tuple<
   types::StructuralUnion,
   types::MixedUnion,
   types::ModelTypedUnion
 >;
 
-std::unique_ptr<IIterator> OverStructuralUnion(
+std::unique_ptr<IIterator> Over_StructuralUnion(
   const types::StructuralUnion& value,
   bool recursive
 ) {
@@ -897,7 +897,7 @@ std::unique_ptr<IIterator> OverStructuralUnion(
   }
 }
 
-std::unique_ptr<IIterator> OverMixedUnion(
+std::unique_ptr<IIterator> Over_MixedUnion(
   const types::MixedUnion& value,
   bool recursive
 ) {
@@ -917,7 +917,7 @@ std::unique_ptr<IIterator> OverMixedUnion(
   }
 }
 
-std::unique_ptr<IIterator> OverModelTypedUnion(
+std::unique_ptr<IIterator> Over_ModelTypedUnion(
   const types::ModelTypedUnion& value,
   bool recursive
 ) {
@@ -931,41 +931,41 @@ std::unique_ptr<IIterator> OverModelTypedUnion(
   }
 }
 
-std::unique_ptr<IIterator> OverListOf_StructuralUnion(
-  const ListOf_StructuralUnion& value,
+std::unique_ptr<IIterator> Over_listOf_StructuralUnion(
+  const listOf_StructuralUnion& value,
   bool recursive
 ) {
   if (!recursive) {
     return Empty();
   }
 
-  return Each(value, &OverStructuralUnion, recursive);
+  return Each(value, &Over_StructuralUnion, recursive);
 }
 
-std::unique_ptr<IIterator> OverListOf_MixedUnion(
-  const ListOf_MixedUnion& value,
+std::unique_ptr<IIterator> Over_listOf_MixedUnion(
+  const listOf_MixedUnion& value,
   bool recursive
 ) {
   if (!recursive) {
     return Empty();
   }
 
-  return Each(value, &OverMixedUnion, recursive);
+  return Each(value, &Over_MixedUnion, recursive);
 }
 
-std::unique_ptr<IIterator> OverListOf_ModelTypedUnion(
-  const ListOf_ModelTypedUnion& value,
+std::unique_ptr<IIterator> Over_listOf_ModelTypedUnion(
+  const listOf_ModelTypedUnion& value,
   bool recursive
 ) {
   if (!recursive) {
     return Empty();
   }
 
-  return Each(value, &OverModelTypedUnion, recursive);
+  return Each(value, &Over_ModelTypedUnion, recursive);
 }
 
-std::unique_ptr<IIterator> OverTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
-  const TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion& value,
+std::unique_ptr<IIterator> Over_tupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
+  const tupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion& value,
   bool recursive
 ) {
   if (!recursive) {
@@ -975,117 +975,120 @@ std::unique_ptr<IIterator> OverTupleOf3_StructuralUnion_MixedUnion_ModelTypedUni
   return Chain(
     AtIndex(
       0,
-      OverStructuralUnion(std::get<0>(value), recursive)
+      Over_StructuralUnion(std::get<0>(value), recursive)
     ),
-    AtIndex(1, OverMixedUnion(std::get<1>(value), recursive)),
+    AtIndex(1, Over_MixedUnion(std::get<1>(value), recursive)),
     AtIndex(
       2,
-      OverModelTypedUnion(std::get<2>(value), recursive)
+      Over_ModelTypedUnion(std::get<2>(value), recursive)
     )
   );
 }
 
-std::unique_ptr<IIterator> OverStructuralFirst(
+std::unique_ptr<IIterator> Over_StructuralFirst(
   const types::IStructuralFirst& that,
   bool
 ) {
   return One(&that, Shape::kStructuralFirst);
 }
 
-std::unique_ptr<IIterator> OverStructuralSecond(
+std::unique_ptr<IIterator> Over_StructuralSecond(
   const types::IStructuralSecond& that,
   bool
 ) {
   return One(&that, Shape::kStructuralSecond);
 }
 
-std::unique_ptr<IIterator> OverMixedAbstractDescendantOne(
+std::unique_ptr<IIterator> Over_MixedAbstractDescendantOne(
   const types::IMixedAbstractDescendantOne& that,
   bool
 ) {
   return One(&that, Shape::kMixedAbstractDescendantOne);
 }
 
-std::unique_ptr<IIterator> OverMixedAbstractDescendantTwo(
+std::unique_ptr<IIterator> Over_MixedAbstractDescendantTwo(
   const types::IMixedAbstractDescendantTwo& that,
   bool
 ) {
   return One(&that, Shape::kMixedAbstractDescendantTwo);
 }
 
-std::unique_ptr<IIterator> OverMixedConcreteWithDescendants(
+std::unique_ptr<IIterator> Over_MixedConcreteWithDescendants(
   const types::IMixedConcreteWithDescendants& that,
   bool
 ) {
   return One(&that, Shape::kMixedConcreteWithDescendants);
 }
 
-std::unique_ptr<IIterator> OverMixedConcreteWithDescendantsChild(
+std::unique_ptr<IIterator> Over_MixedConcreteWithDescendantsChild(
   const types::IMixedConcreteWithDescendantsChild& that,
   bool
 ) {
   return One(&that, Shape::kMixedConcreteWithDescendantsChild);
 }
 
-std::unique_ptr<IIterator> OverMixedConcreteLeaf(
+std::unique_ptr<IIterator> Over_MixedConcreteLeaf(
   const types::IMixedConcreteLeaf& that,
   bool
 ) {
   return One(&that, Shape::kMixedConcreteLeaf);
 }
 
-std::unique_ptr<IIterator> OverModelTypedFirst(
+std::unique_ptr<IIterator> Over_ModelTypedFirst(
   const types::IModelTypedFirst& that,
   bool
 ) {
   return One(&that, Shape::kModelTypedFirst);
 }
 
-std::unique_ptr<IIterator> OverModelTypedSecond(
+std::unique_ptr<IIterator> Over_ModelTypedSecond(
   const types::IModelTypedSecond& that,
   bool
 ) {
   return One(&that, Shape::kModelTypedSecond);
 }
 
-std::unique_ptr<IIterator> OverSomething(
+std::unique_ptr<IIterator> Over_Something(
   const types::ISomething& that,
   bool recursive
 ) {
   return Chain(
     InProperty(
       iteration::Property::kStructuralProperty,
-      OverStructuralUnion(that.structural_property(), recursive)
+      Over_StructuralUnion(that.structural_property(), recursive)
     ),
     InProperty(
       iteration::Property::kMixedProperty,
-      OverMixedUnion(that.mixed_property(), recursive)
+      Over_MixedUnion(that.mixed_property(), recursive)
     ),
     InProperty(
       iteration::Property::kModelTypedProperty,
-      OverModelTypedUnion(that.model_typed_property(), recursive)
+      Over_ModelTypedUnion(that.model_typed_property(), recursive)
     ),
     InProperty(
       iteration::Property::kListStructuralProperty,
-      OverListOf_StructuralUnion(
+      Over_listOf_StructuralUnion(
         that.list_structural_property(),
         recursive
       )
     ),
     InProperty(
       iteration::Property::kListMixedProperty,
-      OverListOf_MixedUnion(that.list_mixed_property(), recursive)
+      Over_listOf_MixedUnion(
+        that.list_mixed_property(),
+        recursive
+      )
     ),
     InProperty(
       iteration::Property::kListModelTypedProperty,
-      OverListOf_ModelTypedUnion(
+      Over_listOf_ModelTypedUnion(
         that.list_model_typed_property(),
         recursive
       )
     ),
     InProperty(
       iteration::Property::kTupleProperty,
-      OverTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
+      Over_tupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
         that.tuple_property(),
         recursive
       )
@@ -1093,7 +1096,7 @@ std::unique_ptr<IIterator> OverSomething(
     InProperty(
       iteration::Property::kOptionalStructuralProperty,
       that.optional_structural_property().has_value()
-        ? OverStructuralUnion(
+        ? Over_StructuralUnion(
             (*that.optional_structural_property()),
             recursive
           )
@@ -1102,13 +1105,16 @@ std::unique_ptr<IIterator> OverSomething(
     InProperty(
       iteration::Property::kOptionalMixedProperty,
       that.optional_mixed_property().has_value()
-        ? OverMixedUnion((*that.optional_mixed_property()), recursive)
+        ? Over_MixedUnion(
+            (*that.optional_mixed_property()),
+            recursive
+          )
         : Empty()
     ),
     InProperty(
       iteration::Property::kOptionalModelTypedProperty,
       that.optional_model_typed_property().has_value()
-        ? OverModelTypedUnion(
+        ? Over_ModelTypedUnion(
             (*that.optional_model_typed_property()),
             recursive
           )
@@ -1120,58 +1126,58 @@ std::unique_ptr<IIterator> OverSomething(
 /**
  * Iterate over the values of the \p instance, dispatched on its runtime type.
  */
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
   const types::IClass& instance,
   bool recursive
 ) {
   switch (instance.model_type()) {
     case types::ModelType::kStructuralFirst:
-      return OverStructuralFirst(
+      return Over_StructuralFirst(
         dynamic_cast<const types::IStructuralFirst&>(instance),
         recursive
       );
     case types::ModelType::kStructuralSecond:
-      return OverStructuralSecond(
+      return Over_StructuralSecond(
         dynamic_cast<const types::IStructuralSecond&>(instance),
         recursive
       );
     case types::ModelType::kMixedAbstractDescendantOne:
-      return OverMixedAbstractDescendantOne(
+      return Over_MixedAbstractDescendantOne(
         dynamic_cast<const types::IMixedAbstractDescendantOne&>(instance),
         recursive
       );
     case types::ModelType::kMixedAbstractDescendantTwo:
-      return OverMixedAbstractDescendantTwo(
+      return Over_MixedAbstractDescendantTwo(
         dynamic_cast<const types::IMixedAbstractDescendantTwo&>(instance),
         recursive
       );
     case types::ModelType::kMixedConcreteWithDescendants:
-      return OverMixedConcreteWithDescendants(
+      return Over_MixedConcreteWithDescendants(
         dynamic_cast<const types::IMixedConcreteWithDescendants&>(instance),
         recursive
       );
     case types::ModelType::kMixedConcreteWithDescendantsChild:
-      return OverMixedConcreteWithDescendantsChild(
+      return Over_MixedConcreteWithDescendantsChild(
         dynamic_cast<const types::IMixedConcreteWithDescendantsChild&>(instance),
         recursive
       );
     case types::ModelType::kMixedConcreteLeaf:
-      return OverMixedConcreteLeaf(
+      return Over_MixedConcreteLeaf(
         dynamic_cast<const types::IMixedConcreteLeaf&>(instance),
         recursive
       );
     case types::ModelType::kModelTypedFirst:
-      return OverModelTypedFirst(
+      return Over_ModelTypedFirst(
         dynamic_cast<const types::IModelTypedFirst&>(instance),
         recursive
       );
     case types::ModelType::kModelTypedSecond:
-      return OverModelTypedSecond(
+      return Over_ModelTypedSecond(
         dynamic_cast<const types::IModelTypedSecond&>(instance),
         recursive
       );
     case types::ModelType::kSomething:
-      return OverSomething(
+      return Over_Something(
         dynamic_cast<const types::ISomething&>(instance),
         recursive
       );
@@ -1402,7 +1408,7 @@ NonRecursiveVerification::NonRecursiveVerification(
 }
 
 Iterator NonRecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, false));
+  return IterateErrors(DispatchOnModelType(*instance_, false));
 }
 
 const Iterator& NonRecursiveVerification::end() const {
@@ -1420,7 +1426,7 @@ RecursiveVerification::RecursiveVerification(
 }
 
 Iterator RecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, true));
+  return IterateErrors(DispatchOnModelType(*instance_, true));
 }
 
 const Iterator& RecursiveVerification::end() const {

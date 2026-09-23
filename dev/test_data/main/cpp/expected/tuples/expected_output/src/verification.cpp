@@ -163,7 +163,7 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
  * The iterators are combined out of the combinators below. They follow three rules
  * so that we never build the iterators over the whole model up front:
  * 1. \ref ChainIterator starts a child only once the previous child is done.
- * 2. \ref OverIterator dispatches on the instance only in \ref Start.
+ * 2. \ref DispatchingIterator dispatches on the instance only in \ref Start.
  * 3. \ref EachIterator builds the iterator over an item only once the iteration
  *    reaches the item.
  *
@@ -600,7 +600,7 @@ std::unique_ptr<IIterator> AtIndex(
   return common::make_unique<AtIndexIterator>(index, std::move(child));
 }
 
-using TupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result = std::tuple<
+using tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result = std::tuple<
   int64_t,
   std::shared_ptr<types::ISomeItem>,
   std::shared_ptr<types::IAbstractItem>,
@@ -609,14 +609,14 @@ using TupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result = std::tupl
   types::Result
 >;
 
-std::unique_ptr<IIterator> OverTupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result(
-  const TupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result& value,
+std::unique_ptr<IIterator> Over_tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result(
+  const tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result& value,
   bool
 ) {
   return AtIndex(4, One(&std::get<4>(value), Shape::kPositiveInt));
 }
 
-std::unique_ptr<IIterator> OverSomething(
+std::unique_ptr<IIterator> Over_Something(
   const types::ISomething& that,
   bool recursive
 ) {
@@ -624,7 +624,7 @@ std::unique_ptr<IIterator> OverSomething(
     One(&that, Shape::kSomething),
     InProperty(
       iteration::Property::kTricky,
-      OverTupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result(
+      Over_tupleOf6_int_SomeItem_AbstractItem_SomeItem_PositiveInt_Result(
         that.tricky(),
         recursive
       )
@@ -635,13 +635,13 @@ std::unique_ptr<IIterator> OverSomething(
 /**
  * Iterate over the values of the \p instance, dispatched on its runtime type.
  */
-std::unique_ptr<IIterator> OverInstance(
+std::unique_ptr<IIterator> DispatchOnModelType(
   const types::IClass& instance,
   bool recursive
 ) {
   switch (instance.model_type()) {
     case types::ModelType::kSomething:
-      return OverSomething(
+      return Over_Something(
         dynamic_cast<const types::ISomething&>(instance),
         recursive
       );
@@ -910,7 +910,7 @@ NonRecursiveVerification::NonRecursiveVerification(
 }
 
 Iterator NonRecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, false));
+  return IterateErrors(DispatchOnModelType(*instance_, false));
 }
 
 const Iterator& NonRecursiveVerification::end() const {
@@ -928,7 +928,7 @@ RecursiveVerification::RecursiveVerification(
 }
 
 Iterator RecursiveVerification::begin() const {
-  return IterateErrors(OverInstance(*instance_, true));
+  return IterateErrors(DispatchOnModelType(*instance_, true));
 }
 
 const Iterator& RecursiveVerification::end() const {

@@ -1,0 +1,29 @@
+{
+  "instances": [
+    {
+      "text": "abc"
+    }
+  ],
+  "pointer": {
+    "text": "ab"
+  },
+  "jsonObjectOfName": {
+    "text": "a"
+  },
+  "mappings": [
+    {
+      "": 1.0
+    }
+  ],
+  "lists": [
+    {
+      "text": "b"
+    }
+  ],
+  "pair": [
+    {
+      "text": "b"
+    },
+    "c"
+  ]
+}
