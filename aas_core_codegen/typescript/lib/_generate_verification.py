@@ -417,6 +417,11 @@ class _TranspilableVerificationTranspiler(typescript_transpilation.Transpiler):
             type_map=type_map,
             environment=environment,
             downcast_map=downcast_map,
+            reassigned_definitions=(
+                typescript_transpilation.collect_reassigned_definitions(
+                    verification.parsed.body
+                )
+            ),
         )
 
         self._symbol_table = symbol_table

@@ -1,6 +1,6 @@
 """This module provides an inferrer to resolve optional type information."""
 
-from typing import Final, List, MutableMapping, Optional, Union, Mapping
+from typing import Final, List, MutableMapping, Optional, Union, Mapping, Sequence
 
 from aas_core_codegen import intermediate
 from aas_core_codegen.common import (
@@ -523,6 +523,18 @@ class OptionalInferrer(parse_tree.Transformer[Optional[Error]]):
         if error is not None:
             return error
 
+        if (
+            isinstance(node.target, parse_tree.Name)
+            and self._environment.find(node.target.identifier) is None
+        ):
+            # NOTE (mristin):
+            # This is a variable definition, so we introduce the variable in
+            # the current scope.
+            self._environment.set(
+                identifier=node.target.identifier,
+                type_annotation=self._type_map[node.value],
+            )
+
         error = self.transform(node.target)
         if error is not None:
             return error
@@ -540,4 +552,67 @@ class OptionalInferrer(parse_tree.Transformer[Optional[Error]]):
 
         self.is_optional_map[node] = False
 
+        return None
+
+    def _transform_in_new_scope(
+        self, statements: Sequence[parse_tree.StatementUnion]
+    ) -> Optional[Error]:
+        """
+        Transform the ``statements`` of a switch branch in a new block scope.
+
+        A scope is the region of the code where a variable is visible. We look up
+        the variables in the scopes, *i.e.*, in :attr:`_environment`, to infer
+        the is-optional of the names.
+
+        Python has only function-level scopes, while the switch branches of
+        the generated code are blocks, each with its own scope. We mirror this here:
+
+        * The ``statements`` see the variables of the enclosing scopes, *e.g.*,
+          the function arguments and the variables defined before the switch.
+        * A variable newly defined in the ``statements`` is introduced in a fresh
+          child environment. We discard the child environment once the branch has
+          been transformed, so the variable is not visible after the branch.
+          Consequently, the sibling branches can define the variables of the same
+          name independently of each other.
+
+        The type inference already refused the references to a variable outside
+        of the branch where it has been defined, so here we only need to keep
+        the environments in line with the generated code.
+        """
+        parent_environment = self._environment
+        self._environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+
+        try:
+            for stmt in statements:
+                error = self.transform(stmt)
+                if error is not None:
+                    return error
+        finally:
+            self._environment = parent_environment
+
+        return None
+
+    def transform_switch(self, node: parse_tree.Switch) -> Optional[Error]:
+        error = self.transform(node.subject)
+        if error is not None:
+            return error
+
+        for case in node.cases:
+            for label in case.labels:
+                error = self.transform(label)
+                if error is not None:
+                    return error
+
+            error = self._transform_in_new_scope(case.body)
+            if error is not None:
+                return error
+
+        if node.default is not None:
+            error = self._transform_in_new_scope(node.default)
+            if error is not None:
+                return error
+
+        self.is_optional_map[node] = False
         return None

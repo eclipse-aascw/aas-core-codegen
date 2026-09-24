@@ -4,10 +4,14 @@ import ast
 import enum
 from typing import Sequence, Union, Generic, TypeVar, List, Optional, Iterator
 
-from icontract import DBC
+from icontract import DBC, require
 
 from aas_core_codegen import stringify
-from aas_core_codegen.common import Identifier, assert_never
+from aas_core_codegen.common import (
+    Identifier,
+    assert_never,
+    assert_union_of_descendants_exhaustive,
+)
 
 T = TypeVar("T")
 
@@ -580,6 +584,101 @@ class Return(Statement):
         visitor.visit_return(self)
 
 
+class SwitchCase:
+    """
+    Represent a single case of a :py:class:`Switch`.
+
+    The case is not a node on its own, but only a part of the :py:class:`Switch`.
+    """
+
+    #: Values matched against the subject of the switch
+    labels: Sequence[Union[Constant, Member]]
+
+    #: Statements executed on match; empty if the original body was ``pass``
+    body: Sequence["StatementUnion"]
+
+    #: Relevant Python node of the case, *i.e.*, the ``if`` or ``elif``
+    original_node: ast.AST
+
+    @require(lambda labels: len(labels) >= 1)
+    def __init__(
+        self,
+        labels: Sequence[Union[Constant, Member]],
+        body: Sequence["StatementUnion"],
+        original_node: ast.AST,
+    ) -> None:
+        """Initialize with the given values."""
+        self.labels = labels
+        self.body = body
+        self.original_node = original_node
+
+
+class Switch(Statement):
+    """
+    Represent a switch over a subject whose cases are constants.
+
+    We understand the chains of ``if``, ``elif`` and ``else`` where all the conditions
+    compare the same subject for equality against constants as switches.
+    """
+
+    #: Expression whose value is matched against the labels of the cases
+    subject: Expression
+
+    #: Cases in the order of the original chain
+    cases: Sequence[SwitchCase]
+
+    #: Statements of the ``else`` branch, if any; empty if the ``else`` was ``pass``
+    default: Optional[Sequence["StatementUnion"]]
+
+    @require(lambda cases: len(cases) >= 1)
+    def __init__(
+        self,
+        subject: Expression,
+        cases: Sequence[SwitchCase],
+        default: Optional[Sequence["StatementUnion"]],
+        original_node: ast.AST,
+    ) -> None:
+        """Initialize with the given values."""
+        Statement.__init__(self, original_node=original_node)
+        self.subject = subject
+        self.cases = cases
+        self.default = default
+
+    def transform(self, transformer: "Transformer[T]") -> T:
+        """Accept the transformer."""
+        return transformer.transform_switch(self)
+
+    def visit(self, visitor: "Visitor") -> None:
+        """Accept the visitor."""
+        visitor.visit_switch(self)
+
+
+StatementUnion = Union[Assignment, Return, Switch]
+
+
+def can_complete_normally(statements: Sequence[StatementUnion]) -> bool:
+    """
+    Check whether the execution can continue after the ``statements``.
+
+    The execution can not continue if the last statement is a return, or a switch
+    with a default where none of the branches can complete normally.
+    """
+    if len(statements) == 0:
+        return True
+
+    last = statements[-1]
+    if isinstance(last, Return):
+        return False
+
+    if isinstance(last, Switch):
+        if last.default is None or can_complete_normally(last.default):
+            return True
+
+        return any(can_complete_normally(case.body) for case in last.cases)
+
+    return True
+
+
 class Visitor(DBC):
     """
     Visit all the nodes in the AST.
@@ -721,6 +820,20 @@ class Visitor(DBC):
         if node.value is not None:
             self.visit(node.value)
 
+    def visit_switch(self, node: Switch) -> None:
+        """Visit a switch statement."""
+        self.visit(node.subject)
+        for case in node.cases:
+            for label in case.labels:
+                self.visit(label)
+
+            for stmt in case.body:
+                self.visit(stmt)
+
+        if node.default is not None:
+            for stmt in node.default:
+                self.visit(stmt)
+
 
 class Transformer(Generic[T], DBC):
     """Transform our AST into something."""
@@ -857,6 +970,11 @@ class Transformer(Generic[T], DBC):
     @abc.abstractmethod
     def transform_return(self, node: Return) -> T:
         """Transform a return statement into something."""
+        raise NotImplementedError(f"{node=}")
+
+    @abc.abstractmethod
+    def transform_switch(self, node: Switch) -> T:
+        """Transform a switch statement into something."""
         raise NotImplementedError(f"{node=}")
 
 
@@ -1143,6 +1261,41 @@ class _StringifyTransformer(Transformer[stringify.Entity]):
             ],
         )
 
+    def transform_switch(self, node: Switch) -> stringify.Entity:
+        cases = []  # type: List[stringify.Entity]
+        for case in node.cases:
+            cases.append(
+                stringify.Entity(
+                    name=case.__class__.__name__,
+                    properties=[
+                        stringify.Property(
+                            "labels", [self.transform(label) for label in case.labels]
+                        ),
+                        stringify.Property(
+                            "body", [self.transform(stmt) for stmt in case.body]
+                        ),
+                        stringify.PropertyEllipsis("original_node", case.original_node),
+                    ],
+                )
+            )
+
+        return stringify.Entity(
+            name=node.__class__.__name__,
+            properties=[
+                stringify.Property("subject", self.transform(node.subject)),
+                stringify.Property("cases", cases),
+                stringify.Property(
+                    "default",
+                    (
+                        [self.transform(stmt) for stmt in node.default]
+                        if node.default is not None
+                        else None
+                    ),
+                ),
+                stringify.PropertyEllipsis("original_node", node.original_node),
+            ],
+        )
+
 
 def dump(node: Node) -> str:
     """Produce a string representation of the tree."""
@@ -1260,6 +1413,10 @@ class RestrictedTransformer(Transformer[T]):
 
     def transform_return(self, node: Return) -> T:
         """Transform a return statement into something."""
+        raise AssertionError(f"Unexpected node: {dump(node)}")
+
+    def transform_switch(self, node: Switch) -> T:
+        """Transform a switch statement into something."""
         raise AssertionError(f"Unexpected node: {dump(node)}")
 
 
@@ -1400,6 +1557,20 @@ class _IterationTransformer(Transformer[Iterator[Node]]):
         if node.value is not None:
             yield from self.transform(node.value)
 
+    def transform_switch(self, node: Switch) -> Iterator[Node]:
+        yield node
+        yield from self.transform(node.subject)
+        for case in node.cases:
+            for label in case.labels:
+                yield from self.transform(label)
+
+            for stmt in case.body:
+                yield from self.transform(stmt)
+
+        if node.default is not None:
+            for stmt in node.default:
+                yield from self.transform(stmt)
+
 
 _ITERATION_TRANSFORMER = _IterationTransformer()
 
@@ -1407,3 +1578,6 @@ _ITERATION_TRANSFORMER = _IterationTransformer()
 def over_nodes(node: Node) -> Iterator[Node]:
     """Iterate recursively over the ``node``, including the ``node`` itself."""
     yield from _ITERATION_TRANSFORMER.transform(node)
+
+
+assert_union_of_descendants_exhaustive(union=StatementUnion, base_class=Statement)

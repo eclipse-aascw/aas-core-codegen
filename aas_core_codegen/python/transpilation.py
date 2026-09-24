@@ -1,11 +1,13 @@
 """Transpile meta-model Python code to Python code."""
 import abc
 import io
+import textwrap
 from typing import (
     Tuple,
     Optional,
     List,
     Mapping,
+    Sequence,
     Union,
     Set,
 )
@@ -1009,6 +1011,134 @@ return (
             )
 
         return Stripped(f"return {value}"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def _transform_branch(
+        self, statements: Sequence[parse_tree.StatementUnion]
+    ) -> Tuple[Optional[Tuple[List[Stripped], bool]], Optional[Error]]:
+        """
+        Transpile the ``statements`` of a switch branch in a new scope.
+
+        Python has only function-level scopes, but we keep the environment in line
+        with the other targets where the variables of a branch are not visible
+        after it.
+
+        The type inference refused all the collisions of variable names where
+        the function-level scope and the block scopes of the other targets
+        would diverge, see
+        :py:meth:`aas_core_codegen.intermediate.type_inference._Inferrer._transform_in_new_scope`.
+        Hence, the generated Python code behaves the same as the code in
+        the other targets.
+
+        Return the transpiled statements, and whether they define any variables.
+        We leave the layout of the statements to the caller.
+        """
+        parent_environment = self._environment
+        scope_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        self._environment = scope_environment
+
+        errors = []  # type: List[Error]
+        stmts = []  # type: List[Stripped]
+        try:
+            for stmt in statements:
+                code, error = self.transform(stmt)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert code is not None
+                stmts.append(code)
+        finally:
+            self._environment = parent_environment
+
+        if len(errors) > 0:
+            return None, Error(
+                None, "Failed to transpile the statements of a switch branch", errors
+            )
+
+        return (stmts, len(scope_environment.mapping) > 0), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_switch(
+        self, node: parse_tree.Switch
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        subject, error = self.transform(node.subject)
+        if error is not None:
+            return None, error
+
+        assert subject is not None
+
+        no_parentheses_types = (
+            parse_tree.Member,
+            parse_tree.FunctionCall,
+            parse_tree.MethodCall,
+            parse_tree.Name,
+            parse_tree.Index,
+        )
+        if not isinstance(node.subject, no_parentheses_types):
+            subject = Stripped(f"({subject})")
+
+        errors = []  # type: List[Error]
+
+        # NOTE (mristin):
+        # Python 3.9 has no ``match`` statement, so we transpile the switch as
+        # a chain of ``if``, ``elif`` and ``else``. We collect the headers of
+        # the branches together with their statements, and treat the default as
+        # the last branch.
+        branches = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+
+        for i, case in enumerate(node.cases):
+            labels = []  # type: List[Stripped]
+            for label in case.labels:
+                label_code, error = self.transform(label)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert label_code is not None
+                labels.append(label_code)
+
+            if len(labels) == 1:
+                condition = f"{subject} == {labels[0]}"
+            else:
+                condition = f"{subject} in ({', '.join(labels)})"
+
+            keyword = "if" if i == 0 else "elif"
+            branches.append((f"{keyword} {condition}:", case.body))
+
+        if node.default is not None:
+            branches.append(("else:", node.default))
+
+        writer = io.StringIO()
+
+        for i, (header, statements) in enumerate(branches):
+            stmts_and_defines, error = self._transform_branch(statements)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert stmts_and_defines is not None
+            stmts, _ = stmts_and_defines
+
+            if i > 0:
+                writer.write("\n")
+            writer.write(header)
+
+            if len(stmts) == 0:
+                writer.write(f"\n{I}pass")
+            else:
+                for stmt in stmts:
+                    writer.write("\n")
+                    writer.write(textwrap.indent(stmt, I))
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the switch", errors
+            )
+
+        return Stripped(writer.getvalue()), None
 
 
 # noinspection PyProtectedMember,PyProtectedMember

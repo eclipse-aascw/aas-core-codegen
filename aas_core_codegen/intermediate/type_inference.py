@@ -14,6 +14,7 @@ import enum
 from typing import (
     Mapping,
     MutableMapping,
+    Set,
     Optional,
     List,
     Final,
@@ -1152,6 +1153,23 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
         self.representation_map[node] = result
         return result
 
+    def transform_switch(self, node: parse_tree.Switch) -> str:
+        parts = [f"switch {self.transform(node.subject)}:"]  # type: List[str]
+
+        for case in node.cases:
+            labels = ", ".join(self.transform(label) for label in case.labels)
+            stmts = "; ".join(self.transform(stmt) for stmt in case.body)
+            parts.append(f"case {labels}: {{{stmts}}}")
+
+        if node.default is not None:
+            stmts = "; ".join(self.transform(stmt) for stmt in node.default)
+            parts.append(f"default: {{{stmts}}}")
+
+        result = " ".join(parts)
+
+        self.representation_map[node] = result
+        return result
+
 
 #: Map a comparator to the comparator which says the same about the flipped operands
 _FLIPPED_COMPARATOR = {
@@ -1292,6 +1310,20 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # narrowing is always the most specific one, as we allow ``isinstance`` only
         # on strict descendants of the value's type.
         self._narrowings = dict()  # type: MutableMapping[str, List[OurTypeAnnotation]]
+
+        # NOTE (mristin):
+        # We keep track of the names of the variables defined in the nested scopes,
+        # *i.e.*, the switch branches, which have been already closed. The variables
+        # themselves are not visible anymore, as their environments have been
+        # discarded. We keep only their names to refuse the re-declarations of
+        # the same names in the enclosing scope. See
+        # :py:meth:`_transform_in_new_scope` for more details.
+        #
+        # Each entry of the stack belongs to a scope, and the top of the stack
+        # belongs to the current scope.
+        self._names_of_variables_in_closed_scopes = [
+            set()
+        ]  # type: List[Set[Identifier]]
 
         self.type_map = dict()
         self.downcast_map = dict()
@@ -2869,6 +2901,30 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         if (not is_new_variable and target_type is None) or (value_type is None):
             return None
 
+        if is_new_variable:
+            assert isinstance(node.target, parse_tree.Name)
+            if node.target.identifier in self._names_of_variables_in_closed_scopes[-1]:
+                self.errors.append(
+                    Error(
+                        node.original_node,
+                        f"The variable {node.target.identifier!r} has been already "
+                        f"defined in a branch of a switch before. In Python, both "
+                        f"definitions denote the same variable, while they denote "
+                        f"two different variables in the target languages with "
+                        f"block scopes, and some target languages, such as C#, "
+                        f"refuse such re-declarations altogether. Please use "
+                        f"a different name.",
+                    )
+                )
+
+                # NOTE (mristin):
+                # We still define the variable so that the subsequent statements
+                # do not report it as unknown, which would only confuse the user.
+                self._environment.set(
+                    identifier=node.target.identifier, type_annotation=value_type
+                )
+                return None
+
         if target_type is not None and not _assignable(
             target_type=target_type, value_type=value_type
         ):
@@ -2904,6 +2960,181 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                 return None
 
         # Treat ``return`` as a statement
+        result = PrimitiveTypeAnnotation(PrimitiveType.NONE)
+        self.type_map[node] = result
+        return result
+
+    def _transform_in_new_scope(
+        self, statements: Sequence[parse_tree.StatementUnion]
+    ) -> bool:
+        """
+        Transform the ``statements`` in a new scope, and return ``True`` on success.
+
+        A scope is the region of the code where a variable is visible. Python has
+        only function-level scopes, so a variable assigned in a branch of an ``if``
+        stays visible after the ``if``. The target languages with C-like syntax
+        (C++, C#, Java, TypeScript and Go) scope the variables to the enclosing block,
+        and we generate a separate block for each branch of a switch. Hence, we
+        model the branches as block scopes here as well:
+
+        * The statements see the variables of the enclosing scopes, and can assign
+          to them.
+        * A variable newly defined in the statements is visible only in them, and
+          not after the branch. For example, the following is not allowed:
+
+          .. code-block:: python
+
+              if kind == Kind.Something:
+                  x = 1
+              else:
+                  x = 2
+
+              return x > 0
+
+        The meta-model is written in Python, but must behave the same in all
+        the targets. Therefore, we refuse all the collisions of variable names where
+        Python's function-level scope and the block scopes would diverge:
+
+        * Reading a variable after the branch which defined it is refused, as
+          the variable is unknown outside the branch. This also refuses reading
+          a variable which has been defined only in a sibling branch.
+        * Defining a variable in an enclosing scope after a branch which defined
+          a variable of the same name is refused. In Python, both definitions
+          would denote the same variable, while they denote two different
+          variables with block scopes. Moreover, some target languages, such as
+          C#, refuse such re-declarations altogether. To that end, we remember
+          the names (but not the variables themselves!) of the closed scopes in
+          :attr:`_names_of_variables_in_closed_scopes`.
+        * Assigning in a branch to a variable defined before the switch is
+          an assignment to that very variable, both in Python and in the block
+          scopes, so it is allowed.
+        * Sibling branches can define the variables of the same name. In Python,
+          they denote the same variable, but since neither of them is visible
+          outside its branch, no branch can observe the value set by another
+          branch, and the behavior is the same as with block scopes.
+        """
+        parent_environment = self._environment
+        scope_environment = MutableEnvironment(parent=parent_environment)
+        self._environment = scope_environment
+        self._names_of_variables_in_closed_scopes.append(set())
+
+        success = True
+        try:
+            for stmt in statements:
+                if self.transform(stmt) is None:
+                    success = False
+        finally:
+            # NOTE (mristin):
+            # We discard the environment of the scope so that its variables are not
+            # visible anymore. However, we pass on the names of its variables, and
+            # the names of the variables of its own closed nested scopes, to
+            # the enclosing scope so that it can refuse their re-declarations.
+            names_of_variables_in_nested_scopes = (
+                self._names_of_variables_in_closed_scopes.pop()
+            )
+            self._names_of_variables_in_closed_scopes[-1].update(
+                names_of_variables_in_nested_scopes
+            )
+            self._names_of_variables_in_closed_scopes[-1].update(
+                scope_environment.mapping.keys()
+            )
+
+            self._environment = parent_environment
+
+        return success
+
+    def transform_switch(
+        self, node: parse_tree.Switch
+    ) -> Optional["TypeAnnotationUnion"]:
+        subject_type = self.transform(node.subject)
+        if subject_type is None:
+            return None
+
+        if isinstance(subject_type, OptionalTypeAnnotation):
+            self.errors.append(
+                Error(
+                    node.subject.original_node,
+                    f"Expected the subject of the switch to be a non-None, "
+                    f"but got: {subject_type}",
+                )
+            )
+            return None
+
+        enumeration = None  # type: Optional[_types.Enumeration]
+        primitive_type = None  # type: Optional[PrimitiveType]
+
+        if isinstance(subject_type, OurTypeAnnotation) and isinstance(
+            subject_type.our_type, _types.Enumeration
+        ):
+            enumeration = subject_type.our_type
+        else:
+            primitive_type = try_primitive_type(subject_type)
+            if primitive_type not in (PrimitiveType.STR, PrimitiveType.INT):
+                self.errors.append(
+                    Error(
+                        node.subject.original_node,
+                        f"Expected the subject of the switch to be an enumeration, "
+                        f"a string or an integer, but got: {subject_type}",
+                    )
+                )
+                return None
+
+        success = True
+
+        for case in node.cases:
+            for label in case.labels:
+                label_type = self.transform(label)
+                if label_type is None:
+                    success = False
+                    continue
+
+                if enumeration is not None:
+                    if not (
+                        isinstance(label, parse_tree.Member)
+                        and isinstance(
+                            self.type_map.get(label.instance, None),
+                            EnumerationAsTypeTypeAnnotation,
+                        )
+                        and isinstance(label_type, OurTypeAnnotation)
+                        and label_type.our_type is enumeration
+                    ):
+                        self.errors.append(
+                            Error(
+                                label.original_node,
+                                f"Expected the label to be a literal of "
+                                f"the enumeration {enumeration.name!r}, the type of "
+                                f"the subject of the switch, but got: {label_type}",
+                            )
+                        )
+                        success = False
+
+                else:
+                    assert primitive_type is not None
+                    if not (
+                        isinstance(label, parse_tree.Constant)
+                        and isinstance(label_type, PrimitiveTypeAnnotation)
+                        and label_type.a_type is primitive_type
+                    ):
+                        self.errors.append(
+                            Error(
+                                label.original_node,
+                                f"Expected the label to be "
+                                f"a {primitive_type.value} literal, the type of "
+                                f"the subject of the switch, but got: {label_type}",
+                            )
+                        )
+                        success = False
+
+            if not self._transform_in_new_scope(case.body):
+                success = False
+
+        if node.default is not None:
+            if not self._transform_in_new_scope(node.default):
+                success = False
+
+        if not success:
+            return None
+
         result = PrimitiveTypeAnnotation(PrimitiveType.NONE)
         self.type_map[node] = result
         return result

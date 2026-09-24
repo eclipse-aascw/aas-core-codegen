@@ -1,11 +1,13 @@
 """Transpile Python to C# code."""
 import abc
 import io
+import textwrap
 from typing import (
     Tuple,
     Optional,
     List,
     Mapping,
+    Sequence,
     Union,
     Set,
 )
@@ -27,6 +29,7 @@ from aas_core_codegen.csharp import (
 from aas_core_codegen.csharp.common import (
     INDENT as I,
     INDENT2 as II,
+    INDENT3 as III,
 )
 from aas_core_codegen.intermediate import type_inference as intermediate_type_inference
 from aas_core_codegen.parse import tree as parse_tree
@@ -1250,6 +1253,123 @@ return (
             )
 
         return Stripped(f"return {value};"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def _transform_branch(
+        self, statements: Sequence[parse_tree.StatementUnion]
+    ) -> Tuple[Optional[Tuple[List[Stripped], bool]], Optional[Error]]:
+        """
+        Transpile the ``statements`` of a switch branch in a new scope.
+
+        The variables defined in the ``statements`` are not visible after
+        the branch.
+
+        Return the transpiled statements, and whether they define any variables.
+        We leave the layout of the statements to the caller.
+        """
+        parent_environment = self._environment
+        scope_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        self._environment = scope_environment
+
+        errors = []  # type: List[Error]
+        stmts = []  # type: List[Stripped]
+        try:
+            for stmt in statements:
+                code, error = self.transform(stmt)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert code is not None
+                stmts.append(code)
+        finally:
+            self._environment = parent_environment
+
+        if len(errors) > 0:
+            return None, Error(
+                None, "Failed to transpile the statements of a switch branch", errors
+            )
+
+        return (stmts, len(scope_environment.mapping) > 0), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_switch(
+        self, node: parse_tree.Switch
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        subject, error = self.transform(node.subject)
+        if error is not None:
+            return None, error
+
+        assert subject is not None
+
+        errors = []  # type: List[Error]
+
+        # NOTE (mristin):
+        # We collect the headers of the clauses together with their statements, and
+        # treat the default as the last clause.
+        clauses = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+
+        for case in node.cases:
+            headers = []  # type: List[str]
+            for label in case.labels:
+                label_code, error = self.transform(label)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert label_code is not None
+                headers.append(f"case {label_code}:")
+
+            clauses.append(("\n".join(headers), case.body))
+
+        if node.default is not None:
+            clauses.append(("default:", node.default))
+
+        writer = io.StringIO()
+        writer.write(f"switch ({subject})\n{{")
+
+        for header, statements in clauses:
+            stmts_and_defines, error = self._transform_branch(statements)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert stmts_and_defines is not None
+            stmts, defines_variables = stmts_and_defines
+
+            # NOTE (mristin):
+            # C# does not allow the fall-through, so we end the clause with
+            # a ``break`` if its execution can complete.
+            if parse_tree.can_complete_normally(statements):
+                stmts = stmts + [Stripped("break;")]
+
+            writer.write("\n")
+            writer.write(textwrap.indent(header, I))
+
+            # NOTE (mristin):
+            # We enclose the statements in a block only if they define variables
+            # since all the clauses of a switch share the same scope otherwise.
+            if defines_variables:
+                writer.write(f"\n{II}{{")
+                for stmt in stmts:
+                    writer.write("\n")
+                    writer.write(textwrap.indent(stmt, III))
+                writer.write(f"\n{II}}}")
+            else:
+                for stmt in stmts:
+                    writer.write("\n")
+                    writer.write(textwrap.indent(stmt, II))
+
+        writer.write("\n}")
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the switch", errors
+            )
+
+        return Stripped(writer.getvalue()), None
 
 
 # noinspection PyProtectedMember,PyProtectedMember

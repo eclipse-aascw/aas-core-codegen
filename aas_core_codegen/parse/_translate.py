@@ -1745,6 +1745,23 @@ def _function_def_to_method(
                 if isinstance(body_child, ast.Pass):
                     continue
 
+                # NOTE (mristin):
+                # Some target languages, such as Java, refuse to compile
+                # unreachable statements.
+                if (
+                    len(understood_body) > 0
+                    and isinstance(understood_body[-1], (tree.Return, tree.Switch))
+                    and not tree.can_complete_normally([understood_body[-1]])
+                ):
+                    understanding_errors.append(
+                        Error(
+                            body_child,
+                            "The statement is unreachable as the preceding "
+                            "statements never complete",
+                        )
+                    )
+                    break
+
                 understood_node, understanding_error = _rules.ast_node_to_our_node(
                     body_child
                 )

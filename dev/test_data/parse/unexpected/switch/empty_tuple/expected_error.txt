@@ -1,0 +1,1 @@
+Expected at least one label in the switch case
