@@ -301,11 +301,11 @@ namespace dummy.Tests
                 Assert.IsNotNull(
                     exception,
                     "Expected the serialization to fail at " +
-                        "someInt" +
+                        "SomeInt" +
                         ", but it succeeded");
 
                 Assert.AreEqual(
-                    "someInt",
+                    "SomeInt",
                     exception!.Path);
             }
         }  // public void TestSomethingSomeIntSerializationOutOfRange
@@ -336,11 +336,11 @@ namespace dummy.Tests
                 Assert.IsNotNull(
                     exception,
                     "Expected the serialization to fail at " +
-                        "someFloat" +
+                        "SomeFloat" +
                         ", but it succeeded");
 
                 Assert.AreEqual(
-                    "someFloat",
+                    "SomeFloat",
                     exception!.Path);
             }
         }  // public void TestSomethingSomeFloatSerializationNonFinite

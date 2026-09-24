@@ -301,11 +301,11 @@ namespace dummy.Tests
                 Assert.IsNotNull(
                     exception,
                     "Expected the serialization to fail at " +
-                        "someFloat" +
+                        "SomeFloat" +
                         ", but it succeeded");
 
                 Assert.AreEqual(
-                    "someFloat",
+                    "SomeFloat",
                     exception!.Path);
             }
         }  // public void TestSomethingSomeFloatSerializationNonFinite
@@ -336,11 +336,11 @@ namespace dummy.Tests
                 Assert.IsNotNull(
                     exception,
                     "Expected the serialization to fail at " +
-                        "someFloats[1]" +
+                        "SomeFloats[1]" +
                         ", but it succeeded");
 
                 Assert.AreEqual(
-                    "someFloats[1]",
+                    "SomeFloats[1]",
                     exception!.Path);
             }
         }  // public void TestSomethingSomeFloatsSerializationNonFinite
@@ -373,11 +373,11 @@ namespace dummy.Tests
                 Assert.IsNotNull(
                     exception,
                     "Expected the serialization to fail at " +
-                        "somePair[1]" +
+                        "SomePair[1]" +
                         ", but it succeeded");
 
                 Assert.AreEqual(
-                    "somePair[1]",
+                    "SomePair[1]",
                     exception!.Path);
             }
         }  // public void TestSomethingSomePairSerializationNonFinite

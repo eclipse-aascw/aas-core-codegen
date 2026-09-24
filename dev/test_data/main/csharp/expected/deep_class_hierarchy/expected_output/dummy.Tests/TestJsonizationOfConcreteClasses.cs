@@ -941,11 +941,11 @@ namespace dummy.Tests
                 Assert.IsNotNull(
                     exception,
                     "Expected the serialization to fail at " +
-                        "value" +
+                        "Value" +
                         ", but it succeeded");
 
                 Assert.AreEqual(
-                    "value",
+                    "Value",
                     exception!.Path);
             }
         }  // public void TestLeafValueSerializationOutOfRange
@@ -976,11 +976,11 @@ namespace dummy.Tests
                 Assert.IsNotNull(
                     exception,
                     "Expected the serialization to fail at " +
-                        "value" +
+                        "Value" +
                         ", but it succeeded");
 
                 Assert.AreEqual(
-                    "value",
+                    "Value",
                     exception!.Path);
             }
         }  // public void TestBlossomValueSerializationOutOfRange
