@@ -192,15 +192,13 @@ export class VerificationError {
 export function interfacE(
   something: string
 ): boolean {
-  return (
-    true);
+  return true;
 }
 
 export function voiD(
   something: string
 ): boolean {
-  return (
-    true);
+  return true;
 }
 
 /**
