@@ -95,7 +95,7 @@ std::string NodeToHumanReadableString(
       return common::Concat(
         "a start node <",
         start_node.name,
-        start_node.in_namespace ? ">" : "> in no namespace"
+        ">"
       );
     }
 
@@ -110,7 +110,7 @@ std::string NodeToHumanReadableString(
       return common::Concat(
         "a stop node </",
         stop_node.name,
-        stop_node.in_namespace ? ">" : "> in no namespace"
+        ">"
       );
     }
 
@@ -153,7 +153,7 @@ std::wstring NodeToHumanReadableWstring(
       return common::Concat(
         L"a start node <",
         common::Utf8ToWstring(start_node.name),
-        start_node.in_namespace ? L">" : L"> in no namespace"
+        L">"
       );
     }
 
@@ -168,7 +168,7 @@ std::wstring NodeToHumanReadableWstring(
       return common::Concat(
         L"a stop node </",
         common::Utf8ToWstring(stop_node.name),
-        stop_node.in_namespace ? L">" : L"> in no namespace"
+        L">"
       );
     }
 
