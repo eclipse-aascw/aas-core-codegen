@@ -939,7 +939,9 @@ namespace dummy
             /// </summary>
             private static Nodes.JsonValue ToJsonValue(string that)
             {
-                return Nodes.JsonValue.Create(that);
+                return Nodes.JsonValue.Create(that)
+                    ?? throw new System.InvalidOperationException(
+                        "Unexpected null JSON value from a non-null string");
             }
 
             /// <summary>

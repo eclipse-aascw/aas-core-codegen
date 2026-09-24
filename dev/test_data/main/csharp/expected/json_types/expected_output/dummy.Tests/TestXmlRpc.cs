@@ -91,7 +91,9 @@ namespace dummy.Tests
                 "a < b & c > d \" e ' f"
             })
             {
-                Nodes.JsonNode original = Nodes.JsonValue.Create(value);
+                Nodes.JsonNode original = Nodes.JsonValue.Create(value)
+                    ?? throw new System.InvalidOperationException(
+                        "Unexpected null JSON value from a non-null string");
                 string text = SerializeToString(original);
 
                 Nodes.JsonNode? roundTripped = DeserializeFromString(

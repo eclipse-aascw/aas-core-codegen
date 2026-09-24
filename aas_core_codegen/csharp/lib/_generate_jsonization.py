@@ -1786,11 +1786,25 @@ def _generate_atomic_serializer_helpers(
 
     for primitive_type, csharp_type, conversion_expr in (
         (intermediate.PrimitiveType.BOOL, "bool", "Nodes.JsonValue.Create(that)"),
-        (intermediate.PrimitiveType.STR, "string", "Nodes.JsonValue.Create(that)"),
+        # NOTE (mristin):
+        # ``Nodes.JsonValue.Create`` returns null for a null string, so the compiler
+        # warns about a possible null return (CS8603) unless we handle it, although
+        # a non-null string never results in null.
+        (
+            intermediate.PrimitiveType.STR,
+            "string",
+            f"""\
+Nodes.JsonValue.Create(that)
+{I}?? throw new System.InvalidOperationException(
+{II}"Unexpected null JSON value from a non-null string")""",
+        ),
         (
             intermediate.PrimitiveType.BYTEARRAY,
             "byte[]",
-            "Nodes.JsonValue.Create(System.Convert.ToBase64String(that))",
+            f"""\
+Nodes.JsonValue.Create(System.Convert.ToBase64String(that))
+{I}?? throw new System.InvalidOperationException(
+{II}"Unexpected null JSON value from a non-null string")""",
         ),
     ):
         if primitive_type not in primitive_types:
@@ -1804,7 +1818,7 @@ def _generate_atomic_serializer_helpers(
 /// </summary>
 private static Nodes.JsonValue ToJsonValue({csharp_type} that)
 {{
-{I}return {conversion_expr};
+{I}return {indent_but_first_line(conversion_expr, I)};
 }}"""
             )
         )

@@ -124,7 +124,9 @@ public void Test_round_trip_string()
 {II}"a < b & c > d \\" e ' f"
 {I}}})
 {I}{{
-{II}Nodes.JsonNode original = Nodes.JsonValue.Create(value);
+{II}Nodes.JsonNode original = Nodes.JsonValue.Create(value)
+{III}?? throw new System.InvalidOperationException(
+{IIII}"Unexpected null JSON value from a non-null string");
 {II}string text = SerializeToString(original);
 
 {II}Nodes.JsonNode? roundTripped = DeserializeFromString(

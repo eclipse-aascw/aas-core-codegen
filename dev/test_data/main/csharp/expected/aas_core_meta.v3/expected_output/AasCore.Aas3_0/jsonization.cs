@@ -7191,7 +7191,9 @@ namespace AasCore.Aas3_0
             /// </summary>
             private static Nodes.JsonValue ToJsonValue(string that)
             {
-                return Nodes.JsonValue.Create(that);
+                return Nodes.JsonValue.Create(that)
+                    ?? throw new System.InvalidOperationException(
+                        "Unexpected null JSON value from a non-null string");
             }
 
             /// <summary>
@@ -7199,7 +7201,9 @@ namespace AasCore.Aas3_0
             /// </summary>
             private static Nodes.JsonValue ToJsonValue(byte[] that)
             {
-                return Nodes.JsonValue.Create(System.Convert.ToBase64String(that));
+                return Nodes.JsonValue.Create(System.Convert.ToBase64String(that))
+                    ?? throw new System.InvalidOperationException(
+                        "Unexpected null JSON value from a non-null string");
             }
 
             /// <summary>
