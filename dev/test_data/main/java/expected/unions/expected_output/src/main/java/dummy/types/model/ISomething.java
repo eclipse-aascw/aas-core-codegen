@@ -53,6 +53,15 @@ public interface ISomething extends IClass {
   Optional<ModelTypedUnion> getOptionalModelTypedProperty();
 
   void setOptionalModelTypedProperty(ModelTypedUnion optionalModelTypedProperty);
+
+  Optional<List<OverlappingUnion>> getOptionalListOverlappingProperty();
+
+  void setOptionalListOverlappingProperty(List<OverlappingUnion> optionalListOverlappingProperty);
+
+  /**
+   * Iterate over optionalListOverlappingProperty, if set, and otherwise return an empty enumerable.
+   */
+  Iterable<OverlappingUnion> overOptionalListOverlappingPropertyOrEmpty();
 }
 
 /*

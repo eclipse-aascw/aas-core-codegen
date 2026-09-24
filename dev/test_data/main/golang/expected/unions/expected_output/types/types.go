@@ -270,11 +270,15 @@ func (s *StructuralUnion) Underlying() IClass {
 
 // Wrap `that` as an instance of [StructuralUnion] based on its run-time type.
 func StructuralUnionFromUnderlying(that IClass) *StructuralUnion {
-	switch casted := that.(type) {
-	case IStructuralFirst:
-		return NewStructuralUnionFromStructuralFirst(casted)
-	case IStructuralSecond:
-		return NewStructuralUnionFromStructuralSecond(casted)
+	switch that.ModelType() {
+	case ModelTypeStructuralFirst:
+		return NewStructuralUnionFromStructuralFirst(
+			that.(IStructuralFirst),
+		)
+	case ModelTypeStructuralSecond:
+		return NewStructuralUnionFromStructuralSecond(
+			that.(IStructuralSecond),
+		)
 	default:
 		panic(
 			fmt.Sprintf(
@@ -753,44 +757,24 @@ func NewMixedConcreteLeaf(
 type mixedUnionValueKind int
 
 const (
-	mixedUnionValueKindMixedAbstractDescendantOne mixedUnionValueKind = iota
-	mixedUnionValueKindMixedAbstractDescendantTwo
-	mixedUnionValueKindMixedConcreteWithDescendantsChild
+	mixedUnionValueKindMixedAbstractMember mixedUnionValueKind = iota
 	mixedUnionValueKindMixedConcreteWithDescendants
 	mixedUnionValueKindMixedConcreteLeaf
 )
 
-// Represent a union of [IMixedAbstractDescendantOne], [IMixedAbstractDescendantTwo], [IMixedConcreteWithDescendantsChild], [IMixedConcreteWithDescendants] and [IMixedConcreteLeaf].
+// Represent a union of [IMixedAbstractMember], [IMixedConcreteWithDescendants] and [IMixedConcreteLeaf].
 type MixedUnion struct {
 	valueKind mixedUnionValueKind
-	asMixedAbstractDescendantOne IMixedAbstractDescendantOne
-	asMixedAbstractDescendantTwo IMixedAbstractDescendantTwo
-	asMixedConcreteWithDescendantsChild IMixedConcreteWithDescendantsChild
+	asMixedAbstractMember IMixedAbstractMember
 	asMixedConcreteWithDescendants IMixedConcreteWithDescendants
 	asMixedConcreteLeaf IMixedConcreteLeaf
 }
 
 // Wrap `that` as an instance of [MixedUnion].
-func NewMixedUnionFromMixedAbstractDescendantOne(that IMixedAbstractDescendantOne) *MixedUnion {
+func NewMixedUnionFromMixedAbstractMember(that IMixedAbstractMember) *MixedUnion {
 	return &MixedUnion{
-		valueKind: mixedUnionValueKindMixedAbstractDescendantOne,
-		asMixedAbstractDescendantOne: that,
-	}
-}
-
-// Wrap `that` as an instance of [MixedUnion].
-func NewMixedUnionFromMixedAbstractDescendantTwo(that IMixedAbstractDescendantTwo) *MixedUnion {
-	return &MixedUnion{
-		valueKind: mixedUnionValueKindMixedAbstractDescendantTwo,
-		asMixedAbstractDescendantTwo: that,
-	}
-}
-
-// Wrap `that` as an instance of [MixedUnion].
-func NewMixedUnionFromMixedConcreteWithDescendantsChild(that IMixedConcreteWithDescendantsChild) *MixedUnion {
-	return &MixedUnion{
-		valueKind: mixedUnionValueKindMixedConcreteWithDescendantsChild,
-		asMixedConcreteWithDescendantsChild: that,
+		valueKind: mixedUnionValueKindMixedAbstractMember,
+		asMixedAbstractMember: that,
 	}
 }
 
@@ -813,12 +797,8 @@ func NewMixedUnionFromMixedConcreteLeaf(that IMixedConcreteLeaf) *MixedUnion {
 // Get the underlying instance regardless of the concrete case.
 func (m *MixedUnion) Underlying() IClass {
 	switch m.valueKind {
-	case mixedUnionValueKindMixedAbstractDescendantOne:
-		return m.asMixedAbstractDescendantOne
-	case mixedUnionValueKindMixedAbstractDescendantTwo:
-		return m.asMixedAbstractDescendantTwo
-	case mixedUnionValueKindMixedConcreteWithDescendantsChild:
-		return m.asMixedConcreteWithDescendantsChild
+	case mixedUnionValueKindMixedAbstractMember:
+		return m.asMixedAbstractMember
 	case mixedUnionValueKindMixedConcreteWithDescendants:
 		return m.asMixedConcreteWithDescendants
 	case mixedUnionValueKindMixedConcreteLeaf:
@@ -835,17 +815,27 @@ func (m *MixedUnion) Underlying() IClass {
 
 // Wrap `that` as an instance of [MixedUnion] based on its run-time type.
 func MixedUnionFromUnderlying(that IClass) *MixedUnion {
-	switch casted := that.(type) {
-	case IMixedAbstractDescendantOne:
-		return NewMixedUnionFromMixedAbstractDescendantOne(casted)
-	case IMixedAbstractDescendantTwo:
-		return NewMixedUnionFromMixedAbstractDescendantTwo(casted)
-	case IMixedConcreteWithDescendantsChild:
-		return NewMixedUnionFromMixedConcreteWithDescendantsChild(casted)
-	case IMixedConcreteWithDescendants:
-		return NewMixedUnionFromMixedConcreteWithDescendants(casted)
-	case IMixedConcreteLeaf:
-		return NewMixedUnionFromMixedConcreteLeaf(casted)
+	switch that.ModelType() {
+	case ModelTypeMixedAbstractDescendantOne:
+		return NewMixedUnionFromMixedAbstractMember(
+			that.(IMixedAbstractMember),
+		)
+	case ModelTypeMixedAbstractDescendantTwo:
+		return NewMixedUnionFromMixedAbstractMember(
+			that.(IMixedAbstractMember),
+		)
+	case ModelTypeMixedConcreteWithDescendantsChild:
+		return NewMixedUnionFromMixedConcreteWithDescendants(
+			that.(IMixedConcreteWithDescendants),
+		)
+	case ModelTypeMixedConcreteWithDescendants:
+		return NewMixedUnionFromMixedConcreteWithDescendants(
+			that.(IMixedConcreteWithDescendants),
+		)
+	case ModelTypeMixedConcreteLeaf:
+		return NewMixedUnionFromMixedConcreteLeaf(
+			that.(IMixedConcreteLeaf),
+		)
 	default:
 		panic(
 			fmt.Sprintf(
@@ -1081,11 +1071,15 @@ func (m *ModelTypedUnion) Underlying() IClass {
 
 // Wrap `that` as an instance of [ModelTypedUnion] based on its run-time type.
 func ModelTypedUnionFromUnderlying(that IClass) *ModelTypedUnion {
-	switch casted := that.(type) {
-	case IModelTypedFirst:
-		return NewModelTypedUnionFromModelTypedFirst(casted)
-	case IModelTypedSecond:
-		return NewModelTypedUnionFromModelTypedSecond(casted)
+	switch that.ModelType() {
+	case ModelTypeModelTypedFirst:
+		return NewModelTypedUnionFromModelTypedFirst(
+			that.(IModelTypedFirst),
+		)
+	case ModelTypeModelTypedSecond:
+		return NewModelTypedUnionFromModelTypedSecond(
+			that.(IModelTypedSecond),
+		)
 	default:
 		panic(
 			fmt.Sprintf(
@@ -1104,6 +1098,116 @@ func ModelTypedUnionFromUnderlying(that IClass) *ModelTypedUnion {
 // union type at compile time.
 func (m *ModelTypedUnion) WithUnderlying(that IClass) *ModelTypedUnion {
 	return ModelTypedUnionFromUnderlying(that)
+}
+
+type overlappingUnionValueKind int
+
+const (
+	overlappingUnionValueKindModelTypedFirst overlappingUnionValueKind = iota
+	overlappingUnionValueKindModelTypedSecond
+	overlappingUnionValueKindMixedConcreteWithDescendants
+	overlappingUnionValueKindMixedConcreteWithDescendantsChild
+)
+
+// Represent a union of [IModelTypedFirst], [IModelTypedSecond], [IMixedConcreteWithDescendants] and [IMixedConcreteWithDescendantsChild].
+type OverlappingUnion struct {
+	valueKind overlappingUnionValueKind
+	asModelTypedFirst IModelTypedFirst
+	asModelTypedSecond IModelTypedSecond
+	asMixedConcreteWithDescendants IMixedConcreteWithDescendants
+	asMixedConcreteWithDescendantsChild IMixedConcreteWithDescendantsChild
+}
+
+// Wrap `that` as an instance of [OverlappingUnion].
+func NewOverlappingUnionFromModelTypedFirst(that IModelTypedFirst) *OverlappingUnion {
+	return &OverlappingUnion{
+		valueKind: overlappingUnionValueKindModelTypedFirst,
+		asModelTypedFirst: that,
+	}
+}
+
+// Wrap `that` as an instance of [OverlappingUnion].
+func NewOverlappingUnionFromModelTypedSecond(that IModelTypedSecond) *OverlappingUnion {
+	return &OverlappingUnion{
+		valueKind: overlappingUnionValueKindModelTypedSecond,
+		asModelTypedSecond: that,
+	}
+}
+
+// Wrap `that` as an instance of [OverlappingUnion].
+func NewOverlappingUnionFromMixedConcreteWithDescendants(that IMixedConcreteWithDescendants) *OverlappingUnion {
+	return &OverlappingUnion{
+		valueKind: overlappingUnionValueKindMixedConcreteWithDescendants,
+		asMixedConcreteWithDescendants: that,
+	}
+}
+
+// Wrap `that` as an instance of [OverlappingUnion].
+func NewOverlappingUnionFromMixedConcreteWithDescendantsChild(that IMixedConcreteWithDescendantsChild) *OverlappingUnion {
+	return &OverlappingUnion{
+		valueKind: overlappingUnionValueKindMixedConcreteWithDescendantsChild,
+		asMixedConcreteWithDescendantsChild: that,
+	}
+}
+
+// Get the underlying instance regardless of the concrete case.
+func (o *OverlappingUnion) Underlying() IClass {
+	switch o.valueKind {
+	case overlappingUnionValueKindModelTypedFirst:
+		return o.asModelTypedFirst
+	case overlappingUnionValueKindModelTypedSecond:
+		return o.asModelTypedSecond
+	case overlappingUnionValueKindMixedConcreteWithDescendants:
+		return o.asMixedConcreteWithDescendants
+	case overlappingUnionValueKindMixedConcreteWithDescendantsChild:
+		return o.asMixedConcreteWithDescendantsChild
+	default:
+		panic(
+			fmt.Sprintf(
+				"Unexpected value kind: %v",
+				o.valueKind,
+			),
+		)
+	}
+}
+
+// Wrap `that` as an instance of [OverlappingUnion] based on its run-time type.
+func OverlappingUnionFromUnderlying(that IClass) *OverlappingUnion {
+	switch that.ModelType() {
+	case ModelTypeModelTypedFirst:
+		return NewOverlappingUnionFromModelTypedFirst(
+			that.(IModelTypedFirst),
+		)
+	case ModelTypeModelTypedSecond:
+		return NewOverlappingUnionFromModelTypedSecond(
+			that.(IModelTypedSecond),
+		)
+	case ModelTypeMixedConcreteWithDescendantsChild:
+		return NewOverlappingUnionFromMixedConcreteWithDescendantsChild(
+			that.(IMixedConcreteWithDescendantsChild),
+		)
+	case ModelTypeMixedConcreteWithDescendants:
+		return NewOverlappingUnionFromMixedConcreteWithDescendants(
+			that.(IMixedConcreteWithDescendants),
+		)
+	default:
+		panic(
+			fmt.Sprintf(
+				"Unexpected run-time type for the union OverlappingUnion: %T",
+				that,
+			),
+		)
+	}
+}
+
+// Wrap `that` as an instance of [OverlappingUnion] based on its run-time type.
+//
+// This is the method-level counterpart of [OverlappingUnionFromUnderlying], needed
+// so that a generic function constrained to a self-referential union
+// interface can re-wrap a transformed value without knowing the concrete
+// union type at compile time.
+func (o *OverlappingUnion) WithUnderlying(that IClass) *OverlappingUnion {
+	return OverlappingUnionFromUnderlying(that)
 }
 
 type ISomething interface {
@@ -1168,6 +1272,12 @@ type ISomething interface {
 	SetOptionalModelTypedProperty(
 		value *ModelTypedUnion,
 	);
+
+	OptionalListOverlappingProperty() []*OverlappingUnion;
+
+	SetOptionalListOverlappingProperty(
+		value []*OverlappingUnion,
+	);
 }
 
 // Check whether the instance corresponds to [aastypes.ISomething]
@@ -1194,6 +1304,7 @@ type Something struct {
 	optionalStructuralProperty *StructuralUnion
 	optionalMixedProperty *MixedUnion
 	optionalModelTypedProperty *ModelTypedUnion
+	optionalListOverlappingProperty []*OverlappingUnion
 }
 
 func (s *Something) StructuralProperty(
@@ -1306,6 +1417,17 @@ func (s *Something) SetOptionalModelTypedProperty(
 	s.optionalModelTypedProperty = value
 }
 
+func (s *Something) OptionalListOverlappingProperty(
+) []*OverlappingUnion {
+	return s.optionalListOverlappingProperty
+}
+
+func (s *Something) SetOptionalListOverlappingProperty(
+	value []*OverlappingUnion,
+) {
+	s.optionalListOverlappingProperty = value
+}
+
 func (s *Something) ModelType(
 ) ModelType {
 	return ModelTypeSomething
@@ -1407,6 +1529,15 @@ func (s *Something) DescendOnce(
 		)
 		if abort {
 			return
+		}
+	}
+
+	if s.optionalListOverlappingProperty != nil {
+		for _, v3 := range s.optionalListOverlappingProperty {
+			abort = action(v3.Underlying());
+			if abort {
+				return
+			}
 		}
 	}
 
@@ -1585,6 +1716,22 @@ func (s *Something) Descend(
 		}
 	}
 
+	if s.optionalListOverlappingProperty != nil {
+		for _, v3 := range s.optionalListOverlappingProperty {
+			abort = action(v3.Underlying());
+			if abort {
+				return
+			}
+
+			abort = v3.Underlying().Descend(
+				action,
+			);
+			if abort {
+				return
+			}
+		}
+	}
+
 	return
 }
 
@@ -1610,6 +1757,7 @@ func NewSomething(
 		optionalStructuralProperty: nil,
 		optionalMixedProperty: nil,
 		optionalModelTypedProperty: nil,
+		optionalListOverlappingProperty: nil,
 	}
 }
 

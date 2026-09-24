@@ -583,9 +583,7 @@ class MixedConcreteLeaf(Class):
 
 #: Represent a union of classes.
 MixedUnion = Union[
-    'MixedAbstractDescendantOne',
-    'MixedAbstractDescendantTwo',
-    'MixedConcreteWithDescendantsChild',
+    'MixedAbstractMember',
     'MixedConcreteWithDescendants',
     'MixedConcreteLeaf',
 ]
@@ -731,6 +729,15 @@ class ModelTypedSecond(Class):
 ModelTypedUnion = Union['ModelTypedFirst', 'ModelTypedSecond']
 
 
+#: Represent a union of classes.
+OverlappingUnion = Union[
+    'ModelTypedFirst',
+    'ModelTypedSecond',
+    'MixedConcreteWithDescendants',
+    'MixedConcreteWithDescendantsChild',
+]
+
+
 class Something(Class):
     # pylint: disable=missing-class-docstring
 
@@ -753,6 +760,15 @@ class Something(Class):
     optional_mixed_property: Optional['MixedUnion']
 
     optional_model_typed_property: Optional['ModelTypedUnion']
+
+    optional_list_overlapping_property: Optional[List['OverlappingUnion']]
+
+    def over_optional_list_overlapping_property_or_empty(
+            self
+    ) -> Iterator['OverlappingUnion']:
+        """Yield from :py:attr:`.optional_list_overlapping_property` if set."""
+        if self.optional_list_overlapping_property is not None:
+            yield from self.optional_list_overlapping_property
 
     def descend_once(self) -> Iterator[Class]:
         """
@@ -788,6 +804,9 @@ class Something(Class):
 
         if self.optional_model_typed_property is not None:
             yield self.optional_model_typed_property
+
+        if self.optional_list_overlapping_property is not None:
+            yield from self.optional_list_overlapping_property
 
     def descend(self) -> Iterator[Class]:
         """
@@ -849,6 +868,12 @@ class Something(Class):
 
             yield from self.optional_model_typed_property.descend()
 
+        if self.optional_list_overlapping_property is not None:
+            for yet_yet_another_item in self.optional_list_overlapping_property:
+                yield yet_yet_another_item
+
+                yield from yet_yet_another_item.descend()
+
     def accept(self, visitor: "AbstractVisitor") -> None:
         """Dispatch the :paramref:`visitor` on this instance."""
         visitor.visit_something(self)
@@ -890,7 +915,8 @@ class Something(Class):
             tuple_property: Tuple['StructuralUnion', 'MixedUnion', 'ModelTypedUnion'],
             optional_structural_property: Optional['StructuralUnion'] = None,
             optional_mixed_property: Optional['MixedUnion'] = None,
-            optional_model_typed_property: Optional['ModelTypedUnion'] = None
+            optional_model_typed_property: Optional['ModelTypedUnion'] = None,
+            optional_list_overlapping_property: Optional[List['OverlappingUnion']] = None
     ) -> None:
         """Initialize with the given values."""
         self.structural_property = structural_property
@@ -903,6 +929,7 @@ class Something(Class):
         self.optional_structural_property = optional_structural_property
         self.optional_mixed_property = optional_mixed_property
         self.optional_model_typed_property = optional_model_typed_property
+        self.optional_list_overlapping_property = optional_list_overlapping_property
 
 
 class AbstractVisitor:

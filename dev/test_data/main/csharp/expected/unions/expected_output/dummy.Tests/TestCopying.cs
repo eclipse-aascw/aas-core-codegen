@@ -212,7 +212,16 @@ namespace dummy.Tests
                         ? Transform(
                                 that.OptionalModelTypedProperty,
                                 casted.OptionalModelTypedProperty)
-                        : that.OptionalModelTypedProperty == null && casted.OptionalModelTypedProperty == null));
+                        : that.OptionalModelTypedProperty == null && casted.OptionalModelTypedProperty == null)
+                    && ((that.OptionalListOverlappingProperty != null && casted.OptionalListOverlappingProperty != null)
+                        ? that.OptionalListOverlappingProperty.Count == casted.OptionalListOverlappingProperty.Count
+                            && (
+                                that.OptionalListOverlappingProperty
+                                    .Zip(
+                                        casted.OptionalListOverlappingProperty,
+                                        Transform)
+                                    .All(item => item))
+                        : that.OptionalListOverlappingProperty == null && casted.OptionalListOverlappingProperty == null));
             }
 
             private bool Transform(Aas.IUnion that, Aas.IUnion other)
@@ -304,7 +313,8 @@ namespace dummy.Tests
                 && that.TupleProperty == other.TupleProperty
                 && that.OptionalStructuralProperty == other.OptionalStructuralProperty
                 && that.OptionalMixedProperty == other.OptionalMixedProperty
-                && that.OptionalModelTypedProperty == other.OptionalModelTypedProperty);
+                && that.OptionalModelTypedProperty == other.OptionalModelTypedProperty
+                && that.OptionalListOverlappingProperty == other.OptionalListOverlappingProperty);
         }
 
         private static bool StructuralFirstDeepEquals(

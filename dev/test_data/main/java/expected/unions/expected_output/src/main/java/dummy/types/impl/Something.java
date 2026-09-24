@@ -48,6 +48,8 @@ public class Something implements ISomething {
 
   private ModelTypedUnion optionalModelTypedProperty;
 
+  private List<OverlappingUnion> optionalListOverlappingProperty;
+
   public Something(
     StructuralUnion structuralProperty,
     MixedUnion mixedProperty,
@@ -89,7 +91,8 @@ public class Something implements ISomething {
     Tuple3<StructuralUnion, MixedUnion, ModelTypedUnion> tupleProperty,
     StructuralUnion optionalStructuralProperty,
     MixedUnion optionalMixedProperty,
-    ModelTypedUnion optionalModelTypedProperty) {
+    ModelTypedUnion optionalModelTypedProperty,
+    List<OverlappingUnion> optionalListOverlappingProperty) {
     this.structuralProperty = Objects.requireNonNull(
       structuralProperty,
       "Argument \"structuralProperty\" must be non-null.");
@@ -114,6 +117,7 @@ public class Something implements ISomething {
     this.optionalStructuralProperty = optionalStructuralProperty;
     this.optionalMixedProperty = optionalMixedProperty;
     this.optionalModelTypedProperty = optionalModelTypedProperty;
+    this.optionalListOverlappingProperty = optionalListOverlappingProperty;
   }
 
   @Override
@@ -228,6 +232,24 @@ public class Something implements ISomething {
   @Override
   public void setOptionalModelTypedProperty(ModelTypedUnion optionalModelTypedProperty) {
     this.optionalModelTypedProperty = optionalModelTypedProperty;
+  }
+
+  @Override
+  public Optional<List<OverlappingUnion>> getOptionalListOverlappingProperty() {
+    return Optional.ofNullable(optionalListOverlappingProperty);
+  }
+
+  @Override
+  public void setOptionalListOverlappingProperty(List<OverlappingUnion> optionalListOverlappingProperty) {
+    this.optionalListOverlappingProperty = optionalListOverlappingProperty;
+  }
+
+  /**
+   * Iterate over {@link Something#optionalListOverlappingProperty}, if set,
+   * and otherwise return an empty iterator.
+   */
+  public Iterable<OverlappingUnion> overOptionalListOverlappingPropertyOrEmpty() {
+    return getOptionalListOverlappingProperty().orElseGet(Collections::emptyList);
   }
 
   /**
@@ -361,6 +383,11 @@ public class Something implements ISomething {
           Stream.<IClass>of(Something.this.optionalModelTypedProperty.getUnderlying()));
       }
 
+      if (optionalListOverlappingProperty != null) {
+        memberStream = Stream.concat(memberStream,
+          Something.this.optionalListOverlappingProperty.stream().map(item -> item.getUnderlying()));
+      }
+
       return memberStream;
     }
   }
@@ -457,6 +484,13 @@ public class Something implements ISomething {
         memberStream = Stream.concat(memberStream,
           Stream.concat(Stream.<IClass>of(Something.this.optionalModelTypedProperty.getUnderlying()),
             StreamSupport.stream(Something.this.optionalModelTypedProperty.getUnderlying().descend().spliterator(), false)));
+      }
+
+      if (optionalListOverlappingProperty != null) {
+        memberStream = Stream.concat(memberStream,
+          Something.this.optionalListOverlappingProperty.stream().map(item -> item.getUnderlying())
+            .flatMap(item -> Stream.concat(Stream.<IClass>of(item),
+              StreamSupport.stream(item.descend().spliterator(), false))));
       }
 
       return memberStream;

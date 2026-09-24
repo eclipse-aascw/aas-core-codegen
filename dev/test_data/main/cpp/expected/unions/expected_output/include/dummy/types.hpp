@@ -98,9 +98,7 @@ using StructuralUnion = common::variant<
  * Represent a union of classes.
  */
 using MixedUnion = common::variant<
-    std::shared_ptr<IMixedAbstractDescendantOne>,
-    std::shared_ptr<IMixedAbstractDescendantTwo>,
-    std::shared_ptr<IMixedConcreteWithDescendantsChild>,
+    std::shared_ptr<IMixedAbstractMember>,
     std::shared_ptr<IMixedConcreteWithDescendants>,
     std::shared_ptr<IMixedConcreteLeaf>
   >;
@@ -111,6 +109,16 @@ using MixedUnion = common::variant<
 using ModelTypedUnion = common::variant<
     std::shared_ptr<IModelTypedFirst>,
     std::shared_ptr<IModelTypedSecond>
+  >;
+
+/**
+ * Represent a union of classes.
+ */
+using OverlappingUnion = common::variant<
+    std::shared_ptr<IModelTypedFirst>,
+    std::shared_ptr<IModelTypedSecond>,
+    std::shared_ptr<IMixedConcreteWithDescendants>,
+    std::shared_ptr<IMixedConcreteWithDescendantsChild>
   >;
 
 // endregion
@@ -340,6 +348,20 @@ class ISomething
 
   virtual void set_optional_model_typed_property(
     common::optional<ModelTypedUnion> value
+  ) = 0;
+
+  virtual const common::optional<
+    std::vector<OverlappingUnion>
+  >& optional_list_overlapping_property() const = 0;
+
+  virtual common::optional<
+    std::vector<OverlappingUnion>
+  >& mutable_optional_list_overlapping_property() = 0;
+
+  virtual void set_optional_list_overlapping_property(
+    common::optional<
+      std::vector<OverlappingUnion>
+    > value
   ) = 0;
 
   virtual ~ISomething() = default;
@@ -624,7 +646,10 @@ class Something
     > tuple_property,
     common::optional<StructuralUnion> optional_structural_property = common::nullopt,
     common::optional<MixedUnion> optional_mixed_property = common::nullopt,
-    common::optional<ModelTypedUnion> optional_model_typed_property = common::nullopt
+    common::optional<ModelTypedUnion> optional_model_typed_property = common::nullopt,
+    common::optional<
+      std::vector<OverlappingUnion>
+    > optional_list_overlapping_property = common::nullopt
   );
 
   ModelType model_type() const override;
@@ -761,6 +786,24 @@ class Something
 
   // endregion
 
+  // region Get and set optional_list_overlapping_property_
+
+  const common::optional<
+    std::vector<OverlappingUnion>
+  >& optional_list_overlapping_property() const override;
+
+  common::optional<
+    std::vector<OverlappingUnion>
+  >& mutable_optional_list_overlapping_property() override;
+
+  void set_optional_list_overlapping_property(
+    common::optional<
+      std::vector<OverlappingUnion>
+    > value
+  ) override;
+
+  // endregion
+
   ~Something() override = default;
 
  private:
@@ -787,6 +830,10 @@ class Something
   common::optional<MixedUnion> optional_mixed_property_;
 
   common::optional<ModelTypedUnion> optional_model_typed_property_;
+
+  common::optional<
+    std::vector<OverlappingUnion>
+  > optional_list_overlapping_property_;
 };
 
 // endregion

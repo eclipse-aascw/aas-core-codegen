@@ -592,6 +592,13 @@ def _stringify_named_union(
                     for implementer in that.implementers
                 ],
             ),
+            stringify_mod.Property(
+                "roots",
+                [
+                    f"Reference to {root.__class__.__name__} {root.name}"
+                    for root in that.roots
+                ],
+            ),
             stringify_mod.Property("description", stringify(that.description)),
             stringify_mod.PropertyEllipsis("parsed", that.parsed),
         ],

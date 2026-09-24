@@ -303,7 +303,7 @@ def _generate_visit_named_union_switch(
     other class pointer.
     """
     case_blocks = []  # type: List[Stripped]
-    for i in range(len(named_union.implementers)):
+    for i in range(len(named_union.roots)):
         case_blocks.append(
             Stripped(
                 f"""\

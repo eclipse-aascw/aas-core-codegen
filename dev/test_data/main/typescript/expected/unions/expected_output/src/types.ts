@@ -767,9 +767,7 @@ export class MixedConcreteLeaf extends Class {
 }
 
 export type MixedUnion =
-  | MixedAbstractDescendantOne
-  | MixedAbstractDescendantTwo
-  | MixedConcreteWithDescendantsChild
+  | IMixedAbstractMember
   | MixedConcreteWithDescendants
   | MixedConcreteLeaf;
 
@@ -957,6 +955,12 @@ export class ModelTypedSecond extends Class {
 
 export type ModelTypedUnion = ModelTypedFirst | ModelTypedSecond;
 
+export type OverlappingUnion =
+  | ModelTypedFirst
+  | ModelTypedSecond
+  | MixedConcreteWithDescendants
+  | MixedConcreteWithDescendantsChild;
+
 export class Something extends Class {
   /**
    * Indicate the runtime model type of the instance.
@@ -987,6 +991,18 @@ export class Something extends Class {
   optionalMixedProperty: MixedUnion | null;
 
   optionalModelTypedProperty: ModelTypedUnion | null;
+
+  optionalListOverlappingProperty: Array<OverlappingUnion> | null;
+
+  /**
+   * Yield from {@link optionalListOverlappingProperty} if it is set, or yield nothing.
+   */
+  *overOptionalListOverlappingPropertyOrEmpty(): IterableIterator<OverlappingUnion> {
+    if (this.optionalListOverlappingProperty !== null) {
+      yield * this.optionalListOverlappingProperty;
+    }
+    return;
+  }
 
   /**
    * Iterate over the instances referenced from this instance.
@@ -1024,6 +1040,10 @@ export class Something extends Class {
 
     if (this.optionalModelTypedProperty !== null) {
       yield this.optionalModelTypedProperty;
+    }
+
+    if (this.optionalListOverlappingProperty !== null) {
+      yield * this.optionalListOverlappingProperty;
     }
   }
 
@@ -1092,6 +1112,14 @@ export class Something extends Class {
 
       yield * this.optionalModelTypedProperty.descend();
     }
+
+    if (this.optionalListOverlappingProperty !== null) {
+      for (const yetYetAnotherItem of this.optionalListOverlappingProperty) {
+        yield yetYetAnotherItem;
+
+        yield * yetYetAnotherItem.descend();
+      }
+    }
   }
 
   /**
@@ -1156,7 +1184,8 @@ export class Something extends Class {
     tupleProperty: [StructuralUnion, MixedUnion, ModelTypedUnion],
     optionalStructuralProperty: StructuralUnion | null = null,
     optionalMixedProperty: MixedUnion | null = null,
-    optionalModelTypedProperty: ModelTypedUnion | null = null
+    optionalModelTypedProperty: ModelTypedUnion | null = null,
+    optionalListOverlappingProperty: Array<OverlappingUnion> | null = null
   ) {
     super();
     this.structuralProperty = structuralProperty;
@@ -1169,6 +1198,7 @@ export class Something extends Class {
     this.optionalStructuralProperty = optionalStructuralProperty;
     this.optionalMixedProperty = optionalMixedProperty;
     this.optionalModelTypedProperty = optionalModelTypedProperty;
+    this.optionalListOverlappingProperty = optionalListOverlappingProperty;
   }
 }
 

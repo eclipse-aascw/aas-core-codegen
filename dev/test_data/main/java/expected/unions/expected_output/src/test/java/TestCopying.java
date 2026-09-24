@@ -171,7 +171,8 @@ public class TestCopying {
         && (that.getOptionalModelTypedProperty().isPresent()
           ? casted.getOptionalModelTypedProperty().isPresent()
           && transform( that.getOptionalModelTypedProperty().get(), casted.getOptionalModelTypedProperty().get())
-          : ! casted.getOptionalModelTypedProperty().isPresent()));
+          : ! casted.getOptionalModelTypedProperty().isPresent())
+        && that.getOptionalListOverlappingProperty().equals(casted.getOptionalListOverlappingProperty()));
     }
 
     private Boolean transform(IUnion<?> that, IUnion<?> other) {
@@ -311,7 +312,8 @@ public class TestCopying {
       && that.getTupleProperty().equals(other.getTupleProperty())
       && that.getOptionalStructuralProperty().equals(other.getOptionalStructuralProperty())
       && that.getOptionalMixedProperty().equals(other.getOptionalMixedProperty())
-      && that.getOptionalModelTypedProperty().equals(other.getOptionalModelTypedProperty()));
+      && that.getOptionalModelTypedProperty().equals(other.getOptionalModelTypedProperty())
+      && that.getOptionalListOverlappingProperty().equals(other.getOptionalListOverlappingProperty()));
   }
 
   private static Boolean StructuralFirstDeepEquals(StructuralFirst that, StructuralFirst other) {

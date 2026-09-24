@@ -352,6 +352,23 @@ common::expected<
   bool additional_properties = false
 );
 
+/**
+ * \brief Deserialize \p json value to an instance
+ * of types::OverlappingUnion.
+ *
+ * \param json value to be de-serialized
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return The deserialized instance, or a de-serialization error, if any.
+ */
+common::expected<
+  types::OverlappingUnion,
+  DeserializationError
+> OverlappingUnionFrom(
+  const nlohmann::json& json,
+  bool additional_properties = false
+);
+
 // endregion Deserialization
 
 // region Serialization

@@ -290,9 +290,11 @@ std::unique_ptr<T> make_unique(
 #if ((defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) || __cplusplus >= 201703L)
 using std::variant;
 using std::get;
+using std::in_place_index_t;
 #else
 using mpark::variant;
 using mpark::get;
+using mpark::in_place_index_t;
 #endif"""
             )
         ]

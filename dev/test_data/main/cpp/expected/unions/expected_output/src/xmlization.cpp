@@ -305,6 +305,13 @@ std::pair<
   xml_common::ReaderMergingText& reader
 );
 
+std::pair<
+  common::optional<types::OverlappingUnion>,
+  common::optional<DeserializationError>
+> OverlappingUnionFromElement(
+  xml_common::ReaderMergingText& reader
+);
+
 // endregion Forward declarations of de-serialization functions
 
 /**
@@ -1139,12 +1146,14 @@ std::pair<
  * Every implementer of a named union is de-serialized through its own
  * *FromSequence function, and the resulting
  * pair<optional<shared_ptr<T>>, ...> then needs to be wrapped into the
- * union's common::variant alternative matching its own interface.
+ * union's common::variant alternative of the implementer's most specific
+ * root. As the roots may overlap, the alternative is picked explicitly by
+ * its index \p Index.
  *
  * \param result the result of a de-serialization call for one implementer
  * \return the result wrapped as a variant, or the propagated error
  */
-template <typename VariantT, typename T>
+template <typename VariantT, std::size_t Index, typename T>
 std::pair<
   common::optional<VariantT>,
   common::optional<DeserializationError>
@@ -1159,7 +1168,10 @@ std::pair<
       common::optional<VariantT>,
       common::optional<DeserializationError>
     >(
-      VariantT(std::move(*result.first)),
+      VariantT(
+        common::in_place_index_t<Index>(),
+        std::move(*result.first)
+      ),
       common::nullopt
     );
   }
@@ -1446,14 +1458,20 @@ std::pair<
     > {
       switch (a_model_type) {
         case types::ModelType::kStructuralFirst: {
-          return WrapDeserializedAsVariant<types::StructuralUnion>(
+          return WrapDeserializedAsVariant<
+            types::StructuralUnion,
+            0
+          >(
             StructuralFirstFromSequence<
               types::IStructuralFirst
             >(a_reader)
           );
         }
         case types::ModelType::kStructuralSecond: {
-          return WrapDeserializedAsVariant<types::StructuralUnion>(
+          return WrapDeserializedAsVariant<
+            types::StructuralUnion,
+            1
+          >(
             StructuralSecondFromSequence<
               types::IStructuralSecond
             >(a_reader)
@@ -1494,35 +1512,50 @@ std::pair<
     > {
       switch (a_model_type) {
         case types::ModelType::kMixedAbstractDescendantOne: {
-          return WrapDeserializedAsVariant<types::MixedUnion>(
+          return WrapDeserializedAsVariant<
+            types::MixedUnion,
+            0
+          >(
             MixedAbstractDescendantOneFromSequence<
               types::IMixedAbstractDescendantOne
             >(a_reader)
           );
         }
         case types::ModelType::kMixedAbstractDescendantTwo: {
-          return WrapDeserializedAsVariant<types::MixedUnion>(
+          return WrapDeserializedAsVariant<
+            types::MixedUnion,
+            0
+          >(
             MixedAbstractDescendantTwoFromSequence<
               types::IMixedAbstractDescendantTwo
             >(a_reader)
           );
         }
         case types::ModelType::kMixedConcreteWithDescendantsChild: {
-          return WrapDeserializedAsVariant<types::MixedUnion>(
+          return WrapDeserializedAsVariant<
+            types::MixedUnion,
+            1
+          >(
             MixedConcreteWithDescendantsChildFromSequence<
               types::IMixedConcreteWithDescendantsChild
             >(a_reader)
           );
         }
         case types::ModelType::kMixedConcreteWithDescendants: {
-          return WrapDeserializedAsVariant<types::MixedUnion>(
+          return WrapDeserializedAsVariant<
+            types::MixedUnion,
+            1
+          >(
             MixedConcreteWithDescendantsFromSequence<
               types::IMixedConcreteWithDescendants
             >(a_reader)
           );
         }
         case types::ModelType::kMixedConcreteLeaf: {
-          return WrapDeserializedAsVariant<types::MixedUnion>(
+          return WrapDeserializedAsVariant<
+            types::MixedUnion,
+            2
+          >(
             MixedConcreteLeafFromSequence<
               types::IMixedConcreteLeaf
             >(a_reader)
@@ -1563,14 +1596,20 @@ std::pair<
     > {
       switch (a_model_type) {
         case types::ModelType::kModelTypedFirst: {
-          return WrapDeserializedAsVariant<types::ModelTypedUnion>(
+          return WrapDeserializedAsVariant<
+            types::ModelTypedUnion,
+            0
+          >(
             ModelTypedFirstFromSequence<
               types::IModelTypedFirst
             >(a_reader)
           );
         }
         case types::ModelType::kModelTypedSecond: {
-          return WrapDeserializedAsVariant<types::ModelTypedUnion>(
+          return WrapDeserializedAsVariant<
+            types::ModelTypedUnion,
+            1
+          >(
             ModelTypedSecondFromSequence<
               types::IModelTypedSecond
             >(a_reader)
@@ -1583,6 +1622,80 @@ std::pair<
             common::Concat(
               L"Impossible to de-serialize an instance "
               L"of ModelTypedUnion from <",
+              common::Utf8ToWstring(a_name),
+              L">"
+            )
+          );
+      }
+    }
+  );
+}
+
+std::pair<
+  common::optional<types::OverlappingUnion>,
+  common::optional<DeserializationError>
+> OverlappingUnionFromElement(
+  xml_common::ReaderMergingText& reader
+) {
+  return DeserializeFromElement<types::OverlappingUnion>(
+    reader,
+    L"OverlappingUnion",
+    [](
+      xml_common::ReaderMergingText& a_reader,
+      types::ModelType a_model_type,
+      const std::string& a_name
+    ) -> std::pair<
+      common::optional<types::OverlappingUnion>,
+      common::optional<DeserializationError>
+    > {
+      switch (a_model_type) {
+        case types::ModelType::kModelTypedFirst: {
+          return WrapDeserializedAsVariant<
+            types::OverlappingUnion,
+            0
+          >(
+            ModelTypedFirstFromSequence<
+              types::IModelTypedFirst
+            >(a_reader)
+          );
+        }
+        case types::ModelType::kModelTypedSecond: {
+          return WrapDeserializedAsVariant<
+            types::OverlappingUnion,
+            1
+          >(
+            ModelTypedSecondFromSequence<
+              types::IModelTypedSecond
+            >(a_reader)
+          );
+        }
+        case types::ModelType::kMixedConcreteWithDescendantsChild: {
+          return WrapDeserializedAsVariant<
+            types::OverlappingUnion,
+            3
+          >(
+            MixedConcreteWithDescendantsChildFromSequence<
+              types::IMixedConcreteWithDescendantsChild
+            >(a_reader)
+          );
+        }
+        case types::ModelType::kMixedConcreteWithDescendants: {
+          return WrapDeserializedAsVariant<
+            types::OverlappingUnion,
+            2
+          >(
+            MixedConcreteWithDescendantsFromSequence<
+              types::IMixedConcreteWithDescendants
+            >(a_reader)
+          );
+        }
+        default:
+          return NoInstanceAndDeserializationErrorWithCause<
+            types::OverlappingUnion
+          >(
+            common::Concat(
+              L"Impossible to de-serialize an instance "
+              L"of OverlappingUnion from <",
               common::Utf8ToWstring(a_name),
               L">"
             )
@@ -2301,7 +2414,8 @@ enum class OfSomething : std::uint32_t {
   kTupleProperty = 6,
   kOptionalStructuralProperty = 7,
   kOptionalMixedProperty = 8,
-  kOptionalModelTypedProperty = 9
+  kOptionalModelTypedProperty = 9,
+  kOptionalListOverlappingProperty = 10
 };  // enum class OfSomething
 
 const std::size_t kPropertyCountOfStructuralFirst = 1;
@@ -2416,7 +2530,7 @@ const std::unordered_map<
   }
 };
 
-const std::size_t kPropertyCountOfSomething = 10;
+const std::size_t kPropertyCountOfSomething = 11;
 
 const std::unordered_map<
   std::string,
@@ -2461,6 +2575,10 @@ const std::unordered_map<
   {
     "optionalModelTypedProperty",
     OfSomething::kOptionalModelTypedProperty
+  },
+  {
+    "optionalListOverlappingProperty",
+    OfSomething::kOptionalListOverlappingProperty
   }
 };
 
@@ -3233,6 +3351,10 @@ std::pair<
 
   common::optional<types::ModelTypedUnion> the_optional_model_typed_property;
 
+  common::optional<
+    std::vector<types::OverlappingUnion>
+  > the_optional_list_overlapping_property;
+
   // endregion Initialization
 
   common::optional<DeserializationError> error(
@@ -3319,6 +3441,16 @@ std::pair<
             return ReadInto(
               the_optional_model_typed_property,
               ModelTypedUnionFromElement(reader)
+            );
+          case properties::OfSomething::kOptionalListOverlappingProperty:
+            return ReadInto(
+              the_optional_list_overlapping_property,
+              DeserializeList<
+                types::OverlappingUnion
+              >(
+                reader,
+                OverlappingUnionFromElement
+              )
             );
           default:
             throw UnexpectedPropertyLiteralError(
@@ -3415,7 +3547,8 @@ std::pair<
         std::move(*the_tuple_property),
         std::move(the_optional_structural_property),
         std::move(the_optional_mixed_property),
-        std::move(the_optional_model_typed_property)
+        std::move(the_optional_model_typed_property),
+        std::move(the_optional_list_overlapping_property)
       )
     ),
     common::nullopt
@@ -3712,6 +3845,22 @@ common::expected<
     is,
     options,
     ModelTypedUnionFromElement
+  );
+}
+
+common::expected<
+  types::OverlappingUnion,
+  DeserializationError
+> OverlappingUnionFrom(
+  std::istream& is,
+  const ReadingOptions& options
+) {
+  return DeserializeFrom<
+    types::OverlappingUnion
+  >(
+    is,
+    options,
+    OverlappingUnionFromElement
   );
 }
 
@@ -4516,6 +4665,19 @@ common::optional<xml_common::SerializationError> SerializeModelTypedUnionAsEleme
 );
 
 /**
+ * \brief Serialize \p that instance by dispatching to the appropriate concrete
+ * serialization function.
+ *
+ * \param that instance to be serialized
+ * \param writer to be write to
+ * \return error, if any
+ */
+common::optional<xml_common::SerializationError> SerializeOverlappingUnionAsElement(
+  const types::OverlappingUnion& that,
+  xml_common::SelfClosingWriter& writer
+);
+
+/**
  * \brief Serialize \p that instance as a sequence of XML elements.
  *
  * Each XML element corresponds to a property.
@@ -5167,6 +5329,17 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
     return error;
   }
 
+  error = WriteListOfInstancesProperty(
+    "optionalListOverlappingProperty",
+    that.optional_list_overlapping_property(),
+    writer,
+    iteration::Property::kOptionalListOverlappingProperty,
+    SerializeOverlappingUnionAsElement
+  );
+  if (error.has_value()) {
+    return error;
+  }
+
   return common::nullopt;
 }
 
@@ -5220,28 +5393,18 @@ common::optional<xml_common::SerializationError> SerializeMixedUnionAsElement(
 ) {
   switch (that.index()) {
     case 0:
-      return SerializeMixedAbstractDescendantOnePtrAsElement(
+      return SerializeMixedAbstractMemberPtrAsElement(
         common::get<0>(that),
         writer
       );
     case 1:
-      return SerializeMixedAbstractDescendantTwoPtrAsElement(
+      return SerializeMixedConcreteWithDescendantsPtrAsElement(
         common::get<1>(that),
         writer
       );
     case 2:
-      return SerializeMixedConcreteWithDescendantsChildPtrAsElement(
-        common::get<2>(that),
-        writer
-      );
-    case 3:
-      return SerializeMixedConcreteWithDescendantsPtrAsElement(
-        common::get<3>(that),
-        writer
-      );
-    case 4:
       return SerializeMixedConcreteLeafPtrAsElement(
-        common::get<4>(that),
+        common::get<2>(that),
         writer
       );
     default:
@@ -5273,6 +5436,41 @@ common::optional<xml_common::SerializationError> SerializeModelTypedUnionAsEleme
       throw std::logic_error(
         common::Concat(
           "Invalid variant index for ModelTypedUnion: ",
+          std::to_string(that.index())
+        )
+      );
+  };
+}
+
+common::optional<xml_common::SerializationError> SerializeOverlappingUnionAsElement(
+  const types::OverlappingUnion& that,
+  xml_common::SelfClosingWriter& writer
+) {
+  switch (that.index()) {
+    case 0:
+      return SerializeModelTypedFirstPtrAsElement(
+        common::get<0>(that),
+        writer
+      );
+    case 1:
+      return SerializeModelTypedSecondPtrAsElement(
+        common::get<1>(that),
+        writer
+      );
+    case 2:
+      return SerializeMixedConcreteWithDescendantsPtrAsElement(
+        common::get<2>(that),
+        writer
+      );
+    case 3:
+      return SerializeMixedConcreteWithDescendantsChildPtrAsElement(
+        common::get<3>(that),
+        writer
+      );
+    default:
+      throw std::logic_error(
+        common::Concat(
+          "Invalid variant index for OverlappingUnion: ",
           std::to_string(that.index())
         )
       );

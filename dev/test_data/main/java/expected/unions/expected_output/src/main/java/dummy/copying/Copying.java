@@ -142,7 +142,8 @@ public class Copying
                 that.getTupleProperty(),
                 that.getOptionalStructuralProperty().orElse(null),
                 that.getOptionalMixedProperty().orElse(null),
-                that.getOptionalModelTypedProperty().orElse(null));
+                that.getOptionalModelTypedProperty().orElse(null),
+                that.getOptionalListOverlappingProperty().orElse(null));
         }
     }
 
@@ -257,6 +258,18 @@ public class Copying
                   deep(that.getTupleProperty().item2()),
                   deep(that.getTupleProperty().item3()));
 
+            List<OverlappingUnion> thatOptionalListOverlappingProperty =
+                that.getOptionalListOverlappingProperty().orElse(null);
+            List<OverlappingUnion> theOptionalListOverlappingProperty = null;
+            if (thatOptionalListOverlappingProperty != null) {
+                theOptionalListOverlappingProperty = new ArrayList<>(
+                    thatOptionalListOverlappingProperty.size());
+                for (OverlappingUnion item : thatOptionalListOverlappingProperty)
+                {
+                    theOptionalListOverlappingProperty.add(deep(item));
+                }
+            }
+
             return new Something(
                 deep(that.getStructuralProperty()),
                 deep(that.getMixedProperty()),
@@ -273,7 +286,8 @@ public class Copying
                     : null,
                 that.getOptionalModelTypedProperty().isPresent()
                     ? deep(that.getOptionalModelTypedProperty().get())
-                    : null
+                    : null,
+                theOptionalListOverlappingProperty
             );
         }
     }

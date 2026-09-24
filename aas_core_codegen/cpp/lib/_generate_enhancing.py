@@ -83,7 +83,7 @@ std::shared_ptr<
     return result
 
 
-@require(lambda named_union: len(named_union.implementers) > 0)
+@require(lambda named_union: len(named_union.roots) > 0)
 def _generate_wrap_for_named_union(named_union: intermediate.NamedUnion) -> Stripped:
     """
     Generate the ``Wrap`` overload implementation for a named union.
@@ -92,18 +92,22 @@ def _generate_wrap_for_named_union(named_union: intermediate.NamedUnion) -> Stri
     so there is no need for the ``model_type()``/``dynamic_pointer_cast``
     dance that the per-class ``Wrap`` overloads need -- the variant already
     knows which alternative it holds through its own ``index()``. Each case
-    simply delegates to the corresponding implementer's own (already
-    generated) ``Wrap<E>`` overload and re-wraps the result.
+    simply delegates to the corresponding root's own (already generated,
+    dynamically dispatching) ``Wrap<E>`` overload and re-wraps the result.
     """
     union_name = cpp_naming.union_name(named_union.name)
 
     case_blocks = []  # type: List[Stripped]
-    for i, _ in enumerate(named_union.implementers):
+    for i, _ in enumerate(named_union.roots):
+        # NOTE (mristin):
+        # The roots may overlap, so we must spell out the alternative explicitly
+        # instead of relying on the implicit conversion into the variant.
         case_blocks.append(
             Stripped(
                 f"""\
 case {i}:
 {I}return types::{union_name}(
+{II}common::in_place_index_t<{i}>(),
 {II}Wrap<E>(
 {III}common::get<{i}>(that),
 {III}factory

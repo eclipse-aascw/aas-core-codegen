@@ -637,6 +637,13 @@ UnverifiedSymbolTable(
         'Model_typed_first',
         'Model_typed_second'],
       node=...),
+    NamedUnion(
+      name='Overlapping_union',
+      members=[
+        'Model_typed_union',
+        'Mixed_concrete_with_descendants',
+        'Mixed_concrete_with_descendants_child'],
+      node=...),
     ConcreteClass(
       name='Something',
       inheritances=[],
@@ -764,6 +771,23 @@ UnverifiedSymbolTable(
           description=None,
           json_name=None,
           xml_name=None,
+          node=...),
+        Property(
+          name='optional_list_overlapping_property',
+          type_annotation=SubscriptedTypeAnnotation(
+            identifier='Optional',
+            subscripts=[
+              SubscriptedTypeAnnotation(
+                identifier='List',
+                subscripts=[
+                  AtomicTypeAnnotation(
+                    identifier='Overlapping_union',
+                    node=...)],
+                node=...)],
+            node=...),
+          description=None,
+          json_name=None,
+          xml_name=None,
           node=...)],
       methods=[
         ConstructorToBeUnderstood(
@@ -881,6 +905,22 @@ UnverifiedSymbolTable(
                 node=...),
               default=Default(
                 node=...),
+              node=...),
+            Argument(
+              name='optional_list_overlapping_property',
+              type_annotation=SubscriptedTypeAnnotation(
+                identifier='Optional',
+                subscripts=[
+                  SubscriptedTypeAnnotation(
+                    identifier='List',
+                    subscripts=[
+                      AtomicTypeAnnotation(
+                        identifier='Overlapping_union',
+                        node=...)],
+                    node=...)],
+                node=...),
+              default=Default(
+                node=...),
               node=...)],
           returns=None,
           description=None,
@@ -901,7 +941,8 @@ UnverifiedSymbolTable(
   named_unions=[
     'Reference to our type Structural_union',
     'Reference to our type Mixed_union',
-    'Reference to our type Model_typed_union'],
+    'Reference to our type Model_typed_union',
+    'Reference to our type Overlapping_union'],
   constants=[],
   verification_functions=[],
   meta_model=MetaModel(

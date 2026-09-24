@@ -292,7 +292,10 @@ Something::Something(
   > tuple_property,
   common::optional<StructuralUnion> optional_structural_property,
   common::optional<MixedUnion> optional_mixed_property,
-  common::optional<ModelTypedUnion> optional_model_typed_property
+  common::optional<ModelTypedUnion> optional_model_typed_property,
+  common::optional<
+    std::vector<OverlappingUnion>
+  > optional_list_overlapping_property
 ) {
   structural_property_ = std::move(structural_property);
 
@@ -313,6 +316,8 @@ Something::Something(
   optional_mixed_property_ = std::move(optional_mixed_property);
 
   optional_model_typed_property_ = std::move(optional_model_typed_property);
+
+  optional_list_overlapping_property_ = std::move(optional_list_overlapping_property);
 }
 
 ModelType Something::model_type() const {
@@ -469,6 +474,26 @@ void Something::set_optional_model_typed_property(
   common::optional<ModelTypedUnion> value
 ) {
   optional_model_typed_property_ = value;
+}
+
+const common::optional<
+  std::vector<OverlappingUnion>
+>& Something::optional_list_overlapping_property() const {
+  return optional_list_overlapping_property_;
+}
+
+common::optional<
+  std::vector<OverlappingUnion>
+>& Something::mutable_optional_list_overlapping_property() {
+  return optional_list_overlapping_property_;
+}
+
+void Something::set_optional_list_overlapping_property(
+  common::optional<
+    std::vector<OverlappingUnion>
+  > value
+) {
+  optional_list_overlapping_property_ = value;
 }
 
 // endregion Something

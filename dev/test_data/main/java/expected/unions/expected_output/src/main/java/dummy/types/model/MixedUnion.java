@@ -6,35 +6,27 @@
 package dummy.types.model;
 
 /**
- * Represent a union of {@link IMixedAbstractDescendantOne}, {@link IMixedAbstractDescendantTwo}, {@link IMixedConcreteWithDescendantsChild}, {@link IMixedConcreteWithDescendants}, and {@link IMixedConcreteLeaf}.
+ * Represent a union of {@link IMixedAbstractMember}, {@link IMixedConcreteWithDescendants}, and {@link IMixedConcreteLeaf}.
  */
 public class MixedUnion implements IUnion<MixedUnion> {
   private enum ValueKind {
-    MIXED_ABSTRACT_DESCENDANT_ONE,
-    MIXED_ABSTRACT_DESCENDANT_TWO,
-    MIXED_CONCRETE_WITH_DESCENDANTS_CHILD,
+    MIXED_ABSTRACT_MEMBER,
     MIXED_CONCRETE_WITH_DESCENDANTS,
     MIXED_CONCRETE_LEAF
   }
 
   private final ValueKind valueKind;
-  private final IMixedAbstractDescendantOne asMixedAbstractDescendantOne;
-  private final IMixedAbstractDescendantTwo asMixedAbstractDescendantTwo;
-  private final IMixedConcreteWithDescendantsChild asMixedConcreteWithDescendantsChild;
+  private final IMixedAbstractMember asMixedAbstractMember;
   private final IMixedConcreteWithDescendants asMixedConcreteWithDescendants;
   private final IMixedConcreteLeaf asMixedConcreteLeaf;
 
   private MixedUnion(
     ValueKind valueKind,
-    IMixedAbstractDescendantOne asMixedAbstractDescendantOne,
-    IMixedAbstractDescendantTwo asMixedAbstractDescendantTwo,
-    IMixedConcreteWithDescendantsChild asMixedConcreteWithDescendantsChild,
+    IMixedAbstractMember asMixedAbstractMember,
     IMixedConcreteWithDescendants asMixedConcreteWithDescendants,
     IMixedConcreteLeaf asMixedConcreteLeaf) {
     this.valueKind = valueKind;
-    this.asMixedAbstractDescendantOne = asMixedAbstractDescendantOne;
-    this.asMixedAbstractDescendantTwo = asMixedAbstractDescendantTwo;
-    this.asMixedConcreteWithDescendantsChild = asMixedConcreteWithDescendantsChild;
+    this.asMixedAbstractMember = asMixedAbstractMember;
     this.asMixedConcreteWithDescendants = asMixedConcreteWithDescendants;
     this.asMixedConcreteLeaf = asMixedConcreteLeaf;
   }
@@ -42,37 +34,9 @@ public class MixedUnion implements IUnion<MixedUnion> {
   /**
    * Wrap {@code that} as an instance of {@link MixedUnion}.
    */
-  public static MixedUnion fromMixedAbstractDescendantOne(IMixedAbstractDescendantOne that) {
+  public static MixedUnion fromMixedAbstractMember(IMixedAbstractMember that) {
     return new MixedUnion(
-      ValueKind.MIXED_ABSTRACT_DESCENDANT_ONE,
-      that,
-      null,
-      null,
-      null,
-      null);
-  }
-
-  /**
-   * Wrap {@code that} as an instance of {@link MixedUnion}.
-   */
-  public static MixedUnion fromMixedAbstractDescendantTwo(IMixedAbstractDescendantTwo that) {
-    return new MixedUnion(
-      ValueKind.MIXED_ABSTRACT_DESCENDANT_TWO,
-      null,
-      that,
-      null,
-      null,
-      null);
-  }
-
-  /**
-   * Wrap {@code that} as an instance of {@link MixedUnion}.
-   */
-  public static MixedUnion fromMixedConcreteWithDescendantsChild(IMixedConcreteWithDescendantsChild that) {
-    return new MixedUnion(
-      ValueKind.MIXED_CONCRETE_WITH_DESCENDANTS_CHILD,
-      null,
-      null,
+      ValueKind.MIXED_ABSTRACT_MEMBER,
       that,
       null,
       null);
@@ -84,8 +48,6 @@ public class MixedUnion implements IUnion<MixedUnion> {
   public static MixedUnion fromMixedConcreteWithDescendants(IMixedConcreteWithDescendants that) {
     return new MixedUnion(
       ValueKind.MIXED_CONCRETE_WITH_DESCENDANTS,
-      null,
-      null,
       null,
       that,
       null);
@@ -99,8 +61,6 @@ public class MixedUnion implements IUnion<MixedUnion> {
       ValueKind.MIXED_CONCRETE_LEAF,
       null,
       null,
-      null,
-      null,
       that);
   }
 
@@ -110,12 +70,8 @@ public class MixedUnion implements IUnion<MixedUnion> {
   @Override
   public IClass getUnderlying() {
     switch (valueKind) {
-      case MIXED_ABSTRACT_DESCENDANT_ONE:
-        return asMixedAbstractDescendantOne;
-      case MIXED_ABSTRACT_DESCENDANT_TWO:
-        return asMixedAbstractDescendantTwo;
-      case MIXED_CONCRETE_WITH_DESCENDANTS_CHILD:
-        return asMixedConcreteWithDescendantsChild;
+      case MIXED_ABSTRACT_MEMBER:
+        return asMixedAbstractMember;
       case MIXED_CONCRETE_WITH_DESCENDANTS:
         return asMixedConcreteWithDescendants;
       case MIXED_CONCRETE_LEAF:
@@ -130,12 +86,8 @@ public class MixedUnion implements IUnion<MixedUnion> {
    * Wrap {@code that} as an instance of {@link MixedUnion} based on its run-time type.
    */
   public static MixedUnion fromUnderlying(IClass that) {
-    if (that instanceof IMixedAbstractDescendantOne) {
-      return fromMixedAbstractDescendantOne((IMixedAbstractDescendantOne) that);
-    } else if (that instanceof IMixedAbstractDescendantTwo) {
-      return fromMixedAbstractDescendantTwo((IMixedAbstractDescendantTwo) that);
-    } else if (that instanceof IMixedConcreteWithDescendantsChild) {
-      return fromMixedConcreteWithDescendantsChild((IMixedConcreteWithDescendantsChild) that);
+    if (that instanceof IMixedAbstractMember) {
+      return fromMixedAbstractMember((IMixedAbstractMember) that);
     } else if (that instanceof IMixedConcreteWithDescendants) {
       return fromMixedConcreteWithDescendants((IMixedConcreteWithDescendants) that);
     } else if (that instanceof IMixedConcreteLeaf) {

@@ -176,6 +176,9 @@ SymbolTable(
       implementers=[
         'Reference to ConcreteClass Structural_first',
         'Reference to ConcreteClass Structural_second'],
+      roots=[
+        'Reference to ConcreteClass Structural_first',
+        'Reference to ConcreteClass Structural_second'],
       description=None,
       parsed=...),
     AbstractClass(
@@ -738,6 +741,10 @@ SymbolTable(
         'Reference to ConcreteClass Mixed_concrete_with_descendants_child',
         'Reference to ConcreteClass Mixed_concrete_with_descendants',
         'Reference to ConcreteClass Mixed_concrete_leaf'],
+      roots=[
+        'Reference to AbstractClass Mixed_abstract_member',
+        'Reference to ConcreteClass Mixed_concrete_with_descendants',
+        'Reference to ConcreteClass Mixed_concrete_leaf'],
       description=None,
       parsed=...),
     ConcreteClass(
@@ -916,6 +923,27 @@ SymbolTable(
       implementers=[
         'Reference to ConcreteClass Model_typed_first',
         'Reference to ConcreteClass Model_typed_second'],
+      roots=[
+        'Reference to ConcreteClass Model_typed_first',
+        'Reference to ConcreteClass Model_typed_second'],
+      description=None,
+      parsed=...),
+    NamedUnion(
+      name='Overlapping_union',
+      members=[
+        'Reference to NamedUnion Model_typed_union',
+        'Reference to ConcreteClass Mixed_concrete_with_descendants',
+        'Reference to ConcreteClass Mixed_concrete_with_descendants_child'],
+      implementers=[
+        'Reference to ConcreteClass Model_typed_first',
+        'Reference to ConcreteClass Model_typed_second',
+        'Reference to ConcreteClass Mixed_concrete_with_descendants_child',
+        'Reference to ConcreteClass Mixed_concrete_with_descendants'],
+      roots=[
+        'Reference to ConcreteClass Model_typed_first',
+        'Reference to ConcreteClass Model_typed_second',
+        'Reference to ConcreteClass Mixed_concrete_with_descendants',
+        'Reference to ConcreteClass Mixed_concrete_with_descendants_child'],
       description=None,
       parsed=...),
     ConcreteClass(
@@ -1050,6 +1078,20 @@ SymbolTable(
           specified_for='Reference to ConcreteClass Something',
           json_name='optionalModelTypedProperty',
           xml_name='optionalModelTypedProperty',
+          parsed=...),
+        Property(
+          name='optional_list_overlapping_property',
+          type_annotation=OptionalTypeAnnotation(
+            value=ListTypeAnnotation(
+              items=OurTypeAnnotation(
+                our_type='Reference to our type Overlapping_union',
+                parsed=...),
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='optionalListOverlappingProperty',
+          xml_name='optionalListOverlappingProperty',
           parsed=...)],
       methods=[],
       constructor=Constructor(
@@ -1151,6 +1193,19 @@ SymbolTable(
             default=DefaultPrimitive(
               value=None,
               parsed=...),
+            parsed=...),
+          Argument(
+            name='optional_list_overlapping_property',
+            type_annotation=OptionalTypeAnnotation(
+              value=ListTypeAnnotation(
+                items=OurTypeAnnotation(
+                  our_type='Reference to our type Overlapping_union',
+                  parsed=...),
+                parsed=...),
+              parsed=...),
+            default=DefaultPrimitive(
+              value=None,
+              parsed=...),
             parsed=...)],
         returns=None,
         description=None,
@@ -1210,6 +1265,11 @@ SymbolTable(
             AssignArgument(
               name='optional_model_typed_property',
               argument='optional_model_typed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_list_overlapping_property',
+              argument='optional_list_overlapping_property',
               default=None)""")],
         inlined_statements=[
           textwrap.dedent("""\
@@ -1261,6 +1321,11 @@ SymbolTable(
             AssignArgument(
               name='optional_model_typed_property',
               argument='optional_model_typed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_list_overlapping_property',
+              argument='optional_list_overlapping_property',
               default=None)""")]),
       invariants=[],
       serialization=Serialization(
@@ -1286,7 +1351,8 @@ SymbolTable(
     'Reference to our type Structural_second',
     'Reference to our type Structural_union',
     'Reference to our type Mixed_union',
-    'Reference to our type Model_typed_union'],
+    'Reference to our type Model_typed_union',
+    'Reference to our type Overlapping_union'],
   enumerations=[],
   constrained_primitives=[],
   classes=[
@@ -1315,7 +1381,8 @@ SymbolTable(
   named_unions=[
     'Reference to our type Structural_union',
     'Reference to our type Mixed_union',
-    'Reference to our type Model_typed_union'],
+    'Reference to our type Model_typed_union',
+    'Reference to our type Overlapping_union'],
   constants=[],
   constants_by_name=...,
   verification_functions=[],

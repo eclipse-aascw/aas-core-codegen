@@ -1419,7 +1419,10 @@ def _generate_wrap_deserialized_as_variant_function() -> Stripped:
     Every implementer of a named union is de-serialized through its own
     ``*FromSequence`` function, and the resulting
     ``pair<optional<shared_ptr<T>>, ...>`` then needs to be wrapped into
-    the union's ``common::variant`` alternative matching its own interface.
+    the union's ``common::variant`` alternative of the implementer's most
+    specific root. As the roots may overlap, the alternative is picked
+    explicitly by its index instead of relying on the implicit conversion into
+    the variant.
     This shape is identical for every implementer of every union (only the
     types differ), so we factor it out into a single generic function
     instead of unrolling it at each dispatch case, mirroring how
@@ -1434,12 +1437,14 @@ def _generate_wrap_deserialized_as_variant_function() -> Stripped:
  * Every implementer of a named union is de-serialized through its own
  * *FromSequence function, and the resulting
  * pair<optional<shared_ptr<T>>, ...> then needs to be wrapped into the
- * union's common::variant alternative matching its own interface.
+ * union's common::variant alternative of the implementer's most specific
+ * root. As the roots may overlap, the alternative is picked explicitly by
+ * its index \\p Index.
  *
  * \\param result the result of a de-serialization call for one implementer
  * \\return the result wrapped as a variant, or the propagated error
  */
-template <typename VariantT, typename T>
+template <typename VariantT, std::size_t Index, typename T>
 std::pair<
 {I}common::optional<VariantT>,
 {I}common::optional<DeserializationError>
@@ -1454,7 +1459,10 @@ std::pair<
 {III}common::optional<VariantT>,
 {III}common::optional<DeserializationError>
 {II}>(
-{III}VariantT(std::move(*result.first)),
+{III}VariantT(
+{IIII}common::in_place_index_t<Index>(),
+{IIII}std::move(*result.first)
+{III}),
 {III}common::nullopt
 {II});
 {I}}}
@@ -1471,7 +1479,7 @@ std::pair<
 
 
 def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
-    implementer: intermediate.ConcreteClass, union_name: Identifier
+    implementer: intermediate.ConcreteClass, named_union: intermediate.NamedUnion
 ) -> Stripped:
     """
     Generate the snippet to de-serialize a single implementer and wrap it.
@@ -1482,6 +1490,14 @@ def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
     resulting pair is wrapped into the union's ``common::variant`` in one call
     via :py:func:`_generate_wrap_deserialized_as_variant_function`.
     """
+    union_name = cpp_naming.union_name(named_union.name)
+
+    # NOTE (mristin):
+    # The alternatives of the variant follow the roots, see
+    # :py:func:`cpp_common.generate_named_union_variant_definition`.
+    root = named_union.most_specific_root_of(implementer)
+    root_index = next(i for i, a_root in enumerate(named_union.roots) if a_root is root)
+
     from_sequence_name = cpp_naming.function_name(
         Identifier(f"{implementer.name}_from_sequence")
     )
@@ -1490,7 +1506,10 @@ def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
 
     return Stripped(
         f"""\
-return WrapDeserializedAsVariant<types::{union_name}>(
+return WrapDeserializedAsVariant<
+{I}types::{union_name},
+{I}{root_index}
+>(
 {I}{from_sequence_name}<
 {II}types::{implementer_interface_name}
 {I}>(a_reader)
@@ -1522,7 +1541,7 @@ def _generate_named_union_from_element(
         model_type_literal = cpp_naming.enum_literal_name(implementer.name)
 
         snippet = _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
-            implementer=implementer, union_name=union_name
+            implementer=implementer, named_union=named_union
         )
 
         case_blocks.append(
@@ -4662,16 +4681,17 @@ def _generate_dispatching_serialize_named_union_as_element(
     value here is a ``common::variant``, not a polymorphic pointer, so there is
     no ``model_type()``/``dynamic_cast`` dance -- the variant already knows
     which alternative it holds through its own ``index()``, so we switch on
-    that directly and delegate to the corresponding implementer's own
+    that directly and delegate to the corresponding root's own
     ``*PtrAsElement`` function (one case per alternative, in the exact same
-    order the variant's alternatives were declared).
+    order the variant's alternatives were declared). The function of a root
+    with descendants dispatches further on the model type by itself.
     """
     union_name = cpp_naming.union_name(named_union.name)
 
     case_blocks = []  # type: List[Stripped]
-    for i, implementer in enumerate(named_union.implementers):
+    for i, root in enumerate(named_union.roots):
         serialize_ptr_as_element = cpp_naming.function_name(
-            Identifier(f"serialize_{implementer.name}_ptr_as_element")
+            Identifier(f"serialize_{root.name}_ptr_as_element")
         )
 
         case_blocks.append(

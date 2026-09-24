@@ -1056,7 +1056,9 @@ func MixedUnionFromJsonable(
 			return unionFromMap(
 				m,
 				mixedConcreteWithDescendantsChildFromMapWithoutDispatch,
-				aastypes.NewMixedUnionFromMixedConcreteWithDescendantsChild,
+				func(that aastypes.IMixedConcreteWithDescendantsChild) *aastypes.MixedUnion {
+					return aastypes.NewMixedUnionFromMixedConcreteWithDescendants(that)
+				},
 			)
 		case "MixedConcreteWithDescendants":
 			return unionFromMap(
@@ -1079,7 +1081,9 @@ func MixedUnionFromJsonable(
 		return unionFromMap(
 			m,
 			mixedAbstractDescendantOneFromMapWithoutDispatch,
-			aastypes.NewMixedUnionFromMixedAbstractDescendantOne,
+			func(that aastypes.IMixedAbstractDescendantOne) *aastypes.MixedUnion {
+				return aastypes.NewMixedUnionFromMixedAbstractMember(that)
+			},
 		)
 	}
 
@@ -1087,7 +1091,9 @@ func MixedUnionFromJsonable(
 		return unionFromMap(
 			m,
 			mixedAbstractDescendantTwoFromMapWithoutDispatch,
-			aastypes.NewMixedUnionFromMixedAbstractDescendantTwo,
+			func(that aastypes.IMixedAbstractDescendantTwo) *aastypes.MixedUnion {
+				return aastypes.NewMixedUnionFromMixedAbstractMember(that)
+			},
 		)
 	}
 
@@ -1304,6 +1310,70 @@ func ModelTypedUnionFromJsonable(
 	return
 }
 
+// Parse `jsonable` as an instance of [aastypes.OverlappingUnion],
+// or return an error.
+func OverlappingUnionFromJsonable(
+	jsonable interface{},
+) (
+	result *aastypes.OverlappingUnion,
+	err error,
+) {
+	m, ok := jsonable.(map[string]interface{})
+	if !ok {
+		err = notAMapError(jsonable)
+		return
+	}
+
+	if _, found := m["modelType"]; found {
+		var modelType string
+		modelType, err = modelTypeFromMap(m)
+		if err != nil {
+			return
+		}
+
+		switch modelType {
+		case "ModelTypedFirst":
+			return unionFromMap(
+				m,
+				modelTypedFirstFromMapWithoutDispatch,
+				aastypes.NewOverlappingUnionFromModelTypedFirst,
+			)
+		case "ModelTypedSecond":
+			return unionFromMap(
+				m,
+				modelTypedSecondFromMapWithoutDispatch,
+				aastypes.NewOverlappingUnionFromModelTypedSecond,
+			)
+		case "MixedConcreteWithDescendantsChild":
+			return unionFromMap(
+				m,
+				mixedConcreteWithDescendantsChildFromMapWithoutDispatch,
+				aastypes.NewOverlappingUnionFromMixedConcreteWithDescendantsChild,
+			)
+		case "MixedConcreteWithDescendants":
+			return unionFromMap(
+				m,
+				mixedConcreteWithDescendantsFromMapWithoutDispatch,
+				aastypes.NewOverlappingUnionFromMixedConcreteWithDescendants,
+			)
+		default:
+			err = newDeserializationError(
+				fmt.Sprintf(
+					"Unexpected model type for the union OverlappingUnion: %s",
+					modelType,
+				),
+			)
+			return
+		}
+	}
+
+	err = newDeserializationError(
+		"Could not determine the concrete type of the union OverlappingUnion: " +
+			"none of its implementers matched",
+	)
+	return
+}
+
 // Parse `jsonable` as an instance of [aastypes.ISomething],
 // or return an error.
 func SomethingFromJsonable(
@@ -1339,6 +1409,7 @@ func somethingFromMapWithoutDispatch(
 	var theOptionalStructuralProperty *aastypes.StructuralUnion
 	var theOptionalMixedProperty *aastypes.MixedUnion
 	var theOptionalModelTypedProperty *aastypes.ModelTypedUnion
+	var theOptionalListOverlappingProperty []*aastypes.OverlappingUnion
 
 	foundStructuralProperty := false
 	foundMixedProperty := false
@@ -1391,6 +1462,11 @@ func somethingFromMapWithoutDispatch(
 
 		case "optionalModelTypedProperty":
 			theOptionalModelTypedProperty, err = ModelTypedUnionFromJsonable(v)
+
+		case "optionalListOverlappingProperty":
+			theOptionalListOverlappingProperty, err = parseArray(
+				v, OverlappingUnionFromJsonable,
+			)
 
 		default:
 			err = newDeserializationError(
@@ -1474,6 +1550,9 @@ func somethingFromMapWithoutDispatch(
 	)
 	result.SetOptionalModelTypedProperty(
 		theOptionalModelTypedProperty,
+	)
+	result.SetOptionalListOverlappingProperty(
+		theOptionalListOverlappingProperty,
 	)
 
 	return
@@ -2017,6 +2096,17 @@ func somethingToMap(
 		)
 		if err != nil {
 			mustSerializationError(err).prependName("OptionalModelTypedProperty()")
+			return
+		}
+	}
+
+	if that.OptionalListOverlappingProperty() != nil {
+		result["optionalListOverlappingProperty"], err = serializeArray(
+			that.OptionalListOverlappingProperty(),
+			unionAsJsonableInterface[*aastypes.OverlappingUnion],
+		)
+		if err != nil {
+			mustSerializationError(err).prependName("OptionalListOverlappingProperty()")
 			return
 		}
 	}

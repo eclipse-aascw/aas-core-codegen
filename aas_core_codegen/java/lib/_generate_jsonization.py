@@ -1021,6 +1021,9 @@ def _generate_from_method_for_named_union(
     for the remaining implementers. This mirrors the per-implementer
     partitioning already verified in the intermediate representation, so
     every implementer is covered by exactly one of the two strategies.
+
+    The de-serialized implementer is wrapped as its most specific root of
+    the union.
     """
     name = java_naming.union_name(named_union.name)
 
@@ -1046,6 +1049,9 @@ def _generate_from_method_for_named_union(
         for implementer in with_model_type:
             model_type = naming.json_model_type(implementer.name)
             implementer_name = java_naming.class_name(implementer.name)
+            root_name = java_naming.class_name(
+                named_union.most_specific_root_of(implementer).name
+            )
             switch_writer.write(
                 f"""\
 {I}case {java_common.string_literal(model_type)}: {{
@@ -1054,7 +1060,7 @@ def _generate_from_method_for_named_union(
 {II}if (result.isError()) {{
 {III}return result.castTo({name}.class);
 {II}}}
-{II}return Reporting.Result.success({name}.from{implementer_name}(result.getResult()));
+{II}return Reporting.Result.success({name}.from{root_name}(result.getResult()));
 {I}}}
 """
             )
@@ -1085,6 +1091,9 @@ if (modelTypeNode != null) {{
 
     for implementer in without_model_type:
         implementer_name = java_naming.class_name(implementer.name)
+        root_name = java_naming.class_name(
+            named_union.most_specific_root_of(implementer).name
+        )
 
         required_json_names = [
             implementer.properties_by_name[arg.name].json_name
@@ -1112,7 +1121,7 @@ if ({condition}) {{
 {I}if (result.isError()) {{
 {II}return result.castTo({name}.class);
 {I}}}
-{I}return Reporting.Result.success({name}.from{implementer_name}(result.getResult()));
+{I}return Reporting.Result.success({name}.from{root_name}(result.getResult()));
 }}"""
             )
         )

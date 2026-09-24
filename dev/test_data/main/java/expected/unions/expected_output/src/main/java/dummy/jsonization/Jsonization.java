@@ -363,6 +363,15 @@ public class Jsonization {
       }
 
       /**
+       * Parse {@code node} as a list of {@code OverlappingUnion}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<OverlappingUnion>> parseListOf_OverlappingUnion(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryOverlappingUnionFrom);
+      }
+
+      /**
        * Deserialize an instance of StructuralFirst from {@code node}.
        *
        * @param node JSON node to be parsed
@@ -798,7 +807,7 @@ public class Jsonization {
               if (result.isError()) {
                 return result.castTo(MixedUnion.class);
               }
-              return Reporting.Result.success(MixedUnion.fromMixedConcreteWithDescendantsChild(result.getResult()));
+              return Reporting.Result.success(MixedUnion.fromMixedConcreteWithDescendants(result.getResult()));
             }
             case "MixedConcreteWithDescendants": {
               final Reporting.Result<MixedConcreteWithDescendants> result =
@@ -821,7 +830,7 @@ public class Jsonization {
           if (result.isError()) {
             return result.castTo(MixedUnion.class);
           }
-          return Reporting.Result.success(MixedUnion.fromMixedAbstractDescendantOne(result.getResult()));
+          return Reporting.Result.success(MixedUnion.fromMixedAbstractMember(result.getResult()));
         }
 
         if (node.get("uniqueToAbstractDescendantTwo") != null) {
@@ -829,7 +838,7 @@ public class Jsonization {
           if (result.isError()) {
             return result.castTo(MixedUnion.class);
           }
-          return Reporting.Result.success(MixedUnion.fromMixedAbstractDescendantTwo(result.getResult()));
+          return Reporting.Result.success(MixedUnion.fromMixedAbstractMember(result.getResult()));
         }
 
         if (node.get("uniqueToConcreteLeaf") != null) {
@@ -1006,6 +1015,68 @@ public class Jsonization {
       }
 
       /**
+       * Deserialize an instance of OverlappingUnion from the {@code node}.
+       *
+       * @param node JSON node to be parsed
+       */
+      public static Reporting.Result<OverlappingUnion> tryOverlappingUnionFrom(JsonNode node) {
+        if (node == null || !node.isObject()) {
+          return notAJsonObject(node);
+        }
+
+        final JsonNode modelTypeNode = node.get("modelType");
+        if (modelTypeNode != null) {
+          final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+          if (modelTypeResult.isError()) {
+            return prependName(modelTypeResult, "modelType");
+          }
+          switch (modelTypeResult.getResult()) {
+            case "ModelTypedFirst": {
+              final Reporting.Result<ModelTypedFirst> result =
+                tryModelTypedFirstFromObject(node);
+              if (result.isError()) {
+                return result.castTo(OverlappingUnion.class);
+              }
+              return Reporting.Result.success(OverlappingUnion.fromModelTypedFirst(result.getResult()));
+            }
+            case "ModelTypedSecond": {
+              final Reporting.Result<ModelTypedSecond> result =
+                tryModelTypedSecondFromObject(node);
+              if (result.isError()) {
+                return result.castTo(OverlappingUnion.class);
+              }
+              return Reporting.Result.success(OverlappingUnion.fromModelTypedSecond(result.getResult()));
+            }
+            case "MixedConcreteWithDescendantsChild": {
+              final Reporting.Result<MixedConcreteWithDescendantsChild> result =
+                tryMixedConcreteWithDescendantsChildFromObject(node);
+              if (result.isError()) {
+                return result.castTo(OverlappingUnion.class);
+              }
+              return Reporting.Result.success(OverlappingUnion.fromMixedConcreteWithDescendantsChild(result.getResult()));
+            }
+            case "MixedConcreteWithDescendants": {
+              final Reporting.Result<MixedConcreteWithDescendants> result =
+                tryMixedConcreteWithDescendantsFromObject(node);
+              if (result.isError()) {
+                return result.castTo(OverlappingUnion.class);
+              }
+              return Reporting.Result.success(OverlappingUnion.fromMixedConcreteWithDescendants(result.getResult()));
+            }
+            default: {
+              final Reporting.Error error = new Reporting.Error(
+                "Unexpected model type for OverlappingUnion: " + modelTypeResult.getResult());
+              return Reporting.Result.failure(error);
+            }
+          }
+        }
+
+        final Reporting.Error error = new Reporting.Error(
+          "Could not determine the concrete type of OverlappingUnion for the given JSON object");
+        return Reporting.Result.failure(error);
+      }
+
+      /**
        * Deserialize an instance of Something from {@code node}.
        *
        * @param node JSON node to be parsed
@@ -1025,6 +1096,7 @@ public class Jsonization {
         StructuralUnion theOptionalStructuralProperty = null;
         MixedUnion theOptionalMixedProperty = null;
         ModelTypedUnion theOptionalModelTypedProperty = null;
+        List<OverlappingUnion> theOptionalListOverlappingProperty = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
@@ -1119,6 +1191,15 @@ public class Jsonization {
               theOptionalModelTypedProperty = parsed.getResult();
               break;
             }
+            case "optionalListOverlappingProperty": {
+              final Reporting.Result<List<OverlappingUnion>> parsed =
+                parseListOf_OverlappingUnion(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
+              }
+              theOptionalListOverlappingProperty = parsed.getResult();
+              break;
+            }
             default:
               return unexpectedProperty(key);
           }
@@ -1162,7 +1243,8 @@ public class Jsonization {
           theTupleProperty,
           theOptionalStructuralProperty,
           theOptionalMixedProperty,
-          theOptionalModelTypedProperty));
+          theOptionalModelTypedProperty,
+          theOptionalListOverlappingProperty));
       }
     }
 
@@ -1479,6 +1561,23 @@ public class Jsonization {
       public static ModelTypedUnion deserializeModelTypedUnion(JsonNode node) {
         final Reporting.Result<? extends ModelTypedUnion> result =
           _DeserializeImplementation.tryModelTypedUnionFrom(
+            node);
+
+        return result.onError(error -> {
+          throw new DeserializeException(
+            Reporting.generateJsonPath(error.getPathSegments()),
+            error.getCause());
+        });
+      }
+
+      /**
+       * Deserialize an instance of OverlappingUnion from {@code node}.
+       *
+       * @param node JSON node to be parsed
+       */
+      public static OverlappingUnion deserializeOverlappingUnion(JsonNode node) {
+        final Reporting.Result<? extends OverlappingUnion> result =
+          _DeserializeImplementation.tryOverlappingUnionFrom(
             node);
 
         return result.onError(error -> {
@@ -1843,6 +1942,10 @@ public class Jsonization {
         setOptionalProperty(
           result, "optionalModelTypedProperty", "getOptionalModelTypedProperty()",
           that.getOptionalModelTypedProperty(), _Transformer::transformUnion);
+
+        setOptionalProperty(
+          result, "optionalListOverlappingProperty", "getOptionalListOverlappingProperty()",
+          that.getOptionalListOverlappingProperty(), _Transformer::serializeListOf_IUnion);
 
         return result;
       }

@@ -32,6 +32,8 @@ public class SomethingBuilder {
 
   private ModelTypedUnion optionalModelTypedProperty;
 
+  private List<OverlappingUnion> optionalListOverlappingProperty;
+
   public SomethingBuilder(
     StructuralUnion structuralProperty,
     MixedUnion mixedProperty,
@@ -78,6 +80,11 @@ public class SomethingBuilder {
     return this;
   }
 
+  public SomethingBuilder setOptionalListOverlappingProperty(List<OverlappingUnion> optionalListOverlappingProperty) {
+    this.optionalListOverlappingProperty = optionalListOverlappingProperty;
+    return this;
+  }
+
   public Something build() {
     return new Something(
       this.structuralProperty,
@@ -89,6 +96,7 @@ public class SomethingBuilder {
       this.tupleProperty,
       this.optionalStructuralProperty,
       this.optionalMixedProperty,
-      this.optionalModelTypedProperty);
+      this.optionalModelTypedProperty,
+      this.optionalListOverlappingProperty);
   }
 }
