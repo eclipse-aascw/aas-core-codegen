@@ -442,6 +442,36 @@ bool IsSomething(
 
 // endregion Is-a functions
 
+// region Underlying instances of named unions
+
+std::shared_ptr<IClass> UnderlyingOfUnionWithoutNumbers(
+  const UnionWithoutNumbers& that
+) {
+  switch (that.index()) {
+    case 0:
+      return common::get<0>(that);
+    case 1:
+      return common::get<1>(that);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+std::shared_ptr<IClass> UnderlyingOfUnionWithNumbers(
+  const UnionWithNumbers& that
+) {
+  switch (that.index()) {
+    case 0:
+      return common::get<0>(that);
+    case 1:
+      return common::get<1>(that);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+// endregion Underlying instances of named unions
+
 }  // namespace types
 }  // namespace dummy
 

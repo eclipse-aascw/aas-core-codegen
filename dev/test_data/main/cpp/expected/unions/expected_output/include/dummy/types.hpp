@@ -1007,6 +1007,66 @@ bool IsSomething(
 
 // endregion Is-a functions
 
+// region Underlying instances of named unions
+
+/**
+ * \brief Extract the instance held in \p that named union.
+ *
+ * The named union is a variant over its roots. The instance is returned as
+ * \ref IClass, so that it can be checked with the is-a functions, and
+ * down-cast with `std::dynamic_pointer_cast`.
+ *
+ * \param that named union holding the instance
+ * \return the instance held in \p that named union
+ */
+std::shared_ptr<IClass> UnderlyingOfStructuralUnion(
+  const StructuralUnion& that
+);
+
+/**
+ * \brief Extract the instance held in \p that named union.
+ *
+ * The named union is a variant over its roots. The instance is returned as
+ * \ref IClass, so that it can be checked with the is-a functions, and
+ * down-cast with `std::dynamic_pointer_cast`.
+ *
+ * \param that named union holding the instance
+ * \return the instance held in \p that named union
+ */
+std::shared_ptr<IClass> UnderlyingOfMixedUnion(
+  const MixedUnion& that
+);
+
+/**
+ * \brief Extract the instance held in \p that named union.
+ *
+ * The named union is a variant over its roots. The instance is returned as
+ * \ref IClass, so that it can be checked with the is-a functions, and
+ * down-cast with `std::dynamic_pointer_cast`.
+ *
+ * \param that named union holding the instance
+ * \return the instance held in \p that named union
+ */
+std::shared_ptr<IClass> UnderlyingOfModelTypedUnion(
+  const ModelTypedUnion& that
+);
+
+/**
+ * \brief Extract the instance held in \p that named union.
+ *
+ * The named union is a variant over its roots. The instance is returned as
+ * \ref IClass, so that it can be checked with the is-a functions, and
+ * down-cast with `std::dynamic_pointer_cast`.
+ *
+ * \param that named union holding the instance
+ * \return the instance held in \p that named union
+ */
+std::shared_ptr<IClass> UnderlyingOfOverlappingUnion(
+  const OverlappingUnion& that
+);
+
+// endregion Underlying instances of named unions
+
 }  // namespace types
 /**@}*/
 

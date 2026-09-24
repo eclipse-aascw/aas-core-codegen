@@ -390,6 +390,7 @@ class _TranspilableVerificationTranspiler(java_transpilation.Transpiler):
             bool,
         ],
         environment: intermediate_type_inference.Environment,
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
         symbol_table: intermediate.SymbolTable,
         verification: intermediate.TranspilableVerification,
     ) -> None:
@@ -399,6 +400,7 @@ class _TranspilableVerificationTranspiler(java_transpilation.Transpiler):
             type_map=type_map,
             optional_map=is_optional_map,
             environment=environment,
+            downcast_map=downcast_map,
         )
 
         self._symbol_table = symbol_table
@@ -480,6 +482,7 @@ def _transpile_transpilable_verification(
         type_map=type_inference.type_map,
         is_optional_map=optional_inferrer.is_optional_map,
         environment=type_inference.environment_with_args,
+        downcast_map=type_inference.downcast_map,
         symbol_table=symbol_table,
         verification=verification,
     )
@@ -631,6 +634,7 @@ class _InvariantTranspiler(java_transpilation.Transpiler):
             bool,
         ],
         environment: intermediate_type_inference.Environment,
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
         symbol_table: intermediate.SymbolTable,
     ) -> None:
         """Initialize with the given values."""
@@ -639,6 +643,7 @@ class _InvariantTranspiler(java_transpilation.Transpiler):
             type_map=type_map,
             optional_map=is_optional_map,
             environment=environment,
+            downcast_map=downcast_map,
         )
 
         self._symbol_table = symbol_table
@@ -685,7 +690,7 @@ def _transpile_invariant(
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Translate the invariant from the meta-model into C# code."""
     # fmt: off
-    type_map, inference_error = (
+    inference, inference_error = (
         intermediate_type_inference.infer_for_invariant(
             invariant=invariant,
             environment=environment
@@ -696,7 +701,8 @@ def _transpile_invariant(
     if inference_error is not None:
         return None, inference_error
 
-    assert type_map is not None
+    assert inference is not None
+    type_map = inference.type_map
 
     optional_inferrer = java_optional.OptionalInferrer(
         environment=environment,
@@ -716,6 +722,7 @@ def _transpile_invariant(
         type_map=type_map,
         is_optional_map=optional_inferrer.is_optional_map,
         environment=environment,
+        downcast_map=inference.downcast_map,
         symbol_table=symbol_table,
     )
 

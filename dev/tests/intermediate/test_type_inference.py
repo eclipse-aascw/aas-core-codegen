@@ -1,7 +1,8 @@
 # pylint: disable=missing-docstring
 
+import ast
 import unittest
-from typing import List
+from typing import List, Tuple
 
 import tests.common
 from aas_core_codegen import intermediate
@@ -504,6 +505,844 @@ __xml_namespace__ = "https://dummy.com"
                 "Expected the value to be of an optional type "
                 "for a non-nullness check (``is not None``), but got str"
             ),
+        )
+
+
+class Test_is_instance(unittest.TestCase):
+    @staticmethod
+    def infer(source: str) -> intermediate_type_inference.InferenceOfInvariant:
+        """Infer the types in the only invariant of the class ``Something``."""
+        symbol_table, error = tests.common.translate_source_to_intermediate(
+            source=source
+        )
+        assert error is None, tests.common.most_underlying_messages(error)
+        assert symbol_table is not None
+
+        something = symbol_table.must_find_concrete_class(Identifier("Something"))
+        assert len(something.invariants) == 1
+
+        environment = intermediate_type_inference.MutableEnvironment(
+            parent=intermediate_type_inference.populate_base_environment(
+                symbol_table=symbol_table
+            )
+        )
+        environment.set(
+            Identifier("self"),
+            intermediate_type_inference.OurTypeAnnotation(our_type=something),
+        )
+
+        inference, inference_error = intermediate_type_inference.infer_for_invariant(
+            invariant=something.invariants[0], environment=environment
+        )
+
+        if inference_error is not None:
+            raise AssertionError(
+                tests.common.most_underlying_messages([inference_error])
+            )
+
+        assert inference is not None
+        return inference
+
+    def expect_downcasts(
+        self, source: str, expected_downcasts: List[Tuple[str, str]]
+    ) -> None:
+        """Expect the down-casts as pairs (source code of the node, class)."""
+        inference = Test_is_instance.infer(source)
+
+        self.assertListEqual(
+            expected_downcasts,
+            [
+                (ast.unparse(node.original_node), str(downcast.target))
+                for node, downcast in inference.downcast_map.items()
+            ],
+        )
+
+    def expect_error(self, source: str, expected_message: str) -> None:
+        with self.assertRaises(AssertionError) as context:
+            Test_is_instance.infer(source)
+
+        self.assertEqual(expected_message, str(context.exception))
+
+    def test_narrowing_in_conjunction(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    text: str
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+@invariant(
+    lambda self: isinstance(self.parent, Child) and len(self.parent.text) > 0,
+    "Dummy invariant description"
+)
+class Something(DBC):
+    parent: Parent
+
+    def __init__(self, parent: Parent) -> None:
+        self.parent = parent
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_downcasts(source, [("self.parent", "Child")])
+
+    def test_narrowing_in_implication(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    text: str
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+@invariant(
+    lambda self: not isinstance(self.parent, Child) or len(self.parent.text) > 0,
+    "Dummy invariant description"
+)
+class Something(DBC):
+    parent: Parent
+
+    def __init__(self, parent: Parent) -> None:
+        self.parent = parent
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_downcasts(source, [("self.parent", "Child")])
+
+    def test_narrowing_in_disjunction_with_negation(self) -> None:
+        # NOTE (mristin):
+        # A disjunction of two values with the first one negated is parsed as
+        # an implication, so we need three values here.
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    text: str
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+@invariant(
+    lambda self:
+    not isinstance(self.parent, Child)
+    or len(self.parent.text) == 0
+    or self.parent.text == "something",
+    "Dummy invariant description"
+)
+class Something(DBC):
+    parent: Parent
+
+    def __init__(self, parent: Parent) -> None:
+        self.parent = parent
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_downcasts(
+            source, [("self.parent", "Child"), ("self.parent", "Child")]
+        )
+
+    def test_narrowing_in_all(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    text: str
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+@invariant(
+    lambda self:
+    all(
+        not isinstance(parent, Child) or len(parent.text) > 0
+        for parent in self.parents
+    ),
+    "Dummy invariant description"
+)
+class Something(DBC):
+    parents: List[Parent]
+
+    def __init__(self, parents: List[Parent]) -> None:
+        self.parents = parents
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_downcasts(source, [("parent", "Child")])
+
+    def test_narrowing_over_two_levels_of_class_hierarchy(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    pass
+
+
+class Grandchild(Child, DBC):
+    text: str
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+@invariant(
+    lambda self:
+    isinstance(self.parent, Child)
+    and isinstance(self.parent, Grandchild)
+    and len(self.parent.text) > 0,
+    "Dummy invariant description"
+)
+class Something(DBC):
+    parent: Parent
+
+    def __init__(self, parent: Parent) -> None:
+        self.parent = parent
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_downcasts(
+            source, [("self.parent", "Child"), ("self.parent", "Grandchild")]
+        )
+
+    def test_narrowing_of_nested_named_unions(self) -> None:
+        source = """\
+@serialization(with_model_type=True)
+class Leaf(DBC):
+    text: str
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+@serialization(with_model_type=True)
+class Other_leaf(DBC):
+    pass
+
+
+Inner = Union[Leaf, Other_leaf]
+
+
+@serialization(with_model_type=True)
+class Wrapper(DBC):
+    inner: Inner
+
+    def __init__(self, inner: Inner) -> None:
+        self.inner = inner
+
+
+Outer = Union[Wrapper, Inner]
+
+
+@invariant(
+    lambda self:
+    isinstance(self.outer, Wrapper)
+    and isinstance(self.outer.inner, Leaf)
+    and len(self.outer.inner.text) > 0,
+    "Dummy invariant description"
+)
+class Something(DBC):
+    outer: Outer
+
+    def __init__(self, outer: Outer) -> None:
+        self.outer = outer
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_downcasts(
+            source,
+            [
+                ("self.outer", "Wrapper"),
+                ("self.outer", "Wrapper"),
+                ("self.outer.inner", "Leaf"),
+            ],
+        )
+
+    def test_narrowing_of_named_union_with_abstract_root(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    text: str
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+@serialization(with_model_type=True)
+class Other(DBC):
+    pass
+
+
+Some_union = Union[Parent, Other]
+
+
+@invariant(
+    lambda self:
+    isinstance(self.value, Parent)
+    and isinstance(self.value, Child)
+    and len(self.value.text) > 0,
+    "Dummy invariant description"
+)
+class Something(DBC):
+    value: Some_union
+
+    def __init__(self, value: Some_union) -> None:
+        self.value = value
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        inference = Test_is_instance.infer(source)
+
+        # NOTE (mristin):
+        # The source of every down-cast is the named union, as the targets need
+        # to extract the underlying instance of the union before casting it.
+        self.assertListEqual(
+            [
+                ("self.value", "Some_union as Parent"),
+                ("self.value", "Some_union as Child"),
+            ],
+            [
+                (ast.unparse(node.original_node), str(downcast))
+                for node, downcast in inference.downcast_map.items()
+            ],
+        )
+
+    def test_narrowing_does_not_leak_out_of_its_scope(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    text: str
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+@invariant(
+    lambda self:
+    (isinstance(self.parent, Child) and len(self.parent.text) > 0)
+    or self.parent.text == "something",
+    "Dummy invariant description"
+)
+class Something(DBC):
+    parent: Parent
+
+    def __init__(self, parent: Parent) -> None:
+        self.parent = parent
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source, "The member 'text' could not be found in the class 'Parent'"
+        )
+
+    def test_no_narrowing_on_tuple(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    text: str
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+class Another_child(Parent, DBC):
+    pass
+
+
+@invariant(
+    lambda self:
+    isinstance(self.parent, (Child, Another_child))
+    and len(self.parent.text) > 0,
+    "Dummy invariant description"
+)
+class Something(DBC):
+    parent: Parent
+
+    def __init__(self, parent: Parent) -> None:
+        self.parent = parent
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source, "The member 'text' could not be found in the class 'Parent'"
+        )
+
+    def test_fails_on_optional_value(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    pass
+
+
+@invariant(
+    lambda self: isinstance(self.parent, Child),
+    "Dummy invariant description"
+)
+class Something(DBC):
+    parent: Optional[Parent]
+
+    def __init__(self, parent: Optional[Parent] = None) -> None:
+        self.parent = parent
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source,
+            "Expected the value to be a non-None for ``isinstance``, "
+            "but got: Optional[Parent]. Please check for ``is not None`` first.",
+        )
+
+    def test_fails_on_primitive_value(self) -> None:
+        source = """\
+class Some_class(DBC):
+    pass
+
+
+@invariant(
+    lambda self: isinstance(self.text, Some_class),
+    "Dummy invariant description"
+)
+class Something(DBC):
+    text: str
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source,
+            "Expected the value to be an instance of a class or "
+            "of a named union for ``isinstance``, but got: str",
+        )
+
+    def test_fails_on_the_same_class(self) -> None:
+        source = """\
+class Parent(DBC):
+    pass
+
+
+@invariant(
+    lambda self: isinstance(self.parent, Parent),
+    "Dummy invariant description"
+)
+class Something(DBC):
+    parent: Parent
+
+    def __init__(self, parent: Parent) -> None:
+        self.parent = parent
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source,
+            "Expected the class 'Parent' to be a strict descendant of the class "
+            "'Parent' of the value in ``isinstance``, but it is not, "
+            "so the check always holds",
+        )
+
+    def test_fails_on_class_not_in_named_union(self) -> None:
+        source = """\
+@serialization(with_model_type=True)
+class First(DBC):
+    pass
+
+
+@serialization(with_model_type=True)
+class Second(DBC):
+    pass
+
+
+class Unrelated(DBC):
+    pass
+
+
+Some_union = Union[First, Second]
+
+
+@invariant(
+    lambda self: isinstance(self.value, Unrelated),
+    "Dummy invariant description"
+)
+class Something(DBC):
+    value: Some_union
+
+    def __init__(self, value: Some_union) -> None:
+        self.value = value
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source,
+            "Expected the class 'Unrelated' to be a root of the named union "
+            "'Some_union' of the value in ``isinstance``, or a descendant of "
+            "a root, but it is not. The roots are: First, Second",
+        )
+
+    def test_fails_on_an_unrelated_class(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    pass
+
+
+class Unrelated(DBC):
+    pass
+
+
+@invariant(
+    lambda self: isinstance(self.parent, Unrelated),
+    "Dummy invariant description"
+)
+class Something(DBC):
+    parent: Parent
+
+    def __init__(self, parent: Parent) -> None:
+        self.parent = parent
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source,
+            "Expected the class 'Unrelated' to be a strict descendant of the class "
+            "'Parent' of the value in ``isinstance``, but it is not, "
+            "so the check never holds",
+        )
+
+    def test_fails_on_a_sibling_class(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    pass
+
+
+class Another_child(Parent, DBC):
+    pass
+
+
+@invariant(
+    lambda self: isinstance(self.child, Another_child),
+    "Dummy invariant description"
+)
+class Something(DBC):
+    child: Child
+
+    def __init__(self, child: Child) -> None:
+        self.child = child
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source,
+            "Expected the class 'Another_child' to be a strict descendant "
+            "of the class 'Child' of the value in ``isinstance``, but it is not, "
+            "so the check never holds",
+        )
+
+    def test_fails_on_an_ancestor_class(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    pass
+
+
+@invariant(
+    lambda self: isinstance(self.child, Parent),
+    "Dummy invariant description"
+)
+class Something(DBC):
+    child: Child
+
+    def __init__(self, child: Child) -> None:
+        self.child = child
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source,
+            "Expected the class 'Parent' to be a strict descendant of the class "
+            "'Child' of the value in ``isinstance``, but it is not, "
+            "so the check always holds",
+        )
+
+    def test_fails_on_an_unrelated_class_in_a_tuple(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class Child(Parent, DBC):
+    pass
+
+
+class Unrelated(DBC):
+    pass
+
+
+@invariant(
+    lambda self: isinstance(self.parent, (Child, Unrelated)),
+    "Dummy invariant description"
+)
+class Something(DBC):
+    parent: Parent
+
+    def __init__(self, parent: Parent) -> None:
+        self.parent = parent
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source,
+            "Expected the class 'Unrelated' to be a strict descendant of the class "
+            "'Parent' of the value in ``isinstance``, but it is not, "
+            "so the check never holds",
+        )
+
+    def test_fails_on_narrowing_to_a_sibling_outside_named_union(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class First(Parent, DBC):
+    pass
+
+
+class Second(Parent, DBC):
+    text: str
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+Some_union = Union[First]
+
+
+@invariant(
+    lambda self: isinstance(self.value, Second) and len(self.value.text) > 0,
+    "Dummy invariant description"
+)
+class Something(DBC):
+    value: Some_union
+
+    def __init__(self, value: Some_union) -> None:
+        self.value = value
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source,
+            "Expected the class 'Second' to be a root of the named union "
+            "'Some_union' of the value in ``isinstance``, or a descendant of "
+            "a root, but it is not. The roots are: First",
+        )
+
+    def test_fails_on_narrowing_to_an_abstract_parent_of_named_union(self) -> None:
+        source = """\
+@abstract
+@serialization(with_model_type=True)
+class Parent(DBC):
+    pass
+
+
+class First(Parent, DBC):
+    pass
+
+
+class Second(Parent, DBC):
+    pass
+
+
+Some_union = Union[First, Second]
+
+
+@invariant(
+    lambda self: isinstance(self.value, Parent),
+    "Dummy invariant description"
+)
+class Something(DBC):
+    value: Some_union
+
+    def __init__(self, value: Some_union) -> None:
+        self.value = value
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source,
+            "Expected the class 'Parent' to be a root of the named union "
+            "'Some_union' of the value in ``isinstance``, or a descendant of "
+            "a root, but it is not. The roots are: First, Second",
+        )
+
+    def test_fails_on_narrowing_to_a_class_outside_nested_named_union(self) -> None:
+        source = """\
+@serialization(with_model_type=True)
+class Leaf(DBC):
+    pass
+
+
+@serialization(with_model_type=True)
+class Other_leaf(DBC):
+    pass
+
+
+Inner = Union[Leaf, Other_leaf]
+
+
+@serialization(with_model_type=True)
+class Wrapper(DBC):
+    inner: Inner
+
+    def __init__(self, inner: Inner) -> None:
+        self.inner = inner
+
+
+Outer = Union[Wrapper, Inner]
+
+
+@invariant(
+    lambda self:
+    isinstance(self.outer, Wrapper)
+    and isinstance(self.outer.inner, Wrapper),
+    "Dummy invariant description"
+)
+class Something(DBC):
+    outer: Outer
+
+    def __init__(self, outer: Outer) -> None:
+        self.outer = outer
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_error(
+            source,
+            "Expected the class 'Wrapper' to be a root of the named union "
+            "'Inner' of the value in ``isinstance``, or a descendant of "
+            "a root, but it is not. The roots are: Leaf, Other_leaf",
         )
 
 

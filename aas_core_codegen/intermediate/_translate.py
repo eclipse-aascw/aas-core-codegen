@@ -4281,6 +4281,38 @@ class _ContractChecker(parse_tree.Visitor):
         for arg in node.args:
             self.visit(arg)
 
+    def visit_is_instance(self, node: parse_tree.IsInstance) -> None:
+        for cls_name in node.classes:
+            our_type = self.symbol_table.find_our_type(cls_name.identifier)
+
+            if our_type is None:
+                self.errors.append(
+                    Error(
+                        cls_name.original_node,
+                        f"The class {cls_name.identifier!r} given to ``isinstance`` "
+                        f"could not be found in the symbol table",
+                    )
+                )
+            elif not isinstance(our_type, (AbstractClass, ConcreteClass)):
+                if isinstance(our_type, Enumeration):
+                    kind = "an enumeration"
+                elif isinstance(our_type, ConstrainedPrimitive):
+                    kind = "a constrained primitive"
+                elif isinstance(our_type, NamedUnion):
+                    kind = "a named union"
+                else:
+                    assert_never(our_type)
+
+                self.errors.append(
+                    Error(
+                        cls_name.original_node,
+                        f"Expected only classes in ``isinstance``, "
+                        f"but {cls_name.identifier!r} is {kind}",
+                    )
+                )
+
+        self.visit(node.value)
+
 
 def _over_signature_likes(symbol_table: SymbolTable) -> Iterator[SignatureLike]:
     """

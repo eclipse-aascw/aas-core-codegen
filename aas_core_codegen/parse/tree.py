@@ -161,6 +161,32 @@ class IsIn(Expression):
         visitor.visit_is_in(self)
 
 
+class IsInstance(Expression):
+    """
+    Represent the run-time type check ``isinstance(value, C)``.
+
+    If there are multiple classes, the check corresponds to
+    ``isinstance(value, (A, B, ...))``, *i.e.*, the value is an instance of any of
+    the classes.
+    """
+
+    def __init__(
+        self, value: "Expression", classes: Sequence["Name"], original_node: ast.AST
+    ) -> None:
+        """Initialize with the given values."""
+        Expression.__init__(self, original_node=original_node)
+        self.value = value
+        self.classes = classes
+
+    def transform(self, transformer: "Transformer[T]") -> T:
+        """Accept the transformer."""
+        return transformer.transform_is_instance(self)
+
+    def visit(self, visitor: "Visitor") -> None:
+        """Accept the visitor."""
+        visitor.visit_is_instance(self)
+
+
 class Implication(Expression):
     """Represent an implication of the form ``A => B``."""
 
@@ -585,6 +611,12 @@ class Visitor(DBC):
         self.visit(node.member)
         self.visit(node.container)
 
+    def visit_is_instance(self, node: IsInstance) -> None:
+        """Visit a run-time type check."""
+        self.visit(node.value)
+        for cls in node.classes:
+            self.visit(cls)
+
     def visit_implication(self, node: Implication) -> None:
         """Visit an implication."""
         self.visit(node.antecedent)
@@ -715,6 +747,11 @@ class Transformer(Generic[T], DBC):
     @abc.abstractmethod
     def transform_is_in(self, node: IsIn) -> T:
         """Transform a membership relation to something."""
+        raise NotImplementedError(f"{node=}")
+
+    @abc.abstractmethod
+    def transform_is_instance(self, node: IsInstance) -> T:
+        """Transform a run-time type check to something."""
         raise NotImplementedError(f"{node=}")
 
     @abc.abstractmethod
@@ -869,6 +906,18 @@ class _StringifyTransformer(Transformer[stringify.Entity]):
             properties=[
                 stringify.Property("member", self.transform(node.member)),
                 stringify.Property("container", self.transform(node.container)),
+                stringify.PropertyEllipsis("original_node", node.original_node),
+            ],
+        )
+
+    def transform_is_instance(self, node: IsInstance) -> stringify.Entity:
+        return stringify.Entity(
+            name=node.__class__.__name__,
+            properties=[
+                stringify.Property("value", self.transform(node.value)),
+                stringify.Property(
+                    "classes", [self.transform(cls) for cls in node.classes]
+                ),
                 stringify.PropertyEllipsis("original_node", node.original_node),
             ],
         )
@@ -1125,6 +1174,10 @@ class RestrictedTransformer(Transformer[T]):
         """Transform a membership relation to something."""
         raise NotImplementedError(f"{node=}")
 
+    def transform_is_instance(self, node: IsInstance) -> T:
+        """Transform a run-time type check to something."""
+        raise NotImplementedError(f"{node=}")
+
     def transform_implication(self, node: Implication) -> T:
         """Transform an implication to something."""
         raise AssertionError(f"Unexpected node: {dump(node)}")
@@ -1235,6 +1288,12 @@ class _IterationTransformer(Transformer[Iterator[Node]]):
         yield node
         yield from self.transform(node.member)
         yield from self.transform(node.container)
+
+    def transform_is_instance(self, node: IsInstance) -> Iterator[Node]:
+        yield node
+        yield from self.transform(node.value)
+        for cls in node.classes:
+            yield from self.transform(cls)
 
     def transform_implication(self, node: Implication) -> Iterator[Node]:
         yield node

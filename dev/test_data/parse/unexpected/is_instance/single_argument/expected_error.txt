@@ -1,0 +1,1 @@
+Expected exactly two arguments to ``isinstance``, but got: 1

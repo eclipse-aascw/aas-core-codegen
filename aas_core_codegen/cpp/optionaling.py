@@ -37,6 +37,14 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
     #: represented as a ``std::optional`` in C++.
     is_optional_map: Final[MutableMapping[parse_tree.Node, bool]]
 
+    #: Track of the is-optional features of the nodes narrowed by ``isinstance``
+    #: *before* their down-cast; ``True`` if the value of the node is represented
+    #: as a ``std::optional`` in C++ before it is down-cast.
+    #:
+    #: The down-cast values are never ``std::optional``, so all the down-cast
+    #: nodes are marked as non-optional in :py:attr:`is_optional_map`.
+    is_optional_before_downcast_map: Final[MutableMapping[parse_tree.Node, bool]]
+
     #: Errors encountered during the inference
     errors: Final[List[Error]]
 
@@ -46,6 +54,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         type_map: Mapping[
             parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
         ],
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
     ) -> None:
         """Initialize with the given values."""
         # We need to create our own child environment so that we can introduce new
@@ -55,8 +64,10 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         )
 
         self._type_map = type_map
+        self._downcast_map = downcast_map
 
         self.is_optional_map = dict()
+        self.is_optional_before_downcast_map = dict()
         self.errors = []
 
     def transform(self, node: parse_tree.Node) -> Optional[Error]:
@@ -65,6 +76,13 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
             f"The node has not been properly added to the is_optional_map: {node}, "
             f"dumped {parse_tree.dump(node)}"
         )
+
+        if node in self._downcast_map:
+            # NOTE (mristin):
+            # The transpiler de-references the value, if necessary, before it
+            # down-casts it. Hence, the down-cast value is never optional.
+            self.is_optional_before_downcast_map[node] = self.is_optional_map[node]
+            self.is_optional_map[node] = False
 
         return result
 
@@ -204,6 +222,17 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
             return error
 
         error = self.transform(node.container)
+        if error is not None:
+            return error
+
+        self.is_optional_map[node] = False
+        return None
+
+    def transform_is_instance(self, node: parse_tree.IsInstance) -> Optional[Error]:
+        # NOTE (mristin):
+        # We do not recurse into the classes as they are not values, but only
+        # refer to our types.
+        error = self.transform(node.value)
         if error is not None:
             return error
 

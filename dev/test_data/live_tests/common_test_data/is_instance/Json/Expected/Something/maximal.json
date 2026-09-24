@@ -1,0 +1,54 @@
+{
+  "root": {
+    "identifier": "root",
+    "children": [
+      {
+        "identifier": "leaf",
+        "text": "hello",
+        "modelType": "Leaf"
+      },
+      {
+        "identifier": "unordered",
+        "children": [
+          {
+            "identifier": "nested-leaf",
+            "text": "nested",
+            "modelType": "Leaf"
+          }
+        ],
+        "modelType": "UnorderedContainer"
+      }
+    ],
+    "isSorted": true,
+    "modelType": "OrderedContainer"
+  },
+  "optionalElement": {
+    "identifier": "optional-leaf",
+    "text": "optional",
+    "modelType": "Leaf"
+  },
+  "value": {
+    "attribute": {
+      "kind": "name",
+      "modelType": "GlobalAttribute"
+    },
+    "modelType": "AttributeOperand"
+  },
+  "values": [
+    {
+      "attribute": {
+        "name": "local",
+        "modelType": "LocalAttribute"
+      },
+      "modelType": "AttributeOperand"
+    },
+    {
+      "text": "root",
+      "modelType": "StringLiteral"
+    },
+    {
+      "number": 1.5,
+      "modelType": "NumberLiteral"
+    }
+  ]
+}

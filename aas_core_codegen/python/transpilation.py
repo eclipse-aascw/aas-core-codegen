@@ -140,6 +140,7 @@ class Transpiler(
         no_parentheses_types = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Constant,
@@ -176,6 +177,7 @@ class Transpiler(
         no_parentheses_types = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Constant,
@@ -216,6 +218,7 @@ class Transpiler(
         no_parentheses_types = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Constant,
@@ -229,6 +232,30 @@ class Transpiler(
             member = Stripped(f"({member})")
 
         return Stripped(f"{member} in {container}"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_is_instance(
+        self, node: parse_tree.IsInstance
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        value, error = self.transform(node.value)
+        if error is not None:
+            return None, error
+
+        assert value is not None
+
+        # NOTE (mristin):
+        # We assume that the types module is imported as ``aas_types`` in
+        # the generated code, as is the case with the verification module.
+        classes = [
+            f"aas_types.{python_naming.class_name(cls.identifier)}"
+            for cls in node.classes
+        ]
+
+        if len(classes) == 1:
+            return Stripped(f"isinstance({value}, {classes[0]})"), None
+
+        classes_joined = ", ".join(classes)
+        return Stripped(f"isinstance({value}, ({classes_joined}))"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_implication(
@@ -255,6 +282,7 @@ class Transpiler(
         no_parentheses_types_in_this_context = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
@@ -323,6 +351,7 @@ not (
         no_parentheses_types_in_this_context = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
@@ -502,6 +531,7 @@ not (
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.Index,
         )
         if isinstance(node.value, no_parentheses_types):
@@ -521,6 +551,7 @@ not (
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.Index,
         )
         if isinstance(node.value, no_parentheses_types_in_this_context):
@@ -546,6 +577,7 @@ not (
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.Index,
         )
         if not isinstance(node.operand, no_parentheses_types_in_this_context):
@@ -571,6 +603,7 @@ not (
                 parse_tree.Member,
                 parse_tree.MethodCall,
                 parse_tree.FunctionCall,
+                parse_tree.IsInstance,
                 parse_tree.Name,
                 parse_tree.Index,
                 parse_tree.Comparison,
@@ -666,6 +699,7 @@ not (
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.Constant,
             parse_tree.Name,
             parse_tree.Index,
@@ -852,6 +886,7 @@ not (
                 parse_tree.Member,
                 parse_tree.MethodCall,
                 parse_tree.FunctionCall,
+                parse_tree.IsInstance,
                 parse_tree.Name,
                 parse_tree.Index,
             )

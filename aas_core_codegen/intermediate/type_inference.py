@@ -121,6 +121,30 @@ class OurTypeAnnotation(AtomicTypeAnnotation):
         return self.our_type.name
 
 
+class Downcast:
+    """
+    Represent a value whose type has been narrowed down by an ``isinstance`` guard.
+
+    The implementation targets need to down-cast such values. The class or
+    the named union of the value before the narrowing determines how the value
+    is represented, and hence how it needs to be down-cast.
+    """
+
+    #: Type of the value before the narrowing, a class or a named union
+    source: Final[OurTypeAnnotation]
+
+    #: Class which the value has been narrowed down to
+    target: Final[OurTypeAnnotation]
+
+    def __init__(self, source: OurTypeAnnotation, target: OurTypeAnnotation) -> None:
+        """Initialize with the given values."""
+        self.source = source
+        self.target = target
+
+    def __str__(self) -> str:
+        return f"{self.source} as {self.target}"
+
+
 def try_primitive_type(
     type_annotation: "TypeAnnotationUnion",
 ) -> Optional[PrimitiveType]:
@@ -693,18 +717,38 @@ class Environment(DBC):
 
         return None
 
+    def find_our_type(self, identifier: Identifier) -> Optional[_types.OurType]:
+        """
+        Search for our type with the given ``identifier``.
+
+        Unlike :py:meth:`find`, this method resolves the names which refer to our
+        types, and not to values. For example, we need to resolve the classes
+        in ``isinstance(something, Some_class)``.
+
+        We search all the way to the most outer scope.
+        """
+        if self.parent is not None:
+            return self.parent.find_our_type(identifier)
+
+        return None
+
 
 class ImmutableEnvironment(Environment):
     """
     Map immutably names to type annotations for a given scope.
+
+    Optionally, the environment also resolves the names of our types. This is
+    usually the case only for the most outer, global scope.
     """
 
     def __init__(
         self,
         mapping: Mapping[Identifier, "TypeAnnotationUnion"],
         parent: Optional["Environment"] = None,
+        our_types_by_name: Optional[Mapping[Identifier, _types.OurType]] = None,
     ) -> None:
         self._mapping = mapping
+        self._our_types_by_name = our_types_by_name
 
         Environment.__init__(self, parent)
 
@@ -712,6 +756,14 @@ class ImmutableEnvironment(Environment):
     def mapping(self) -> Mapping[Identifier, "TypeAnnotationUnion"]:
         """Retrieve the underlying mapping."""
         return self._mapping
+
+    def find_our_type(self, identifier: Identifier) -> Optional[_types.OurType]:
+        if self._our_types_by_name is not None:
+            our_type = self._our_types_by_name.get(identifier, None)
+            if our_type is not None:
+                return our_type
+
+        return Environment.find_our_type(self, identifier)
 
 
 class MutableEnvironment(Environment):
@@ -847,6 +899,20 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
             container = f"({container})"
 
         result = f"{member} in {container}"
+        self.representation_map[node] = result
+        return result
+
+    def transform_is_instance(self, node: parse_tree.IsInstance) -> str:
+        value = self.transform(node.value)
+
+        classes = [self.transform(cls) for cls in node.classes]
+
+        if len(classes) == 1:
+            result = f"isinstance({value}, {classes[0]})"
+        else:
+            classes_joined = ", ".join(classes)
+            result = f"isinstance({value}, ({classes_joined}))"
+
         self.representation_map[node] = result
         return result
 
@@ -1184,6 +1250,11 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
     #: Track of the inferred types
     type_map: Final[MutableMapping[parse_tree.Node, "TypeAnnotationUnion"]]
 
+    #: Track of the nodes whose type has been narrowed down to a class by
+    #: an ``isinstance`` guard. The implementation targets need to down-cast
+    #: the value of these nodes to the given class.
+    downcast_map: Final[MutableMapping[parse_tree.Node, Downcast]]
+
     #: Errors encountered during the inference
     errors: Final[List[Error]]
 
@@ -1214,7 +1285,16 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # stacked, so that we can pop them as the iteration leaves the guarded scope.
         self._min_lengths = dict()  # type: MutableMapping[str, List[int]]
 
+        # NOTE (mristin):
+        # We analogously keep track of the classes to which the values have been
+        # narrowed down by the ``isinstance`` guards. The narrowings are stacked, so
+        # that we can pop them as the iteration leaves the guarded scope. The last
+        # narrowing is always the most specific one, as we allow ``isinstance`` only
+        # on strict descendants of the value's type.
+        self._narrowings = dict()  # type: MutableMapping[str, List[OurTypeAnnotation]]
+
         self.type_map = dict()
+        self.downcast_map = dict()
         self.errors = []
 
     def _strip_optional_if_non_null(
@@ -1329,6 +1409,37 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
 
         return self._representation_map[collection], min_length
 
+    def _assume_narrowing(
+        self, node: parse_tree.IsInstance, exit_stack: contextlib.ExitStack
+    ) -> None:
+        """
+        Assume that the value of the ``node`` is an instance of its class.
+
+        The assumption is undone as the ``exit_stack`` unwinds.
+
+        Mind that the ``node`` must have been already transformed and its types
+        successfully inferred, as we need to resolve the class.
+        """
+        if len(node.classes) != 1:
+            return
+
+        cls = self._environment.find_our_type(node.classes[0].identifier)
+        assert isinstance(cls, _types.ClassUnionAsTuple), (
+            f"Expected the class of a successfully inferred isinstance "
+            f"to be resolved, but got: {cls}"
+        )
+
+        canonical_repr = self._representation_map[node.value]
+
+        narrowings = self._narrowings.setdefault(canonical_repr, [])
+        narrowings.append(OurTypeAnnotation(our_type=cls))
+
+        # fmt: off
+        exit_stack.callback(
+            lambda a_narrowings=narrowings: a_narrowings.pop()  # type: ignore
+        )
+        # fmt: on
+
     def _assume_guard(
         self, node: parse_tree.Node, exit_stack: contextlib.ExitStack
     ) -> None:
@@ -1375,6 +1486,14 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             return
 
         # NOTE (mristin):
+        # ``isinstance(x, C)`` tells us that ``x`` is an instance of ``C``. We can not
+        # narrow on multiple classes, ``isinstance(x, (A, B))``, as the value could be
+        # an instance of either of them.
+        if isinstance(node, parse_tree.IsInstance):
+            self._assume_narrowing(node, exit_stack)
+            return
+
+        # NOTE (mristin):
         # ``len(arr) > 0`` tells us that ``arr[0]`` and ``arr[-1]`` are there, and
         # so on for the longer arrays.
         asserted = self._asserted_min_length(node)
@@ -1403,7 +1522,21 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             f"in the supplied representation_map."
         )
 
-        return super().transform(node)
+        result = super().transform(node)
+
+        # NOTE (mristin):
+        # We narrow the type of the value if an ``isinstance`` guard applies to it.
+        # Analogous to non-nullness, we are lax here, and ignore the fact that
+        # calls to methods and functions can alter the value in-between.
+        if isinstance(result, OurTypeAnnotation):
+            narrowings = self._narrowings.get(self._representation_map[node], None)
+            if narrowings is not None and len(narrowings) > 0:
+                self.downcast_map[node] = Downcast(source=result, target=narrowings[-1])
+
+                result = narrowings[-1]
+                self.type_map[node] = result
+
+        return result
 
     def transform_member(
         self, node: parse_tree.Member
@@ -1749,6 +1882,122 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                 )
             )
             success = False
+
+        if not success:
+            return None
+
+        result = PrimitiveTypeAnnotation(PrimitiveType.BOOL)
+        self.type_map[node] = result
+        return result
+
+    def transform_is_instance(
+        self, node: parse_tree.IsInstance
+    ) -> Optional["TypeAnnotationUnion"]:
+        value_type = self.transform(node.value)
+
+        if value_type is None:
+            return None
+
+        # NOTE (mristin):
+        # We refuse the optional values since ``isinstance`` on ``None`` would
+        # panic or be undefined behavior in some implementation targets. Please
+        # check for non-nullness first, and only then check the class.
+        if isinstance(value_type, OptionalTypeAnnotation):
+            self.errors.append(
+                Error(
+                    node.value.original_node,
+                    f"Expected the value to be a non-None for ``isinstance``, "
+                    f"but got: {value_type}. Please check for ``is not None`` first.",
+                )
+            )
+            return None
+
+        if not (
+            isinstance(value_type, OurTypeAnnotation)
+            and isinstance(
+                value_type.our_type,
+                (_types.AbstractClass, _types.ConcreteClass, _types.NamedUnion),
+            )
+        ):
+            self.errors.append(
+                Error(
+                    node.value.original_node,
+                    f"Expected the value to be an instance of a class or "
+                    f"of a named union for ``isinstance``, but got: {value_type}",
+                )
+            )
+            return None
+
+        value_our_type = value_type.our_type
+
+        success = True
+
+        for cls_name in node.classes:
+            cls = self._environment.find_our_type(cls_name.identifier)
+
+            if cls is None:
+                self.errors.append(
+                    Error(
+                        cls_name.original_node,
+                        f"The class {cls_name.identifier!r} given to ``isinstance`` "
+                        f"could not be found",
+                    )
+                )
+                success = False
+                continue
+
+            if not isinstance(cls, _types.ClassUnionAsTuple):
+                self.errors.append(
+                    Error(
+                        cls_name.original_node,
+                        f"Expected only classes in ``isinstance``, "
+                        f"but got {cls_name.identifier!r}: {cls}",
+                    )
+                )
+                success = False
+                continue
+
+            if isinstance(value_our_type, _types.NamedUnion):
+                if not any(cls.is_subclass_of(root) for root in value_our_type.roots):
+                    roots_joined = ", ".join(root.name for root in value_our_type.roots)
+
+                    self.errors.append(
+                        Error(
+                            cls_name.original_node,
+                            f"Expected the class {cls.name!r} "
+                            f"to be a root of the named union "
+                            f"{value_our_type.name!r} of the value "
+                            f"in ``isinstance``, or a descendant of a root, "
+                            f"but it is not. The roots are: {roots_joined}",
+                        )
+                    )
+                    success = False
+
+            elif isinstance(value_our_type, _types.ClassUnionAsTuple):
+                if _types.runtime_id(cls) not in value_our_type.descendant_id_set:
+                    is_ancestor_or_same = (
+                        cls is value_our_type
+                        or _types.runtime_id(value_our_type) in cls.descendant_id_set
+                    )
+
+                    if is_ancestor_or_same:
+                        reason = "so the check always holds"
+                    else:
+                        reason = "so the check never holds"
+
+                    self.errors.append(
+                        Error(
+                            cls_name.original_node,
+                            f"Expected the class {cls.name!r} to be a strict "
+                            f"descendant of the class {value_our_type.name!r} "
+                            f"of the value in ``isinstance``, but it is not, "
+                            f"{reason}",
+                        )
+                    )
+                    success = False
+
+            else:
+                assert_never(value_our_type)
 
         if not success:
             return None
@@ -2192,6 +2441,17 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                         )
                     )
                     # fmt: on
+
+                # NOTE (mristin):
+                # Analogous to ``x is None or ...``, the remainder of
+                # the disjunction in ``not isinstance(x, C) or ...`` is evaluated only
+                # if ``x`` is an instance of ``C``.
+                if (
+                    success
+                    and isinstance(value_node, parse_tree.Not)
+                    and isinstance(value_node.operand, parse_tree.IsInstance)
+                ):
+                    self._assume_narrowing(value_node.operand, exit_stack)
 
         if not success:
             return None
@@ -2692,7 +2952,13 @@ def populate_base_environment(symbol_table: _types.SymbolTable) -> Environment:
                 enumeration=our_type
             )
 
-    return ImmutableEnvironment(mapping=mapping, parent=None)
+    return ImmutableEnvironment(
+        mapping=mapping,
+        parent=None,
+        our_types_by_name={
+            our_type.name: our_type for our_type in symbol_table.our_types
+        },
+    )
 
 
 class InferenceOfFunction:
@@ -2705,14 +2971,19 @@ class InferenceOfFunction:
     #: Map of body nodes to types
     type_map: Final[Mapping[parse_tree.Node, "TypeAnnotationUnion"]]
 
+    #: Map of body nodes narrowed by ``isinstance`` to their down-casts
+    downcast_map: Final[Mapping[parse_tree.Node, Downcast]]
+
     def __init__(
         self,
         environment_with_args: Environment,
         type_map: Mapping[parse_tree.Node, "TypeAnnotationUnion"],
+        downcast_map: Mapping[parse_tree.Node, Downcast],
     ) -> None:
         """Initialize with the given values."""
         self.environment_with_args = environment_with_args
         self.type_map = type_map
+        self.downcast_map = downcast_map
 
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -2750,16 +3021,37 @@ def infer_for_verification(
 
     return (
         InferenceOfFunction(
-            environment_with_args=environment, type_map=type_inferrer.type_map
+            environment_with_args=environment,
+            type_map=type_inferrer.type_map,
+            downcast_map=type_inferrer.downcast_map,
         ),
         None,
     )
 
 
+class InferenceOfInvariant:
+    """Represent the result of type inference on the body of an invariant."""
+
+    #: Map of body nodes to types
+    type_map: Final[Mapping[parse_tree.Node, "TypeAnnotationUnion"]]
+
+    #: Map of body nodes narrowed by ``isinstance`` to their down-casts
+    downcast_map: Final[Mapping[parse_tree.Node, Downcast]]
+
+    def __init__(
+        self,
+        type_map: Mapping[parse_tree.Node, "TypeAnnotationUnion"],
+        downcast_map: Mapping[parse_tree.Node, Downcast],
+    ) -> None:
+        """Initialize with the given values."""
+        self.type_map = type_map
+        self.downcast_map = downcast_map
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def infer_for_invariant(
     invariant: _types.Invariant, environment: Environment
-) -> Tuple[Optional[Mapping[parse_tree.Node, "TypeAnnotationUnion"]], Optional[Error]]:
+) -> Tuple[Optional[InferenceOfInvariant], Optional[Error]]:
     """Infer the types of the nodes corresponding to the body of an invariant."""
     canonicalizer = _Canonicalizer()
     _ = canonicalizer.transform(invariant.body)
@@ -2778,7 +3070,13 @@ def infer_for_invariant(
             type_inferrer.errors,
         )
 
-    return type_inferrer.type_map, None
+    return (
+        InferenceOfInvariant(
+            type_map=type_inferrer.type_map,
+            downcast_map=type_inferrer.downcast_map,
+        ),
+        None,
+    )
 
 
 assert_union_of_descendants_exhaustive(

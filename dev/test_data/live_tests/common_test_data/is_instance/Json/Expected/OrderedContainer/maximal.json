@@ -1,0 +1,23 @@
+{
+  "identifier": "root",
+  "children": [
+    {
+      "identifier": "leaf",
+      "text": "hello",
+      "modelType": "Leaf"
+    },
+    {
+      "identifier": "unordered",
+      "children": [
+        {
+          "identifier": "leaf",
+          "text": "hello",
+          "modelType": "Leaf"
+        }
+      ],
+      "modelType": "UnorderedContainer"
+    }
+  ],
+  "isSorted": true,
+  "modelType": "OrderedContainer"
+}

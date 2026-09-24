@@ -898,6 +898,68 @@ bool IsSomething(
 
 // endregion Is-a functions
 
+// region Underlying instances of named unions
+
+std::shared_ptr<IClass> UnderlyingOfStructuralUnion(
+  const StructuralUnion& that
+) {
+  switch (that.index()) {
+    case 0:
+      return common::get<0>(that);
+    case 1:
+      return common::get<1>(that);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+std::shared_ptr<IClass> UnderlyingOfMixedUnion(
+  const MixedUnion& that
+) {
+  switch (that.index()) {
+    case 0:
+      return common::get<0>(that);
+    case 1:
+      return common::get<1>(that);
+    case 2:
+      return common::get<2>(that);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+std::shared_ptr<IClass> UnderlyingOfModelTypedUnion(
+  const ModelTypedUnion& that
+) {
+  switch (that.index()) {
+    case 0:
+      return common::get<0>(that);
+    case 1:
+      return common::get<1>(that);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+std::shared_ptr<IClass> UnderlyingOfOverlappingUnion(
+  const OverlappingUnion& that
+) {
+  switch (that.index()) {
+    case 0:
+      return common::get<0>(that);
+    case 1:
+      return common::get<1>(that);
+    case 2:
+      return common::get<2>(that);
+    case 3:
+      return common::get<3>(that);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+// endregion Underlying instances of named unions
+
 }  // namespace types
 }  // namespace dummy
 

@@ -52,16 +52,82 @@ class Transpiler(
             parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
         ],
         environment: intermediate_type_inference.Environment,
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
     ) -> None:
         """Initialize with the given values."""
         self.type_map = type_map
         self._environment = intermediate_type_inference.MutableEnvironment(
             parent=environment
         )
+        self._downcast_map = downcast_map
 
         # Keep track whenever we define a variable name, so that we can know how to
         # generate the reference in the C# code.
         self._variable_name_set = set()  # type: Set[Identifier]
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform(
+        self, node: parse_tree.Node
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        code, error = super().transform(node)
+        if error is not None:
+            return None, error
+
+        assert code is not None
+
+        downcast = self._downcast_map.get(node, None)
+        if downcast is None:
+            return code, None
+
+        # NOTE (mristin):
+        # The type inference narrowed the value down with an ``isinstance`` guard,
+        # but the C# compiler does not know about it, so we have to down-cast
+        # explicitly. We always parenthesize the cast so that the callers need not
+        # care about the operator precedence.
+        return Transpiler._downcast(code=code, downcast=downcast), None
+
+    @staticmethod
+    def _underlying_if_named_union(
+        code: Stripped,
+        type_annotation: intermediate_type_inference.TypeAnnotationUnion,
+    ) -> Stripped:
+        """
+        Access the underlying instance of ``code`` if it is a named union.
+
+        A named union is represented as a wrapper class in C#, so the run-time
+        type checks and the down-casts need to operate on its underlying instance.
+        """
+        type_anno = intermediate_type_inference.beneath_optional(type_annotation)
+        if isinstance(
+            type_anno, intermediate_type_inference.OurTypeAnnotation
+        ) and isinstance(type_anno.our_type, intermediate.NamedUnion):
+            return Stripped(f"{code}.Underlying")
+
+        return code
+
+    @staticmethod
+    def _downcast(
+        code: Stripped, downcast: intermediate_type_inference.Downcast
+    ) -> Stripped:
+        """Down-cast the value given as ``code`` according to ``downcast``."""
+        assert isinstance(
+            downcast.target.our_type,
+            (intermediate.AbstractClass, intermediate.ConcreteClass),
+        ), (
+            f"Expected the target of a down-cast to be a class, "
+            f"but got: {downcast.target}"
+        )
+
+        value = Transpiler._underlying_if_named_union(
+            code=code, type_annotation=downcast.source
+        )
+
+        interface_name = csharp_naming.interface_name(downcast.target.our_type.name)
+
+        # NOTE (mristin):
+        # We assume that the types are referred to with the ``Aas.`` prefix in
+        # the generated code, as is the case with the verification module.
+        return Stripped(f"((Aas.{interface_name}){value})")
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_member(
@@ -357,6 +423,57 @@ class Transpiler(
             )
 
         return Stripped(f"{container}.Contains({member})"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_is_instance(
+        self, node: parse_tree.IsInstance
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        value_type: intermediate_type_inference.TypeAnnotationUnion
+
+        downcast = self._downcast_map.get(node.value, None)
+        if downcast is not None:
+            # NOTE (mristin):
+            # The value has already been narrowed down by an earlier guard. We skip
+            # the down-cast of the value here, since it would change nothing at
+            # the run-time, and only make the check harder to read.
+            value, error = super().transform(node.value)
+            value_type = downcast.source
+        else:
+            value, error = self.transform(node.value)
+            value_type = self.type_map[node.value]
+
+        if error is not None:
+            return None, error
+
+        assert value is not None
+
+        no_parentheses_types = (
+            parse_tree.Member,
+            parse_tree.FunctionCall,
+            parse_tree.MethodCall,
+            parse_tree.Name,
+            parse_tree.Index,
+        )
+        if not isinstance(node.value, no_parentheses_types):
+            value = Stripped(f"({value})")
+
+        value = Transpiler._underlying_if_named_union(
+            code=value, type_annotation=value_type
+        )
+
+        # NOTE (mristin):
+        # We assume that the types are referred to with the ``Aas.`` prefix in
+        # the generated code, as is the case with the verification module.
+        checks = [
+            f"{value} is Aas.{csharp_naming.interface_name(cls.identifier)}"
+            for cls in node.classes
+        ]
+
+        if len(checks) == 1:
+            return Stripped(checks[0]), None
+
+        checks_joined = " || ".join(checks)
+        return Stripped(f"({checks_joined})"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_implication(
@@ -720,6 +837,7 @@ class Transpiler(
                 parse_tree.Comparison,
                 parse_tree.Name,
                 parse_tree.IsIn,
+                parse_tree.IsInstance,
                 parse_tree.Index,
             )
 
@@ -775,6 +893,7 @@ class Transpiler(
                 parse_tree.Comparison,
                 parse_tree.Name,
                 parse_tree.IsIn,
+                parse_tree.IsInstance,
                 parse_tree.Index,
             )
 

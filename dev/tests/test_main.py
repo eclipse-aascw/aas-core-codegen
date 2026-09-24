@@ -295,6 +295,11 @@ class Test_cpp(_TestCase):
             case_name="infallible_dispatch_among_fallible_classes",
         )
 
+    def test_expected_is_instance(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CPP, case_name="is_instance"
+        )
+
     def test_expected_json_types(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.CPP, case_name="json_types"
@@ -369,6 +374,20 @@ class Test_cpp(_TestCase):
             case_name="conflict_between_constructor_arguments",
         )
 
+    def test_unexpected_conflict_between_is_function_and_class(self) -> None:
+        self._run_unexpected_test(
+            target=aas_core_codegen.main.Target.CPP,
+            case_name="conflict_between_is_function_and_class",
+        )
+
+    def test_unexpected_conflict_between_underlying_of_function_and_class(
+        self,
+    ) -> None:
+        self._run_unexpected_test(
+            target=aas_core_codegen.main.Target.CPP,
+            case_name="conflict_between_underlying_of_function_and_class",
+        )
+
 
 class Test_csharp(_TestCase):
     def test_expected_aas_core_meta_v3(self) -> None:
@@ -412,6 +431,11 @@ class Test_csharp(_TestCase):
         self._run_expected_test(
             target=aas_core_codegen.main.Target.CSHARP,
             case_name="implementation_specific",
+        )
+
+    def test_expected_is_instance(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CSHARP, case_name="is_instance"
         )
 
     def test_expected_json_types(self) -> None:
@@ -521,6 +545,11 @@ class Test_golang(_TestCase):
         self._run_expected_test(
             target=aas_core_codegen.main.Target.GOLANG,
             case_name="implementation_specific",
+        )
+
+    def test_expected_is_instance(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.GOLANG, case_name="is_instance"
         )
 
     def test_expected_json_types(self) -> None:
@@ -635,6 +664,11 @@ class Test_java(_TestCase):
         self._run_expected_test(
             target=aas_core_codegen.main.Target.JAVA,
             case_name="implementation_specific",
+        )
+
+    def test_expected_is_instance(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.JAVA, case_name="is_instance"
         )
 
     def test_expected_json_types(self) -> None:
@@ -881,6 +915,11 @@ class Test_python(_TestCase):
             case_name="implementation_specific",
         )
 
+    def test_expected_is_instance(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.PYTHON, case_name="is_instance"
+        )
+
     def test_expected_json_types(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.PYTHON, case_name="json_types"
@@ -996,6 +1035,11 @@ class Test_typescript(_TestCase):
         self._run_expected_test(
             target=aas_core_codegen.main.Target.TYPESCRIPT,
             case_name="implementation_specific",
+        )
+
+    def test_expected_is_instance(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.TYPESCRIPT, case_name="is_instance"
         )
 
     def test_expected_json_types(self) -> None:

@@ -1,0 +1,1 @@
+Expected a class name in the second argument to ``isinstance``, but got: Attribute(value=Name(id='self', ctx=Load()), attr='Another_child', ctx=Load())

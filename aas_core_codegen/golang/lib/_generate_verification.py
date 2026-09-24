@@ -428,6 +428,7 @@ class _TranspilableVerificationTranspiler(golang_transpilation.Transpiler):
             parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
         ],
         is_pointer_map: Mapping[parse_tree.Node, bool],
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
         environment: intermediate_type_inference.Environment,
         symbol_table: intermediate.SymbolTable,
         verification: intermediate.TranspilableVerification,
@@ -437,7 +438,9 @@ class _TranspilableVerificationTranspiler(golang_transpilation.Transpiler):
             self,
             type_map=type_map,
             is_pointer_map=is_pointer_map,
+            downcast_map=downcast_map,
             environment=environment,
+            types_package=Identifier("aastypes"),
         )
 
         self._symbol_table = symbol_table
@@ -524,6 +527,7 @@ def _transpile_transpilable_verification(
     transpiler = _TranspilableVerificationTranspiler(
         type_map=type_inference.type_map,
         is_pointer_map=pointer_inferrer.is_pointer_map,
+        downcast_map=type_inference.downcast_map,
         environment=type_inference.environment_with_args,
         symbol_table=symbol_table,
         verification=verification,
@@ -617,6 +621,7 @@ class _InvariantTranspiler(golang_transpilation.Transpiler):
             parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
         ],
         is_pointer_map: Mapping[parse_tree.Node, bool],
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
         environment: intermediate_type_inference.Environment,
         symbol_table: intermediate.SymbolTable,
     ) -> None:
@@ -625,6 +630,7 @@ class _InvariantTranspiler(golang_transpilation.Transpiler):
             self,
             type_map=type_map,
             is_pointer_map=is_pointer_map,
+            downcast_map=downcast_map,
             environment=environment,
             types_package=Identifier("aastypes"),
         )
@@ -683,7 +689,7 @@ def _transpile_invariant(
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Translate the invariant from the meta-model into Golang code."""
     # fmt: off
-    type_map, inference_error = (
+    inference, inference_error = (
         intermediate_type_inference.infer_for_invariant(
             invariant=invariant,
             environment=environment
@@ -694,7 +700,8 @@ def _transpile_invariant(
     if inference_error is not None:
         return None, inference_error
 
-    assert type_map is not None
+    assert inference is not None
+    type_map = inference.type_map
 
     pointer_inferrer = golang_pointering.Inferrer(
         environment=environment, type_map=type_map
@@ -712,6 +719,7 @@ def _transpile_invariant(
     transpiler = _InvariantTranspiler(
         type_map=type_map,
         is_pointer_map=pointer_inferrer.is_pointer_map,
+        downcast_map=inference.downcast_map,
         environment=environment,
         symbol_table=symbol_table,
     )
@@ -737,6 +745,7 @@ if !(
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
         )
 
         if isinstance(invariant.parsed.body, no_parenthesis_type_in_this_context):

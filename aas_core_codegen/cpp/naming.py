@@ -304,6 +304,36 @@ def function_name(identifier: Identifier) -> Identifier:
     return naming.capitalized_camel_case(identifier)
 
 
+def is_function_name(cls_identifier: Identifier) -> Identifier:
+    """
+    Generate the name of the function to check whether an instance is of a class.
+
+    >>> is_function_name(Identifier("something"))
+    'IsSomething'
+
+    >>> is_function_name(Identifier("URL_to_something"))
+    'IsUrlToSomething'
+    """
+    return function_name(Identifier(f"is_{cls_identifier}"))
+
+
+def underlying_of_function_name(union_identifier: Identifier) -> Identifier:
+    """
+    Generate the name of the function to extract the instance held in a named union.
+
+    We generate one such function per named union, instead of overloading a single
+    function, since two named unions might have exactly the same alternatives, and
+    thus alias the same ``common::variant``.
+
+    >>> underlying_of_function_name(Identifier("something"))
+    'UnderlyingOfSomething'
+
+    >>> underlying_of_function_name(Identifier("URL_to_something"))
+    'UnderlyingOfUrlToSomething'
+    """
+    return function_name(Identifier(f"underlying_of_{union_identifier}"))
+
+
 def argument_name(identifier: Identifier) -> Identifier:
     """
     Generate a C++ name for an argument based on its meta-model ``identifier``.

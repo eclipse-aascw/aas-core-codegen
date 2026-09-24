@@ -1,0 +1,1 @@
+Keyword arguments are not supported in a call to ``isinstance``

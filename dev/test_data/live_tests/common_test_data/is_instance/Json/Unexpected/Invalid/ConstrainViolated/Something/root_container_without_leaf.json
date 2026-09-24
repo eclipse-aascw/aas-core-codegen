@@ -1,0 +1,37 @@
+{
+  "root": {
+    "identifier": "root",
+    "children": [
+      {
+        "identifier": "unordered",
+        "children": [
+          {
+            "identifier": "empty",
+            "children": [],
+            "modelType": "UnorderedContainer"
+          }
+        ],
+        "modelType": "UnorderedContainer"
+      }
+    ],
+    "isSorted": true,
+    "modelType": "OrderedContainer"
+  },
+  "value": {
+    "attribute": {
+      "kind": "name",
+      "modelType": "GlobalAttribute"
+    },
+    "modelType": "AttributeOperand"
+  },
+  "values": [
+    {
+      "text": "root",
+      "modelType": "StringLiteral"
+    },
+    {
+      "number": 1.5,
+      "modelType": "NumberLiteral"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+Expected at least one class in the tuple given as the second argument to ``isinstance``, but got an empty tuple

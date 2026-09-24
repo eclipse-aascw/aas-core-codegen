@@ -877,6 +877,7 @@ def _generate_dispatch_parse_element(
     map_name: Identifier,
     expected_name: Identifier,
     function_name: Identifier,
+    may_be_unused: bool,
 ) -> Stripped:
     """
     Generate a function to dispatch-parse an element into ``expected_name``.
@@ -888,8 +889,17 @@ def _generate_dispatch_parse_element(
     ``expected_name``. This lets us reject an XML element of an unexpected type
     based on its local name alone, without wastefully parsing its full (possibly
     deeply nested) content only to discover the type mismatch afterwards.
+
+    If ``may_be_unused`` is set, we instruct the linter not to complain if
+    the function is never called.
     """
     expected_name_literal = typescript_common.string_literal(expected_name)
+
+    maybe_disable_unused = (
+        "// eslint-disable-next-line @typescript-eslint/no-unused-vars\n"
+        if may_be_unused
+        else ""
+    )
 
     call = Stripped(
         f"""\
@@ -910,7 +920,7 @@ dispatchParseElement(
  * @param cursor - to read from
  * @returns the parsed instance, or an error
  */
-function {function_name}(
+{maybe_disable_unused}function {function_name}(
 {I}cursor: XmlCursor
 ): AasCommon.Either<AasTypes.{expected_name}, DeserializationError> {{
 {I}return {indent_but_first_line(call, I)};
@@ -1949,6 +1959,7 @@ function duplicatePropertyError(localName: string): DeserializationError {{
                 map_name=map_name,
                 expected_name=expected_name,
                 function_name=_dispatch_parse_element_function_name(interface),
+                may_be_unused=False,
             )
         )
         blocks.append(_generate_from_xml_string_for_interface(interface=interface))
@@ -1958,6 +1969,10 @@ function duplicatePropertyError(localName: string): DeserializationError {{
     # own, separate from the loop above, since a named union is never
     # a member of ``symbol_table.classes``.
     for named_union in symbol_table.named_unions:
+        # NOTE (mristin):
+        # Unlike an interface, a named union has no ``from...XmlString`` of its
+        # own, so its dispatch function is unused if no property refers to it,
+        # *e.g.*, when the named union is only nested in another named union.
         union_name = typescript_naming.union_name(named_union.name)
 
         map_name = _dispatch_map_name(named_union.name)
@@ -1978,6 +1993,7 @@ function duplicatePropertyError(localName: string): DeserializationError {{
                         named_union=named_union
                     )
                 ),
+                may_be_unused=True,
             )
         )
 

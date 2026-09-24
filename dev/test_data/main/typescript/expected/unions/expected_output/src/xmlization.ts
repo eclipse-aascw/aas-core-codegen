@@ -1858,6 +1858,7 @@ const PARSERS_OF_STRUCTURAL_UNION = new Map<
  * @param cursor - to read from
  * @returns the parsed instance, or an error
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function dispatchParseStructuralUnionElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.StructuralUnion, DeserializationError> {
@@ -1887,6 +1888,7 @@ const PARSERS_OF_MIXED_UNION = new Map<
  * @param cursor - to read from
  * @returns the parsed instance, or an error
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function dispatchParseMixedUnionElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.MixedUnion, DeserializationError> {
@@ -1913,6 +1915,7 @@ const PARSERS_OF_MODEL_TYPED_UNION = new Map<
  * @param cursor - to read from
  * @returns the parsed instance, or an error
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function dispatchParseModelTypedUnionElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ModelTypedUnion, DeserializationError> {
@@ -1941,6 +1944,7 @@ const PARSERS_OF_OVERLAPPING_UNION = new Map<
  * @param cursor - to read from
  * @returns the parsed instance, or an error
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function dispatchParseOverlappingUnionElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.OverlappingUnion, DeserializationError> {

@@ -2701,11 +2701,11 @@ public class Verification {
         !(that.getSpecificAssetIds().isPresent())
         || (
             that.getSpecificAssetIds().get().stream().allMatch(
-                specificAssetId -> specificAssetId.getName() != "globalAssetId"
+                specificAssetId -> !Objects.equals(specificAssetId.getName(), "globalAssetId")
                     || (
                         (that.getGlobalAssetId().isPresent())
-                        && specificAssetId.getName() == "globalAssetId"
-                        && specificAssetId.getValue() == that.getGlobalAssetId().get()
+                        && Objects.equals(specificAssetId.getName(), "globalAssetId")
+                        && Objects.equals(specificAssetId.getValue(), that.getGlobalAssetId().get())
                     ))
         ))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -8265,7 +8265,7 @@ public class Verification {
       if (!(
         !(
             (that.getCategory().isPresent())
-            && that.getCategory().get() == "QUALIFIER_TYPE"
+            && Objects.equals(that.getCategory().get(), "QUALIFIER_TYPE")
             && (that.getEmbeddedDataSpecifications().isPresent())
         )
         || dataSpecificationIec61360sHaveDataType(that.getEmbeddedDataSpecifications().orElse(null)))) {
@@ -8281,7 +8281,7 @@ public class Verification {
       if (!(
         !(
             (that.getCategory().isPresent())
-            && that.getCategory().get() == "DOCUMENT"
+            && Objects.equals(that.getCategory().get(), "DOCUMENT")
             && (that.getEmbeddedDataSpecifications().isPresent())
         )
         || dataSpecificationIec61360sForDocumentHaveAppropriateDataType(that.getEmbeddedDataSpecifications().orElse(null)))) {
@@ -8297,7 +8297,7 @@ public class Verification {
       if (!(
         !(
             (that.getCategory().isPresent())
-            && that.getCategory().get() == "REFERENCE"
+            && Objects.equals(that.getCategory().get(), "REFERENCE")
             && (that.getEmbeddedDataSpecifications().isPresent())
         )
         || dataSpecificationIec61360sForReferenceHaveAppropriateDataType(that.getEmbeddedDataSpecifications().orElse(null)))) {
@@ -8314,8 +8314,8 @@ public class Verification {
         !(
             (that.getCategory().isPresent())
             && (
-                that.getCategory().get() == "PROPERTY"
-                || that.getCategory().get() == "VALUE"
+                Objects.equals(that.getCategory().get(), "PROPERTY")
+                || Objects.equals(that.getCategory().get(), "VALUE")
             )
             && (that.getEmbeddedDataSpecifications().isPresent())
         )
