@@ -781,11 +781,11 @@ namespace dummy.Tests
                 Assert.IsNotNull(
                     exception,
                     "Expected the serialization to fail at " +
-                        "serialNumber" +
+                        "SerialNumber" +
                         ", but it succeeded");
 
                 Assert.AreEqual(
-                    "serialNumber",
+                    "SerialNumber",
                     exception!.Path);
             }
         }  // public void TestAnotherItemSerialNumberSerializationOutOfRange

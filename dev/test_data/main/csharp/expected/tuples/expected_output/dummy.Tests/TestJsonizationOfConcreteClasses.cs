@@ -621,11 +621,11 @@ namespace dummy.Tests
                 Assert.IsNotNull(
                     exception,
                     "Expected the serialization to fail at " +
-                        "serialNumber" +
+                        "SerialNumber" +
                         ", but it succeeded");
 
                 Assert.AreEqual(
-                    "serialNumber",
+                    "SerialNumber",
                     exception!.Path);
             }
         }  // public void TestAnotherItemSerialNumberSerializationOutOfRange
@@ -658,11 +658,11 @@ namespace dummy.Tests
                 Assert.IsNotNull(
                     exception,
                     "Expected the serialization to fail at " +
-                        "pair[1]" +
+                        "Pair[1]" +
                         ", but it succeeded");
 
                 Assert.AreEqual(
-                    "pair[1]",
+                    "Pair[1]",
                     exception!.Path);
             }
         }  // public void TestSomethingPairSerializationOutOfRange
@@ -699,11 +699,11 @@ namespace dummy.Tests
                 Assert.IsNotNull(
                     exception,
                     "Expected the serialization to fail at " +
-                        "tricky[0]" +
+                        "Tricky[0]" +
                         ", but it succeeded");
 
                 Assert.AreEqual(
-                    "tricky[0]",
+                    "Tricky[0]",
                     exception!.Path);
             }
         }  // public void TestSomethingTrickySerializationOutOfRange
