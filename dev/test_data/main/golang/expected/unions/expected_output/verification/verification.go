@@ -591,6 +591,32 @@ func VerifySomething(
 		}
 	}
 
+	if that.OptionalListOverlappingProperty() != nil {
+		for i, v := range that.OptionalListOverlappingProperty() {
+			abort = Verify(
+				v.Underlying(),
+				func(err *VerificationError) bool {
+					err.Path.PrependIndex(
+						&aasreporting.IndexSegment{
+							Index: i,
+						},
+					)
+
+					err.Path.PrependName(
+						&aasreporting.NameSegment{
+							Name: "OptionalListOverlappingProperty",
+						},
+					)
+
+					return onError(err)
+				},
+			)
+			if abort {
+				return
+			}
+		}
+	}
+
 	return
 }
 

@@ -1863,6 +1863,71 @@ function modelTypedUnionFromJsonable(
 }
 
 /**
+ * Parse `jsonable` as an instance
+ * of {@link types!OverlappingUnion}.
+ *
+ * @param jsonable - to be parsed
+ * @returns parsed instance, or error if `jsonable` is invalid
+ */
+function overlappingUnionFromJsonable(
+  jsonable: JsonValue
+): AasCommon.Either<
+  AasTypes.OverlappingUnion,
+  DeserializationError
+> {
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.OverlappingUnion,
+      DeserializationError
+    >(
+      null,
+      objectError
+    );
+  }
+  const jsonObject = <JsonObject>jsonable;
+
+  if (jsonObject["modelType"] !== undefined) {
+    const modelTypeOrError = extractModelType(jsonObject);
+    if (modelTypeOrError.error !== null) {
+      return new AasCommon.Either<
+        AasTypes.OverlappingUnion,
+        DeserializationError
+      >(
+        null,
+        modelTypeOrError.error
+      );
+    }
+
+    const modelType = modelTypeOrError.mustValue();
+
+    switch (modelType) {
+      case "ModelTypedFirst":
+        return parsePropertiesOfModelTypedFirst(jsonObject);
+
+      case "ModelTypedSecond":
+        return parsePropertiesOfModelTypedSecond(jsonObject);
+
+      case "MixedConcreteWithDescendantsChild":
+        return parsePropertiesOfMixedConcreteWithDescendantsChild(jsonObject);
+
+      case "MixedConcreteWithDescendants":
+        return parsePropertiesOfMixedConcreteWithDescendants(jsonObject);
+
+      default:
+        return newDeserializationError<AasTypes.OverlappingUnion>(
+          `Unexpected model type for OverlappingUnion: ${modelType}`
+        );
+    }
+  }
+
+  return newDeserializationError<AasTypes.OverlappingUnion>(
+    "Could not determine the concrete type of OverlappingUnion for the " +
+      "given JSON object"
+  );
+}
+
+/**
  * Parse the properties of an instance
  * of {@link types!Something} from `jsonObject`.
  *
@@ -1886,6 +1951,7 @@ function parsePropertiesOfSomething(
   let theOptionalStructuralProperty: AasTypes.StructuralUnion | null = null;
   let theOptionalMixedProperty: AasTypes.MixedUnion | null = null;
   let theOptionalModelTypedProperty: AasTypes.ModelTypedUnion | null = null;
+  let theOptionalListOverlappingProperty: Array<AasTypes.OverlappingUnion> | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
@@ -1988,6 +2054,16 @@ function parsePropertiesOfSomething(
         break;
       }
 
+      case "optionalListOverlappingProperty": {
+        const parsed = parseArray(
+          jsonableValue,
+          overlappingUnionFromJsonable
+        );
+        propertyError = parsed.error;
+        theOptionalListOverlappingProperty = parsed.value;
+        break;
+      }
+
       // NOTE (mristin):
       // Since we conflate here a JavaScript object with a JSON object, we ignore
       // properties which we do not know how to de-serialize and assume they are
@@ -2081,7 +2157,8 @@ function parsePropertiesOfSomething(
       theTupleProperty,
       theOptionalStructuralProperty,
       theOptionalMixedProperty,
-      theOptionalModelTypedProperty
+      theOptionalModelTypedProperty,
+      theOptionalListOverlappingProperty
     ),
     null
   );
@@ -2485,6 +2562,12 @@ function serializeSomething(
       jsonable["optionalModelTypedProperty"] =
         serializeClass(that.optionalModelTypedProperty);
     }
+
+    if (that.optionalListOverlappingProperty !== null) {
+      prop = "optionalListOverlappingProperty";
+      jsonable["optionalListOverlappingProperty"] =
+        serialize_ListOf_OverlappingUnion(that.optionalListOverlappingProperty);
+    }
   } catch (error) {
     if (error instanceof SerializationError) {
       error.prependProperty(prop);
@@ -2598,6 +2681,30 @@ function serialize_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
   } catch (error) {
     if (error instanceof SerializationError) {
       error.prependIndex(2);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_OverlappingUnion(
+  that: ReadonlyArray<AasTypes.OverlappingUnion>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeClass(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
     }
     throw error;
   }

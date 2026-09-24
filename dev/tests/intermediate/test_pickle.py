@@ -1038,6 +1038,10 @@ __xml_namespace__ = "https://dummy.com"
             ["Some_class", "Another_class"],
             [implementer.name for implementer in unpickled.implementers],
         )
+        self.assertListEqual(
+            ["Some_class", "Another_class"],
+            [root.name for root in unpickled.roots],
+        )
 
     def test_numeric_place(self) -> None:
         source = """\

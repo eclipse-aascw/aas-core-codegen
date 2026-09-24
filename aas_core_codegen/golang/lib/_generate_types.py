@@ -1560,11 +1560,16 @@ def _generate_named_union_struct(named_union: intermediate.NamedUnion) -> Stripp
 
     Unlike a class, a named union is a closed set of alternatives, so we do
     not want to allow custom enhancements or wrappings around it. Hence we
-    represent it as a plain struct storing exactly one of its flattened
-    implementers, tagged by a private discriminant. This keeps every
-    alternative in its own, separately typed field, so that a future
+    represent it as a plain struct storing exactly one of its roots, tagged by
+    a private discriminant, so that the struct mirrors the meta-model. This keeps
+    every alternative in its own, separately typed field, so that a future
     primitive alternative (which can not implement `IClass`) would still fit
     the same shape.
+
+    Go interfaces are structural, so a type switch on the interfaces can not tell
+    the roots apart (*e.g.*, an abstract class without properties is satisfied by
+    any :py:class:`IClass`). Hence we dispatch on the model type of each implementer
+    instead, and wrap it in its most specific root.
     """
     name = golang_naming.union_name(named_union.name)
     receiver = Identifier(name[0].lower())
@@ -1574,8 +1579,7 @@ def _generate_named_union_struct(named_union: intermediate.NamedUnion) -> Stripp
     )
 
     interface_names = [
-        golang_naming.interface_name(implementer.name)
-        for implementer in named_union.implementers
+        golang_naming.interface_name(root.name) for root in named_union.roots
     ]
 
     crefs = [f"[{interface_name}]" for interface_name in interface_names]
@@ -1591,15 +1595,15 @@ def _generate_named_union_struct(named_union: intermediate.NamedUnion) -> Stripp
     from_underlying_cases = []  # type: List[Stripped]
 
     field_names = [
-        golang_naming.private_property_name(Identifier(f"as_{implementer.name}"))
-        for implementer in named_union.implementers
+        golang_naming.private_property_name(Identifier(f"as_{root.name}"))
+        for root in named_union.roots
     ]
 
-    for implementer, interface_name, field_name in zip(
-        named_union.implementers, interface_names, field_names
+    for root, interface_name, field_name in zip(
+        named_union.roots, interface_names, field_names
     ):
         discriminant_case = golang_naming.private_constant_name(
-            Identifier(f"{named_union.name}_value_kind_{implementer.name}")
+            Identifier(f"{named_union.name}_value_kind_{root.name}")
         )
 
         if len(discriminant_cases) == 0:
@@ -1620,7 +1624,7 @@ case {discriminant_case}:
         )
 
         from_method_name = golang_naming.function_name(
-            Identifier(f"new_{named_union.name}_from_{implementer.name}")
+            Identifier(f"new_{named_union.name}_from_{root.name}")
         )
 
         from_methods.append(
@@ -1636,11 +1640,24 @@ func {from_method_name}(that {interface_name}) *{name} {{
             )
         )
 
+    for implementer in named_union.implementers:
+        root = named_union.most_specific_root_of(implementer)
+
+        model_type_literal = golang_naming.enum_literal_name(
+            enumeration_name=Identifier("Model_type"), literal_name=implementer.name
+        )
+
+        from_method_name = golang_naming.function_name(
+            Identifier(f"new_{named_union.name}_from_{root.name}")
+        )
+
         from_underlying_cases.append(
             Stripped(
                 f"""\
-case {interface_name}:
-{I}return {from_method_name}(casted)"""
+case {model_type_literal}:
+{I}return {from_method_name}(
+{II}that.({golang_naming.interface_name(root.name)}),
+{I})"""
             )
         )
 
@@ -1686,7 +1703,7 @@ func ({receiver} *{name}) Underlying() IClass {{
 
 // Wrap `that` as an instance of [{name}] based on its run-time type.
 func {from_underlying_name}(that IClass) *{name} {{
-{I}switch casted := that.(type) {{
+{I}switch that.ModelType() {{
 {I}{indent_but_first_line(from_underlying_cases_joined, I)}
 {I}default:
 {II}panic(

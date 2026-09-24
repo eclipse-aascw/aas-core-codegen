@@ -32,19 +32,20 @@ enum class Property : std::uint32_t {
   kListStructuralProperty = 2,
   kMixedProperty = 3,
   kModelTypedProperty = 4,
-  kOptionalMixedProperty = 5,
-  kOptionalModelTypedProperty = 6,
-  kOptionalStructuralProperty = 7,
-  kSomeBaseProperty = 8,
-  kSomeChildProperty = 9,
-  kSomeProperty = 10,
-  kStructuralProperty = 11,
-  kTupleProperty = 12,
-  kUniqueToAbstractDescendantOne = 13,
-  kUniqueToAbstractDescendantTwo = 14,
-  kUniqueToConcreteLeaf = 15,
-  kUniqueToFirst = 16,
-  kUniqueToSecond = 17
+  kOptionalListOverlappingProperty = 5,
+  kOptionalMixedProperty = 6,
+  kOptionalModelTypedProperty = 7,
+  kOptionalStructuralProperty = 8,
+  kSomeBaseProperty = 9,
+  kSomeChildProperty = 10,
+  kSomeProperty = 11,
+  kStructuralProperty = 12,
+  kTupleProperty = 13,
+  kUniqueToAbstractDescendantOne = 14,
+  kUniqueToAbstractDescendantTwo = 15,
+  kUniqueToConcreteLeaf = 16,
+  kUniqueToFirst = 17,
+  kUniqueToSecond = 18
 };
 
 std::wstring PropertyToWstring(

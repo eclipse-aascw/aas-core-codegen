@@ -309,6 +309,29 @@ func deepEqualSomething(
 		}
 	}
 
+	thatOptionalListOverlappingProperty := that.OptionalListOverlappingProperty()
+	otherOptionalListOverlappingProperty := other.OptionalListOverlappingProperty()
+	if
+		(thatOptionalListOverlappingProperty == nil && otherOptionalListOverlappingProperty != nil) ||
+		(thatOptionalListOverlappingProperty != nil && otherOptionalListOverlappingProperty == nil) {
+		return false
+	}
+	if thatOptionalListOverlappingProperty != nil {
+		if 
+			len(thatOptionalListOverlappingProperty) !=
+			len(otherOptionalListOverlappingProperty) {
+			return false
+		}
+		for i := range thatOptionalListOverlappingProperty {
+			if !DeepEqual(
+				thatOptionalListOverlappingProperty[i].Underlying(),
+				otherOptionalListOverlappingProperty[i].Underlying(),
+			) {
+				return false
+			}
+		}
+	}
+
 	return true
 }
 

@@ -15141,7 +15141,7 @@ nlohmann::json SerializeSubmodel(
  * \param that instance to be serialized
  * \return the JSON value
  */
-nlohmann::json SerializeRelationshipElement(
+nlohmann::json SerializeConcreteRelationshipElement(
   const types::IRelationshipElement& that
 );
 
@@ -15433,6 +15433,149 @@ nlohmann::json SerializeLangStringDefinitionTypeIec61360(
  */
 nlohmann::json SerializeDataSpecificationIec61360(
   const types::IDataSpecificationIec61360& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IHasSemantics to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeHasSemantics(
+  const types::IHasSemantics& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IHasExtensions to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeHasExtensions(
+  const types::IHasExtensions& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IReferable to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeReferable(
+  const types::IReferable& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IIdentifiable to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeIdentifiable(
+  const types::IIdentifiable& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IHasKind to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeHasKind(
+  const types::IHasKind& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IHasDataSpecification to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeHasDataSpecification(
+  const types::IHasDataSpecification& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IQualifiable to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeQualifiable(
+  const types::IQualifiable& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::ISubmodelElement to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeSubmodelElement(
+  const types::ISubmodelElement& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IRelationshipElement to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeRelationshipElement(
+  const types::IRelationshipElement& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IDataElement to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeDataElement(
+  const types::IDataElement& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IEventElement to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeEventElement(
+  const types::IEventElement& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IAbstractLangString to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeAbstractLangString(
+  const types::IAbstractLangString& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IDataSpecificationContent to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeDataSpecificationContent(
+  const types::IDataSpecificationContent& that
 );
 
 nlohmann::json SerializeExtension(
@@ -16042,7 +16185,7 @@ nlohmann::json SerializeSubmodel(
   if (maybe_submodel_elements.has_value()) {
     result["submodelElements"] = SerializeListOfInstancesWithInfallible(
       *maybe_submodel_elements,
-      SerializeIClass
+      SerializeSubmodelElement
     );
   }
 
@@ -16051,7 +16194,7 @@ nlohmann::json SerializeSubmodel(
   return result;
 }
 
-nlohmann::json SerializeRelationshipElement(
+nlohmann::json SerializeConcreteRelationshipElement(
   const types::IRelationshipElement& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -16343,7 +16486,7 @@ nlohmann::json SerializeSubmodelElementList(
   if (maybe_value.has_value()) {
     result["value"] = SerializeListOfInstancesWithInfallible(
       *maybe_value,
-      SerializeIClass
+      SerializeSubmodelElement
     );
   }
 
@@ -16480,7 +16623,7 @@ nlohmann::json SerializeSubmodelElementCollection(
   if (maybe_value.has_value()) {
     result["value"] = SerializeListOfInstancesWithInfallible(
       *maybe_value,
-      SerializeIClass
+      SerializeSubmodelElement
     );
   }
 
@@ -17473,7 +17616,7 @@ nlohmann::json SerializeAnnotatedRelationshipElement(
   if (maybe_annotations.has_value()) {
     result["annotations"] = SerializeListOfInstancesWithInfallible(
       *maybe_annotations,
-      SerializeIClass
+      SerializeDataElement
     );
   }
 
@@ -17610,7 +17753,7 @@ nlohmann::json SerializeEntity(
   if (maybe_statements.has_value()) {
     result["statements"] = SerializeListOfInstancesWithInfallible(
       *maybe_statements,
-      SerializeIClass
+      SerializeSubmodelElement
     );
   }
 
@@ -18071,7 +18214,7 @@ nlohmann::json SerializeOperationVariable(
 ) {
   nlohmann::json result = nlohmann::json::object();
 
-  result["value"] = SerializeIClass(
+  result["value"] = SerializeSubmodelElement(
     *(that.value())
   );
 
@@ -18449,7 +18592,7 @@ nlohmann::json SerializeEmbeddedDataSpecification(
     *(that.data_specification())
   );
 
-  result["dataSpecificationContent"] = SerializeIClass(
+  result["dataSpecificationContent"] = SerializeDataSpecificationContent(
     *(that.data_specification_content())
   );
 
@@ -18687,6 +18830,775 @@ nlohmann::json SerializeDataSpecificationIec61360(
   return result;
 }
 
+nlohmann::json SerializeHasSemantics(
+  const types::IHasSemantics& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kRelationshipElement:
+      return SerializeConcreteRelationshipElement(
+        dynamic_cast<const types::IRelationshipElement&>(that)
+      );
+    case types::ModelType::kAnnotatedRelationshipElement:
+      return SerializeAnnotatedRelationshipElement(
+        dynamic_cast<const types::IAnnotatedRelationshipElement&>(that)
+      );
+    case types::ModelType::kBasicEventElement:
+      return SerializeBasicEventElement(
+        dynamic_cast<const types::IBasicEventElement&>(that)
+      );
+    case types::ModelType::kBlob:
+      return SerializeBlob(
+        dynamic_cast<const types::IBlob&>(that)
+      );
+    case types::ModelType::kCapability:
+      return SerializeCapability(
+        dynamic_cast<const types::ICapability&>(that)
+      );
+    case types::ModelType::kEntity:
+      return SerializeEntity(
+        dynamic_cast<const types::IEntity&>(that)
+      );
+    case types::ModelType::kExtension:
+      return SerializeExtension(
+        dynamic_cast<const types::IExtension&>(that)
+      );
+    case types::ModelType::kFile:
+      return SerializeFile(
+        dynamic_cast<const types::IFile&>(that)
+      );
+    case types::ModelType::kMultiLanguageProperty:
+      return SerializeMultiLanguageProperty(
+        dynamic_cast<const types::IMultiLanguageProperty&>(that)
+      );
+    case types::ModelType::kOperation:
+      return SerializeOperation(
+        dynamic_cast<const types::IOperation&>(that)
+      );
+    case types::ModelType::kProperty:
+      return SerializeProperty(
+        dynamic_cast<const types::IProperty&>(that)
+      );
+    case types::ModelType::kQualifier:
+      return SerializeQualifier(
+        dynamic_cast<const types::IQualifier&>(that)
+      );
+    case types::ModelType::kRange:
+      return SerializeRange(
+        dynamic_cast<const types::IRange&>(that)
+      );
+    case types::ModelType::kReferenceElement:
+      return SerializeReferenceElement(
+        dynamic_cast<const types::IReferenceElement&>(that)
+      );
+    case types::ModelType::kSpecificAssetId:
+      return SerializeSpecificAssetId(
+        dynamic_cast<const types::ISpecificAssetId&>(that)
+      );
+    case types::ModelType::kSubmodel:
+      return SerializeSubmodel(
+        dynamic_cast<const types::ISubmodel&>(that)
+      );
+    case types::ModelType::kSubmodelElementCollection:
+      return SerializeSubmodelElementCollection(
+        dynamic_cast<const types::ISubmodelElementCollection&>(that)
+      );
+    case types::ModelType::kSubmodelElementList:
+      return SerializeSubmodelElementList(
+        dynamic_cast<const types::ISubmodelElementList&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeHasExtensions(
+  const types::IHasExtensions& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kRelationshipElement:
+      return SerializeConcreteRelationshipElement(
+        dynamic_cast<const types::IRelationshipElement&>(that)
+      );
+    case types::ModelType::kAnnotatedRelationshipElement:
+      return SerializeAnnotatedRelationshipElement(
+        dynamic_cast<const types::IAnnotatedRelationshipElement&>(that)
+      );
+    case types::ModelType::kAssetAdministrationShell:
+      return SerializeAssetAdministrationShell(
+        dynamic_cast<const types::IAssetAdministrationShell&>(that)
+      );
+    case types::ModelType::kBasicEventElement:
+      return SerializeBasicEventElement(
+        dynamic_cast<const types::IBasicEventElement&>(that)
+      );
+    case types::ModelType::kBlob:
+      return SerializeBlob(
+        dynamic_cast<const types::IBlob&>(that)
+      );
+    case types::ModelType::kCapability:
+      return SerializeCapability(
+        dynamic_cast<const types::ICapability&>(that)
+      );
+    case types::ModelType::kConceptDescription:
+      return SerializeConceptDescription(
+        dynamic_cast<const types::IConceptDescription&>(that)
+      );
+    case types::ModelType::kEntity:
+      return SerializeEntity(
+        dynamic_cast<const types::IEntity&>(that)
+      );
+    case types::ModelType::kFile:
+      return SerializeFile(
+        dynamic_cast<const types::IFile&>(that)
+      );
+    case types::ModelType::kMultiLanguageProperty:
+      return SerializeMultiLanguageProperty(
+        dynamic_cast<const types::IMultiLanguageProperty&>(that)
+      );
+    case types::ModelType::kOperation:
+      return SerializeOperation(
+        dynamic_cast<const types::IOperation&>(that)
+      );
+    case types::ModelType::kProperty:
+      return SerializeProperty(
+        dynamic_cast<const types::IProperty&>(that)
+      );
+    case types::ModelType::kRange:
+      return SerializeRange(
+        dynamic_cast<const types::IRange&>(that)
+      );
+    case types::ModelType::kReferenceElement:
+      return SerializeReferenceElement(
+        dynamic_cast<const types::IReferenceElement&>(that)
+      );
+    case types::ModelType::kSubmodel:
+      return SerializeSubmodel(
+        dynamic_cast<const types::ISubmodel&>(that)
+      );
+    case types::ModelType::kSubmodelElementCollection:
+      return SerializeSubmodelElementCollection(
+        dynamic_cast<const types::ISubmodelElementCollection&>(that)
+      );
+    case types::ModelType::kSubmodelElementList:
+      return SerializeSubmodelElementList(
+        dynamic_cast<const types::ISubmodelElementList&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeReferable(
+  const types::IReferable& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kRelationshipElement:
+      return SerializeConcreteRelationshipElement(
+        dynamic_cast<const types::IRelationshipElement&>(that)
+      );
+    case types::ModelType::kAnnotatedRelationshipElement:
+      return SerializeAnnotatedRelationshipElement(
+        dynamic_cast<const types::IAnnotatedRelationshipElement&>(that)
+      );
+    case types::ModelType::kAssetAdministrationShell:
+      return SerializeAssetAdministrationShell(
+        dynamic_cast<const types::IAssetAdministrationShell&>(that)
+      );
+    case types::ModelType::kBasicEventElement:
+      return SerializeBasicEventElement(
+        dynamic_cast<const types::IBasicEventElement&>(that)
+      );
+    case types::ModelType::kBlob:
+      return SerializeBlob(
+        dynamic_cast<const types::IBlob&>(that)
+      );
+    case types::ModelType::kCapability:
+      return SerializeCapability(
+        dynamic_cast<const types::ICapability&>(that)
+      );
+    case types::ModelType::kConceptDescription:
+      return SerializeConceptDescription(
+        dynamic_cast<const types::IConceptDescription&>(that)
+      );
+    case types::ModelType::kEntity:
+      return SerializeEntity(
+        dynamic_cast<const types::IEntity&>(that)
+      );
+    case types::ModelType::kFile:
+      return SerializeFile(
+        dynamic_cast<const types::IFile&>(that)
+      );
+    case types::ModelType::kMultiLanguageProperty:
+      return SerializeMultiLanguageProperty(
+        dynamic_cast<const types::IMultiLanguageProperty&>(that)
+      );
+    case types::ModelType::kOperation:
+      return SerializeOperation(
+        dynamic_cast<const types::IOperation&>(that)
+      );
+    case types::ModelType::kProperty:
+      return SerializeProperty(
+        dynamic_cast<const types::IProperty&>(that)
+      );
+    case types::ModelType::kRange:
+      return SerializeRange(
+        dynamic_cast<const types::IRange&>(that)
+      );
+    case types::ModelType::kReferenceElement:
+      return SerializeReferenceElement(
+        dynamic_cast<const types::IReferenceElement&>(that)
+      );
+    case types::ModelType::kSubmodel:
+      return SerializeSubmodel(
+        dynamic_cast<const types::ISubmodel&>(that)
+      );
+    case types::ModelType::kSubmodelElementCollection:
+      return SerializeSubmodelElementCollection(
+        dynamic_cast<const types::ISubmodelElementCollection&>(that)
+      );
+    case types::ModelType::kSubmodelElementList:
+      return SerializeSubmodelElementList(
+        dynamic_cast<const types::ISubmodelElementList&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeIdentifiable(
+  const types::IIdentifiable& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kAssetAdministrationShell:
+      return SerializeAssetAdministrationShell(
+        dynamic_cast<const types::IAssetAdministrationShell&>(that)
+      );
+    case types::ModelType::kConceptDescription:
+      return SerializeConceptDescription(
+        dynamic_cast<const types::IConceptDescription&>(that)
+      );
+    case types::ModelType::kSubmodel:
+      return SerializeSubmodel(
+        dynamic_cast<const types::ISubmodel&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeHasKind(
+  const types::IHasKind& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kSubmodel:
+      return SerializeSubmodel(
+        dynamic_cast<const types::ISubmodel&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeHasDataSpecification(
+  const types::IHasDataSpecification& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kAdministrativeInformation:
+      return SerializeAdministrativeInformation(
+        dynamic_cast<const types::IAdministrativeInformation&>(that)
+      );
+    case types::ModelType::kRelationshipElement:
+      return SerializeConcreteRelationshipElement(
+        dynamic_cast<const types::IRelationshipElement&>(that)
+      );
+    case types::ModelType::kAnnotatedRelationshipElement:
+      return SerializeAnnotatedRelationshipElement(
+        dynamic_cast<const types::IAnnotatedRelationshipElement&>(that)
+      );
+    case types::ModelType::kAssetAdministrationShell:
+      return SerializeAssetAdministrationShell(
+        dynamic_cast<const types::IAssetAdministrationShell&>(that)
+      );
+    case types::ModelType::kBasicEventElement:
+      return SerializeBasicEventElement(
+        dynamic_cast<const types::IBasicEventElement&>(that)
+      );
+    case types::ModelType::kBlob:
+      return SerializeBlob(
+        dynamic_cast<const types::IBlob&>(that)
+      );
+    case types::ModelType::kCapability:
+      return SerializeCapability(
+        dynamic_cast<const types::ICapability&>(that)
+      );
+    case types::ModelType::kConceptDescription:
+      return SerializeConceptDescription(
+        dynamic_cast<const types::IConceptDescription&>(that)
+      );
+    case types::ModelType::kEntity:
+      return SerializeEntity(
+        dynamic_cast<const types::IEntity&>(that)
+      );
+    case types::ModelType::kFile:
+      return SerializeFile(
+        dynamic_cast<const types::IFile&>(that)
+      );
+    case types::ModelType::kMultiLanguageProperty:
+      return SerializeMultiLanguageProperty(
+        dynamic_cast<const types::IMultiLanguageProperty&>(that)
+      );
+    case types::ModelType::kOperation:
+      return SerializeOperation(
+        dynamic_cast<const types::IOperation&>(that)
+      );
+    case types::ModelType::kProperty:
+      return SerializeProperty(
+        dynamic_cast<const types::IProperty&>(that)
+      );
+    case types::ModelType::kRange:
+      return SerializeRange(
+        dynamic_cast<const types::IRange&>(that)
+      );
+    case types::ModelType::kReferenceElement:
+      return SerializeReferenceElement(
+        dynamic_cast<const types::IReferenceElement&>(that)
+      );
+    case types::ModelType::kSubmodel:
+      return SerializeSubmodel(
+        dynamic_cast<const types::ISubmodel&>(that)
+      );
+    case types::ModelType::kSubmodelElementCollection:
+      return SerializeSubmodelElementCollection(
+        dynamic_cast<const types::ISubmodelElementCollection&>(that)
+      );
+    case types::ModelType::kSubmodelElementList:
+      return SerializeSubmodelElementList(
+        dynamic_cast<const types::ISubmodelElementList&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeQualifiable(
+  const types::IQualifiable& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kRelationshipElement:
+      return SerializeConcreteRelationshipElement(
+        dynamic_cast<const types::IRelationshipElement&>(that)
+      );
+    case types::ModelType::kAnnotatedRelationshipElement:
+      return SerializeAnnotatedRelationshipElement(
+        dynamic_cast<const types::IAnnotatedRelationshipElement&>(that)
+      );
+    case types::ModelType::kBasicEventElement:
+      return SerializeBasicEventElement(
+        dynamic_cast<const types::IBasicEventElement&>(that)
+      );
+    case types::ModelType::kBlob:
+      return SerializeBlob(
+        dynamic_cast<const types::IBlob&>(that)
+      );
+    case types::ModelType::kCapability:
+      return SerializeCapability(
+        dynamic_cast<const types::ICapability&>(that)
+      );
+    case types::ModelType::kEntity:
+      return SerializeEntity(
+        dynamic_cast<const types::IEntity&>(that)
+      );
+    case types::ModelType::kFile:
+      return SerializeFile(
+        dynamic_cast<const types::IFile&>(that)
+      );
+    case types::ModelType::kMultiLanguageProperty:
+      return SerializeMultiLanguageProperty(
+        dynamic_cast<const types::IMultiLanguageProperty&>(that)
+      );
+    case types::ModelType::kOperation:
+      return SerializeOperation(
+        dynamic_cast<const types::IOperation&>(that)
+      );
+    case types::ModelType::kProperty:
+      return SerializeProperty(
+        dynamic_cast<const types::IProperty&>(that)
+      );
+    case types::ModelType::kRange:
+      return SerializeRange(
+        dynamic_cast<const types::IRange&>(that)
+      );
+    case types::ModelType::kReferenceElement:
+      return SerializeReferenceElement(
+        dynamic_cast<const types::IReferenceElement&>(that)
+      );
+    case types::ModelType::kSubmodel:
+      return SerializeSubmodel(
+        dynamic_cast<const types::ISubmodel&>(that)
+      );
+    case types::ModelType::kSubmodelElementCollection:
+      return SerializeSubmodelElementCollection(
+        dynamic_cast<const types::ISubmodelElementCollection&>(that)
+      );
+    case types::ModelType::kSubmodelElementList:
+      return SerializeSubmodelElementList(
+        dynamic_cast<const types::ISubmodelElementList&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeSubmodelElement(
+  const types::ISubmodelElement& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kRelationshipElement:
+      return SerializeConcreteRelationshipElement(
+        dynamic_cast<const types::IRelationshipElement&>(that)
+      );
+    case types::ModelType::kAnnotatedRelationshipElement:
+      return SerializeAnnotatedRelationshipElement(
+        dynamic_cast<const types::IAnnotatedRelationshipElement&>(that)
+      );
+    case types::ModelType::kBasicEventElement:
+      return SerializeBasicEventElement(
+        dynamic_cast<const types::IBasicEventElement&>(that)
+      );
+    case types::ModelType::kBlob:
+      return SerializeBlob(
+        dynamic_cast<const types::IBlob&>(that)
+      );
+    case types::ModelType::kCapability:
+      return SerializeCapability(
+        dynamic_cast<const types::ICapability&>(that)
+      );
+    case types::ModelType::kEntity:
+      return SerializeEntity(
+        dynamic_cast<const types::IEntity&>(that)
+      );
+    case types::ModelType::kFile:
+      return SerializeFile(
+        dynamic_cast<const types::IFile&>(that)
+      );
+    case types::ModelType::kMultiLanguageProperty:
+      return SerializeMultiLanguageProperty(
+        dynamic_cast<const types::IMultiLanguageProperty&>(that)
+      );
+    case types::ModelType::kOperation:
+      return SerializeOperation(
+        dynamic_cast<const types::IOperation&>(that)
+      );
+    case types::ModelType::kProperty:
+      return SerializeProperty(
+        dynamic_cast<const types::IProperty&>(that)
+      );
+    case types::ModelType::kRange:
+      return SerializeRange(
+        dynamic_cast<const types::IRange&>(that)
+      );
+    case types::ModelType::kReferenceElement:
+      return SerializeReferenceElement(
+        dynamic_cast<const types::IReferenceElement&>(that)
+      );
+    case types::ModelType::kSubmodelElementCollection:
+      return SerializeSubmodelElementCollection(
+        dynamic_cast<const types::ISubmodelElementCollection&>(that)
+      );
+    case types::ModelType::kSubmodelElementList:
+      return SerializeSubmodelElementList(
+        dynamic_cast<const types::ISubmodelElementList&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeRelationshipElement(
+  const types::IRelationshipElement& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kRelationshipElement:
+      return SerializeConcreteRelationshipElement(that);
+    case types::ModelType::kAnnotatedRelationshipElement:
+      return SerializeAnnotatedRelationshipElement(
+        dynamic_cast<const types::IAnnotatedRelationshipElement&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeDataElement(
+  const types::IDataElement& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kBlob:
+      return SerializeBlob(
+        dynamic_cast<const types::IBlob&>(that)
+      );
+    case types::ModelType::kFile:
+      return SerializeFile(
+        dynamic_cast<const types::IFile&>(that)
+      );
+    case types::ModelType::kMultiLanguageProperty:
+      return SerializeMultiLanguageProperty(
+        dynamic_cast<const types::IMultiLanguageProperty&>(that)
+      );
+    case types::ModelType::kProperty:
+      return SerializeProperty(
+        dynamic_cast<const types::IProperty&>(that)
+      );
+    case types::ModelType::kRange:
+      return SerializeRange(
+        dynamic_cast<const types::IRange&>(that)
+      );
+    case types::ModelType::kReferenceElement:
+      return SerializeReferenceElement(
+        dynamic_cast<const types::IReferenceElement&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeEventElement(
+  const types::IEventElement& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kBasicEventElement:
+      return SerializeBasicEventElement(
+        dynamic_cast<const types::IBasicEventElement&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeAbstractLangString(
+  const types::IAbstractLangString& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kLangStringDefinitionTypeIec61360:
+      return SerializeLangStringDefinitionTypeIec61360(
+        dynamic_cast<const types::ILangStringDefinitionTypeIec61360&>(that)
+      );
+    case types::ModelType::kLangStringNameType:
+      return SerializeLangStringNameType(
+        dynamic_cast<const types::ILangStringNameType&>(that)
+      );
+    case types::ModelType::kLangStringPreferredNameTypeIec61360:
+      return SerializeLangStringPreferredNameTypeIec61360(
+        dynamic_cast<const types::ILangStringPreferredNameTypeIec61360&>(that)
+      );
+    case types::ModelType::kLangStringShortNameTypeIec61360:
+      return SerializeLangStringShortNameTypeIec61360(
+        dynamic_cast<const types::ILangStringShortNameTypeIec61360&>(that)
+      );
+    case types::ModelType::kLangStringTextType:
+      return SerializeLangStringTextType(
+        dynamic_cast<const types::ILangStringTextType&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeDataSpecificationContent(
+  const types::IDataSpecificationContent& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kDataSpecificationIec61360:
+      return SerializeDataSpecificationIec61360(
+        dynamic_cast<const types::IDataSpecificationIec61360&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
 nlohmann::json SerializeIClass(
   const types::IClass& that
 ) {
@@ -18724,7 +19636,7 @@ nlohmann::json SerializeIClass(
         dynamic_cast<const types::ISubmodel&>(that)
       );
     case types::ModelType::kRelationshipElement:
-      return SerializeRelationshipElement(
+      return SerializeConcreteRelationshipElement(
         dynamic_cast<const types::IRelationshipElement&>(that)
       );
     case types::ModelType::kSubmodelElementList:

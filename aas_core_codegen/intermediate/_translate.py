@@ -4185,6 +4185,41 @@ def _second_pass_to_resolve_named_union_implementers_in_place(
         named_union._set_implementers(implementers)
 
 
+def _second_pass_to_resolve_named_union_roots_in_place(
+    symbol_table: SymbolTable,
+) -> None:
+    """
+    Inline the members of every named union into its roots.
+
+    This assumes that the named union members have already been resolved (see
+    :func:`_second_pass_to_resolve_named_union_members_in_place`), and that
+    we iterate the named unions in the topological order over the named-union
+    dependency graph via ``symbol_table.our_types_topologically_sorted`` so that
+    a named-union member's own ``roots`` is already resolved by the time we need
+    it here.
+    """
+    for our_type in symbol_table.our_types_topologically_sorted:
+        if not isinstance(our_type, NamedUnion):
+            continue
+
+        named_union = our_type
+
+        roots = []  # type: List[ClassUnion]
+        observed_ids = set()  # type: Set[IdOfClass]
+
+        for member in named_union.members:
+            member_roots = (
+                member.roots if isinstance(member, NamedUnion) else [member]
+            )  # type: Sequence[ClassUnion]
+
+            for root in member_roots:
+                if runtime_id(root) not in observed_ids:
+                    roots.append(root)
+                    observed_ids.add(runtime_id(root))
+
+        named_union._set_roots(roots)
+
+
 class _PropertyOfClass:
     """Represent the property with its corresponding class."""
 
@@ -5761,6 +5796,11 @@ def translate(
     # This needs the members' ``concrete_descendants`` to be resolved, hence it
     # runs after ``_second_pass_to_resolve_ancestors_and_descendants_in_place``.
     _second_pass_to_resolve_named_union_implementers_in_place(symbol_table=symbol_table)
+
+    # NOTE (mristin):
+    # This needs the named-union members to be resolved, hence it runs after
+    # ``_second_pass_to_resolve_named_union_members_in_place``.
+    _second_pass_to_resolve_named_union_roots_in_place(symbol_table=symbol_table)
 
     # endregion
 

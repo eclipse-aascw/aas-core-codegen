@@ -2152,6 +2152,17 @@ nlohmann::json SerializeContainer(
   const types::IContainer& that
 );
 
+/**
+ * \brief Serialize \p that instance of types::IItem to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeItem(
+  const types::IItem& that
+);
+
 nlohmann::json SerializeBox(
   const types::IBox& that
 ) {
@@ -2206,10 +2217,41 @@ nlohmann::json SerializeContainer(
 
   result["items"] = SerializeListOfInstancesWithInfallible(
     that.items(),
-    SerializeIClass
+    SerializeItem
   );
 
   return result;
+}
+
+nlohmann::json SerializeItem(
+  const types::IItem& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kBag:
+      return SerializeBag(
+        dynamic_cast<const types::IBag&>(that)
+      );
+    case types::ModelType::kBox:
+      return SerializeBox(
+        dynamic_cast<const types::IBox&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
 }
 
 nlohmann::json SerializeIClass(

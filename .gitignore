@@ -6,6 +6,7 @@
 /venv39/
 /venv310/
 /deleteme*
+/.gitignore/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

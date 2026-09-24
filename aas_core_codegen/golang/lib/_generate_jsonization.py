@@ -708,16 +708,38 @@ def _generate_return_union_from_map(
     the model type, which the surrounding switch has just matched, or structurally.
     Going through ``*FromJsonable`` would re-do both, and, for an implementer with
     concrete descendants of its own, dispatch on the model type a second time.
+
+    The parsed instance is wrapped in the most specific root of the union
+    which holds the ``implementer``. As Go does not convert function types, we need
+    to wrap the constructor of the union in a closure if the root differs from
+    the ``implementer``.
     """
     from_map_name = golang_naming.private_function_name(
         Identifier(f"{implementer.name}_from_map_without_dispatch")
     )
 
+    root = named_union.most_specific_root_of(implementer)
+
     new_union_name = golang_naming.function_name(
-        Identifier(f"new_{named_union.name}_from_{implementer.name}")
+        Identifier(f"new_{named_union.name}_from_{root.name}")
     )
 
-    arguments = ["m", from_map_name, f"aastypes.{new_union_name}"]
+    if root is implementer:
+        arguments = ["m", from_map_name, f"aastypes.{new_union_name}"]
+    else:
+        interface_name = golang_naming.interface_name(implementer.name)
+        union_name = golang_naming.union_name(named_union.name)
+
+        return Stripped(
+            f"""\
+return unionFromMap(
+{I}m,
+{I}{from_map_name},
+{I}func(that aastypes.{interface_name}) *aastypes.{union_name} {{
+{II}return aastypes.{new_union_name}(that)
+{I}}},
+)"""
+        )
 
     single_line = f"return unionFromMap({', '.join(arguments)})"
     if (

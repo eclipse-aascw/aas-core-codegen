@@ -14,7 +14,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 public class TestOverXOrEmpty {
-  
+  @Test
+  public void testSomethingOverOptionalListOverlappingPropertyOrEmpty() throws IOException {
+    for (Something instance : new Something[]
+    {
+      CommonJsonization.loadMinimalSomething(),
+      CommonJsonization.loadMaximalSomething()
+    }) {
+      int length = instance.getOptionalListOverlappingProperty().map(elem -> elem.size()).orElse(0);
+      AtomicInteger count = new AtomicInteger();
+      instance.overOptionalListOverlappingPropertyOrEmpty().forEach(i -> count.getAndIncrement());
+      assertEquals(length , count.get());
+    }
+  } // public void testSomethingoverOptionalListOverlappingPropertyOrEmpty
 } // class TestOverXOrEmpty
 
 // package dummy.tests

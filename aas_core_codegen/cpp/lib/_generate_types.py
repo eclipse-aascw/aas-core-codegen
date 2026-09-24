@@ -575,7 +575,7 @@ def _generate_named_union_alias(named_union: intermediate.NamedUnion) -> Strippe
     """
     Generate the ``using`` alias declaring the named union as a ``common::variant``.
 
-    We reference the flattened implementers' interfaces by their bare name
+    We reference the roots' interfaces by their bare name
     (no ``types::`` prefix) since this alias is itself declared inside
     ``namespace types``.
     """
@@ -1113,7 +1113,7 @@ class IClass {{
         # A named union's ``using`` alias must be declared before any class
         # interface that references it as a property type, since (unlike a
         # class) it can not be forward-declared -- it only needs its
-        # implementers' interfaces forward-declared (already true at this
+        # roots' interfaces forward-declared (already true at this
         # point), so it is safe to place it right after ``IClass`` and
         # before any class interface is defined.
         blocks.append(Stripped("// region Named unions"))

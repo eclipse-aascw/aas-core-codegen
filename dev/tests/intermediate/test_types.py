@@ -1094,5 +1094,80 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(expected_literal_values, some_set.literal_value_set)
 
 
+class TestRootsOfNamedUnion(unittest.TestCase):
+    def test_overlapping_roots(self) -> None:
+        source = """\
+@serialization(with_model_type=True)
+class Parent:
+    pass
+
+
+@serialization(with_model_type=True)
+class Child(Parent):
+    pass
+
+
+@serialization(with_model_type=True)
+class Grandchild(Child):
+    pass
+
+
+@serialization(with_model_type=True)
+class Another_child(Parent):
+    pass
+
+
+@serialization(with_model_type=True)
+class Unrelated:
+    pass
+
+
+Some_union = Union[Parent, Unrelated, Child]
+
+
+class Something:
+    some_property: Some_union
+
+    def __init__(self, some_property: Some_union) -> None:
+        self.some_property = some_property
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        symbol_table, error = tests.common.translate_source_to_intermediate(
+            source=source
+        )
+        assert error is None, tests.common.most_underlying_messages(error)
+        assert symbol_table is not None
+
+        some_union = symbol_table.must_find_named_union(Identifier("Some_union"))
+
+        self.assertListEqual(
+            ["Parent", "Unrelated", "Child"],
+            [root.name for root in some_union.roots],
+        )
+
+        self.assertListEqual(
+            ["Child", "Parent", "Unrelated"],
+            [root.name for root in some_union.roots_most_specific_first()],
+        )
+
+        self.assertDictEqual(
+            {
+                "Parent": "Parent",
+                "Child": "Child",
+                "Grandchild": "Child",
+                "Another_child": "Parent",
+                "Unrelated": "Unrelated",
+            },
+            {
+                implementer.name: some_union.most_specific_root_of(implementer).name
+                for implementer in some_union.implementers
+            },
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -314,6 +314,25 @@ class _Transformer(
                 )
                 yield error
 
+        if that.optional_list_overlapping_property is not None:
+            for i, yet_yet_another_item in enumerate(
+                    that.optional_list_overlapping_property
+            ):
+                for error in self.transform(yet_yet_another_item):
+                    error.path._prepend(
+                        IndexSegment(
+                            that.optional_list_overlapping_property,
+                            i
+                        )
+                    )
+                    error.path._prepend(
+                        PropertySegment(
+                            that,
+                            'optional_list_overlapping_property'
+                        )
+                    )
+                    yield error
+
 
 _TRANSFORMER = _Transformer()
 

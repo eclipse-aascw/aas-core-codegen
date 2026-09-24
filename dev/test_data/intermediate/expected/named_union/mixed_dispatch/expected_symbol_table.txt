@@ -434,6 +434,10 @@ SymbolTable(
         'Reference to ConcreteClass Concrete_with_descendants_child',
         'Reference to ConcreteClass Concrete_with_descendants',
         'Reference to ConcreteClass Concrete_leaf'],
+      roots=[
+        'Reference to AbstractClass Abstract_member',
+        'Reference to ConcreteClass Concrete_with_descendants',
+        'Reference to ConcreteClass Concrete_leaf'],
       description=None,
       parsed=...),
     ConcreteClass(

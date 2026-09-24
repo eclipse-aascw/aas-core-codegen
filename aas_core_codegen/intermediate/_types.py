@@ -3012,6 +3012,11 @@ class NamedUnion:
     own (already flattened) :attr:`implementers` to this union's, transitively —
     a named union may not be its own member, directly or transitively (no cycles).
 
+    We provide two views on the members: :attr:`roots` mirror the meta-model
+    (the classes listed in the union, with the named unions inlined), while
+    :attr:`implementers` list the concrete classes which de/serialization needs
+    to dispatch on.
+
     Unlike :class:`Interface`, a named union is *not* synthesized from a single
     base class's descendants — it is directly declared in the meta-model, and
     its members need not share any common ancestor or structure.
@@ -3044,6 +3049,18 @@ class NamedUnion:
 
     _implementers: Sequence["ConcreteClass"]
 
+    # endregion
+
+    # region Roots
+
+    # NOTE (mristin):
+    # We have to decorate roots with ``@property`` so that the translation
+    # code is forced to use ``_set_roots``.
+
+    _roots: Sequence["ClassUnion"]
+
+    # endregion
+
     def __init__(
         self,
         name: Identifier,
@@ -3063,6 +3080,11 @@ class NamedUnion:
         # Likewise, the implementers can only be computed once the members are
         # resolved and every member class's descendants have been resolved.
         self._implementers = []
+
+        # NOTE (mristin):
+        # Likewise, the roots can only be computed once the members are resolved
+        # and every member class's ancestors have been resolved.
+        self._roots = []
 
     @property
     def members(self) -> Sequence[Union["ClassUnion", "NamedUnion"]]:
@@ -3097,8 +3119,6 @@ class NamedUnion:
         """
         self._members = members
 
-    # endregion
-
     @property
     def implementers(self) -> Sequence["ConcreteClass"]:
         """
@@ -3131,6 +3151,88 @@ class NamedUnion:
         topological order over the named-union dependency graph).
         """
         self._implementers = implementers
+
+    @property
+    def roots(self) -> Sequence["ClassUnion"]:
+        """
+        Get the most general classes whose instances can appear as a value of this
+        union.
+
+        This *inlines* :attr:`members`, recursively, but does not descend to
+        the concrete classes, so that the roots mirror the meta-model:
+
+        * a member which is a class contributes itself, be it abstract or
+          concrete;
+        * a member which is itself a named union contributes its own (already
+          inlined) :attr:`roots`.
+
+        The roots may overlap. For example, a class and its ancestor can both be
+        roots, in which case an instance of the class is an instance of both roots.
+
+        Each one of :attr:`implementers` is either a root or a descendant of
+        at least one root.
+
+        The roots are sorted in the order in which they are declared, where
+        the roots of a named-union member take the place of that member.
+        A root is listed only once, at its first occurrence.
+        """
+        return self._roots
+
+    # fmt: off
+    @require(
+        lambda roots: len(roots) >= 1,
+        "At least one root in the named union"
+    )
+    @require(
+        lambda roots:
+        len(roots) == len(set(runtime_id(root) for root in roots)),
+        "Unique roots in the named union"
+    )
+    # fmt: on
+    def _set_roots(self, roots: Sequence["ClassUnion"]) -> None:
+        """
+        Set the roots of the named union.
+
+        This method is expected to be called only during the translation phase,
+        after :attr:`members` has been resolved, and — for any member which is
+        itself a named union — that member's own :attr:`roots` has already been
+        resolved (*i.e.*, in the topological order over the named-union
+        dependency graph).
+        """
+        self._roots = roots
+
+    def roots_most_specific_first(self) -> List["ClassUnion"]:
+        """
+        Sort :attr:`roots` such that every root comes before its ancestors.
+
+        This is practical for type switches, where the first matching case wins,
+        and some languages even reject a case subsumed by an earlier one.
+        The roots which are not related keep their declaration order.
+        """
+        # NOTE (mristin):
+        # A descendant has strictly more ancestors than any of its ancestors,
+        # and the sort is stable.
+        return sorted(self._roots, key=lambda root: -len(root.ancestor_id_set))
+
+    def most_specific_root_of(self, cls: "ClassUnion") -> "ClassUnion":
+        """
+        Find the root which holds an instance of ``cls`` in this union.
+
+        As the roots may overlap, we pick the most specific one: ``cls`` itself
+        if it is a root, otherwise its closest ancestor among the roots.
+        If there are more such candidates due to multiple inheritance, we pick
+        the first one in :meth:`roots_most_specific_first`.
+
+        This is used, for example, to wrap a de-serialized instance in the union.
+        """
+        for root in self.roots_most_specific_first():
+            if cls.is_subclass_of(root):
+                return root
+
+        raise KeyError(
+            f"The class {cls.name!r} is neither a root of the named union "
+            f"{self.name!r} nor a descendant of one"
+        )
 
     def __repr__(self) -> str:
         """Represent the instance as a string for easier debugging."""

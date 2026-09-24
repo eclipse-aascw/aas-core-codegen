@@ -458,6 +458,23 @@ def _list_of__model_typed_union_from_jsonable(
     )
 
 
+def _list_of__overlapping_union_from_jsonable(
+    jsonable: Jsonable
+) -> List[aas_types.OverlappingUnion]:
+    """
+    Parse :paramref:`jsonable` as a list of
+    :py:class:`.types.OverlappingUnion`.
+
+    :param jsonable: JSON-able structure to be parsed
+    :return: parsed list
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    return _list_from_jsonable(
+        jsonable,
+        overlapping_union_from_jsonable
+    )
+
+
 def _list_of__structural_union_from_jsonable(
     jsonable: Jsonable
 ) -> List[aas_types.StructuralUnion]:
@@ -1030,6 +1047,32 @@ def model_typed_union_from_jsonable(
     )
 
 
+def overlapping_union_from_jsonable(
+        jsonable: Jsonable
+) -> aas_types.OverlappingUnion:
+    """
+    Parse an instance of :py:class:`.types.OverlappingUnion` from the JSON-able
+    structure :paramref:`jsonable`.
+
+    :param jsonable: structure to be parsed
+    :return: Concrete instance corresponding to :py:class:`.types.OverlappingUnion`
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    mapping = _as_mapping(jsonable)
+
+    if "modelType" in mapping:
+        return _dispatch_from_jsonable(
+            mapping,
+            _OVERLAPPING_UNION_FROM_JSONABLE_DISPATCH,
+            'OverlappingUnion'
+        )
+
+    raise DeserializationException(
+        "Could not determine the concrete type of OverlappingUnion "
+        "for the given JSON object"
+    )
+
+
 def something_from_jsonable(
         jsonable: Jsonable
 ) -> aas_types.Something:
@@ -1059,6 +1102,7 @@ def something_from_jsonable(
     the_optional_structural_property: Optional[aas_types.StructuralUnion] = None
     the_optional_mixed_property: Optional[aas_types.MixedUnion] = None
     the_optional_model_typed_property: Optional[aas_types.ModelTypedUnion] = None
+    the_optional_list_overlapping_property: Optional[List[aas_types.OverlappingUnion]] = None
 
     try:
         for key, jsonable_value in mapping.items():
@@ -1096,6 +1140,10 @@ def something_from_jsonable(
             elif key == 'optionalModelTypedProperty':
                 the_optional_model_typed_property = (
                     model_typed_union_from_jsonable(jsonable_value)
+                )
+            elif key == 'optionalListOverlappingProperty':
+                the_optional_list_overlapping_property = (
+                    _list_of__overlapping_union_from_jsonable(jsonable_value)
                 )
             else:
                 raise DeserializationException(
@@ -1152,7 +1200,8 @@ def something_from_jsonable(
         the_tuple_property,
         the_optional_structural_property,
         the_optional_mixed_property,
-        the_optional_model_typed_property
+        the_optional_model_typed_property,
+        the_optional_list_overlapping_property
     )
 
 
@@ -1197,6 +1246,19 @@ _MODEL_TYPED_UNION_FROM_JSONABLE_DISPATCH: Mapping[
 ] = {
     'ModelTypedFirst': model_typed_first_from_jsonable,
     'ModelTypedSecond': model_typed_second_from_jsonable,
+}
+
+
+#: De-serialize an implementer of
+#: :py:class:`.types.OverlappingUnion`, by its model type
+_OVERLAPPING_UNION_FROM_JSONABLE_DISPATCH: Mapping[
+    str,
+    _Parser[aas_types.OverlappingUnion]
+] = {
+    'ModelTypedFirst': model_typed_first_from_jsonable,
+    'ModelTypedSecond': model_typed_second_from_jsonable,
+    'MixedConcreteWithDescendantsChild': mixed_concrete_with_descendants_child_from_jsonable,
+    'MixedConcreteWithDescendants': mixed_concrete_with_descendants_from_jsonable,
 }
 
 
@@ -1285,6 +1347,28 @@ def _list_of__model_typed_union_to_jsonable(
     """
     Serialize :paramref:`that` as a list of
     :py:class:`.types.ModelTypedUnion`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                item.transform(_SERIALIZER)
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
+
+
+def _list_of__overlapping_union_to_jsonable(
+    that: List[aas_types.OverlappingUnion]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.OverlappingUnion`.
 
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
@@ -1552,6 +1636,14 @@ def _something_to_jsonable(
             jsonable['optionalModelTypedProperty'] = that.optional_model_typed_property.transform(_SERIALIZER)
         except SerializationException as exception:
             exception._prepend_property('optional_model_typed_property')
+            raise
+    if that.optional_list_overlapping_property is not None:
+        try:
+            jsonable['optionalListOverlappingProperty'] = _list_of__overlapping_union_to_jsonable(
+                that.optional_list_overlapping_property
+            )
+        except SerializationException as exception:
+            exception._prepend_property('optional_list_overlapping_property')
             raise
     return jsonable
 

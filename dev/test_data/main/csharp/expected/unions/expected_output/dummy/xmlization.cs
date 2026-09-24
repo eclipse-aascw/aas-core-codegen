@@ -612,6 +612,12 @@ namespace dummy
                     MixedUnionFromElement,
                     ModelTypedUnionFromElement));
 
+            private static readonly ContentReader<
+                List<OverlappingUnion>
+            > Read_ListOf_OverlappingUnion = (
+                AsList<OverlappingUnion>(
+                    OverlappingUnionFromElement));
+
             /// <summary>
             /// Deserialize an instance of class StructuralFirst from a sequence of XML elements.
             /// </summary>
@@ -1582,6 +1588,7 @@ namespace dummy
                 StructuralUnion? theOptionalStructuralProperty = null;
                 MixedUnion? theOptionalMixedProperty = null;
                 ModelTypedUnion? theOptionalModelTypedProperty = null;
+                List<OverlappingUnion>? theOptionalListOverlappingProperty = null;
 
                 if (!isEmptySequence)
                 {
@@ -1690,6 +1697,15 @@ namespace dummy
                                     break;
                                 }
                                 theOptionalModelTypedProperty = Read_ModelTypedUnion(
+                                    reader, isEmptyProperty, out error);
+                                break;
+                            case "optionalListOverlappingProperty":
+                                if (theOptionalListOverlappingProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
+                                theOptionalListOverlappingProperty = Read_ListOf_OverlappingUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1809,7 +1825,8 @@ namespace dummy
                             "Unexpected null, had to be handled before"),
                     theOptionalStructuralProperty,
                     theOptionalMixedProperty,
-                    theOptionalModelTypedProperty);
+                    theOptionalModelTypedProperty,
+                    theOptionalListOverlappingProperty);
             }  // internal static Aas.Something? SomethingFromSequence
 
             /// <summary>
@@ -1879,7 +1896,7 @@ namespace dummy
                         {
                             return default!;
                         }
-                        return Aas.MixedUnion.FromMixedAbstractDescendantOne(instance);
+                        return Aas.MixedUnion.FromMixedAbstractMember(instance);
                     }
                     case "mixedAbstractDescendantTwo":
                     {
@@ -1889,7 +1906,7 @@ namespace dummy
                         {
                             return default!;
                         }
-                        return Aas.MixedUnion.FromMixedAbstractDescendantTwo(instance);
+                        return Aas.MixedUnion.FromMixedAbstractMember(instance);
                     }
                     case "mixedConcreteWithDescendantsChild":
                     {
@@ -1899,7 +1916,7 @@ namespace dummy
                         {
                             return default!;
                         }
-                        return Aas.MixedUnion.FromMixedConcreteWithDescendantsChild(instance);
+                        return Aas.MixedUnion.FromMixedConcreteWithDescendants(instance);
                     }
                     case "mixedConcreteWithDescendants":
                     {
@@ -1970,6 +1987,69 @@ namespace dummy
                         return default!;
                 }
             }  // internal static Aas.ModelTypedUnion? ModelTypedUnionFromElement
+
+            /// <summary>
+            /// Deserialize an instance of OverlappingUnion from an XML element.
+            /// </summary>
+            internal static Aas.OverlappingUnion OverlappingUnionFromElement(
+                Xml.XmlReader reader,
+                out Reporting.Error? error)
+            {
+                string elementName = XmlCommon.PeekElementName(
+                    reader, out error);
+                if (error != null)
+                {
+                    return default!;
+                }
+
+                switch (elementName)
+                {
+                    case "modelTypedFirst":
+                    {
+                        Aas.ModelTypedFirst instance = ModelTypedFirstFromElement(
+                            reader, out error);
+                        if (error != null)
+                        {
+                            return default!;
+                        }
+                        return Aas.OverlappingUnion.FromModelTypedFirst(instance);
+                    }
+                    case "modelTypedSecond":
+                    {
+                        Aas.ModelTypedSecond instance = ModelTypedSecondFromElement(
+                            reader, out error);
+                        if (error != null)
+                        {
+                            return default!;
+                        }
+                        return Aas.OverlappingUnion.FromModelTypedSecond(instance);
+                    }
+                    case "mixedConcreteWithDescendantsChild":
+                    {
+                        Aas.MixedConcreteWithDescendantsChild instance = MixedConcreteWithDescendantsChildFromElement(
+                            reader, out error);
+                        if (error != null)
+                        {
+                            return default!;
+                        }
+                        return Aas.OverlappingUnion.FromMixedConcreteWithDescendantsChild(instance);
+                    }
+                    case "mixedConcreteWithDescendants":
+                    {
+                        Aas.MixedConcreteWithDescendants instance = MixedConcreteWithDescendantsFromElement(
+                            reader, out error);
+                        if (error != null)
+                        {
+                            return default!;
+                        }
+                        return Aas.OverlappingUnion.FromMixedConcreteWithDescendants(instance);
+                    }
+                    default:
+                        error = new Reporting.Error(
+                            $"Unexpected element with the name {elementName}");
+                        return default!;
+                }
+            }  // internal static Aas.OverlappingUnion? OverlappingUnionFromElement
         }  // internal static class DeserializeImplementation
 
         /// <summary>
@@ -2514,6 +2594,40 @@ namespace dummy
                 }
                 return result;
             }
+
+            /// <summary>
+            /// Deserialize an instance of OverlappingUnion from <paramref name="reader" />.
+            /// </summary>
+            /// <param name="reader">Initialized XML reader with cursor set to the element</param>
+            /// <exception cref="Xmlization.Exception">
+            /// Thrown when the element is not a valid XML
+            /// representation of OverlappingUnion.
+            /// </exception>
+            public static Aas.OverlappingUnion OverlappingUnionFrom(
+                Xml.XmlReader reader)
+            {
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
+
+                if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
+                {
+                    throw new Xmlization.Exception(
+                        "",
+                        "Unexpected XML declaration when reading an instance " +
+                        "of class OverlappingUnion, as we expect the reader " +
+                        "to be set at content with MoveToContent");
+                }
+
+                Aas.OverlappingUnion result = DeserializeImplementation.OverlappingUnionFromElement(
+                    reader,
+                    out Reporting.Error? error);
+                if (error != null)
+                {
+                    throw new Xmlization.Exception(
+                        Reporting.GenerateRelativeXPath(error.PathSegments),
+                        error.Cause);
+                }
+                return result;
+            }
         }  // public static class Deserialize
 
         /// <summary>
@@ -2761,6 +2875,12 @@ namespace dummy
                 WriteTuple3<StructuralUnion, MixedUnion, ModelTypedUnion>(
                     WriteIUnion,
                     WriteIUnion,
+                    WriteIUnion));
+
+            private static readonly ContentWriter<
+                List<OverlappingUnion>
+            > Write_ListOf_OverlappingUnion = (
+                WriteList<OverlappingUnion>(
                     WriteIUnion));
 
             private static void StructuralFirstToSequence(
@@ -3056,6 +3176,16 @@ namespace dummy
                         that.OptionalModelTypedProperty,
                         writer,
                         Write_ModelTypedUnion);
+                }
+
+                if (that.OptionalListOverlappingProperty != null)
+                {
+                    WriteProperty(
+                        "optionalListOverlappingProperty",
+                        "OptionalListOverlappingProperty",
+                        that.OptionalListOverlappingProperty,
+                        writer,
+                        Write_ListOf_OverlappingUnion);
                 }
             }  // private static void SomethingToSequence
 

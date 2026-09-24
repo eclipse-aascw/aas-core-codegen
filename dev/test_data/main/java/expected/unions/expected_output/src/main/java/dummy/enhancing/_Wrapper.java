@@ -261,6 +261,13 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
       that.setOptionalModelTypedProperty(transform(optionalModelTypedProperty));
     }
 
+    if (that.getOptionalListOverlappingProperty().isPresent()) {
+      List<OverlappingUnion> optionalListOverlappingProperty = that.getOptionalListOverlappingProperty().get();
+      List<OverlappingUnion> transformedOptionalListOverlappingProperty = optionalListOverlappingProperty.stream()
+        .map(this::transform).collect(Collectors.toList());
+      that.setOptionalListOverlappingProperty(transformedOptionalListOverlappingProperty);
+    }
+
     Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
     return !enhancement.isPresent()
       ? that

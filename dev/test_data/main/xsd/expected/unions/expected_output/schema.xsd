@@ -110,6 +110,14 @@
       <xs:element name="modelTypedSecond" type="modelTypedSecond_t"/>
     </xs:choice>
   </xs:group>
+  <xs:group name="overlappingUnion_choice">
+    <xs:choice>
+      <xs:element name="modelTypedFirst" type="modelTypedFirst_t"/>
+      <xs:element name="modelTypedSecond" type="modelTypedSecond_t"/>
+      <xs:element name="mixedConcreteWithDescendantsChild" type="mixedConcreteWithDescendantsChild_t"/>
+      <xs:element name="mixedConcreteWithDescendants" type="mixedConcreteWithDescendants_t"/>
+    </xs:choice>
+  </xs:group>
   <xs:group name="something">
     <xs:sequence>
       <xs:element name="structuralProperty">
@@ -181,6 +189,13 @@
         <xs:complexType>
           <xs:sequence>
             <xs:group ref="modelTypedUnion_choice"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="optionalListOverlappingProperty" minOccurs="0" maxOccurs="1">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="overlappingUnion_choice" minOccurs="0" maxOccurs="unbounded"/>
           </xs:sequence>
         </xs:complexType>
       </xs:element>

@@ -11,7 +11,26 @@ namespace dummy.Tests
 {
     public class TestOverXOrEmpty
     {
-        
+        [Test]
+        public void Test_Something_OverOptionalListOverlappingPropertyOrEmpty()
+        {
+            foreach (Aas.Something instance in new[]
+            {
+                Aas.Tests.CommonJsonization.LoadMinimalSomething(),
+                Aas.Tests.CommonJsonization.LoadMaximalSomething()
+            })
+            {
+                int count = 0;
+                foreach (var _ in instance.OverOptionalListOverlappingPropertyOrEmpty())
+                {
+                    count++;
+                }
+
+                Assert.AreEqual(
+                    instance.OptionalListOverlappingProperty?.Count ?? 0,
+                    count);
+            }
+        }  // public void Test_Something_OverOptionalListOverlappingPropertyOrEmpty
     }  // class TestOverXOrEmpty
 }  // namespace dummy.Tests
 

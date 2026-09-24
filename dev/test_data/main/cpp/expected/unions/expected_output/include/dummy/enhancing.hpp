@@ -207,6 +207,16 @@ types::ModelTypedUnion Wrap(
   >& factory
 );
 
+template <typename E>
+types::OverlappingUnion Wrap(
+  const types::OverlappingUnion& that,
+  const std::function<
+    std::shared_ptr<E>(
+      const std::shared_ptr<types::IClass>&
+    )
+  >& factory
+);
+
 // endregion Forward declarations
 
 /// \cond HIDDEN
@@ -878,6 +888,26 @@ class EnhancedSomething
     instance_->set_optional_model_typed_property(value);
   }
 
+  const common::optional<
+    std::vector<types::OverlappingUnion>
+  >& optional_list_overlapping_property() const override {
+    return instance_->optional_list_overlapping_property();
+  }
+
+  common::optional<
+    std::vector<types::OverlappingUnion>
+  >& mutable_optional_list_overlapping_property() override {
+    return instance_->mutable_optional_list_overlapping_property();
+  }
+
+  void set_optional_list_overlapping_property(
+    common::optional<
+      std::vector<types::OverlappingUnion>
+    > value
+  ) override {
+    instance_->set_optional_list_overlapping_property(value);
+  }
+
   const std::shared_ptr<E>& enhancement() const {
     return enhancement_;
   }
@@ -1438,6 +1468,34 @@ std::shared_ptr<types::ISomething> WrapSomething(
     );
 
     that->set_optional_model_typed_property(
+      common::make_optional(
+        std::move(wrapped)
+      )
+    );
+  }
+
+  if (that->optional_list_overlapping_property().has_value()) {
+    const std::vector<types::OverlappingUnion>& value(
+      that->optional_list_overlapping_property().value()
+    );
+    const std::size_t size = value.size();
+
+    std::vector<types::OverlappingUnion> wrapped;
+    wrapped.reserve(size);
+
+    for (
+      const types::OverlappingUnion& item
+      : value
+    ) {
+      wrapped.emplace_back(
+        Wrap<E>(
+          item,
+          factory
+        )
+      );
+    }
+
+    that->set_optional_list_overlapping_property(
       common::make_optional(
         std::move(wrapped)
       )
@@ -2094,6 +2152,7 @@ types::StructuralUnion Wrap(
   switch (that.index()) {
     case 0:
       return types::StructuralUnion(
+        common::in_place_index_t<0>(),
         Wrap<E>(
           common::get<0>(that),
           factory
@@ -2101,6 +2160,7 @@ types::StructuralUnion Wrap(
       );
     case 1:
       return types::StructuralUnion(
+        common::in_place_index_t<1>(),
         Wrap<E>(
           common::get<1>(that),
           factory
@@ -2123,6 +2183,7 @@ types::MixedUnion Wrap(
   switch (that.index()) {
     case 0:
       return types::MixedUnion(
+        common::in_place_index_t<0>(),
         Wrap<E>(
           common::get<0>(that),
           factory
@@ -2130,6 +2191,7 @@ types::MixedUnion Wrap(
       );
     case 1:
       return types::MixedUnion(
+        common::in_place_index_t<1>(),
         Wrap<E>(
           common::get<1>(that),
           factory
@@ -2137,22 +2199,9 @@ types::MixedUnion Wrap(
       );
     case 2:
       return types::MixedUnion(
+        common::in_place_index_t<2>(),
         Wrap<E>(
           common::get<2>(that),
-          factory
-        )
-      );
-    case 3:
-      return types::MixedUnion(
-        Wrap<E>(
-          common::get<3>(that),
-          factory
-        )
-      );
-    case 4:
-      return types::MixedUnion(
-        Wrap<E>(
-          common::get<4>(that),
           factory
         )
       );
@@ -2173,6 +2222,7 @@ types::ModelTypedUnion Wrap(
   switch (that.index()) {
     case 0:
       return types::ModelTypedUnion(
+        common::in_place_index_t<0>(),
         Wrap<E>(
           common::get<0>(that),
           factory
@@ -2180,8 +2230,56 @@ types::ModelTypedUnion Wrap(
       );
     case 1:
       return types::ModelTypedUnion(
+        common::in_place_index_t<1>(),
         Wrap<E>(
           common::get<1>(that),
+          factory
+        )
+      );
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+template <typename E>
+types::OverlappingUnion Wrap(
+  const types::OverlappingUnion& that,
+  const std::function<
+    std::shared_ptr<E>(
+      const std::shared_ptr<types::IClass>&
+    )
+  >& factory
+) {
+  switch (that.index()) {
+    case 0:
+      return types::OverlappingUnion(
+        common::in_place_index_t<0>(),
+        Wrap<E>(
+          common::get<0>(that),
+          factory
+        )
+      );
+    case 1:
+      return types::OverlappingUnion(
+        common::in_place_index_t<1>(),
+        Wrap<E>(
+          common::get<1>(that),
+          factory
+        )
+      );
+    case 2:
+      return types::OverlappingUnion(
+        common::in_place_index_t<2>(),
+        Wrap<E>(
+          common::get<2>(that),
+          factory
+        )
+      );
+    case 3:
+      return types::OverlappingUnion(
+        common::in_place_index_t<3>(),
+        Wrap<E>(
+          common::get<3>(that),
           factory
         )
       );

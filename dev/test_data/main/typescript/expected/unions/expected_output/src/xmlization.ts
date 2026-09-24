@@ -328,6 +328,15 @@ function parse_ListOf_ModelTypedUnion(
   );
 }
 
+function parse_ListOf_OverlappingUnion(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.OverlappingUnion>, DeserializationError> {
+  return parseList<AasTypes.OverlappingUnion>(
+    cursor,
+    dispatchParseOverlappingUnionElement
+  );
+}
+
 function parse_ListOf_StructuralUnion(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.StructuralUnion>, DeserializationError> {
@@ -1173,6 +1182,7 @@ function parseSomethingFromSequence(
   let theOptionalStructuralProperty: AasTypes.StructuralUnion | null = null;
   let theOptionalMixedProperty: AasTypes.MixedUnion | null = null;
   let theOptionalModelTypedProperty: AasTypes.ModelTypedUnion | null = null;
+  let theOptionalListOverlappingProperty: Array<AasTypes.OverlappingUnion> | null = null;
 
   const className = AasTypes.Something.name;
 
@@ -1354,6 +1364,22 @@ function parseSomethingFromSequence(
         break;
       }
 
+      case "optionalListOverlappingProperty": {
+        if (theOptionalListOverlappingProperty !== null) {
+          propertyError = duplicatePropertyError(propertyLocalName);
+          break;
+        }
+
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_OverlappingUnion
+        );
+        propertyError = parsed.error;
+        theOptionalListOverlappingProperty = parsed.value;
+        break;
+      }
+
       default: {
         propertyError = new DeserializationError(
           `Unexpected XML property: ${propertyLocalName}`
@@ -1425,7 +1451,8 @@ function parseSomethingFromSequence(
     theTupleProperty,
     theOptionalStructuralProperty,
     theOptionalMixedProperty,
-    theOptionalModelTypedProperty
+    theOptionalModelTypedProperty,
+    theOptionalListOverlappingProperty
   );
   return new AasCommon.Either<AasTypes.Something, DeserializationError>(
     instance,
@@ -1671,6 +1698,12 @@ function writeSomethingAsSequence(
     that.optionalModelTypedProperty,
     writeClass
   );
+  writeOptionalProperty(
+    parts,
+    "optionalListOverlappingProperty",
+    that.optionalListOverlappingProperty,
+    writeListOfInstances
+  );
 }
 
 const PARSERS_OF_MIXED_ABSTRACT_MEMBER = new Map<
@@ -1887,6 +1920,34 @@ function dispatchParseModelTypedUnionElement(
     cursor,
     "ModelTypedUnion",
     PARSERS_OF_MODEL_TYPED_UNION
+  );
+}
+
+const PARSERS_OF_OVERLAPPING_UNION = new Map<
+  string,
+  ContentParser<AasTypes.OverlappingUnion>
+>([
+  ["modelTypedFirst", parseModelTypedFirstFromSequence],
+  ["modelTypedSecond", parseModelTypedSecondFromSequence],
+  ["mixedConcreteWithDescendantsChild", parseMixedConcreteWithDescendantsChildFromSequence],
+  ["mixedConcreteWithDescendants", parseMixedConcreteWithDescendantsFromSequence]
+]);
+
+/**
+ * Dispatch-parse an instance
+ * of {@link types!OverlappingUnion} from the next
+ * XML element in `cursor`, based on the element's local name.
+ *
+ * @param cursor - to read from
+ * @returns the parsed instance, or an error
+ */
+function dispatchParseOverlappingUnionElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.OverlappingUnion, DeserializationError> {
+  return dispatchParseElement(
+    cursor,
+    "OverlappingUnion",
+    PARSERS_OF_OVERLAPPING_UNION
   );
 }
 

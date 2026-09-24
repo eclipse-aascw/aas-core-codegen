@@ -49,5 +49,20 @@
   "optionalModelTypedProperty": {
     "someProperty": "value",
     "modelType": "ModelTypedSecond"
-  }
+  },
+  "optionalListOverlappingProperty": [
+    {
+      "someBaseProperty": "overlapping-base",
+      "modelType": "MixedConcreteWithDescendants"
+    },
+    {
+      "someBaseProperty": "overlapping-child-base",
+      "someChildProperty": "overlapping-child",
+      "modelType": "MixedConcreteWithDescendantsChild"
+    },
+    {
+      "someProperty": "overlapping-model-typed",
+      "modelType": "ModelTypedSecond"
+    }
+  ]
 }

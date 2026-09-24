@@ -1252,16 +1252,21 @@ def _generate_named_union_class(named_union: intermediate.NamedUnion) -> Strippe
 
     Unlike a class, a named union is a closed set of alternatives, so we do not
     want to allow custom enhancements or wrappings around it. Hence we represent
-    it as a plain class, storing exactly one of its flattened implementers, tagged
-    by a private discriminant enum. This keeps every alternative in its own,
+    it as a plain class, storing exactly one of its roots, tagged by a private
+    discriminant enum. The roots mirror the meta-model: an abstract class or
+    a concrete class with descendants is held as its interface, not flattened
+    to its concrete implementers. This keeps every alternative in its own,
     separately typed field, so that a future primitive alternative (which can not
     implement ``IClass``) would still fit the same shape.
+
+    As the roots may overlap, :meth:`FromUnderlying` switches over the roots
+    ordered most specific first, so that an instance is wrapped in its most
+    specific root.
     """
     name = csharp_naming.class_name(named_union.name)
 
     interface_names = [
-        csharp_naming.interface_name(implementer.name)
-        for implementer in named_union.implementers
+        csharp_naming.interface_name(root.name) for root in named_union.roots
     ]
 
     crefs = [f'<see cref="{interface_name}" />' for interface_name in interface_names]
@@ -1279,18 +1284,18 @@ def _generate_named_union_class(named_union: intermediate.NamedUnion) -> Strippe
     from_underlying_cases = []  # type: List[Stripped]
 
     field_names = [
-        csharp_naming.private_property_name(Identifier(f"as_{implementer.name}"))
-        for implementer in named_union.implementers
+        csharp_naming.private_property_name(Identifier(f"as_{root.name}"))
+        for root in named_union.roots
     ]
     constructor_arg_names = [
-        csharp_naming.argument_name(Identifier(f"as_{implementer.name}"))
-        for implementer in named_union.implementers
+        csharp_naming.argument_name(Identifier(f"as_{root.name}"))
+        for root in named_union.roots
     ]
 
-    for implementer, interface_name, field_name, constructor_arg_name in zip(
-        named_union.implementers, interface_names, field_names, constructor_arg_names
+    for root, interface_name, field_name, constructor_arg_name in zip(
+        named_union.roots, interface_names, field_names, constructor_arg_names
     ):
-        discriminant_case = csharp_naming.enum_literal_name(implementer.name)
+        discriminant_case = csharp_naming.enum_literal_name(root.name)
         discriminant_cases.append(Stripped(discriminant_case))
 
         field_decls.append(
@@ -1311,9 +1316,7 @@ ValueKind.{discriminant_case} => {field_name}
             )
         )
 
-        from_method_name = csharp_naming.method_name(
-            Identifier(f"from_{implementer.name}")
-        )
+        from_method_name = csharp_naming.method_name(Identifier(f"from_{root.name}"))
 
         null_args = ",\n".join(
             "null" if other_field_name != field_name else "that"
@@ -1334,6 +1337,13 @@ public static {name} {from_method_name}({interface_name} that)
 }}"""
             )
         )
+
+    # NOTE (mristin):
+    # The roots may overlap, so we need to test the most specific ones first.
+    # Otherwise, C# rejects the subsumed cases (CS8120).
+    for root in named_union.roots_most_specific_first():
+        interface_name = csharp_naming.interface_name(root.name)
+        from_method_name = csharp_naming.method_name(Identifier(f"from_{root.name}"))
 
         from_underlying_cases.append(
             Stripped(

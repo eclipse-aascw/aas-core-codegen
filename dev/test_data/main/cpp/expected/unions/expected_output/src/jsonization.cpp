@@ -631,13 +631,13 @@ common::optional<types::ModelType> ModelTypeFromModelTypeString(
  * Every implementer of a named union is de-serialized through its own
  * canonical entry point (bypassing the union), and the resulting pointer
  * then needs to be wrapped into the union's common::variant alternative
- * matching its own interface -- no upcasting is involved, since the
- * variant is spelled out over the implementers' own interfaces directly.
+ * of the implementer's most specific root. As the roots may overlap,
+ * the alternative is picked explicitly by its index \p Index.
  *
  * \param result the result of a de-serialization call for one implementer
  * \return the result wrapped as a variant, or the propagated error
  */
-template <typename VariantT, typename T>
+template <typename VariantT, std::size_t Index, typename T>
 std::pair<
   common::optional<VariantT>,
   common::optional<DeserializationError>
@@ -652,7 +652,10 @@ std::pair<
       common::optional<VariantT>,
       common::optional<DeserializationError>
     >(
-      VariantT(std::move(*result.first)),
+      VariantT(
+        common::in_place_index_t<Index>(),
+        std::move(*result.first)
+      ),
       common::nullopt
     );
   }
@@ -987,7 +990,8 @@ enum class OfSomething : std::uint32_t {
   kTupleProperty,
   kOptionalStructuralProperty,
   kOptionalMixedProperty,
-  kOptionalModelTypedProperty
+  kOptionalModelTypedProperty,
+  kOptionalListOverlappingProperty
 };  // enum class OfSomething
 
 const std::unordered_map<
@@ -1143,6 +1147,10 @@ const std::unordered_map<
   {
     "optionalModelTypedProperty",
     OfSomething::kOptionalModelTypedProperty
+  },
+  {
+    "optionalListOverlappingProperty",
+    OfSomething::kOptionalListOverlappingProperty
   }
 };
 
@@ -1865,6 +1873,23 @@ std::pair<
   common::optional<types::ModelTypedUnion>,
   common::optional<DeserializationError>
 > DeserializeModelTypedUnion(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Dispatch the deserialization for an instance
+ * of types::OverlappingUnion.
+ *
+ * \param json value to be de-serialized
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the deserialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<types::OverlappingUnion>,
+  common::optional<DeserializationError>
+> DeserializeOverlappingUnion(
   const nlohmann::json& json,
   bool additional_properties
 );
@@ -2901,6 +2926,10 @@ std::pair<
 
   common::optional<types::ModelTypedUnion> the_optional_model_typed_property;
 
+  common::optional<
+    std::vector<types::OverlappingUnion>
+  > the_optional_list_overlapping_property;
+
   common::optional<DeserializationError> error(
     ParseProperties(
       json,
@@ -3012,6 +3041,17 @@ std::pair<
                 additional_properties
               )
             );
+          case properties::OfSomething::kOptionalListOverlappingProperty:
+            return ParseInto(
+              the_optional_list_overlapping_property,
+              DeserializeList<
+                types::OverlappingUnion
+              >(
+                value,
+                additional_properties,
+                DeserializeOverlappingUnion
+              )
+            );
           default:
             throw UnexpectedPropertyLiteralError(
               "properties::OfSomething",
@@ -3103,7 +3143,8 @@ std::pair<
         std::move(*the_tuple_property),
         std::move(the_optional_structural_property),
         std::move(the_optional_mixed_property),
-        std::move(the_optional_model_typed_property)
+        std::move(the_optional_model_typed_property),
+        std::move(the_optional_list_overlapping_property)
       )
     ),
     common::nullopt
@@ -3154,7 +3195,10 @@ std::pair<
   }
 
   if (json.contains("uniqueToFirst")) {
-    return WrapDeserializedAsVariant<types::StructuralUnion>(
+    return WrapDeserializedAsVariant<
+      types::StructuralUnion,
+      0
+    >(
       ParsePropertiesOfStructuralFirst(
         json,
         additional_properties
@@ -3163,7 +3207,10 @@ std::pair<
   }
 
   if (json.contains("uniqueToSecond")) {
-    return WrapDeserializedAsVariant<types::StructuralUnion>(
+    return WrapDeserializedAsVariant<
+      types::StructuralUnion,
+      1
+    >(
       ParsePropertiesOfStructuralSecond(
         json,
         additional_properties
@@ -3250,7 +3297,10 @@ std::pair<
 
     switch (*model_type) {
       case types::ModelType::kMixedConcreteWithDescendantsChild: {
-        return WrapDeserializedAsVariant<types::MixedUnion>(
+        return WrapDeserializedAsVariant<
+          types::MixedUnion,
+          1
+        >(
           ParsePropertiesOfMixedConcreteWithDescendantsChild<
             types::IMixedConcreteWithDescendantsChild
           >(
@@ -3260,7 +3310,10 @@ std::pair<
         );
       }
       case types::ModelType::kMixedConcreteWithDescendants: {
-        return WrapDeserializedAsVariant<types::MixedUnion>(
+        return WrapDeserializedAsVariant<
+          types::MixedUnion,
+          1
+        >(
           ParsePropertiesOfMixedConcreteWithDescendants(
             json,
             additional_properties
@@ -3289,7 +3342,10 @@ std::pair<
   }
 
   if (json.contains("uniqueToAbstractDescendantOne")) {
-    return WrapDeserializedAsVariant<types::MixedUnion>(
+    return WrapDeserializedAsVariant<
+      types::MixedUnion,
+      0
+    >(
       ParsePropertiesOfMixedAbstractDescendantOne<
         types::IMixedAbstractDescendantOne
       >(
@@ -3300,7 +3356,10 @@ std::pair<
   }
 
   if (json.contains("uniqueToAbstractDescendantTwo")) {
-    return WrapDeserializedAsVariant<types::MixedUnion>(
+    return WrapDeserializedAsVariant<
+      types::MixedUnion,
+      0
+    >(
       ParsePropertiesOfMixedAbstractDescendantTwo<
         types::IMixedAbstractDescendantTwo
       >(
@@ -3311,7 +3370,10 @@ std::pair<
   }
 
   if (json.contains("uniqueToConcreteLeaf")) {
-    return WrapDeserializedAsVariant<types::MixedUnion>(
+    return WrapDeserializedAsVariant<
+      types::MixedUnion,
+      2
+    >(
       ParsePropertiesOfMixedConcreteLeaf(
         json,
         additional_properties
@@ -3398,7 +3460,10 @@ std::pair<
 
     switch (*model_type) {
       case types::ModelType::kModelTypedFirst: {
-        return WrapDeserializedAsVariant<types::ModelTypedUnion>(
+        return WrapDeserializedAsVariant<
+          types::ModelTypedUnion,
+          0
+        >(
           ParsePropertiesOfModelTypedFirst(
             json,
             additional_properties
@@ -3406,7 +3471,10 @@ std::pair<
         );
       }
       case types::ModelType::kModelTypedSecond: {
-        return WrapDeserializedAsVariant<types::ModelTypedUnion>(
+        return WrapDeserializedAsVariant<
+          types::ModelTypedUnion,
+          1
+        >(
           ParsePropertiesOfModelTypedSecond(
             json,
             additional_properties
@@ -3443,6 +3511,151 @@ std::pair<
 
   return std::make_pair<
     common::optional<types::ModelTypedUnion>,
+    common::optional<DeserializationError>
+  >(
+    common::nullopt,
+    common::make_optional<DeserializationError>(
+      message
+    )
+  );
+}
+
+std::pair<
+  common::optional<types::OverlappingUnion>,
+  common::optional<DeserializationError>
+> DeserializeOverlappingUnion(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> not_an_object(
+    CheckJsonObject(json)
+  );
+
+  if (not_an_object.has_value()) {
+    return NoInstanceAndDeserializationError<
+      types::OverlappingUnion
+    >(
+      std::move(*not_an_object)
+    );
+  }
+
+  if (json.contains("modelType")) {
+    const std::string* model_type_str;
+    common::optional<DeserializationError> error;
+
+    std::tie(
+      model_type_str,
+      error
+    ) = GetModelTypeFrom(json);
+
+    if (error.has_value()) {
+      return std::make_pair<
+        common::optional<types::OverlappingUnion>,
+        common::optional<DeserializationError>
+      >(
+        common::nullopt,
+        std::move(error)
+      );
+    }
+
+    common::optional<types::ModelType> model_type(
+      ModelTypeFromModelTypeString(*model_type_str)
+    );
+
+    if (!model_type.has_value()) {
+      std::wstring message = common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
+      );
+
+      return std::make_pair<
+        common::optional<types::OverlappingUnion>,
+        common::optional<DeserializationError>
+      >(
+        common::nullopt,
+        common::make_optional<DeserializationError>(
+          message
+        )
+      );
+    }
+
+    switch (*model_type) {
+      case types::ModelType::kModelTypedFirst: {
+        return WrapDeserializedAsVariant<
+          types::OverlappingUnion,
+          0
+        >(
+          ParsePropertiesOfModelTypedFirst(
+            json,
+            additional_properties
+          )
+        );
+      }
+      case types::ModelType::kModelTypedSecond: {
+        return WrapDeserializedAsVariant<
+          types::OverlappingUnion,
+          1
+        >(
+          ParsePropertiesOfModelTypedSecond(
+            json,
+            additional_properties
+          )
+        );
+      }
+      case types::ModelType::kMixedConcreteWithDescendantsChild: {
+        return WrapDeserializedAsVariant<
+          types::OverlappingUnion,
+          3
+        >(
+          ParsePropertiesOfMixedConcreteWithDescendantsChild<
+            types::IMixedConcreteWithDescendantsChild
+          >(
+            json,
+            additional_properties
+          )
+        );
+      }
+      case types::ModelType::kMixedConcreteWithDescendants: {
+        return WrapDeserializedAsVariant<
+          types::OverlappingUnion,
+          2
+        >(
+          ParsePropertiesOfMixedConcreteWithDescendants(
+            json,
+            additional_properties
+          )
+        );
+      }
+      default: {
+        std::wstring message = common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::OverlappingUnion "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
+        );
+
+        return std::make_pair<
+          common::optional<types::OverlappingUnion>,
+          common::optional<DeserializationError>
+        >(
+          common::nullopt,
+          common::make_optional<DeserializationError>(
+            message
+          )
+        );
+      }
+    }
+  }
+
+  std::wstring message(
+    L"Could not determine a concrete type to dispatch the JSON "
+    L"de-serialization of types::OverlappingUnion to, based neither "
+    L"on the modelType nor on the required properties present "
+    L"in the object"
+  );
+
+  return std::make_pair<
+    common::optional<types::OverlappingUnion>,
     common::optional<DeserializationError>
   >(
     common::nullopt,
@@ -3720,6 +3933,22 @@ common::expected<
     json,
     additional_properties,
     DeserializeModelTypedUnion
+  );
+}
+
+common::expected<
+  types::OverlappingUnion,
+  DeserializationError
+> OverlappingUnionFrom(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  return DeserializeFrom<
+    types::OverlappingUnion
+  >(
+    json,
+    additional_properties,
+    DeserializeOverlappingUnion
   );
 }
 
@@ -4307,7 +4536,7 @@ nlohmann::json SerializeMixedAbstractDescendantTwo(
  * \param that instance to be serialized
  * \return the JSON value
  */
-nlohmann::json SerializeMixedConcreteWithDescendants(
+nlohmann::json SerializeConcreteMixedConcreteWithDescendants(
   const types::IMixedConcreteWithDescendants& that
 );
 
@@ -4364,6 +4593,28 @@ std::pair<
   const types::ISomething& that
 );
 
+/**
+ * \brief Serialize \p that instance of types::IMixedAbstractMember to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeMixedAbstractMember(
+  const types::IMixedAbstractMember& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IMixedConcreteWithDescendants to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeMixedConcreteWithDescendants(
+  const types::IMixedConcreteWithDescendants& that
+);
+
 nlohmann::json SerializeStructuralUnion(
   const types::StructuralUnion& that
 );
@@ -4374,6 +4625,10 @@ nlohmann::json SerializeMixedUnion(
 
 nlohmann::json SerializeModelTypedUnion(
   const types::ModelTypedUnion& that
+);
+
+nlohmann::json SerializeOverlappingUnion(
+  const types::OverlappingUnion& that
 );
 
 nlohmann::json SerializeStructuralFirst(
@@ -4424,7 +4679,7 @@ nlohmann::json SerializeMixedAbstractDescendantTwo(
   return result;
 }
 
-nlohmann::json SerializeMixedConcreteWithDescendants(
+nlohmann::json SerializeConcreteMixedConcreteWithDescendants(
   const types::IMixedConcreteWithDescendants& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -4577,6 +4832,18 @@ std::pair<
     );
   }
 
+  const common::optional<
+    std::vector<types::OverlappingUnion>
+  >& maybe_optional_list_overlapping_property(
+    that.optional_list_overlapping_property()
+  );
+  if (maybe_optional_list_overlapping_property.has_value()) {
+    result["optionalListOverlappingProperty"] = SerializeListWithInfallible(
+      *maybe_optional_list_overlapping_property,
+      SerializeOverlappingUnion
+    );
+  }
+
   return std::make_pair<
     common::optional<nlohmann::json>,
     common::optional<SerializationError>
@@ -4584,6 +4851,66 @@ std::pair<
     common::make_optional<nlohmann::json>(std::move(result)),
     common::nullopt
   );
+}
+
+nlohmann::json SerializeMixedAbstractMember(
+  const types::IMixedAbstractMember& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kMixedAbstractDescendantOne:
+      return SerializeMixedAbstractDescendantOne(
+        dynamic_cast<const types::IMixedAbstractDescendantOne&>(that)
+      );
+    case types::ModelType::kMixedAbstractDescendantTwo:
+      return SerializeMixedAbstractDescendantTwo(
+        dynamic_cast<const types::IMixedAbstractDescendantTwo&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+nlohmann::json SerializeMixedConcreteWithDescendants(
+  const types::IMixedConcreteWithDescendants& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kMixedConcreteWithDescendants:
+      return SerializeConcreteMixedConcreteWithDescendants(that);
+    case types::ModelType::kMixedConcreteWithDescendantsChild:
+      return SerializeMixedConcreteWithDescendantsChild(
+        dynamic_cast<const types::IMixedConcreteWithDescendantsChild&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
 }
 
 std::pair<
@@ -4619,7 +4946,7 @@ std::pair<
       );
     case types::ModelType::kMixedConcreteWithDescendants:
       return AsFallible(
-        SerializeMixedConcreteWithDescendants(
+        SerializeConcreteMixedConcreteWithDescendants(
           dynamic_cast<const types::IMixedConcreteWithDescendants&>(that)
         )
       );
@@ -4689,15 +5016,11 @@ nlohmann::json SerializeMixedUnion(
 ) {
   switch (that.index()) {
     case 0:
-      return SerializeMixedAbstractDescendantOne(*common::get<0>(that));
+      return SerializeMixedAbstractMember(*common::get<0>(that));
     case 1:
-      return SerializeMixedAbstractDescendantTwo(*common::get<1>(that));
+      return SerializeMixedConcreteWithDescendants(*common::get<1>(that));
     case 2:
-      return SerializeMixedConcreteWithDescendantsChild(*common::get<2>(that));
-    case 3:
-      return SerializeMixedConcreteWithDescendants(*common::get<3>(that));
-    case 4:
-      return SerializeMixedConcreteLeaf(*common::get<4>(that));
+      return SerializeMixedConcreteLeaf(*common::get<2>(that));
     default:
       throw std::logic_error(
         common::Concat(
@@ -4720,6 +5043,28 @@ nlohmann::json SerializeModelTypedUnion(
       throw std::logic_error(
         common::Concat(
           "Invalid variant index for ModelTypedUnion: ",
+          std::to_string(that.index())
+        )
+      );
+  };
+}
+
+nlohmann::json SerializeOverlappingUnion(
+  const types::OverlappingUnion& that
+) {
+  switch (that.index()) {
+    case 0:
+      return SerializeModelTypedFirst(*common::get<0>(that));
+    case 1:
+      return SerializeModelTypedSecond(*common::get<1>(that));
+    case 2:
+      return SerializeMixedConcreteWithDescendants(*common::get<2>(that));
+    case 3:
+      return SerializeMixedConcreteWithDescendantsChild(*common::get<3>(that));
+    default:
+      throw std::logic_error(
+        common::Concat(
+          "Invalid variant index for OverlappingUnion: ",
           std::to_string(that.index())
         )
       );

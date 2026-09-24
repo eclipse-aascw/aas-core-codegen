@@ -3074,8 +3074,9 @@ def _generate_wrap_deserialized_as_variant_function() -> Stripped:
     Every implementer of a named union is de-serialized through its own
     canonical entry point (bypassing the union), and the resulting pointer
     then needs to be wrapped into the union's ``common::variant`` alternative
-    matching its own interface -- no upcasting is involved, since the
-    variant is spelled out over the implementers' own interfaces directly.
+    of the implementer's most specific root. As the roots may overlap, the
+    alternative is picked explicitly by its index instead of relying on
+    the implicit conversion into the variant.
     This shape is identical for every implementer of every union (only the
     types differ), so we factor it out into a single generic function
     instead of unrolling it at each dispatch case, mirroring how
@@ -3090,13 +3091,13 @@ def _generate_wrap_deserialized_as_variant_function() -> Stripped:
  * Every implementer of a named union is de-serialized through its own
  * canonical entry point (bypassing the union), and the resulting pointer
  * then needs to be wrapped into the union's common::variant alternative
- * matching its own interface -- no upcasting is involved, since the
- * variant is spelled out over the implementers' own interfaces directly.
+ * of the implementer's most specific root. As the roots may overlap,
+ * the alternative is picked explicitly by its index \\p Index.
  *
  * \\param result the result of a de-serialization call for one implementer
  * \\return the result wrapped as a variant, or the propagated error
  */
-template <typename VariantT, typename T>
+template <typename VariantT, std::size_t Index, typename T>
 std::pair<
 {I}common::optional<VariantT>,
 {I}common::optional<DeserializationError>
@@ -3111,7 +3112,10 @@ std::pair<
 {III}common::optional<VariantT>,
 {III}common::optional<DeserializationError>
 {II}>(
-{III}VariantT(std::move(*result.first)),
+{III}VariantT(
+{IIII}common::in_place_index_t<Index>(),
+{IIII}std::move(*result.first)
+{III}),
 {III}common::nullopt
 {II});
 {I}}}
@@ -3128,7 +3132,7 @@ std::pair<
 
 
 def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
-    target_cls: intermediate.ConcreteClass, union_name: Identifier
+    target_cls: intermediate.ConcreteClass, named_union: intermediate.NamedUnion
 ) -> Stripped:
     """
     Generate the snippet to de-serialize a single implementer and wrap it.
@@ -3143,6 +3147,14 @@ def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
     the implementer carries no model type at all -- so there is nothing left
     for ``Deserialize{Cls}`` to check.
     """
+    union_name = cpp_naming.union_name(named_union.name)
+
+    # NOTE (mristin):
+    # The alternatives of the variant follow the roots, see
+    # :py:func:`cpp_common.generate_named_union_variant_definition`.
+    root = named_union.most_specific_root_of(target_cls)
+    root_index = next(i for i, a_root in enumerate(named_union.roots) if a_root is root)
+
     target_function = cpp_naming.function_name(
         Identifier(f"parse_properties_of_{target_cls.name}")
     )
@@ -3166,7 +3178,10 @@ def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
 
     return Stripped(
         f"""\
-return WrapDeserializedAsVariant<types::{union_name}>(
+return WrapDeserializedAsVariant<
+{I}types::{union_name},
+{I}{root_index}
+>(
 {I}{indent_but_first_line(call, I)}(
 {II}json,
 {II}additional_properties
@@ -3226,7 +3241,7 @@ if (not_an_object.has_value()) {{
             literal_name = cpp_naming.enum_literal_name(target_cls.name)
             snippet = (
                 _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
-                    target_cls=target_cls, union_name=union_name
+                    target_cls=target_cls, named_union=named_union
                 )
             )
 
@@ -3328,7 +3343,7 @@ if (json.contains("modelType")) {{
         )
 
         snippet = _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
-            target_cls=target_cls, union_name=union_name
+            target_cls=target_cls, named_union=named_union
         )
 
         body_blocks.append(
@@ -4013,6 +4028,29 @@ def _serialization_is_fallible(
     return False
 
 
+def _serialization_dispatches(cls: intermediate.ClassUnion) -> bool:
+    """Check whether the run-time type of an instance of ``cls`` is open."""
+    return len(cls.concrete_descendants) > 0 or isinstance(
+        cls, intermediate.AbstractClass
+    )
+
+
+def _own_serialization_is_fallible(
+    cls: intermediate.ConcreteClass,
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
+) -> bool:
+    """
+    Check whether serializing an instance of exactly ``cls`` can fail.
+
+    Unlike the entry of ``cls`` in ``ids_of_fallible_types``, this disregards
+    the descendants, as it concerns only the serializer which is not dispatched.
+    """
+    return any(
+        _serialization_is_fallible(prop.type_annotation, ids_of_fallible_types)
+        for prop in cls.properties
+    )
+
+
 def _collect_ids_of_types_with_fallible_serialization(
     symbol_table: intermediate.SymbolTable,
 ) -> Set[intermediate.IdOfOurType]:
@@ -4048,10 +4086,11 @@ def _collect_ids_of_types_with_fallible_serialization(
             if intermediate.runtime_id(union) in result:
                 continue
 
-            if any(
-                intermediate.runtime_id(implementer) in result
-                for implementer in union.implementers
-            ):
+            # NOTE (mristin):
+            # A root is serialized by its own serializer, which dispatches over
+            # the root's concrete classes if its run-time type is open, so
+            # a union can fail exactly where one of its roots can.
+            if any(intermediate.runtime_id(root) in result for root in union.roots):
                 result.add(intermediate.runtime_id(union))
                 changed = True
 
@@ -4066,14 +4105,28 @@ def _determine_serialize_function_for_class(
 
     The run-time type of a value is open only where the declared type leaves it
     open -- an abstract class, or a concrete class with concrete descendants --
-    and only there do we dispatch. Everywhere else the declared type already
-    answers which serializer to call, so we name it and pay neither
-    the ``model_type()`` nor the ``switch`` nor the ``dynamic_cast``.
+    and only there does ``Serialize{Cls}`` dispatch, and only over the concrete
+    classes of ``cls`` (see :py:func:`_generate_dispatching_serialize_cls`).
+    Hence the serializer can fail exactly where ``cls`` can, as the fixed point
+    in :py:func:`_collect_ids_of_types_with_fallible_serialization` decides.
+    Everywhere else the declared type already answers which serializer to call,
+    and we pay neither the ``model_type()`` nor the ``switch`` nor
+    the ``dynamic_cast``.
     """
-    if len(cls.concrete_descendants) > 0 or isinstance(cls, intermediate.AbstractClass):
-        return Stripped("SerializeIClass")
-
     return Stripped(cpp_naming.function_name(Identifier(f"serialize_{cls.name}")))
+
+
+def _concrete_serialize_function_name(cls: intermediate.ConcreteClass) -> Identifier:
+    """
+    Determine the name of the serializer of exactly ``cls``, without dispatch.
+
+    If ``cls`` has concrete descendants, ``Serialize{Cls}`` dispatches, so
+    the serializer of exactly ``cls`` needs a name of its own.
+    """
+    if len(cls.concrete_descendants) > 0:
+        return cpp_naming.function_name(Identifier(f"serialize_concrete_{cls.name}"))
+
+    return cpp_naming.function_name(Identifier(f"serialize_{cls.name}"))
 
 
 def _serialize_item_expr(
@@ -4400,8 +4453,8 @@ def _generate_serialize_cls(
     cls: intermediate.ConcreteClass,
     ids_of_fallible_types: Set[intermediate.IdOfOurType],
 ) -> Stripped:
-    """Generate the serialization function for the class ``cls``."""
-    fallible = intermediate.runtime_id(cls) in ids_of_fallible_types
+    """Generate the serialization function for exactly the class ``cls``."""
+    fallible = _own_serialization_is_fallible(cls, ids_of_fallible_types)
 
     blocks = [
         Stripped("nlohmann::json result = nlohmann::json::object();")
@@ -4440,7 +4493,7 @@ return std::make_pair<
 
     blocks_joined = "\n\n".join(blocks)
 
-    serialize_name = cpp_naming.function_name(Identifier(f"serialize_{cls.name}"))
+    serialize_name = _concrete_serialize_function_name(cls)
 
     interface_name = cpp_naming.interface_name(cls.name)
 
@@ -4684,9 +4737,9 @@ def _generate_serialize_cls_declaration(
     emitted in the order of the symbol table, so a serializer has to be
     declared before any of them can call it.
     """
-    fallible = intermediate.runtime_id(cls) in ids_of_fallible_types
+    fallible = _own_serialization_is_fallible(cls, ids_of_fallible_types)
 
-    serialize_name = cpp_naming.function_name(Identifier(f"serialize_{cls.name}"))
+    serialize_name = _concrete_serialize_function_name(cls)
 
     interface_name = cpp_naming.interface_name(cls.name)
 
@@ -4701,6 +4754,130 @@ def _generate_serialize_cls_declaration(
 {_serialize_cls_return_type(fallible)} {serialize_name}(
 {I}const types::{interface_name}& that
 );"""
+    )
+
+
+def _generate_dispatching_serialize_cls_declaration(
+    cls: intermediate.ClassUnion,
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
+) -> Stripped:
+    """Generate the forward declaration of the dispatching serializer of ``cls``."""
+    fallible = intermediate.runtime_id(cls) in ids_of_fallible_types
+
+    serialize_name = _determine_serialize_function_for_class(cls)
+
+    interface_name = cpp_naming.interface_name(cls.name)
+
+    return Stripped(
+        f"""\
+/**
+ * \\brief Serialize \\p that instance of types::{interface_name} to a JSON value,
+ * dispatching on its model type.
+ *
+ * \\param that instance to be serialized
+ * \\return the JSON value{" , or an error, if any" if fallible else ""}
+ */
+{_serialize_cls_return_type(fallible)} {serialize_name}(
+{I}const types::{interface_name}& that
+);"""
+    )
+
+
+def _generate_dispatching_serialize_cls(
+    cls: intermediate.ClassUnion,
+    ids_of_fallible_types: Set[intermediate.IdOfOurType],
+) -> Stripped:
+    """
+    Generate the serializer of ``cls`` which dispatches on the model type.
+
+    Unlike ``SerializeIClass``, this dispatches only over the concrete classes
+    of ``cls``, so that it can fail only where ``cls`` can, and does not take
+    over the fallibility of the whole meta-model.
+    """
+    fallible = intermediate.runtime_id(cls) in ids_of_fallible_types
+
+    concrete_classes = list(cls.concrete_descendants)
+    if isinstance(cls, intermediate.ConcreteClass):
+        concrete_classes.insert(0, cls)
+
+    model_type_enum = cpp_naming.enum_name(Identifier("Model_type"))
+
+    case_blocks = []  # type: List[Stripped]
+    for concrete_cls in concrete_classes:
+        serialize_name = _concrete_serialize_function_name(concrete_cls)
+
+        if concrete_cls is cls:
+            call = Stripped(f"{serialize_name}(that)")
+        else:
+            concrete_interface_name = cpp_naming.interface_name(concrete_cls.name)
+
+            call = Stripped(
+                f"""\
+{serialize_name}(
+{I}dynamic_cast<const types::{concrete_interface_name}&>(that)
+)"""
+            )
+
+        # NOTE (mristin):
+        # The dispatch has to give out one shape for every class, so a class
+        # whose serialization can not fail is lifted into the fallible one.
+        if fallible and not _own_serialization_is_fallible(
+            concrete_cls, ids_of_fallible_types
+        ):
+            call = Stripped(
+                f"""\
+AsFallible(
+{I}{indent_but_first_line(call, I)}
+)"""
+            )
+
+        model_type_literal = cpp_naming.enum_literal_name(concrete_cls.name)
+
+        case_blocks.append(
+            Stripped(
+                f"""\
+case types::{model_type_enum}::{model_type_literal}:
+{I}return {indent_but_first_line(call, I)};"""
+            )
+        )
+
+    case_blocks.append(
+        Stripped(
+            f"""\
+default: {{
+{I}std::string message = common::Concat(
+{II}"Unexpected model type: ",
+{II}std::to_string(
+{III}static_cast<std::uint32_t>(
+{IIII}that.model_type()
+{III})
+{II})
+{I});
+
+{I}throw std::invalid_argument(message);
+}}"""
+        )
+    )
+
+    case_blocks_joined = "\n".join(case_blocks)
+
+    dispatch_name = _determine_serialize_function_for_class(cls)
+
+    interface_name = cpp_naming.interface_name(cls.name)
+
+    return Stripped(
+        f"""\
+{_serialize_cls_return_type(fallible)} {dispatch_name}(
+{I}const types::{interface_name}& that
+) {{
+{I}// NOTE (mristin):
+{I}// The dynamic casts are necessary due to virtual inheritance. Otherwise,
+{I}// we would have used static casts.
+
+{I}switch (that.model_type()) {{
+{II}{indent_but_first_line(case_blocks_joined, II)}
+{I}}};
+}}"""
     )
 
 
@@ -4733,7 +4910,7 @@ def _generate_serialize_iclass_implementation(
 
     case_blocks = []  # type: List[Stripped]
     for cls in symbol_table.concrete_classes:
-        serialize_name = cpp_naming.function_name(Identifier(f"serialize_{cls.name}"))
+        serialize_name = _concrete_serialize_function_name(cls)
 
         model_type_literal = cpp_naming.enum_literal_name(cls.name)
         model_type_enum = cpp_naming.enum_name(Identifier("Model_type"))
@@ -4750,7 +4927,7 @@ def _generate_serialize_iclass_implementation(
         # NOTE (mristin):
         # The dispatch has to give out one shape for every class, so a class
         # whose serialization can not fail is lifted into the fallible one.
-        if fallible and intermediate.runtime_id(cls) not in ids_of_fallible_types:
+        if fallible and not _own_serialization_is_fallible(cls, ids_of_fallible_types):
             call = Stripped(
                 f"""\
 AsFallible(
@@ -4839,11 +5016,14 @@ def _named_union_serialization_is_fallible(
     named_union: intermediate.NamedUnion,
     ids_of_fallible_types: Set[intermediate.IdOfOurType],
 ) -> bool:
-    """Check whether the serialization of ``named_union`` can fail."""
-    return any(
-        intermediate.runtime_id(implementer) in ids_of_fallible_types
-        for implementer in named_union.implementers
-    )
+    """
+    Check whether the serialization of ``named_union`` can fail.
+
+    A named union can fail exactly where one of its roots can, as
+    the fixed point in :py:func:`_collect_ids_of_types_with_fallible_serialization`
+    decides.
+    """
+    return intermediate.runtime_id(named_union) in ids_of_fallible_types
 
 
 def _generate_serialize_named_union_declaration(
@@ -4871,7 +5051,7 @@ def _generate_serialize_named_union_declaration(
     )
 
 
-@require(lambda named_union: len(named_union.implementers) > 0)
+@require(lambda named_union: len(named_union.roots) > 0)
 def _generate_serialize_named_union_implementation(
     named_union: intermediate.NamedUnion,
     ids_of_fallible_types: Set[intermediate.IdOfOurType],
@@ -4880,8 +5060,9 @@ def _generate_serialize_named_union_implementation(
     Generate the function to serialize a named union, once per union.
 
     This switches on the ``common::variant``'s own ``index()`` -- the variant
-    already knows which alternative it holds, so neither a ``model_type()``
-    nor a dynamic cast is needed.
+    already knows which alternative, *i.e.*, which root it holds. Each root is
+    serialized by its own serializer, which dispatches over the concrete classes
+    of the root if its run-time type is open.
     """
     fallible = _named_union_serialization_is_fallible(
         named_union, ids_of_fallible_types
@@ -4890,17 +5071,12 @@ def _generate_serialize_named_union_implementation(
     union_name = cpp_naming.union_name(named_union.name)
 
     case_blocks = []  # type: List[Stripped]
-    for i, implementer in enumerate(named_union.implementers):
-        serialize_function = cpp_naming.function_name(
-            Identifier(f"serialize_{implementer.name}")
-        )
+    for i, root in enumerate(named_union.roots):
+        serialize_function = _determine_serialize_function_for_class(root)
 
         call = Stripped(f"{serialize_function}(*common::get<{i}>(that))")
 
-        if (
-            fallible
-            and intermediate.runtime_id(implementer) not in ids_of_fallible_types
-        ):
+        if fallible and intermediate.runtime_id(root) not in ids_of_fallible_types:
             call = Stripped(
                 f"""\
 AsFallible(
@@ -5250,6 +5426,15 @@ struct SerializationError {{
             )
         )
 
+    for cls in symbol_table.classes:
+        if _serialization_dispatches(cls):
+            blocks.append(
+                _generate_dispatching_serialize_cls_declaration(
+                    cls=cls,
+                    ids_of_fallible_types=ids_of_fallible_types,
+                )
+            )
+
     for named_union in symbol_table.named_unions:
         blocks.append(
             _generate_serialize_named_union_declaration(
@@ -5265,6 +5450,15 @@ struct SerializationError {{
                 ids_of_fallible_types=ids_of_fallible_types,
             )
         )
+
+    for cls in symbol_table.classes:
+        if _serialization_dispatches(cls):
+            blocks.append(
+                _generate_dispatching_serialize_cls(
+                    cls=cls,
+                    ids_of_fallible_types=ids_of_fallible_types,
+                )
+            )
 
     blocks.append(
         _generate_serialize_iclass_implementation(

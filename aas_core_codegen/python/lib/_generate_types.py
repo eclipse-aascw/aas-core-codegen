@@ -1619,19 +1619,23 @@ def _generate_named_union_alias(named_union: intermediate.NamedUnion) -> Strippe
     """Generate the type alias for the named union ``named_union``."""
     name = python_naming.union_name(named_union.name)
 
-    implementer_literals = [
-        repr(python_naming.class_name(implementer.name))
-        for implementer in named_union.implementers
+    # NOTE (mristin):
+    # We list the roots of the union, not its implementers, so that the alias
+    # mirrors the meta-model. Abstract classes and concrete classes with
+    # descendants are Python classes as well, so their descendants are covered
+    # by the ``Union[...]`` through sub-typing.
+    root_literals = [
+        repr(python_naming.class_name(root.name)) for root in named_union.roots
     ]
 
-    one_liner = f"{name} = Union[{', '.join(implementer_literals)}]"
+    one_liner = f"{name} = Union[{', '.join(root_literals)}]"
     if len(one_liner) <= 70:
         assignment = one_liner
     else:
-        joined_implementer_literals = ",\n".join(implementer_literals)
+        joined_root_literals = ",\n".join(root_literals)
         assignment = f"""\
 {name} = Union[
-{I}{indent_but_first_line(joined_implementer_literals, I)},
+{I}{indent_but_first_line(joined_root_literals, I)},
 ]"""
 
     return Stripped(
