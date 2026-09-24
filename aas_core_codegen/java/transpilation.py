@@ -1,11 +1,13 @@
 """Transpile Python to Java code."""
 import abc
 import io
+import textwrap
 from typing import (
     Tuple,
     List,
     Mapping,
     Optional,
+    Sequence,
     Set,
     Union,
 )
@@ -1303,7 +1305,10 @@ IntStream.range(
                 if error is not None:
                     errors.append(error)
                 else:
-                    target = Stripped(f"{type_anno} {target}")
+                    # NOTE (mristin):
+                    # We infer the type of the local variable with ``var``, which
+                    # is available since Java 10.
+                    target = Stripped(f"var {target}")
             else:
                 target, error = self.transform(node=node.target)
                 if error is not None:
@@ -1358,6 +1363,203 @@ return (
             )
 
         return Stripped(f"return {value};"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def _transform_branch(
+        self, statements: Sequence[parse_tree.StatementUnion]
+    ) -> Tuple[Optional[Tuple[List[Stripped], bool]], Optional[Error]]:
+        """
+        Transpile the ``statements`` of a switch branch in a new scope.
+
+        The variables defined in the ``statements`` are not visible after
+        the branch.
+
+        Return the transpiled statements, and whether they define any variables.
+        We leave the layout of the statements to the caller.
+        """
+        parent_environment = self._environment
+        scope_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        self._environment = scope_environment
+
+        errors = []  # type: List[Error]
+        stmts = []  # type: List[Stripped]
+        try:
+            for stmt in statements:
+                code, error = self.transform(stmt)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert code is not None
+                stmts.append(code)
+        finally:
+            self._environment = parent_environment
+
+        if len(errors) > 0:
+            return None, Error(
+                None, "Failed to transpile the statements of a switch branch", errors
+            )
+
+        return (stmts, len(scope_environment.mapping) > 0), None
+
+    @staticmethod
+    def _block(stmts: Sequence[Stripped]) -> Stripped:
+        """Enclose the ``stmts`` in a block."""
+        if len(stmts) == 0:
+            return Stripped("{}")
+
+        writer = io.StringIO()
+        writer.write("{")
+        for stmt in stmts:
+            writer.write("\n")
+            writer.write(textwrap.indent(stmt, I))
+        writer.write("\n}")
+
+        return Stripped(writer.getvalue())
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def _transform_switch_as_if_chain(
+        self, node: parse_tree.Switch, subject: Stripped
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        """
+        Transpile the ``node`` as a chain of ``if``, ``else if`` and ``else``.
+
+        We need this for the subjects which Java can not switch on, namely ``long``.
+        """
+        no_parentheses_types = (
+            parse_tree.Member,
+            parse_tree.FunctionCall,
+            parse_tree.MethodCall,
+            parse_tree.Name,
+            parse_tree.Index,
+        )
+        if not isinstance(node.subject, no_parentheses_types):
+            subject = Stripped(f"({subject})")
+
+        errors = []  # type: List[Error]
+
+        # NOTE (mristin):
+        # We collect the headers of the branches together with their statements,
+        # and treat the default as the last branch.
+        branches = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+
+        for i, case in enumerate(node.cases):
+            comparisons = []  # type: List[str]
+            for label in case.labels:
+                label_code, error = self.transform(label)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert label_code is not None
+                comparisons.append(f"{subject} == {label_code}")
+
+            condition = " || ".join(comparisons)
+            keyword = "if" if i == 0 else "else if"
+            branches.append((f"{keyword} ({condition})", case.body))
+
+        if node.default is not None:
+            branches.append(("else", node.default))
+
+        writer = io.StringIO()
+
+        for i, (header, statements) in enumerate(branches):
+            stmts_and_defines, error = self._transform_branch(statements)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert stmts_and_defines is not None
+            stmts, _ = stmts_and_defines
+
+            if i > 0:
+                writer.write(" ")
+            writer.write(f"{header} {Transpiler._block(stmts)}")
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the switch", errors
+            )
+
+        return Stripped(writer.getvalue()), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_switch(
+        self, node: parse_tree.Switch
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        subject, error = self.transform(node.subject)
+        if error is not None:
+            return None, error
+
+        assert subject is not None
+
+        subject_type = self.type_map[node.subject]
+
+        # NOTE (mristin):
+        # Java can not switch on ``long``, which we use for integers.
+        if (
+            intermediate_type_inference.try_primitive_type(subject_type)
+            is intermediate_type_inference.PrimitiveType.INT
+        ):
+            return self._transform_switch_as_if_chain(node=node, subject=subject)
+
+        errors = []  # type: List[Error]
+
+        # NOTE (mristin):
+        # We collect the headers of the clauses together with their statements, and
+        # treat the default as the last clause.
+        clauses = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+
+        for case in node.cases:
+            labels = []  # type: List[str]
+            for label in case.labels:
+                if isinstance(label, parse_tree.Member):
+                    # NOTE (mristin):
+                    # Java 17 expects the enumeration literals in the case labels
+                    # without the qualification.
+                    labels.append(java_naming.enum_literal_name(label.name))
+                else:
+                    label_code, error = self.transform(label)
+                    if error is not None:
+                        errors.append(error)
+                        continue
+
+                    assert label_code is not None
+                    labels.append(label_code)
+
+            clauses.append((f"case {', '.join(labels)} ->", case.body))
+
+        if node.default is not None:
+            clauses.append(("default ->", node.default))
+
+        writer = io.StringIO()
+        writer.write(f"switch ({subject}) {{")
+
+        for header, statements in clauses:
+            stmts_and_defines, error = self._transform_branch(statements)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert stmts_and_defines is not None
+            stmts, _ = stmts_and_defines
+
+            # NOTE (mristin):
+            # We always enclose the statements in a block. The arrow form of
+            # the case does not fall through, so we need no ``break``.
+            writer.write("\n")
+            writer.write(textwrap.indent(f"{header} {Transpiler._block(stmts)}", I))
+
+        writer.write("\n}")
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the switch", errors
+            )
+
+        return Stripped(writer.getvalue()), None
 
 
 # noinspection PyProtectedMember,PyProtectedMember

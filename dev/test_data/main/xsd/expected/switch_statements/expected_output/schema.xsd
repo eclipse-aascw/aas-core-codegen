@@ -1,0 +1,31 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="https://dummy.com" elementFormDefault="qualified" targetNamespace="https://dummy.com">
+  <xs:group name="something">
+    <xs:sequence>
+      <xs:element name="kind" type="kind_t"/>
+      <xs:element name="text" type="xs:string"/>
+      <xs:element name="name">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+      <xs:element name="number" type="xs:long"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:simpleType name="kind_t">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="alpha"/>
+      <xs:enumeration value="beta"/>
+      <xs:enumeration value="gamma"/>
+      <xs:enumeration value="delta"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="something_t">
+    <xs:sequence>
+      <xs:group ref="something"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="something" type="something_t"/>
+</xs:schema>

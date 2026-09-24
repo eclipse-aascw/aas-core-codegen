@@ -1,11 +1,15 @@
 """Transpile meta-model Python code to TypeScript code."""
 import abc
 import io
+import textwrap
 from typing import (
+    AbstractSet,
     Tuple,
     Optional,
     List,
     Mapping,
+    MutableMapping,
+    Sequence,
     Union,
     Set,
 )
@@ -33,6 +37,60 @@ from aas_core_codegen.typescript import (
 )
 
 
+def _collect_reassigned_definitions_in_scope(
+    statements: Sequence[parse_tree.Node],
+    visible: Mapping[Identifier, parse_tree.Assignment],
+    result: Set[parse_tree.Assignment],
+) -> None:
+    """
+    Collect recursively the re-assigned definitions of the variables into ``result``.
+
+    The ``visible`` maps the variables of the enclosing scopes to their definitions.
+    """
+    definitions = dict(
+        visible
+    )  # type: MutableMapping[Identifier, parse_tree.Assignment]
+
+    for stmt in statements:
+        if isinstance(stmt, parse_tree.Assignment) and isinstance(
+            stmt.target, parse_tree.Name
+        ):
+            definition = definitions.get(stmt.target.identifier, None)
+            if definition is None:
+                definitions[stmt.target.identifier] = stmt
+            else:
+                result.add(definition)
+
+        elif isinstance(stmt, parse_tree.Switch):
+            for case in stmt.cases:
+                _collect_reassigned_definitions_in_scope(
+                    statements=case.body, visible=definitions, result=result
+                )
+
+            if stmt.default is not None:
+                _collect_reassigned_definitions_in_scope(
+                    statements=stmt.default, visible=definitions, result=result
+                )
+
+
+def collect_reassigned_definitions(
+    body: Sequence[parse_tree.Node],
+) -> Set[parse_tree.Assignment]:
+    """
+    Collect the definitions of the variables which are re-assigned later.
+
+    We need to know this to define the variables with ``const`` whenever possible,
+    as ESLint otherwise complains. The variables defined in a switch branch are
+    scoped to the branch, so a variable of the same name in a sibling branch is
+    a different variable.
+    """
+    result = set()  # type: Set[parse_tree.Assignment]
+    _collect_reassigned_definitions_in_scope(
+        statements=body, visible=dict(), result=result
+    )
+    return result
+
+
 class Transpiler(
     parse_tree.RestrictedTransformer[Tuple[Optional[Stripped], Optional[Error]]]
 ):
@@ -54,13 +112,21 @@ class Transpiler(
         ],
         environment: intermediate_type_inference.Environment,
         downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
+        reassigned_definitions: AbstractSet[parse_tree.Assignment] = frozenset(),
     ) -> None:
-        """Initialize with the given values."""
+        """
+        Initialize with the given values.
+
+        The ``reassigned_definitions`` are defined with ``let``, while
+        the other definitions are defined with ``const``, see
+        :py:func:`collect_reassigned_definitions`.
+        """
         self.type_map = type_map
         self._downcast_map = downcast_map
         self._environment = intermediate_type_inference.MutableEnvironment(
             parent=environment
         )
+        self._reassigned_definitions = reassigned_definitions
 
         # NOTE (mristin):
         # Keep track whenever we define a variable name, so that we can know how to
@@ -1200,12 +1266,16 @@ AasCommon.range(
         if error is not None:
             errors.append(error)
 
+        is_definition = False
+
         if isinstance(node.target, parse_tree.Name):
             type_anno = self._environment.find(identifier=node.target.identifier)
             if type_anno is None:
                 # NOTE (mristin):
                 # This is a variable definition as we did not specify the identifier
                 # in the environment.
+
+                is_definition = True
 
                 type_anno = self.type_map[node.value]
                 self._variable_name_set.add(node.target.identifier)
@@ -1224,6 +1294,12 @@ AasCommon.range(
 
         assert target is not None
         assert value is not None
+
+        if is_definition:
+            if node in self._reassigned_definitions:
+                target = Stripped(f"let {target}")
+            else:
+                target = Stripped(f"const {target}")
 
         # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in
@@ -1266,6 +1342,123 @@ return (
             )
 
         return Stripped(f"return {value};"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def _transform_branch(
+        self, statements: Sequence[parse_tree.StatementUnion]
+    ) -> Tuple[Optional[Tuple[List[Stripped], bool]], Optional[Error]]:
+        """
+        Transpile the ``statements`` of a switch branch in a new scope.
+
+        The variables defined in the ``statements`` are not visible after
+        the branch.
+
+        Return the transpiled statements, and whether they define any variables.
+        We leave the layout of the statements to the caller.
+        """
+        parent_environment = self._environment
+        scope_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        self._environment = scope_environment
+
+        errors = []  # type: List[Error]
+        stmts = []  # type: List[Stripped]
+        try:
+            for stmt in statements:
+                code, error = self.transform(stmt)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert code is not None
+                stmts.append(code)
+        finally:
+            self._environment = parent_environment
+
+        if len(errors) > 0:
+            return None, Error(
+                None, "Failed to transpile the statements of a switch branch", errors
+            )
+
+        return (stmts, len(scope_environment.mapping) > 0), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_switch(
+        self, node: parse_tree.Switch
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        subject, error = self.transform(node.subject)
+        if error is not None:
+            return None, error
+
+        assert subject is not None
+
+        errors = []  # type: List[Error]
+
+        # NOTE (mristin):
+        # We collect the headers of the clauses together with their statements, and
+        # treat the default as the last clause.
+        clauses = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+
+        for case in node.cases:
+            headers = []  # type: List[str]
+            for label in case.labels:
+                label_code, error = self.transform(label)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert label_code is not None
+                headers.append(f"case {label_code}:")
+
+            clauses.append(("\n".join(headers), case.body))
+
+        if node.default is not None:
+            clauses.append(("default:", node.default))
+
+        writer = io.StringIO()
+        writer.write(f"switch ({subject}) {{")
+
+        for header, statements in clauses:
+            stmts_and_defines, error = self._transform_branch(statements)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert stmts_and_defines is not None
+            stmts, defines_variables = stmts_and_defines
+
+            # NOTE (mristin):
+            # TypeScript falls through, so we end the clause with a ``break`` if its
+            # execution can complete.
+            if parse_tree.can_complete_normally(statements):
+                stmts = stmts + [Stripped("break;")]
+
+            writer.write("\n")
+            writer.write(textwrap.indent(header, I))
+
+            # NOTE (mristin):
+            # We enclose the statements in a block only if they define variables
+            # since all the clauses of a switch share the same scope otherwise.
+            if defines_variables:
+                writer.write(" {")
+                for stmt in stmts:
+                    writer.write("\n")
+                    writer.write(textwrap.indent(stmt, II))
+                writer.write(f"\n{I}}}")
+            else:
+                for stmt in stmts:
+                    writer.write("\n")
+                    writer.write(textwrap.indent(stmt, II))
+
+        writer.write("\n}")
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the switch", errors
+            )
+
+        return Stripped(writer.getvalue()), None
 
 
 # noinspection PyProtectedMember,PyProtectedMember

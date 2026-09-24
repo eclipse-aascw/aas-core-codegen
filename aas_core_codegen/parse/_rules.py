@@ -13,7 +13,7 @@ import ast
 import os
 import pathlib
 import sys
-from typing import Tuple, Optional, List, Mapping, Type, Sequence, Union, cast
+from typing import Tuple, Optional, List, Mapping, Type, Sequence, Set, Union, cast
 
 from icontract import ensure
 
@@ -812,6 +812,264 @@ class _ParseReturn(_Parse):
         return tree.Return(value=value, original_node=node), None
 
 
+def _match_switch_test(
+    test: ast.expr,
+) -> Optional[Tuple[ast.expr, List[ast.expr]]]:
+    """
+    Match the ``test`` of an ``if`` as a case of a switch.
+
+    Return the subject and the labels, if the ``test`` matches. We expect one of
+    the forms:
+
+    * ``subject == label``,
+    * ``subject == label1 or subject == label2 or ...``, or
+    * ``subject in (label1, label2, ...)``.
+
+    The labels are not checked here, but only matched syntactically.
+    """
+    if isinstance(test, ast.Compare) and len(test.ops) == 1:
+        if isinstance(test.ops[0], ast.Eq):
+            return test.left, [test.comparators[0]]
+
+        if isinstance(test.ops[0], ast.In) and isinstance(
+            test.comparators[0], ast.Tuple
+        ):
+            return test.left, list(test.comparators[0].elts)
+
+        return None
+
+    if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.Or):
+        subject = None  # type: Optional[ast.expr]
+        labels = []  # type: List[ast.expr]
+
+        for value in test.values:
+            if not (
+                isinstance(value, ast.Compare)
+                and len(value.ops) == 1
+                and isinstance(value.ops[0], ast.Eq)
+            ):
+                return None
+
+            if subject is None:
+                subject = value.left
+            elif ast.dump(subject) != ast.dump(value.left):
+                return None
+
+            labels.append(value.comparators[0])
+
+        assert subject is not None
+        return subject, labels
+
+    return None
+
+
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _parse_switch_label(
+    node: ast.expr,
+) -> Tuple[Optional[Union[tree.Constant, tree.Member]], Optional[Error]]:
+    """
+    Parse a label of a switch case.
+
+    We expect either a string or an integer literal, or an enumeration literal
+    such as ``Some_enum.Some_literal``.
+    """
+    if isinstance(node, ast.Constant):
+        # NOTE (mristin):
+        # We have to explicitly exclude booleans as they are integers in Python.
+        if isinstance(node.value, (str, int)) and not isinstance(node.value, bool):
+            return tree.Constant(value=node.value, original_node=node), None
+
+    elif (
+        isinstance(node, ast.UnaryOp)
+        and isinstance(node.op, ast.USub)
+        and isinstance(node.operand, ast.Constant)
+        and isinstance(node.operand.value, int)
+        and not isinstance(node.operand.value, bool)
+    ):
+        return tree.Constant(value=-node.operand.value, original_node=node), None
+
+    elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        return (
+            tree.Member(
+                instance=tree.Name(
+                    identifier=Identifier(node.value.id), original_node=node.value
+                ),
+                name=Identifier(node.attr),
+                original_node=node,
+            ),
+            None,
+        )
+
+    return None, Error(
+        node,
+        f"Expected the label of a switch case to be a string literal, "
+        f"an integer literal or an enumeration literal, "
+        f"but got: {ast.unparse(node)}",
+    )
+
+
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _parse_switch_body(
+    nodes: Sequence[ast.stmt],
+) -> Tuple[Optional[List[tree.StatementUnion]], Optional[Error]]:
+    """
+    Parse the body of a switch branch.
+
+    A sole ``pass`` is understood as an empty body.
+    """
+    if len(nodes) == 1 and isinstance(nodes[0], ast.Pass):
+        return [], None
+
+    body = []  # type: List[tree.StatementUnion]
+    for node in nodes:
+        if len(body) > 0 and not tree.can_complete_normally(body):
+            return None, Error(
+                node,
+                "The statement is unreachable as the preceding statements "
+                "never complete",
+            )
+
+        if isinstance(node, ast.Pass):
+            return None, Error(
+                node,
+                "We expect ``pass`` only as the sole statement of a switch branch",
+            )
+
+        stmt, error = ast_node_to_our_node(node)
+        if error is not None:
+            return None, error
+
+        assert stmt is not None
+
+        if not isinstance(stmt, (tree.Assignment, tree.Return, tree.Switch)):
+            return None, Error(
+                node,
+                f"Expected only statements in a switch branch, "
+                f"but got an expression: {ast.unparse(node)}",
+            )
+
+        body.append(stmt)
+
+    return body, None
+
+
+class _ParseSwitch(_Parse):
+    """
+    Parse a chain of ``if``, ``elif`` and ``else`` as a switch.
+
+    The chain continues as long as the ``else`` contains a sole ``if`` statement
+    which compares the same subject. Otherwise, the ``else`` is the default of
+    the switch. Since Python's AST does not distinguish ``elif`` from ``else``
+    followed by a nested ``if``, an ``elif`` on a different subject becomes
+    a nested switch in the default.
+    """
+
+    def matches(self, node: ast.AST) -> bool:
+        return isinstance(node, ast.If)
+
+    # noinspection PyTypeChecker
+    def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
+        assert isinstance(node, ast.If)
+
+        match = _match_switch_test(node.test)
+        if match is None:
+            return None, Error(
+                node.test,
+                f"We support if-statements only as switches, where each condition "
+                f"compares a single subject against constants in the form "
+                f"``subject == label``, ``subject == label1 or subject == label2`` "
+                f"or ``subject in (label1, label2)``, but got: "
+                f"{ast.unparse(node.test)}",
+            )
+
+        subject_node, _ = match
+
+        if_nodes = [node]  # type: List[ast.If]
+        label_nodes_per_case = [match[1]]  # type: List[List[ast.expr]]
+
+        cursor = node
+        while len(cursor.orelse) == 1 and isinstance(cursor.orelse[0], ast.If):
+            next_if = cursor.orelse[0]
+            next_match = _match_switch_test(next_if.test)
+            if next_match is None or ast.dump(next_match[0]) != ast.dump(subject_node):
+                break
+
+            if_nodes.append(next_if)
+            label_nodes_per_case.append(next_match[1])
+            cursor = next_if
+
+        subject, error = ast_node_to_our_node(subject_node)
+        if error is not None:
+            return None, error
+
+        assert subject is not None
+        if not isinstance(subject, tree.Expression):
+            return None, Error(
+                subject_node,
+                f"Expected the subject of the switch to be an expression, "
+                f"but got: {ast.unparse(subject_node)}",
+            )
+
+        # NOTE (mristin):
+        # We check for the duplicate labels syntactically. For example, we can not
+        # detect that two different enumeration literals share the same value,
+        # but that would not be a valid enumeration in the meta-model anyhow.
+        observed_labels = set()  # type: Set[str]
+
+        cases = []  # type: List[tree.SwitchCase]
+        for if_node, label_nodes in zip(if_nodes, label_nodes_per_case):
+            if len(label_nodes) == 0:
+                return None, Error(
+                    if_node.test, "Expected at least one label in the switch case"
+                )
+
+            labels = []  # type: List[Union[tree.Constant, tree.Member]]
+            for label_node in label_nodes:
+                label, error = _parse_switch_label(label_node)
+                if error is not None:
+                    return None, error
+
+                assert label is not None
+
+                if isinstance(label, tree.Constant):
+                    label_key = f"{type(label.value).__name__}:{label.value!r}"
+                else:
+                    label_key = ast.dump(label_node)
+
+                if label_key in observed_labels:
+                    return None, Error(
+                        label_node,
+                        f"The label {ast.unparse(label_node)} has been already "
+                        f"used in the switch",
+                    )
+
+                observed_labels.add(label_key)
+                labels.append(label)
+
+            body, error = _parse_switch_body(if_node.body)
+            if error is not None:
+                return None, error
+
+            assert body is not None
+
+            cases.append(
+                tree.SwitchCase(labels=labels, body=body, original_node=if_node)
+            )
+
+        default = None  # type: Optional[List[tree.StatementUnion]]
+        if len(cursor.orelse) > 0:
+            default, error = _parse_switch_body(cursor.orelse)
+            if error is not None:
+                return None, error
+
+        return (
+            tree.Switch(
+                subject=subject, cases=cases, default=default, original_node=node
+            ),
+            None,
+        )
+
+
 _CHAIN_OF_RULES = [
     _ParseComparison(),
     _ParseIsIn(),
@@ -832,6 +1090,7 @@ _CHAIN_OF_RULES = [
     _ParseJoinedStr(),
     _ParseAssignment(),
     _ParseReturn(),
+    _ParseSwitch(),
 ]  # type: Sequence[_Parse]
 
 

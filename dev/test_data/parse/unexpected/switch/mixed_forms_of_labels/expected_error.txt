@@ -1,0 +1,1 @@
+We support if-statements only as switches, where each condition compares a single subject against constants in the form ``subject == label``, ``subject == label1 or subject == label2`` or ``subject in (label1, label2)``, but got: text == 'a' or text in ('b', 'c')

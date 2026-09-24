@@ -1,10 +1,13 @@
 """Transpile Python to Go code."""
 import abc
+import io
+import textwrap
 from typing import (
     Tuple,
     Optional,
     List,
     Mapping,
+    Sequence,
     Union,
     Set,
 )
@@ -1464,6 +1467,109 @@ return {indent_but_first_line(value, I)}"""
             )
 
         return Stripped(f"return {value}"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def _transform_branch(
+        self, statements: Sequence[parse_tree.StatementUnion]
+    ) -> Tuple[Optional[Tuple[List[Stripped], bool]], Optional[Error]]:
+        """
+        Transpile the ``statements`` of a switch branch in a new scope.
+
+        Each clause of a Go switch is an implicit block, so the variables defined
+        in the ``statements`` are not visible after the branch.
+
+        Return the transpiled statements, and whether they define any variables.
+        We leave the layout of the statements to the caller.
+        """
+        parent_environment = self._environment
+        scope_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        self._environment = scope_environment
+
+        errors = []  # type: List[Error]
+        stmts = []  # type: List[Stripped]
+        try:
+            for stmt in statements:
+                code, error = self.transform(stmt)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert code is not None
+                stmts.append(code)
+        finally:
+            self._environment = parent_environment
+
+        if len(errors) > 0:
+            return None, Error(
+                None, "Failed to transpile the statements of a switch branch", errors
+            )
+
+        return (stmts, len(scope_environment.mapping) > 0), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_switch(
+        self, node: parse_tree.Switch
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        subject, error = self._transform_and_dereference_if_necessary(node.subject)
+        if error is not None:
+            return None, error
+
+        assert subject is not None
+
+        errors = []  # type: List[Error]
+
+        # NOTE (mristin):
+        # We collect the headers of the clauses together with their statements, and
+        # treat the default as the last clause.
+        clauses = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+
+        for case in node.cases:
+            labels = []  # type: List[Stripped]
+            for label in case.labels:
+                label_code, error = self.transform(label)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert label_code is not None
+                labels.append(label_code)
+
+            clauses.append((f"case {', '.join(labels)}:", case.body))
+
+        if node.default is not None:
+            clauses.append(("default:", node.default))
+
+        writer = io.StringIO()
+        writer.write(f"switch {subject} {{")
+
+        for header, statements in clauses:
+            stmts_and_defines, error = self._transform_branch(statements)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert stmts_and_defines is not None
+
+            # NOTE (mristin):
+            # Each clause is an implicit block in Go, so we need no explicit block
+            # for the variables. Go does not fall through, so we need no ``break``.
+            stmts, _ = stmts_and_defines
+
+            writer.write(f"\n{header}")
+            for stmt in stmts:
+                writer.write("\n")
+                writer.write(textwrap.indent(stmt, I))
+
+        writer.write("\n}")
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the switch", errors
+            )
+
+        return Stripped(writer.getvalue()), None
 
 
 # noinspection PyProtectedMember,PyProtectedMember

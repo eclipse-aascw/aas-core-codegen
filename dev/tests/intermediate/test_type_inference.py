@@ -507,6 +507,393 @@ __xml_namespace__ = "https://dummy.com"
             ),
         )
 
+    def test_switch_variable_used_after_the_branch_fails(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(kind: Kind) -> bool:
+    if kind == Kind.Alpha:
+        x = 1
+    else:
+        x = 2
+
+    return x > 0
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "We do not know how to infer the type of the variable with "
+                "the identifier 'x' from the given environment. Mind that we "
+                "do not consider the module scope nor handle all built-in "
+                "functions due to simplicity! If you believe this needs to "
+                "work, please notify the developers."
+            ),
+        )
+
+    def test_switch_variable_of_a_sibling_branch_fails(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(kind: Kind) -> bool:
+    if kind == Kind.Alpha:
+        x = 1
+        return x > 0
+    else:
+        return x > 0
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "We do not know how to infer the type of the variable with "
+                "the identifier 'x' from the given environment. Mind that we "
+                "do not consider the module scope nor handle all built-in "
+                "functions due to simplicity! If you believe this needs to "
+                "work, please notify the developers."
+            ),
+        )
+
+    def test_switch_variable_redeclared_after_the_switch_fails(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(kind: Kind) -> bool:
+    if kind == Kind.Alpha:
+        x = 1
+        return x > 0
+
+    x = 2
+    return x > 0
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "The variable 'x' has been already defined in a branch of a "
+                "switch before. In Python, both definitions denote the same "
+                "variable, while they denote two different variables in the "
+                "target languages with block scopes, and some target "
+                "languages, such as C#, refuse such re-declarations "
+                "altogether. Please use a different name."
+            ),
+        )
+
+    def test_switch_variable_redeclared_after_a_nested_switch_fails(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(kind: Kind, number: int) -> bool:
+    if kind == Kind.Alpha:
+        if number == 0:
+            x = 1
+            return x > 0
+
+        x = 2
+        return x > 0
+
+    return True
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "The variable 'x' has been already defined in a branch of a "
+                "switch before. In Python, both definitions denote the same "
+                "variable, while they denote two different variables in the "
+                "target languages with block scopes, and some target "
+                "languages, such as C#, refuse such re-declarations "
+                "altogether. Please use a different name."
+            ),
+        )
+
+    def test_switch_variable_reused_in_sibling_branches(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(kind: Kind, text: str) -> bool:
+    if kind == Kind.Alpha:
+        x = len(text)
+        return x > 0
+    else:
+        x = len(text)
+        return x > 1
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.execute(source=source)
+
+    def test_switch_assignment_to_a_variable_before_the_switch(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(kind: Kind) -> bool:
+    x = 1
+    if kind == Kind.Alpha:
+        x = 2
+
+    return x > 1
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.execute(source=source)
+
+    def test_switch_on_optional_subject_fails(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(kind: Optional[Kind]) -> bool:
+    if kind == Kind.Alpha:
+        return False
+
+    return True
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "Expected the subject of the switch to be a non-None, but "
+                "got: Optional[Kind]"
+            ),
+        )
+
+    def test_switch_on_bool_subject_fails(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(flag: bool) -> bool:
+    if flag == 1:
+        return False
+
+    return True
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "Expected the subject of the switch to be an enumeration, a "
+                "string or an integer, but got: bool"
+            ),
+        )
+
+    def test_switch_label_of_another_enumeration_fails(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(kind: Kind) -> bool:
+    if kind == Other_kind.Alpha:
+        return False
+
+    return True
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "Expected the label to be a literal of the enumeration "
+                "'Kind', the type of the subject of the switch, but got: "
+                "Other_kind"
+            ),
+        )
+
+    def test_switch_label_with_unknown_literal_fails(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(kind: Kind) -> bool:
+    if kind == Kind.Gamma:
+        return False
+
+    return True
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "The literal 'Gamma' could not be found in the enumeration " "'Kind'"
+            ),
+        )
+
+    def test_switch_int_label_on_str_subject_fails(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(text: str) -> bool:
+    if text == 1:
+        return False
+
+    return True
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "Expected the label to be a str literal, the type of the "
+                "subject of the switch, but got: int"
+            ),
+        )
+
+    def test_switch_str_label_on_enum_subject_fails(self) -> None:
+        source = """\
+class Kind(Enum):
+    Alpha = "alpha"
+    Beta = "beta"
+
+
+class Other_kind(Enum):
+    Alpha = "alpha"
+
+
+@verification
+def some_func(kind: Kind) -> bool:
+    if kind == "alpha":
+        return False
+
+    return True
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "Expected the label to be a literal of the enumeration "
+                "'Kind', the type of the subject of the switch, but got: str"
+            ),
+        )
+
 
 class Test_is_instance(unittest.TestCase):
     @staticmethod

@@ -1,11 +1,13 @@
 """Transpile meta-model Python code to C++ code."""
 import abc
 import io
+import textwrap
 from typing import (
     Tuple,
     Optional,
     List,
     Mapping,
+    Sequence,
     Union,
     Set,
 )
@@ -1780,6 +1782,219 @@ return (
             )
 
         return Stripped(f"return {value};"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def _transform_branch(
+        self, statements: Sequence[parse_tree.StatementUnion]
+    ) -> Tuple[Optional[Tuple[List[Stripped], bool]], Optional[Error]]:
+        """
+        Transpile the ``statements`` of a switch branch in a new scope.
+
+        The variables defined in the ``statements`` are not visible after
+        the branch.
+
+        Return the transpiled statements, and whether they define any variables.
+        We leave the layout of the statements to the caller.
+        """
+        parent_environment = self._environment
+        scope_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        self._environment = scope_environment
+
+        errors = []  # type: List[Error]
+        stmts = []  # type: List[Stripped]
+        try:
+            for stmt in statements:
+                code, error = self.transform(stmt)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert code is not None
+                stmts.append(code)
+        finally:
+            self._environment = parent_environment
+
+        if len(errors) > 0:
+            return None, Error(
+                None, "Failed to transpile the statements of a switch branch", errors
+            )
+
+        return (stmts, len(scope_environment.mapping) > 0), None
+
+    @staticmethod
+    def _block(stmts: Sequence[Stripped]) -> Stripped:
+        """Enclose the ``stmts`` in a block."""
+        if len(stmts) == 0:
+            return Stripped("{}")
+
+        body = "\n".join(stmts)
+        return Stripped(
+            f"""\
+{{
+{I}{indent_but_first_line(body, I)}
+}}"""
+        )
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def _transform_switch_as_if_chain(
+        self, node: parse_tree.Switch, subject: Stripped
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        """
+        Transpile the ``node`` as a chain of ``if``, ``else if`` and ``else``.
+
+        We need this for the subjects which C++ can not switch on, namely strings.
+        """
+        no_parentheses_types = (
+            parse_tree.Member,
+            parse_tree.FunctionCall,
+            parse_tree.MethodCall,
+            parse_tree.Name,
+            parse_tree.Index,
+        )
+        if not isinstance(node.subject, no_parentheses_types):
+            subject = Stripped(f"({subject})")
+
+        errors = []  # type: List[Error]
+        writer = io.StringIO()
+
+        for i, case in enumerate(node.cases):
+            comparisons = []  # type: List[str]
+            for label in case.labels:
+                label_code, error = self.transform(label)
+                if error is not None:
+                    errors.append(error)
+                    continue
+
+                assert label_code is not None
+                comparisons.append(f"{subject} == {label_code}")
+
+            stmts_and_defines, error = self._transform_branch(case.body)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert stmts_and_defines is not None
+            body = Transpiler._block(stmts_and_defines[0])
+
+            condition = " || ".join(comparisons)
+            if i == 0:
+                writer.write(f"if ({condition}) {body}")
+            else:
+                writer.write(f" else if ({condition}) {body}")
+
+        if node.default is not None:
+            stmts_and_defines, error = self._transform_branch(node.default)
+            if error is not None:
+                errors.append(error)
+            else:
+                assert stmts_and_defines is not None
+                writer.write(f" else {Transpiler._block(stmts_and_defines[0])}")
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the switch", errors
+            )
+
+        return Stripped(writer.getvalue()), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_switch(
+        self, node: parse_tree.Switch
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        subject, error = self._transform_and_value_if_necessary(node.subject)
+        if error is not None:
+            return None, error
+
+        assert subject is not None
+
+        subject_type = self.type_map[node.subject]
+        primitive_type = intermediate_type_inference.try_primitive_type(subject_type)
+
+        # NOTE (mristin):
+        # C++ can not switch on strings.
+        if primitive_type is intermediate_type_inference.PrimitiveType.STR:
+            return self._transform_switch_as_if_chain(node=node, subject=subject)
+
+        errors = []  # type: List[Error]
+
+        # NOTE (mristin):
+        # We collect the headers of the clauses together with their statements, and
+        # treat the default as the last clause.
+        clauses = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+
+        for case in node.cases:
+            headers = []  # type: List[str]
+            for label in case.labels:
+                if isinstance(label, parse_tree.Constant):
+                    # NOTE (mristin):
+                    # We render the integers directly as the constants are otherwise
+                    # rendered as floating-point literals.
+                    assert isinstance(label.value, int) and not isinstance(
+                        label.value, bool
+                    )
+                    headers.append(f"case {label.value}:")
+                else:
+                    label_code, error = self.transform(label)
+                    if error is not None:
+                        errors.append(error)
+                        continue
+
+                    assert label_code is not None
+                    headers.append(f"case {label_code}:")
+
+            clauses.append(("\n".join(headers), case.body))
+
+        if node.default is not None:
+            clauses.append(("default:", node.default))
+        elif primitive_type is None:
+            # NOTE (mristin):
+            # We add an explicit default to the switches over enumerations to
+            # signal that the missing literals are intentional, and silence
+            # the ``-Wswitch`` warning.
+            clauses.append(("default:", []))
+
+        writer = io.StringIO()
+        writer.write(f"switch ({subject}) {{")
+
+        for header, statements in clauses:
+            stmts_and_defines, error = self._transform_branch(statements)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert stmts_and_defines is not None
+            stmts, defines_variables = stmts_and_defines
+
+            # NOTE (mristin):
+            # C++ falls through, so we end the clause with a ``break`` if its
+            # execution can complete.
+            if parse_tree.can_complete_normally(statements):
+                stmts = stmts + [Stripped("break;")]
+
+            writer.write("\n")
+            writer.write(textwrap.indent(header, I))
+
+            # NOTE (mristin):
+            # We enclose the statements in a block only if they define variables as
+            # C++ does not allow to jump over the initialization of a variable.
+            if defines_variables:
+                writer.write(" ")
+                writer.write(indent_but_first_line(Transpiler._block(stmts), I))
+            else:
+                for stmt in stmts:
+                    writer.write("\n")
+                    writer.write(textwrap.indent(stmt, II))
+
+        writer.write("\n}")
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the switch", errors
+            )
+
+        return Stripped(writer.getvalue()), None
 
 
 # noinspection PyProtectedMember,PyProtectedMember

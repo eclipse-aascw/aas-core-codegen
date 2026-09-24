@@ -1,0 +1,1 @@
+The label Kind.Alpha has been already used in the switch

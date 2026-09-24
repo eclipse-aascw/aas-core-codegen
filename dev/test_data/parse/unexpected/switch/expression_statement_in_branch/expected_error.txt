@@ -1,0 +1,1 @@
+Expected only statements in a switch branch, but got an expression: len(text)
