@@ -451,7 +451,7 @@ void XMLCALL OnStartElement(
 {I}our_data->nodes.emplace_back(
 {II}aas::common::make_unique<StartNode>(
 {III}name,
-{III}std::move(ss.str())
+{III}ss.str()
 {II})
 {I});
 }}"""

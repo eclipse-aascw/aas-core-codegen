@@ -292,7 +292,7 @@ void XMLCALL OnStartElement(
   our_data->nodes.emplace_back(
     aas::common::make_unique<StartNode>(
       name,
-      std::move(ss.str())
+      ss.str()
     )
   );
 }
