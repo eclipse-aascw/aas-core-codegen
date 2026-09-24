@@ -305,6 +305,38 @@ def _verify_structure_name_collisions(
 
     # endregion
 
+    # region Collisions of the generated functions with the structures
+
+    # NOTE (mristin):
+    # The functions ``Is{Class}`` and ``UnderlyingOf{Union}`` live in the same
+    # namespace as the structures, so their names must not collide with them.
+    # They can not collide among themselves, since their prefixes differ and
+    # the names of the classes and named unions are unique.
+
+    # noinspection PyTypeChecker
+    for cls_or_union in itertools.chain(
+        symbol_table.classes, symbol_table.named_unions
+    ):
+        function_name: Identifier
+        if isinstance(cls_or_union, intermediate.NamedUnion):
+            function_name = cpp_naming.underlying_of_function_name(cls_or_union.name)
+        else:
+            function_name = cpp_naming.is_function_name(cls_or_union.name)
+
+        other = observed_type_names.get(function_name, None)
+        if other is not None:
+            errors.append(
+                Error(
+                    cls_or_union.parsed.node,
+                    f"The C++ name {function_name!r} of the function generated "
+                    f"for the {_human_readable_identifier(cls_or_union)} "
+                    f"collides with the C++ name "
+                    f"of the {_human_readable_identifier(other)}",
+                )
+            )
+
+    # endregion
+
     # region Intra-structure collisions
 
     for our_type in symbol_table.our_types:
@@ -981,9 +1013,36 @@ class {cls_name}
     )
 
 
+@require(lambda named_union: len(named_union.roots) > 0)
+def _generate_underlying_of_named_union_definition(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """Generate the definition of the function to extract the underlying instance."""
+    function_name = cpp_naming.underlying_of_function_name(named_union.name)
+
+    union_name = cpp_naming.union_name(named_union.name)
+
+    return Stripped(
+        f"""\
+/**
+ * \\brief Extract the instance held in \\p that named union.
+ *
+ * The named union is a variant over its roots. The instance is returned as
+ * \\ref IClass, so that it can be checked with the is-a functions, and
+ * down-cast with `std::dynamic_pointer_cast`.
+ *
+ * \\param that named union holding the instance
+ * \\return the instance held in \\p that named union
+ */
+std::shared_ptr<IClass> {function_name}(
+{I}const {union_name}& that
+);"""
+    )
+
+
 def _generate_is_cls_definition(cls: intermediate.ClassUnion) -> Stripped:
     """Generate the definition of the function to check is-a based on model type."""
-    function_name = cpp_naming.function_name(Identifier(f"is_{cls.name}"))
+    function_name = cpp_naming.is_function_name(cls.name)
 
     interface_name = cpp_naming.interface_name(cls.name)
 
@@ -1149,6 +1208,16 @@ class IClass {{
         blocks.append(_generate_is_cls_definition(cls=cls))
 
     blocks.append(Stripped("// endregion Is-a functions"))
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(Stripped("// region Underlying instances of named unions"))
+
+        for named_union in symbol_table.named_unions:
+            blocks.append(
+                _generate_underlying_of_named_union_definition(named_union=named_union)
+            )
+
+        blocks.append(Stripped("// endregion Underlying instances of named unions"))
 
     blocks.extend(
         [
@@ -1473,11 +1542,59 @@ def _generate_class_implementation(
     return blocks, None
 
 
+@require(lambda named_union: len(named_union.roots) > 0)
+def _generate_underlying_of_named_union_implementation(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate the impl. of the function to extract the instance held in a named union.
+
+    A named union is a ``common::variant``, not a polymorphic pointer, so it can
+    not be cast directly. Instead, we switch on the variant's ``index()`` and
+    return the corresponding alternative, which up-casts to ``IClass`` as any
+    other pointer to an instance of a class.
+    """
+    function_name = cpp_naming.underlying_of_function_name(named_union.name)
+
+    union_name = cpp_naming.union_name(named_union.name)
+
+    case_blocks = []  # type: List[Stripped]
+    for i in range(len(named_union.roots)):
+        case_blocks.append(
+            Stripped(
+                f"""\
+case {i}:
+{I}return common::get<{i}>(that);"""
+            )
+        )
+
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}throw std::logic_error("Invalid variant index");"""
+        )
+    )
+
+    case_blocks_joined = "\n".join(case_blocks)
+
+    return Stripped(
+        f"""\
+std::shared_ptr<IClass> {function_name}(
+{I}const {union_name}& that
+) {{
+{I}switch (that.index()) {{
+{II}{indent_but_first_line(case_blocks_joined, II)}
+{I}}}
+}}"""
+    )
+
+
 def _generate_is_cls_implementation(
     cls: intermediate.ClassUnion, symbol_table: intermediate.SymbolTable
 ) -> Stripped:
     """Generate the impl. of the function to check is-a based on model type."""
-    function_name = cpp_naming.function_name(Identifier(f"is_{cls.name}"))
+    function_name = cpp_naming.is_function_name(cls.name)
 
     case_blocks = []  # type: List[Stripped]
     for concrete_cls in symbol_table.concrete_classes:
@@ -1578,6 +1695,18 @@ def generate_implementation(
         )
 
     blocks.append(Stripped("// endregion Is-a functions"))
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(Stripped("// region Underlying instances of named unions"))
+
+        for named_union in symbol_table.named_unions:
+            blocks.append(
+                _generate_underlying_of_named_union_implementation(
+                    named_union=named_union
+                )
+            )
+
+        blocks.append(Stripped("// endregion Underlying instances of named unions"))
 
     blocks.extend(
         [

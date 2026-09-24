@@ -32,9 +32,9 @@ public class Verification {
   public static Boolean someVerification(
     String x,
     Long y) {
-    return (new Tuple2<>(
+    return Objects.equals((new Tuple2<>(
       x,
-      y)).item1() == x;
+      y)).item1(), x);
   }
 
   /**

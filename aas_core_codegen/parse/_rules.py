@@ -247,6 +247,84 @@ class _ParseAnyOrAll(_Parse):
         )
 
 
+class _ParseIsInstance(_Parse):
+    def matches(self, node: ast.AST) -> bool:
+        return (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "isinstance"
+        )
+
+    # noinspection PyTypeChecker
+    def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
+        assert isinstance(node, ast.Call)
+
+        if len(node.keywords) > 0:
+            return None, Error(
+                node,
+                "Keyword arguments are not supported in a call to ``isinstance``",
+            )
+
+        if len(node.args) != 2:
+            return None, Error(
+                node,
+                f"Expected exactly two arguments to ``isinstance``, "
+                f"but got: {len(node.args)}",
+            )
+
+        value, error = ast_node_to_our_node(node.args[0])
+        if error is not None:
+            return None, error
+
+        if not isinstance(value, tree.Expression):
+            return None, Error(
+                node.args[0],
+                f"Expected the first argument to ``isinstance`` to be an expression, "
+                f"but got: {value}",
+            )
+
+        class_nodes: List[ast.AST]
+        if isinstance(node.args[1], ast.Name):
+            class_nodes = [node.args[1]]
+        elif isinstance(node.args[1], ast.Tuple):
+            class_nodes = list(node.args[1].elts)
+
+            if len(class_nodes) == 0:
+                return None, Error(
+                    node.args[1],
+                    "Expected at least one class in the tuple given as the second "
+                    "argument to ``isinstance``, but got an empty tuple",
+                )
+        else:
+            return None, Error(
+                node.args[1],
+                f"Expected the second argument to ``isinstance`` to be either "
+                f"a class name or a tuple of class names, "
+                f"but got: {ast.dump(node.args[1])}",
+            )
+
+        classes = []  # type: List[tree.Name]
+        for class_node in class_nodes:
+            if not isinstance(class_node, ast.Name):
+                return None, Error(
+                    class_node,
+                    f"Expected a class name in the second argument "
+                    f"to ``isinstance``, but got: {ast.dump(class_node)}",
+                )
+
+            cls, error = ast_node_to_our_node(class_node)
+            if error is not None:
+                return None, error
+
+            assert isinstance(cls, tree.Name)
+            classes.append(cls)
+
+        return (
+            tree.IsInstance(value=value, classes=classes, original_node=node),
+            None,
+        )
+
+
 class _ParseCall(_Parse):
     def matches(self, node: ast.AST) -> bool:
         return isinstance(node, ast.Call)
@@ -738,6 +816,7 @@ _CHAIN_OF_RULES = [
     _ParseComparison(),
     _ParseIsIn(),
     _ParseAnyOrAll(),
+    _ParseIsInstance(),
     _ParseCall(),
     _ParseConstant(),
     _ParseTuple(),

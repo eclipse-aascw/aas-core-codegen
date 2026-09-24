@@ -407,12 +407,16 @@ class _TranspilableVerificationTranspiler(typescript_transpilation.Transpiler):
             parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
         ],
         environment: intermediate_type_inference.Environment,
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
         symbol_table: intermediate.SymbolTable,
         verification: intermediate.TranspilableVerification,
     ) -> None:
         """Initialize with the given values."""
         typescript_transpilation.Transpiler.__init__(
-            self, type_map=type_map, environment=environment
+            self,
+            type_map=type_map,
+            environment=environment,
+            downcast_map=downcast_map,
         )
 
         self._symbol_table = symbol_table
@@ -475,6 +479,7 @@ def _transpile_transpilable_verification(
     transpiler = _TranspilableVerificationTranspiler(
         type_map=type_inference.type_map,
         environment=type_inference.environment_with_args,
+        downcast_map=type_inference.downcast_map,
         symbol_table=symbol_table,
         verification=verification,
     )
@@ -576,11 +581,15 @@ class _InvariantTranspiler(typescript_transpilation.Transpiler):
             parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
         ],
         environment: intermediate_type_inference.Environment,
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
         symbol_table: intermediate.SymbolTable,
     ) -> None:
         """Initialize with the given values."""
         typescript_transpilation.Transpiler.__init__(
-            self, type_map=type_map, environment=environment
+            self,
+            type_map=type_map,
+            environment=environment,
+            downcast_map=downcast_map,
         )
 
         self._symbol_table = symbol_table
@@ -627,7 +636,7 @@ def _transpile_invariant(
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Translate the invariant from the meta-model into TypeScript code."""
     # fmt: off
-    type_map, inference_error = (
+    inference, inference_error = (
         intermediate_type_inference.infer_for_invariant(
             invariant=invariant,
             environment=environment
@@ -638,11 +647,12 @@ def _transpile_invariant(
     if inference_error is not None:
         return None, inference_error
 
-    assert type_map is not None
+    assert inference is not None
 
     transpiler = _InvariantTranspiler(
-        type_map=type_map,
+        type_map=inference.type_map,
         environment=environment,
+        downcast_map=inference.downcast_map,
         symbol_table=symbol_table,
     )
 
@@ -664,6 +674,7 @@ def _transpile_invariant(
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
         )
 
         if isinstance(invariant.parsed.body, no_parenthesis_type_in_this_context):

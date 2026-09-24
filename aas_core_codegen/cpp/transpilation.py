@@ -159,6 +159,17 @@ def generate_type(
                 None,
             )
 
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union is declared as a ``using`` alias to a
+            # ``common::variant``, so we refer to it only by its name.
+            union_name = cpp_naming.union_name(our_type.name)
+
+            if types_namespace is None:
+                return union_name, None
+
+            return Stripped(f"{types_namespace}::{union_name}"), None
+
     elif isinstance(type_annotation, intermediate_type_inference.ListTypeAnnotation):
         item_type, error_msg = generate_type(
             type_annotation=type_annotation.items, types_namespace=types_namespace
@@ -254,6 +265,9 @@ def determine_whether_referencable(
         ):
             return True, None
 
+        elif isinstance(our_type, intermediate.NamedUnion):
+            return True, None
+
     elif isinstance(type_annotation, intermediate_type_inference.ListTypeAnnotation):
         return True, None
 
@@ -314,6 +328,26 @@ def generate_type_with_const_ref_if_applicable(
     return code, None
 
 
+def _generate_call_with_single_argument(function: str, argument: str) -> Stripped:
+    """
+    Generate the call of ``function`` on the single ``argument``.
+
+    We break the line if the argument spans multiple lines or is too long.
+    """
+    # NOTE (mristin):
+    # This is a rudimentary heuristic for basic line breaks, but works well in
+    # practice.
+    if "\n" in argument or len(argument) > 50:
+        return Stripped(
+            f"""\
+{function}(
+{I}{indent_but_first_line(argument, I)}
+)"""
+        )
+
+    return Stripped(f"{function}({argument})")
+
+
 class Transpiler(
     parse_tree.RestrictedTransformer[Tuple[Optional[Stripped], Optional[Error]]]
 ):
@@ -334,16 +368,24 @@ class Transpiler(
             parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
         ],
         is_optional_map: Mapping[parse_tree.Node, bool],
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
+        is_optional_before_downcast_map: Mapping[parse_tree.Node, bool],
         environment: intermediate_type_inference.Environment,
         types_namespace: Optional[Identifier] = None,
     ) -> None:
         """
         Initialize with the given values.
 
+        The ``downcast_map`` comes from the type inference, while
+        the ``is_optional_map`` and the ``is_optional_before_downcast_map`` come
+        from :py:class:`aas_core_codegen.cpp.optionaling.Inferrer`.
+
         If ``types_namespace`` is specified, it is prepended to all our types.
         """
         self.type_map = type_map
         self.is_optional_map = is_optional_map
+        self.downcast_map = downcast_map
+        self.is_optional_before_downcast_map = is_optional_before_downcast_map
         self._environment = intermediate_type_inference.MutableEnvironment(
             parent=environment
         )
@@ -395,6 +437,101 @@ class Transpiler(
             return Stripped(f"(*({code}))"), None
 
         return code, None
+
+    def _qualify_with_types_namespace(self, identifier: Identifier) -> Stripped:
+        """Prepend the types namespace to ``identifier``, if specified."""
+        if self._types_namespace is None:
+            return Stripped(identifier)
+
+        return Stripped(f"{self._types_namespace}::{identifier}")
+
+    def _extract_underlying_instance(
+        self, named_union: intermediate.NamedUnion, code: Stripped
+    ) -> Stripped:
+        """
+        Generate the extraction of the instance held in ``named_union``.
+
+        The ``code`` denotes the value of the named union. The extracted instance
+        is a ``std::shared_ptr`` to ``IClass``.
+        """
+        underlying_of = self._qualify_with_types_namespace(
+            cpp_naming.underlying_of_function_name(named_union.name)
+        )
+
+        return _generate_call_with_single_argument(
+            function=underlying_of, argument=code
+        )
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform(
+        self, node: parse_tree.Node
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        code, error = node.transform(self)
+        if error is not None:
+            return None, error
+
+        assert code is not None
+
+        downcast = self.downcast_map.get(node, None)
+        if downcast is None:
+            return code, None
+
+        # NOTE (mristin):
+        # The value has been narrowed down by an ``isinstance`` guard. We need to
+        # down-cast it explicitly as C++ does not narrow the types. Since the classes
+        # inherit the interfaces with ``virtual public``, we have to use
+        # ``std::dynamic_pointer_cast``, as a static cast is not possible.
+        #
+        # The optional inferrer marks the down-cast nodes as non-optional. Hence,
+        # we de-reference the value here, if necessary, before we cast it.
+
+        if self.is_optional_before_downcast_map[node]:
+            # NOTE (mristin):
+            # The de-referenced value is passed on as an argument to a function
+            # so that we need no outer parentheses.
+            no_parentheses_types = (
+                parse_tree.Member,
+                parse_tree.FunctionCall,
+                parse_tree.MethodCall,
+                parse_tree.Name,
+                parse_tree.Index,
+            )
+            if isinstance(node, no_parentheses_types):
+                code = Stripped(f"*{code}")
+            else:
+                code = Stripped(f"*({code})")
+
+        source_type = downcast.source.our_type
+        if isinstance(source_type, intermediate.NamedUnion):
+            code = self._extract_underlying_instance(named_union=source_type, code=code)
+        elif isinstance(source_type, intermediate.Class):
+            pass
+        else:
+            return None, Error(
+                node.original_node,
+                f"Unexpected type of a value down-cast by an ``isinstance`` guard; "
+                f"expected a class or a named union, but got: {downcast.source}",
+            )
+
+        target_type = downcast.target.our_type
+        if not isinstance(target_type, intermediate.Class):
+            return None, Error(
+                node.original_node,
+                f"Unexpected type to which a value needs to be down-cast by "
+                f"an ``isinstance`` guard; expected a class, "
+                f"but got: {downcast.target}",
+            )
+
+        interface_name = self._qualify_with_types_namespace(
+            cpp_naming.interface_name(target_type.name)
+        )
+
+        return (
+            _generate_call_with_single_argument(
+                function=f"std::dynamic_pointer_cast<{interface_name}>", argument=code
+            ),
+            None,
+        )
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_member(
@@ -750,6 +887,93 @@ common::{contains_function}(
         )
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_is_instance(
+        self, node: parse_tree.IsInstance
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        value, error = self._transform_and_value_if_necessary(node.value)
+        if error is not None:
+            return None, error
+
+        assert value is not None
+
+        value_type = self.type_map[node.value]
+        if not isinstance(value_type, intermediate_type_inference.OurTypeAnnotation):
+            return None, Error(
+                node.original_node,
+                f"Expected the value of ``isinstance`` to be a class or "
+                f"a named union as checked in the type inference, "
+                f"but got: {value_type}",
+            )
+
+        instance: Stripped
+
+        if isinstance(value_type.our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # We de-reference the result of a function call so that we need
+            # no parentheses.
+            underlying = self._extract_underlying_instance(
+                named_union=value_type.our_type, code=value
+            )
+            instance = Stripped(f"*{underlying}")
+
+        elif isinstance(value_type.our_type, intermediate.Class):
+            # NOTE (mristin):
+            # The de-referenced optional value is already wrapped in parentheses,
+            # and the down-cast value is a function call. Hence, we can
+            # de-reference both without additional parentheses.
+            no_parentheses_types = (
+                parse_tree.Member,
+                parse_tree.FunctionCall,
+                parse_tree.MethodCall,
+                parse_tree.Name,
+                parse_tree.Index,
+            )
+
+            if (
+                isinstance(node.value, no_parentheses_types)
+                or self.is_optional_map[node.value]
+                or node.value in self.downcast_map
+            ):
+                instance = Stripped(f"*{value}")
+            else:
+                instance = Stripped(f"*({value})")
+
+        else:
+            return None, Error(
+                node.original_node,
+                f"Expected the value of ``isinstance`` to be a class or "
+                f"a named union as checked in the type inference, "
+                f"but got: {value_type}",
+            )
+
+        checks = []  # type: List[Stripped]
+        for cls_name in node.classes:
+            is_cls = self._qualify_with_types_namespace(
+                cpp_naming.is_function_name(cls_name.identifier)
+            )
+
+            checks.append(
+                _generate_call_with_single_argument(function=is_cls, argument=instance)
+            )
+
+        if len(checks) == 1:
+            return checks[0], None
+
+        # NOTE (mristin):
+        # We always wrap the disjunction in parentheses so that the callers never
+        # need to wrap ``isinstance`` in additional parentheses.
+        checks_joined = "\n|| ".join(checks)
+        return (
+            Stripped(
+                f"""\
+(
+{I}{indent_but_first_line(checks_joined, I)}
+)"""
+            ),
+            None,
+        )
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_implication(
         self, node: parse_tree.Implication
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
@@ -777,6 +1001,7 @@ common::{contains_function}(
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.IsIn,
+            parse_tree.IsInstance,
             parse_tree.Index,
             parse_tree.All,
             parse_tree.Any,
@@ -939,6 +1164,7 @@ common::{contains_function}(
                     parse_tree.MethodCall,
                     parse_tree.Name,
                     parse_tree.IsIn,
+                    parse_tree.IsInstance,
                     parse_tree.Index,
                     parse_tree.All,
                     parse_tree.Any,
@@ -1008,6 +1234,7 @@ common::{contains_function}(
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.IsIn,
+            parse_tree.IsInstance,
             parse_tree.Index,
             parse_tree.All,
             parse_tree.Any,
@@ -1030,6 +1257,7 @@ common::{contains_function}(
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.IsIn,
+            parse_tree.IsInstance,
             parse_tree.Index,
             parse_tree.All,
             parse_tree.Any,
@@ -1058,6 +1286,7 @@ common::{contains_function}(
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.IsIn,
+            parse_tree.IsInstance,
             parse_tree.Index,
             parse_tree.All,
             parse_tree.Any,
@@ -1087,6 +1316,7 @@ common::{contains_function}(
                 parse_tree.MethodCall,
                 parse_tree.Name,
                 parse_tree.IsIn,
+                parse_tree.IsInstance,
                 parse_tree.Index,
                 parse_tree.All,
                 parse_tree.Any,
@@ -1185,6 +1415,7 @@ common::{contains_function}(
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.IsIn,
+            parse_tree.IsInstance,
             parse_tree.Index,
             parse_tree.All,
             parse_tree.Any,
@@ -1369,6 +1600,7 @@ common::{concat}(
                 parse_tree.FunctionCall,
                 parse_tree.Name,
                 parse_tree.IsIn,
+                parse_tree.IsInstance,
                 parse_tree.Index,
                 parse_tree.All,
                 parse_tree.Any,

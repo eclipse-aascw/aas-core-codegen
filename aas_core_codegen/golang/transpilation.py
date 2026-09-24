@@ -93,6 +93,17 @@ def generate_type(
 
             return Stripped(f"{types_package}.{interface_name}"), None
 
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union is represented as a pointer to a plain Go struct,
+            # see :py:func:`aas_core_codegen.golang.common.generate_type`.
+            union_name = golang_naming.union_name(our_type.name)
+
+            if types_package is None:
+                return Stripped(f"*{union_name}"), None
+
+            return Stripped(f"*{types_package}.{union_name}"), None
+
     elif isinstance(type_annotation, intermediate_type_inference.ListTypeAnnotation):
         item_type, error_msg = generate_type(
             type_annotation=type_annotation.items, types_package=types_package
@@ -186,6 +197,7 @@ class Transpiler(
             parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
         ],
         is_pointer_map: Mapping[parse_tree.Node, bool],
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
         environment: intermediate_type_inference.Environment,
         types_package: Optional[Identifier] = None,
     ) -> None:
@@ -196,6 +208,7 @@ class Transpiler(
         """
         self.type_map = type_map
         self._is_pointer_map = is_pointer_map
+        self._downcast_map = downcast_map
         self._environment = intermediate_type_inference.MutableEnvironment(
             parent=environment
         )
@@ -204,6 +217,71 @@ class Transpiler(
         # Keep track whenever we define a variable name, so that we can know how to
         # generate the reference in the Go code.
         self._variable_name_set = set()  # type: Set[Identifier]
+
+    def _our_type_name(self, name: Identifier) -> Stripped:
+        """Prepend the types package, if specified, to the ``name`` of our type."""
+        if self._types_package is None:
+            return Stripped(name)
+
+        return Stripped(f"{self._types_package}.{name}")
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform(
+        self, node: parse_tree.Node
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        code, error = super().transform(node)
+        if error is not None:
+            return None, error
+
+        assert code is not None
+
+        downcast = self._downcast_map.get(node, None)
+        if downcast is None:
+            return code, None
+
+        # NOTE (mristin):
+        # The value has been narrowed down by an ``isinstance`` guard, so we need to
+        # cast it to the interface of the target class. The type assertion is safe
+        # as the guard checked the model type before.
+        #
+        # Classes are represented as interfaces and named unions as pointers to
+        # structs, so the narrowed value is never a pointer which we would need to
+        # de-reference.
+        if self._is_pointer_map.get(node, False):
+            return None, Error(
+                node.original_node,
+                f"Unexpected narrowed value represented as a pointer "
+                f"in Go: {parse_tree.dump(node)}; this is an assertion violation!",
+            )
+
+        no_parentheses_types = (
+            parse_tree.Member,
+            parse_tree.FunctionCall,
+            parse_tree.MethodCall,
+            parse_tree.Name,
+            parse_tree.Index,
+        )
+        if not isinstance(node, no_parentheses_types):
+            code = Stripped(f"({code})")
+
+        interface_name = self._our_type_name(
+            golang_naming.interface_name(downcast.target.our_type.name)
+        )
+
+        source_type = downcast.source.our_type
+        if isinstance(source_type, intermediate.Class):
+            return Stripped(f"{code}.({interface_name})"), None
+
+        elif isinstance(source_type, intermediate.NamedUnion):
+            return Stripped(f"{code}.Underlying().({interface_name})"), None
+
+        else:
+            return None, Error(
+                node.original_node,
+                f"Expected the source of a narrowing to be a class or "
+                f"a named union, but got {downcast.source} "
+                f"for {parse_tree.dump(node)}; this is an assertion violation!",
+            )
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def _transform_and_dereference_if_necessary(
@@ -368,6 +446,7 @@ class Transpiler(
             no_parentheses_types = (
                 parse_tree.Member,
                 parse_tree.FunctionCall,
+                parse_tree.IsInstance,
                 parse_tree.MethodCall,
                 parse_tree.Name,
                 parse_tree.Constant,
@@ -408,6 +487,7 @@ len(
         no_parentheses_types = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Constant,
@@ -451,6 +531,7 @@ len(
         no_parentheses_types = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Constant,
@@ -525,6 +606,81 @@ aascommon.MapContains(
             )
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_is_instance(
+        self, node: parse_tree.IsInstance
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        # NOTE (mristin):
+        # We do not de-reference the value as neither classes nor named unions are
+        # represented as pointers which we would need to de-reference.
+        value, error = self.transform(node.value)
+        if error is not None:
+            return None, error
+
+        assert value is not None
+
+        value_type = self.type_map[node.value]
+        assert isinstance(value_type, intermediate_type_inference.OurTypeAnnotation), (
+            f"Expected the value of a successfully inferred isinstance to be "
+            f"our type, but got {value_type} for {parse_tree.dump(node)}"
+        )
+
+        # NOTE (mristin):
+        # Go interfaces are structural, so a type assertion to an interface might
+        # succeed for an instance of another class with the same method set. That is
+        # why we check the run-time model type with the generated ``Is*`` functions.
+        subject: Stripped
+        if isinstance(value_type.our_type, intermediate.Class):
+            subject = value
+
+        elif isinstance(value_type.our_type, intermediate.NamedUnion):
+            no_parentheses_types = (
+                parse_tree.Member,
+                parse_tree.FunctionCall,
+                parse_tree.MethodCall,
+                parse_tree.Name,
+                parse_tree.Index,
+            )
+            if not isinstance(node.value, no_parentheses_types):
+                value = Stripped(f"({value})")
+
+            subject = Stripped(f"{value}.Underlying()")
+
+        else:
+            return None, Error(
+                node.original_node,
+                f"Expected the value of isinstance to be a class or "
+                f"a named union, but got {value_type}; "
+                f"this is an assertion violation!",
+            )
+
+        checks = []  # type: List[Stripped]
+        for cls_name in node.classes:
+            function_name = self._our_type_name(
+                golang_naming.function_name(Identifier(f"is_{cls_name.identifier}"))
+            )
+
+            if "\n" in subject:
+                checks.append(
+                    Stripped(
+                        f"""\
+{function_name}(
+{I}{indent_but_first_line(subject, I)},
+)"""
+                    )
+                )
+            else:
+                checks.append(Stripped(f"{function_name}({subject})"))
+
+        if len(checks) == 1:
+            return checks[0], None
+
+        # NOTE (mristin):
+        # We always wrap the disjunction in parentheses so that the ``isinstance``
+        # can be treated as a primary expression regardless of the context.
+        checks_joined = " ||\n".join(checks)
+        return Stripped(f"({checks_joined})"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_implication(
         self, node: parse_tree.Implication
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
@@ -553,6 +709,7 @@ aascommon.MapContains(
         no_parentheses_types_in_this_context = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.IsIn,
@@ -793,6 +950,7 @@ len(
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.IsIn,
             parse_tree.Index,
             parse_tree.All,
@@ -815,6 +973,7 @@ len(
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.IsIn,
             parse_tree.Index,
             parse_tree.All,
@@ -843,6 +1002,7 @@ len(
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.IsIn,
             parse_tree.Index,
             parse_tree.All,
@@ -871,6 +1031,7 @@ len(
                 parse_tree.Member,
                 parse_tree.MethodCall,
                 parse_tree.FunctionCall,
+                parse_tree.IsInstance,
                 parse_tree.Comparison,
                 parse_tree.Name,
                 parse_tree.IsIn,
@@ -910,6 +1071,7 @@ len(
                 parse_tree.Member,
                 parse_tree.MethodCall,
                 parse_tree.FunctionCall,
+                parse_tree.IsInstance,
                 parse_tree.Comparison,
                 parse_tree.Name,
                 parse_tree.IsIn,
@@ -961,6 +1123,7 @@ len(
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.Constant,
             parse_tree.Name,
             parse_tree.IsIn,
@@ -1135,6 +1298,7 @@ fmt.Sprintf(
                 parse_tree.Member,
                 parse_tree.MethodCall,
                 parse_tree.FunctionCall,
+                parse_tree.IsInstance,
                 parse_tree.Name,
                 parse_tree.IsIn,
                 parse_tree.Index,

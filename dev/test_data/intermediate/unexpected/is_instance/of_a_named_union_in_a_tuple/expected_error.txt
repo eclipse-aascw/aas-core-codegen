@@ -1,0 +1,1 @@
+Expected only classes in ``isinstance``, but 'Some_union' is a named union

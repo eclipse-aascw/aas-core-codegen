@@ -653,6 +653,8 @@ class _TranspilableVerificationTranspiler(cpp_transpilation.Transpiler):
             parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
         ],
         is_optional_map: Mapping[parse_tree.Node, bool],
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
+        is_optional_before_downcast_map: Mapping[parse_tree.Node, bool],
         environment: intermediate_type_inference.Environment,
         symbol_table: intermediate.SymbolTable,
         verification: intermediate.TranspilableVerification,
@@ -662,6 +664,8 @@ class _TranspilableVerificationTranspiler(cpp_transpilation.Transpiler):
             self,
             type_map=type_map,
             is_optional_map=is_optional_map,
+            downcast_map=downcast_map,
+            is_optional_before_downcast_map=is_optional_before_downcast_map,
             environment=environment,
             types_namespace=cpp_common.TYPES_NAMESPACE,
         )
@@ -729,6 +733,7 @@ def _generate_implementation_of_transpilable_verification(
     optional_inferrer = cpp_optionaling.Inferrer(
         environment=type_inference.environment_with_args,
         type_map=type_inference.type_map,
+        downcast_map=type_inference.downcast_map,
     )
     for node in verification.parsed.body:
         _ = optional_inferrer.transform(node)
@@ -744,6 +749,10 @@ def _generate_implementation_of_transpilable_verification(
     transpiler = _TranspilableVerificationTranspiler(
         type_map=type_inference.type_map,
         is_optional_map=optional_inferrer.is_optional_map,
+        downcast_map=type_inference.downcast_map,
+        is_optional_before_downcast_map=(
+            optional_inferrer.is_optional_before_downcast_map
+        ),
         environment=type_inference.environment_with_args,
         symbol_table=symbol_table,
         verification=verification,
@@ -808,6 +817,8 @@ class _InvariantTranspiler(cpp_transpilation.Transpiler):
             parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
         ],
         is_optional_map: Mapping[parse_tree.Node, bool],
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
+        is_optional_before_downcast_map: Mapping[parse_tree.Node, bool],
         environment: intermediate_type_inference.Environment,
         symbol_table: intermediate.SymbolTable,
     ) -> None:
@@ -816,6 +827,8 @@ class _InvariantTranspiler(cpp_transpilation.Transpiler):
             self,
             type_map=type_map,
             is_optional_map=is_optional_map,
+            downcast_map=downcast_map,
+            is_optional_before_downcast_map=is_optional_before_downcast_map,
             environment=environment,
             types_namespace=cpp_common.TYPES_NAMESPACE,
         )
@@ -874,7 +887,7 @@ def _transpile_invariant(
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Translate the invariant from the meta-model into a C++ condition."""
     # fmt: off
-    type_map, inference_error = (
+    inference, inference_error = (
         intermediate_type_inference.infer_for_invariant(
             invariant=invariant,
             environment=environment
@@ -885,10 +898,13 @@ def _transpile_invariant(
     if inference_error is not None:
         return None, inference_error
 
-    assert type_map is not None
+    assert inference is not None
+    type_map = inference.type_map
 
     optional_inferrer = cpp_optionaling.Inferrer(
-        environment=environment, type_map=type_map
+        environment=environment,
+        type_map=type_map,
+        downcast_map=inference.downcast_map,
     )
 
     _ = optional_inferrer.transform(invariant.body)
@@ -904,6 +920,10 @@ def _transpile_invariant(
     transpiler = _InvariantTranspiler(
         type_map=type_map,
         is_optional_map=optional_inferrer.is_optional_map,
+        downcast_map=inference.downcast_map,
+        is_optional_before_downcast_map=(
+            optional_inferrer.is_optional_before_downcast_map
+        ),
         environment=environment,
         symbol_table=symbol_table,
     )

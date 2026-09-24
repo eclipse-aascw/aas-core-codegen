@@ -1,0 +1,27 @@
+{
+  "root": {
+    "identifier": "root",
+    "children": [
+      {
+        "identifier": "leaf",
+        "text": "hello",
+        "modelType": "Leaf"
+      }
+    ],
+    "isSorted": "invalid",
+    "modelType": "OrderedContainer"
+  },
+  "value": {
+    "attribute": {
+      "kind": "name",
+      "modelType": "GlobalAttribute"
+    },
+    "modelType": "AttributeOperand"
+  },
+  "values": [
+    {
+      "text": "root",
+      "modelType": "StringLiteral"
+    }
+  ]
+}

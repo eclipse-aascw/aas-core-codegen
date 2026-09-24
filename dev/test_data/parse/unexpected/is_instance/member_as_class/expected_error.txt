@@ -1,0 +1,1 @@
+Expected the second argument to ``isinstance`` to be either a class name or a tuple of class names, but got: Attribute(value=Name(id='self', ctx=Load()), attr='Child', ctx=Load())

@@ -140,6 +140,17 @@ class OptionalInferrer(parse_tree.Transformer[Optional[Error]]):
         self.is_optional_map[node] = False
         return None
 
+    def transform_is_instance(self, node: parse_tree.IsInstance) -> Optional[Error]:
+        # NOTE (mristin):
+        # We do not recurse into the classes as they are not values, but only
+        # refer to our types.
+        error = self.transform(node.value)
+        if error is not None:
+            return error
+
+        self.is_optional_map[node] = False
+        return None
+
     def transform_implication(self, node: parse_tree.Implication) -> Optional[Error]:
         error = self.transform(node.antecedent)
         if error is not None:

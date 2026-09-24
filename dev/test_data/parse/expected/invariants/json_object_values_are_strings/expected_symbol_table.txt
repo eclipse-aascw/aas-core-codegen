@@ -70,12 +70,11 @@ UnverifiedSymbolTable(
                   args=[],
                   original_node=...),
                 original_node=...),
-              condition=FunctionCall(
-                name='isinstance',
-                args=[
-                  Name(
-                    identifier='item',
-                    original_node=...),
+              condition=IsInstance(
+                value=Name(
+                  identifier='item',
+                  original_node=...),
+                classes=[
                   Name(
                     identifier='str',
                     original_node=...)],

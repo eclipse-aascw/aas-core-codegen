@@ -131,6 +131,16 @@ def generate_type(
     raise AssertionError("Should not have gotten here")
 
 
+def _is_parenthesized_is_instance(node: parse_tree.Node) -> bool:
+    """
+    Check whether ``node`` is an ``isinstance`` transpiled with parentheses.
+
+    We always parenthesize the disjunction of ``instanceof`` checks when
+    an ``isinstance`` is checked against multiple classes.
+    """
+    return isinstance(node, parse_tree.IsInstance) and len(node.classes) > 1
+
+
 class Transpiler(
     parse_tree.RestrictedTransformer[Tuple[Optional[Stripped], Optional[Error]]]
 ):
@@ -152,10 +162,12 @@ class Transpiler(
         ],
         optional_map: Mapping[parse_tree.Node, bool],
         environment: intermediate_type_inference.Environment,
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
     ) -> None:
         """Initialize with the given values."""
         self.type_map = type_map
         self._optional_map = optional_map
+        self._downcast_map = downcast_map
         self._environment = intermediate_type_inference.MutableEnvironment(
             parent=environment
         )
@@ -172,6 +184,31 @@ class Transpiler(
         # Keep track whenever we define a variable name, so that we can know how to
         # generate the reference in the Java code.
         self._variable_name_set = set()  # type: Set[Identifier]
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform(
+        self, node: parse_tree.Node
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        code, error = super().transform(node)
+        if error is not None:
+            return None, error
+
+        assert code is not None
+
+        downcast = self._downcast_map.get(node, None)
+        if downcast is None:
+            return code, None
+
+        # NOTE (mristin):
+        # The value has been narrowed down by an ``isinstance`` guard, so we need
+        # to down-cast it. A named union is represented as a wrapper class in Java,
+        # so we need to down-cast its underlying instance.
+        if isinstance(downcast.source.our_type, intermediate.NamedUnion):
+            code = Stripped(f"{code}.getUnderlying()")
+
+        interface_name = java_naming.interface_name(downcast.target.our_type.name)
+
+        return Stripped(f"(({interface_name}) {code})"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_member(
@@ -360,6 +397,22 @@ class Transpiler(
                 node.original_node, "Failed to transpile the comparison", errors
             )
 
+        # NOTE (mristin):
+        # The operators ``==`` and ``!=`` compare the references of strings in Java,
+        # so we need to compare their content explicitly.
+        if node.op in (parse_tree.Comparator.EQ, parse_tree.Comparator.NE) and any(
+            intermediate_type_inference.try_primitive_type(
+                intermediate_type_inference.beneath_optional(self.type_map[operand])
+            )
+            is intermediate_type_inference.PrimitiveType.STR
+            for operand in (node.left, node.right)
+        ):
+            equals = f"Objects.equals({left}, {right})"
+            if node.op is parse_tree.Comparator.EQ:
+                return Stripped(equals), None
+
+            return Stripped(f"!{equals}"), None
+
         no_parentheses_types = (
             parse_tree.Member,
             parse_tree.FunctionCall,
@@ -439,6 +492,50 @@ class Transpiler(
         return Stripped(f"{container}.contains({member})"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_is_instance(
+        self, node: parse_tree.IsInstance
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        value, error = self.transform(node.value)
+        if error is not None:
+            return None, error
+
+        assert value is not None
+
+        no_parentheses_types = (
+            parse_tree.Member,
+            parse_tree.FunctionCall,
+            parse_tree.MethodCall,
+            parse_tree.Name,
+            parse_tree.Index,
+        )
+
+        if not isinstance(node.value, no_parentheses_types):
+            value = Stripped(f"({value})")
+
+        # NOTE (mristin):
+        # A named union is represented as a wrapper class in Java, so we need to
+        # check the type of its underlying instance.
+        value_type = self.type_map[node.value]
+        if isinstance(
+            value_type, intermediate_type_inference.OurTypeAnnotation
+        ) and isinstance(value_type.our_type, intermediate.NamedUnion):
+            value = Stripped(f"{value}.getUnderlying()")
+
+        checks = [
+            f"{value} instanceof {java_naming.interface_name(cls.identifier)}"
+            for cls in node.classes
+        ]
+
+        if len(checks) == 1:
+            return Stripped(checks[0]), None
+
+        # NOTE (mristin):
+        # We always parenthesize the disjunction so that the check can be used
+        # as an operand of a conjunction or a disjunction without further ado.
+        checks_joined = " || ".join(checks)
+        return Stripped(f"({checks_joined})"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_implication(
         self, node: parse_tree.Implication
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
@@ -469,7 +566,9 @@ class Transpiler(
             parse_tree.Index,
         )
 
-        if isinstance(node.antecedent, no_parentheses_types_in_this_context):
+        if isinstance(
+            node.antecedent, no_parentheses_types_in_this_context
+        ) or _is_parenthesized_is_instance(node.antecedent):
             not_antecedent = f"!{antecedent}"
         else:
             # NOTE (empwilli):
@@ -484,7 +583,13 @@ class Transpiler(
             else:
                 not_antecedent = f"!({antecedent})"
 
-        if not isinstance(node.consequent, no_parentheses_types_in_this_context):
+        # NOTE (mristin):
+        # The operator ``instanceof`` binds stronger than ``||``, and a check
+        # against multiple classes is always parenthesized.
+        if not isinstance(
+            node.consequent,
+            (*no_parentheses_types_in_this_context, parse_tree.IsInstance),
+        ):
             # NOTE (empwilli):
             # This is a very rudimentary heuristic for breaking the lines, and can be
             # greatly improved by rendering into Java code. However, at this point, we
@@ -816,7 +921,9 @@ class Transpiler(
             parse_tree.IsIn,
             parse_tree.Index,
         )
-        if not isinstance(node.operand, no_parentheses_types_in_this_context):
+        if not isinstance(
+            node.operand, no_parentheses_types_in_this_context
+        ) and not _is_parenthesized_is_instance(node.operand):
             return Stripped(f"!({operand})"), None
         else:
             return Stripped(f"!{operand}"), None
@@ -835,6 +942,9 @@ class Transpiler(
 
             assert value is not None
 
+            # NOTE (mristin):
+            # The operator ``instanceof`` binds stronger than ``&&`` and ``||``,
+            # and a check against multiple classes is always parenthesized.
             no_parentheses_types_in_this_context = (
                 parse_tree.Member,
                 parse_tree.MethodCall,
@@ -842,6 +952,7 @@ class Transpiler(
                 parse_tree.Comparison,
                 parse_tree.Name,
                 parse_tree.IsIn,
+                parse_tree.IsInstance,
                 parse_tree.Index,
             )
 
@@ -890,6 +1001,9 @@ class Transpiler(
 
             assert value is not None
 
+            # NOTE (mristin):
+            # The operator ``instanceof`` binds stronger than ``&&`` and ``||``,
+            # and a check against multiple classes is always parenthesized.
             no_parentheses_types_in_this_context = (
                 parse_tree.Member,
                 parse_tree.MethodCall,
@@ -897,6 +1011,7 @@ class Transpiler(
                 parse_tree.Comparison,
                 parse_tree.Name,
                 parse_tree.IsIn,
+                parse_tree.IsInstance,
                 parse_tree.Index,
             )
 

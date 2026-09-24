@@ -1,0 +1,19 @@
+{
+  "root": {
+    "identifier": "root",
+    "modelType": "Element"
+  },
+  "value": {
+    "attribute": {
+      "kind": "name",
+      "modelType": "GlobalAttribute"
+    },
+    "modelType": "AttributeOperand"
+  },
+  "values": [
+    {
+      "text": "root",
+      "modelType": "StringLiteral"
+    }
+  ]
+}

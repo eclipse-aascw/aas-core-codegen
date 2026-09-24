@@ -615,7 +615,7 @@ def _transpile_invariant(
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Translate the invariant from the meta-model into Python code."""
     # fmt: off
-    type_map, inference_error = (
+    inference, inference_error = (
         intermediate_type_inference.infer_for_invariant(
             invariant=invariant,
             environment=environment
@@ -626,7 +626,8 @@ def _transpile_invariant(
     if inference_error is not None:
         return None, inference_error
 
-    assert type_map is not None
+    assert inference is not None
+    type_map = inference.type_map
 
     transpiler = _InvariantTranspiler(
         type_map=type_map,
@@ -652,6 +653,7 @@ def _transpile_invariant(
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
         )
 
         if isinstance(invariant.parsed.body, no_parenthesis_type_in_this_context):

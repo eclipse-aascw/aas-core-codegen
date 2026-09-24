@@ -53,9 +53,11 @@ class Transpiler(
             parse_tree.Node, intermediate_type_inference.TypeAnnotationUnion
         ],
         environment: intermediate_type_inference.Environment,
+        downcast_map: Mapping[parse_tree.Node, intermediate_type_inference.Downcast],
     ) -> None:
         """Initialize with the given values."""
         self.type_map = type_map
+        self._downcast_map = downcast_map
         self._environment = intermediate_type_inference.MutableEnvironment(
             parent=environment
         )
@@ -66,6 +68,62 @@ class Transpiler(
         #
         # While this class does not directly use it, the descendants of this class do!
         self._variable_name_set = set()  # type: Set[Identifier]
+
+    def _transform_without_downcast(
+        self, node: parse_tree.Node
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        """Transform the ``node`` ignoring its narrowing by ``isinstance``, if any."""
+        return super().transform(node)
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform(
+        self, node: parse_tree.Node
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        code, error = self._transform_without_downcast(node)
+        if error is not None:
+            return None, error
+
+        assert code is not None
+
+        downcast = self._downcast_map.get(node, None)
+        if downcast is None:
+            return code, None
+
+        # NOTE (mristin):
+        # TypeScript does not reliably narrow the values through our conjunctions
+        # and implications, especially in the lambdas, so we explicitly cast
+        # every value narrowed by an ``isinstance`` guard. The named unions are
+        # plain type aliases over the classes in TypeScript, so a cast suffices
+        # both for the classes and for the named unions.
+        target_type = downcast.target.our_type
+        assert isinstance(
+            target_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+        ), (
+            f"Expected the target of a down-cast to be a class, "
+            f"but got: {target_type}"
+        )
+
+        target_type_name: Identifier
+        if isinstance(target_type, intermediate.AbstractClass):
+            target_type_name = typescript_naming.interface_name(target_type.name)
+        elif isinstance(target_type, intermediate.ConcreteClass):
+            target_type_name = typescript_naming.class_name(target_type.name)
+        else:
+            assert_never(target_type)
+
+        if "\n" in code:
+            return (
+                Stripped(
+                    f"""\
+(
+{I}{indent_but_first_line(code, I)}
+{I}as AasTypes.{target_type_name}
+)"""
+                ),
+                None,
+            )
+
+        return Stripped(f"({code} as AasTypes.{target_type_name})"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_member(
@@ -169,6 +227,7 @@ class Transpiler(
             tuple_no_parentheses_types = (
                 parse_tree.Member,
                 parse_tree.FunctionCall,
+                parse_tree.IsInstance,
                 parse_tree.MethodCall,
                 parse_tree.Name,
                 parse_tree.Constant,
@@ -195,6 +254,7 @@ class Transpiler(
         no_parentheses_types = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Constant,
@@ -278,6 +338,7 @@ AasCommon.at(
         no_parentheses_types = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Constant,
@@ -318,6 +379,7 @@ AasCommon.at(
         no_parentheses_types = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Constant,
@@ -363,6 +425,49 @@ AasCommon.at(
             )
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_is_instance(
+        self, node: parse_tree.IsInstance
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        # NOTE (mristin):
+        # The type guards accept any instance of our classes, so we do not need
+        # to down-cast the value if it has been already narrowed.
+        value, error = self._transform_without_downcast(node.value)
+        if error is not None:
+            return None, error
+
+        assert value is not None
+
+        # NOTE (mristin):
+        # We assume that the types module is imported as ``AasTypes`` in
+        # the generated code, as is the case with the verification module.
+        checks = [
+            Stripped(
+                f"AasTypes."
+                f"{typescript_naming.function_name(Identifier(f'is_{cls.identifier}'))}"
+                f"({value})"
+            )
+            for cls in node.classes
+        ]
+
+        if len(checks) == 1:
+            return checks[0], None
+
+        joined_checks = " || ".join(checks)
+        if "\n" not in joined_checks and len(joined_checks) <= 70:
+            return Stripped(f"({joined_checks})"), None
+
+        writer = io.StringIO()
+        writer.write("(\n")
+        for i, check in enumerate(checks):
+            if i == 0:
+                writer.write(f"{I}{indent_but_first_line(check, I)}\n")
+            else:
+                writer.write(f"{I}|| {indent_but_first_line(check, I)}\n")
+        writer.write(")")
+
+        return Stripped(writer.getvalue()), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_implication(
         self, node: parse_tree.Implication
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
@@ -387,6 +492,7 @@ AasCommon.at(
         no_parentheses_types_in_this_context = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
@@ -455,6 +561,7 @@ AasCommon.at(
         no_parentheses_types_in_this_context = (
             parse_tree.Member,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
@@ -501,6 +608,7 @@ AasCommon.at(
                 parse_tree.Member,
                 parse_tree.MethodCall,
                 parse_tree.FunctionCall,
+                parse_tree.IsInstance,
                 parse_tree.Index,
                 parse_tree.Constant,
             ),
@@ -701,6 +809,7 @@ AasCommon.at(
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.Index,
             parse_tree.Constant,
         )
@@ -721,6 +830,7 @@ AasCommon.at(
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.Index,
             parse_tree.Constant,
         )
@@ -747,6 +857,7 @@ AasCommon.at(
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.Index,
         )
         if not isinstance(node.operand, no_parentheses_types_in_this_context):
@@ -772,6 +883,7 @@ AasCommon.at(
                 parse_tree.Member,
                 parse_tree.MethodCall,
                 parse_tree.FunctionCall,
+                parse_tree.IsInstance,
                 parse_tree.Name,
                 parse_tree.Index,
                 parse_tree.Comparison,
@@ -868,6 +980,7 @@ AasCommon.at(
             parse_tree.Member,
             parse_tree.MethodCall,
             parse_tree.FunctionCall,
+            parse_tree.IsInstance,
             parse_tree.Constant,
             parse_tree.Name,
             parse_tree.Index,
@@ -1026,6 +1139,7 @@ AasCommon.at(
                 parse_tree.Member,
                 parse_tree.MethodCall,
                 parse_tree.FunctionCall,
+                parse_tree.IsInstance,
                 parse_tree.Name,
                 parse_tree.Index,
             )

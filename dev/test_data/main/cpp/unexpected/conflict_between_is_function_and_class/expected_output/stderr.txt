@@ -1,0 +1,2 @@
+Failed to verify the intermediate symbol table for generation of C++ code based on <path to meta_model.py>:
+* At line 1 and column 1: The C++ name 'IsLeaf' of the function generated for the meta-model concrete class 'Leaf' collides with the C++ name of the meta-model concrete class 'Is_leaf'

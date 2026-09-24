@@ -1,0 +1,1 @@
+<something xmlns="https://dummy.com"><root><orderedContainer><identifier>root</identifier><children><leaf><identifier>leaf</identifier><text>hello</text></leaf></children><isSorted>true</isSorted></orderedContainer></root><value><unknownOperand><text>root</text></unknownOperand></value><values><stringLiteral><text>root</text></stringLiteral></values></something>

@@ -1,0 +1,7 @@
+{
+  "attribute": {
+    "name": "local",
+    "modelType": "LocalAttribute"
+  },
+  "modelType": "AttributeOperand"
+}

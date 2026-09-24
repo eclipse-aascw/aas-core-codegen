@@ -1,0 +1,2 @@
+Failed to verify the intermediate symbol table for generation of C++ code based on <path to meta_model.py>:
+* At line 11 and column 2: The C++ name 'UnderlyingOfValue' of the function generated for the meta-model named union 'Value' collides with the C++ name of the meta-model concrete class 'Underlying_of_value'
