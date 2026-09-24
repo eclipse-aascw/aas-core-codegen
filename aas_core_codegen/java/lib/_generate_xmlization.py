@@ -1851,6 +1851,9 @@ def _generate_deserialize_impl_named_union_from_element(
     implementer -- XML elements are always self-tagging with the concrete
     class's own name, regardless of whether that implementer is dispatched
     by ``modelType`` on the JSON side.
+
+    The de-serialized implementer is wrapped as its most specific root of
+    the union.
     """
     name = java_naming.union_name(named_union.name)
 
@@ -1861,6 +1864,9 @@ def _generate_deserialize_impl_named_union_from_element(
         )
 
         implementer_name = java_naming.class_name(implementer.name)
+        root_name = java_naming.class_name(
+            named_union.most_specific_root_of(implementer).name
+        )
 
         case_blocks.append(
             Stripped(
@@ -1871,7 +1877,7 @@ case {implementer_xml_name_literal}: {{
 {I}if (result.isError()) {{
 {II}return Reporting.Result.failure(result.getError());
 {I}}}
-{I}return Reporting.Result.success({name}.from{implementer_name}(result.getResult()));
+{I}return Reporting.Result.success({name}.from{root_name}(result.getResult()));
 }}"""
             )
         )

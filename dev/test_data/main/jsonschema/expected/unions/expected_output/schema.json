@@ -189,6 +189,22 @@
         }
       ]
     },
+    "OverlappingUnion_choice": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/ModelTypedFirst"
+        },
+        {
+          "$ref": "#/definitions/ModelTypedSecond"
+        },
+        {
+          "$ref": "#/definitions/MixedConcreteWithDescendantsChild"
+        },
+        {
+          "$ref": "#/definitions/MixedConcreteWithDescendants"
+        }
+      ]
+    },
     "Something": {
       "type": "object",
       "properties": {
@@ -244,6 +260,12 @@
         },
         "optionalModelTypedProperty": {
           "$ref": "#/definitions/ModelTypedUnion_choice"
+        },
+        "optionalListOverlappingProperty": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OverlappingUnion_choice"
+          }
         }
       },
       "required": [

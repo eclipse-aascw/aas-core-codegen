@@ -134,6 +134,9 @@ SymbolTable(
       implementers=[
         'Reference to ConcreteClass Some_class',
         'Reference to ConcreteClass Another_class'],
+      roots=[
+        'Reference to ConcreteClass Some_class',
+        'Reference to ConcreteClass Another_class'],
       description=None,
       parsed=...),
     ConcreteClass(

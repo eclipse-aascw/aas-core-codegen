@@ -1216,16 +1216,22 @@ def _generate_named_union_type_alias(named_union: intermediate.NamedUnion) -> St
     """
     Generate the type alias representing the named union.
 
-    Every implementer of the named union is a concrete class, so we simply
-    alias the union to the union of their class types -- no wrapper is
-    needed, as every implementer already satisfies the common ``Class``
-    thanks to TypeScript's structural typing.
+    The alias mirrors the meta-model and lists the roots of the named union,
+    each spelled as a property of that type would be: a concrete class by its
+    class name, and an abstract class by its interface name. No wrapper is
+    needed, as every root already satisfies the common ``Class`` thanks to
+    TypeScript's structural typing. The roots may overlap (*e.g.*, a class and
+    its ancestor), which is harmless in a TypeScript union type.
     """
     union_name = typescript_naming.union_name(named_union.name)
 
     member_names = [
-        typescript_naming.class_name(implementer.name)
-        for implementer in named_union.implementers
+        (
+            typescript_naming.interface_name(root.name)
+            if isinstance(root, intermediate.AbstractClass)
+            else typescript_naming.class_name(root.name)
+        )
+        for root in named_union.roots
     ]
 
     one_liner = f"export type {union_name} = {' | '.join(member_names)};"

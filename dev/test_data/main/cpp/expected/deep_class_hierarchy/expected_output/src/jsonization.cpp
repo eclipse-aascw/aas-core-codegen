@@ -2502,12 +2502,9 @@ std::pair<
  * \brief Serialize \p that instance of types::IBranch to a JSON value.
  *
  * \param that instance to be serialized
- * \return the JSON value , or an error, if any
+ * \return the JSON value
  */
-std::pair<
-  common::optional<nlohmann::json>,
-  common::optional<SerializationError>
-> SerializeBranch(
+nlohmann::json SerializeConcreteBranch(
   const types::IBranch& that
 );
 
@@ -2520,7 +2517,7 @@ std::pair<
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
-> SerializeLeaf(
+> SerializeConcreteLeaf(
   const types::ILeaf& that
 );
 
@@ -2563,15 +2560,52 @@ std::pair<
   const types::IContainer& that
 );
 
+/**
+ * \brief Serialize \p that instance of types::INode to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value , or an error, if any
+ */
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> SerializeNode(
+  const types::INode& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::IBranch to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value , or an error, if any
+ */
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
 > SerializeBranch(
   const types::IBranch& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::ILeaf to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value , or an error, if any
+ */
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> SerializeLeaf(
+  const types::ILeaf& that
+);
+
+nlohmann::json SerializeConcreteBranch(
+  const types::IBranch& that
 ) {
   nlohmann::json result = nlohmann::json::object();
-
-  common::optional<SerializationError> error;
 
   result["identifier"] = SerializeWstring(
     that.identifier()
@@ -2583,19 +2617,13 @@ std::pair<
 
   result["modelType"] = "Branch";
 
-  return std::make_pair<
-    common::optional<nlohmann::json>,
-    common::optional<SerializationError>
-  >(
-    common::make_optional<nlohmann::json>(std::move(result)),
-    common::nullopt
-  );
+  return result;
 }
 
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
-> SerializeLeaf(
+> SerializeConcreteLeaf(
   const types::ILeaf& that
 ) {
   nlohmann::json result = nlohmann::json::object();
@@ -2696,7 +2724,7 @@ std::pair<
     result,
     "someChoice",
     iteration::Property::kSomeChoice,
-    SerializeIClass(
+    SerializeNode(
       *(that.some_choice())
     )
   );
@@ -2710,7 +2738,7 @@ std::pair<
     result,
     "somethingWithoutChoice",
     iteration::Property::kSomethingWithoutChoice,
-    SerializeIClass(
+    SerializeBranch(
       *(that.something_without_choice())
     )
   );
@@ -2743,7 +2771,7 @@ std::pair<
     result,
     "node",
     iteration::Property::kNode,
-    SerializeIClass(
+    SerializeNode(
       *(that.node())
     )
   );
@@ -2779,16 +2807,128 @@ std::pair<
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
+> SerializeNode(
+  const types::INode& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kBranch:
+      return AsFallible(
+        SerializeConcreteBranch(
+          dynamic_cast<const types::IBranch&>(that)
+        )
+      );
+    case types::ModelType::kLeaf:
+      return SerializeConcreteLeaf(
+        dynamic_cast<const types::ILeaf&>(that)
+      );
+    case types::ModelType::kBlossom:
+      return SerializeBlossom(
+        dynamic_cast<const types::IBlossom&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> SerializeBranch(
+  const types::IBranch& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kBranch:
+      return AsFallible(
+        SerializeConcreteBranch(that)
+      );
+    case types::ModelType::kLeaf:
+      return SerializeConcreteLeaf(
+        dynamic_cast<const types::ILeaf&>(that)
+      );
+    case types::ModelType::kBlossom:
+      return SerializeBlossom(
+        dynamic_cast<const types::IBlossom&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> SerializeLeaf(
+  const types::ILeaf& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kLeaf:
+      return SerializeConcreteLeaf(that);
+    case types::ModelType::kBlossom:
+      return SerializeBlossom(
+        dynamic_cast<const types::IBlossom&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
 > SerializeIClass(
   const types::IClass& that
 ) {
   switch (that.model_type()) {
     case types::ModelType::kBranch:
-      return SerializeBranch(
-        dynamic_cast<const types::IBranch&>(that)
+      return AsFallible(
+        SerializeConcreteBranch(
+          dynamic_cast<const types::IBranch&>(that)
+        )
       );
     case types::ModelType::kLeaf:
-      return SerializeLeaf(
+      return SerializeConcreteLeaf(
         dynamic_cast<const types::ILeaf&>(that)
       );
     case types::ModelType::kBlossom:

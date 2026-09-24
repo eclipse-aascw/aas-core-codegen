@@ -283,6 +283,12 @@ public class Xmlization {
         _DeserializeImplementation::readModelTypedUnionFromElement);
     }
 
+    private static Reporting.Result<List<OverlappingUnion>> readListOf_OverlappingUnion(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readOverlappingUnionFromElement);
+    }
+
     /**
      * Deserialize an instance of class StructuralFirst from a sequence of XML elements.
      *
@@ -1065,6 +1071,7 @@ public class Xmlization {
       StructuralUnion theOptionalStructuralProperty = null;
       MixedUnion theOptionalMixedProperty = null;
       ModelTypedUnion theOptionalModelTypedProperty = null;
+      List<OverlappingUnion> theOptionalListOverlappingProperty = null;
 
       if (!isEmptySequence) {
         while (!atEndOfSequence(reader)) {
@@ -1247,6 +1254,21 @@ public class Xmlization {
               }
               break;
             }
+            case "optionalListOverlappingProperty": {
+              if (theOptionalListOverlappingProperty != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
+              final Reporting.Result<List<OverlappingUnion>> value =
+                readListOf_OverlappingUnion(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theOptionalListOverlappingProperty = value.getResult();
+              }
+              break;
+            }
             default:
               return unexpectedProperty("Something", elementName);
           }
@@ -1303,7 +1325,8 @@ public class Xmlization {
         theTupleProperty,
         theOptionalStructuralProperty,
         theOptionalMixedProperty,
-        theOptionalModelTypedProperty));
+        theOptionalModelTypedProperty,
+        theOptionalListOverlappingProperty));
     }
 
     /**
@@ -1373,7 +1396,7 @@ public class Xmlization {
           if (result.isError()) {
             return Reporting.Result.failure(result.getError());
           }
-          return Reporting.Result.success(MixedUnion.fromMixedAbstractDescendantOne(result.getResult()));
+          return Reporting.Result.success(MixedUnion.fromMixedAbstractMember(result.getResult()));
         }
         case "mixedAbstractDescendantTwo": {
           final Reporting.Result<? extends MixedAbstractDescendantTwo> result =
@@ -1381,7 +1404,7 @@ public class Xmlization {
           if (result.isError()) {
             return Reporting.Result.failure(result.getError());
           }
-          return Reporting.Result.success(MixedUnion.fromMixedAbstractDescendantTwo(result.getResult()));
+          return Reporting.Result.success(MixedUnion.fromMixedAbstractMember(result.getResult()));
         }
         case "mixedConcreteWithDescendantsChild": {
           final Reporting.Result<? extends MixedConcreteWithDescendantsChild> result =
@@ -1389,7 +1412,7 @@ public class Xmlization {
           if (result.isError()) {
             return Reporting.Result.failure(result.getError());
           }
-          return Reporting.Result.success(MixedUnion.fromMixedConcreteWithDescendantsChild(result.getResult()));
+          return Reporting.Result.success(MixedUnion.fromMixedConcreteWithDescendants(result.getResult()));
         }
         case "mixedConcreteWithDescendants": {
           final Reporting.Result<? extends MixedConcreteWithDescendants> result =
@@ -1442,6 +1465,58 @@ public class Xmlization {
             return Reporting.Result.failure(result.getError());
           }
           return Reporting.Result.success(ModelTypedUnion.fromModelTypedSecond(result.getResult()));
+        }
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
+    }
+
+    /**
+     * Deserialize an instance of OverlappingUnion from an XML element.
+     */
+    private static Reporting.Result<? extends OverlappingUnion> readOverlappingUnionFromElement(
+      XMLEventReader reader) {
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "modelTypedFirst": {
+          final Reporting.Result<? extends ModelTypedFirst> result =
+            readModelTypedFirstFromElement(reader);
+          if (result.isError()) {
+            return Reporting.Result.failure(result.getError());
+          }
+          return Reporting.Result.success(OverlappingUnion.fromModelTypedFirst(result.getResult()));
+        }
+        case "modelTypedSecond": {
+          final Reporting.Result<? extends ModelTypedSecond> result =
+            readModelTypedSecondFromElement(reader);
+          if (result.isError()) {
+            return Reporting.Result.failure(result.getError());
+          }
+          return Reporting.Result.success(OverlappingUnion.fromModelTypedSecond(result.getResult()));
+        }
+        case "mixedConcreteWithDescendantsChild": {
+          final Reporting.Result<? extends MixedConcreteWithDescendantsChild> result =
+            readMixedConcreteWithDescendantsChildFromElement(reader);
+          if (result.isError()) {
+            return Reporting.Result.failure(result.getError());
+          }
+          return Reporting.Result.success(OverlappingUnion.fromMixedConcreteWithDescendantsChild(result.getResult()));
+        }
+        case "mixedConcreteWithDescendants": {
+          final Reporting.Result<? extends MixedConcreteWithDescendants> result =
+            readMixedConcreteWithDescendantsFromElement(reader);
+          if (result.isError()) {
+            return Reporting.Result.failure(result.getError());
+          }
+          return Reporting.Result.success(OverlappingUnion.fromMixedConcreteWithDescendants(result.getResult()));
         }
         default:
           return Reporting.Result.failure(new Reporting.Error(
@@ -1813,6 +1888,29 @@ public class Xmlization {
 
       return result.onError(error -> {
         error.prependSegment(new Reporting.NameSegment("modeltypedunion"));
+        throw new XmlCommon.DeserializeException(
+          Reporting.generateRelativeXPath(error.getPathSegments()),
+          error.getCause());
+      });
+    }
+
+    /**
+     * Deserialize an instance of OverlappingUnion from {@code reader}.
+     *
+     * @param reader Initialized XML reader with reader.peek() set to the element
+     */
+    public static OverlappingUnion deserializeOverlappingUnion(
+      XMLEventReader reader) {
+
+      _DeserializeImplementation.skipStartDocument(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
+
+      Reporting.Result<? extends OverlappingUnion> result =
+        _DeserializeImplementation.readOverlappingUnionFromElement(
+          reader);
+
+      return result.onError(error -> {
+        error.prependSegment(new Reporting.NameSegment("overlappingunion"));
         throw new XmlCommon.DeserializeException(
           Reporting.generateRelativeXPath(error.getPathSegments()),
           error.getCause());
@@ -2263,6 +2361,13 @@ public class Xmlization {
         that.getOptionalModelTypedProperty(),
         writer,
         _VisitorWithWriter::writeUnion);
+
+      writeOptionalProperty(
+        "optionalListOverlappingProperty",
+        "getOptionalListOverlappingProperty()",
+        that.getOptionalListOverlappingProperty(),
+        writer,
+        _VisitorWithWriter::writeListOf_IUnion);
     }
 
     @Override

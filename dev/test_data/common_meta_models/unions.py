@@ -130,6 +130,16 @@ Model_typed_union = Union[Model_typed_first, Model_typed_second]
 
 # endregion
 
+# region Overlapping roots: a nested union, and a class listed next to its ancestor
+
+Overlapping_union = Union[
+    Model_typed_union,
+    Mixed_concrete_with_descendants,
+    Mixed_concrete_with_descendants_child,
+]
+
+# endregion
+
 
 class Something(DBC):
     structural_property: Structural_union
@@ -149,6 +159,9 @@ class Something(DBC):
     optional_mixed_property: Optional[Mixed_union]
     optional_model_typed_property: Optional[Model_typed_union]
 
+    #: Test a named union with overlapping roots
+    optional_list_overlapping_property: Optional[List[Overlapping_union]]
+
     def __init__(
         self,
         structural_property: Structural_union,
@@ -161,6 +174,7 @@ class Something(DBC):
         optional_structural_property: Optional[Structural_union] = None,
         optional_mixed_property: Optional[Mixed_union] = None,
         optional_model_typed_property: Optional[Model_typed_union] = None,
+        optional_list_overlapping_property: Optional[List[Overlapping_union]] = None,
     ) -> None:
         self.structural_property = structural_property
         self.mixed_property = mixed_property
@@ -172,6 +186,7 @@ class Something(DBC):
         self.optional_structural_property = optional_structural_property
         self.optional_mixed_property = optional_mixed_property
         self.optional_model_typed_property = optional_model_typed_property
+        self.optional_list_overlapping_property = optional_list_overlapping_property
 
 
 __version__ = "dummy"

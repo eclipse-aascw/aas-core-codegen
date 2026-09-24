@@ -2780,6 +2780,21 @@ def _read_list_of__model_typed_union(
     )
 
 
+def _read_list_of__overlapping_union(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> List[aas_types.OverlappingUnion]:
+    """
+    Read the items of :paramref:`element` as a list of
+    :py:class:`.types.OverlappingUnion`.
+    """
+    return _read_list_of_items(
+        element,
+        iterator,
+        _read_overlapping_union_as_element
+    )
+
+
 def _read_list_of__structural_union(
     element: Element,
     iterator: Iterator[Tuple[str, Element]]
@@ -3515,6 +3530,30 @@ def _read_model_typed_union_as_element(
     )
 
 
+def _read_overlapping_union_as_element(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.OverlappingUnion:
+    """
+    Read an instance of :py:class:`.types.OverlappingUnion` from
+    :paramref:`iterator`, including the end element.
+
+    :param element: start element
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed instance
+    """
+    return _read_dispatched(
+        element,
+        iterator,
+        _DISPATCH_FOR_OVERLAPPING_UNION,
+        "a concrete instance of 'OverlappingUnion'"
+    )
+
+
 def _read_something_as_sequence(
         element: Element,
         iterator: Iterator[Tuple[str, Element]]
@@ -3574,6 +3613,9 @@ def _read_something_as_sequence(
     the_optional_model_typed_property: Optional[aas_types.ModelTypedUnion] = values.get(
         'optionalModelTypedProperty'
     )
+    the_optional_list_overlapping_property: Optional[List[aas_types.OverlappingUnion]] = values.get(
+        'optionalListOverlappingProperty'
+    )
 
     if the_structural_property is None:
         raise DeserializationException(
@@ -3620,7 +3662,8 @@ def _read_something_as_sequence(
         the_tuple_property,
         the_optional_structural_property,
         the_optional_mixed_property,
-        the_optional_model_typed_property
+        the_optional_model_typed_property,
+        the_optional_list_overlapping_property
     )
 
 
@@ -3760,6 +3803,25 @@ _DISPATCH_FOR_MODEL_TYPED_UNION: Mapping[
 
 
 #: Dispatch XML class names to read-as-sequence functions
+#: corresponding to the implementers of OverlappingUnion
+_DISPATCH_FOR_OVERLAPPING_UNION: Mapping[
+    str,
+    Callable[
+        [
+            Element,
+            Iterator[Tuple[str, Element]]
+        ],
+        aas_types.OverlappingUnion
+    ]
+] = {
+    'modelTypedFirst': _read_model_typed_first_as_sequence,
+    'modelTypedSecond': _read_model_typed_second_as_sequence,
+    'mixedConcreteWithDescendantsChild': _read_mixed_concrete_with_descendants_child_as_sequence,
+    'mixedConcreteWithDescendants': _read_mixed_concrete_with_descendants_as_sequence,
+}
+
+
+#: Dispatch XML class names to read-as-sequence functions
 #: corresponding to the concrete classes
 _GENERAL_DISPATCH: Mapping[
     str,
@@ -3891,6 +3953,7 @@ _READERS_FOR_SOMETHING: Mapping[
     'optionalStructuralProperty': _read_nested__structural_union,
     'optionalMixedProperty': _read_nested__mixed_union,
     'optionalModelTypedProperty': _read_nested__model_typed_union,
+    'optionalListOverlappingProperty': _read_list_of__overlapping_union,
 }
 
 
@@ -4478,6 +4541,13 @@ def _write_something_as_element(
                 'optionalModelTypedProperty',
                 'optional_model_typed_property',
                 that.optional_model_typed_property,
+                serializer
+            )
+        if that.optional_list_overlapping_property is not None:
+            _write_list_of_instances(
+                'optionalListOverlappingProperty',
+                'optional_list_overlapping_property',
+                that.optional_list_overlapping_property,
                 serializer
             )
         serializer.writer.write_end_element(name)

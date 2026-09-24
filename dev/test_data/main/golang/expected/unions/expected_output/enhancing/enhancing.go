@@ -761,6 +761,17 @@ func (es *enhancedSomething[E]) SetOptionalModelTypedProperty(
 	es.instance.SetOptionalModelTypedProperty(value)
 }
 
+func (es *enhancedSomething[E]) OptionalListOverlappingProperty(
+) []*aastypes.OverlappingUnion {
+	return es.instance.OptionalListOverlappingProperty()
+}
+
+func (es *enhancedSomething[E]) SetOptionalListOverlappingProperty(
+	value []*aastypes.OverlappingUnion,
+) {
+	es.instance.SetOptionalListOverlappingProperty(value)
+}
+
 func (es *enhancedSomething[E]) getEnhancement(
 ) E {
 	return es.enhancement
@@ -867,6 +878,14 @@ func wrapSomething[E any](
 				factory,
 			),
 		)
+	}
+
+	theOptionalListOverlappingProperty := that.OptionalListOverlappingProperty()
+	if theOptionalListOverlappingProperty != nil {
+		for i, v := range theOptionalListOverlappingProperty {
+			// Update in-situ
+			theOptionalListOverlappingProperty[i] = wrapUnion[E](v, factory)
+		}
 	}
 
 	return

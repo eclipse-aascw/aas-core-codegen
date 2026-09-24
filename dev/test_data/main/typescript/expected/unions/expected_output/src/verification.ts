@@ -504,6 +504,28 @@ class Verifier
           yield error;
         }
       }
+
+      if (that.optionalListOverlappingProperty !== null) {
+        let optionalListOverlappingPropertyIndex = 0;
+        for (const item of that.optionalListOverlappingProperty) {
+          for (const error of this.transformWithContext(item, context)) {
+            error.path.prepend(
+              new IndexSegment(
+                that.optionalListOverlappingProperty,
+                optionalListOverlappingPropertyIndex
+              )
+            );
+            error.path.prepend(
+              new PropertySegment(
+                that,
+                "optionalListOverlappingProperty"
+              )
+            );
+            yield error;
+          }
+          optionalListOverlappingPropertyIndex++;
+        }
+      }
     }
   }
 }

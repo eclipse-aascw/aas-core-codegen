@@ -310,6 +310,25 @@ namespace dummy
                         yield return error;
                     }
                 }
+
+                if (that.OptionalListOverlappingProperty != null)
+                {
+                    int indexOptionalListOverlappingProperty = 0;
+                    foreach (var item in that.OptionalListOverlappingProperty)
+                    {
+                        foreach (var error in Verification.Verify(item))
+                        {
+                            error.PrependSegment(
+                                new Reporting.IndexSegment(
+                                    indexOptionalListOverlappingProperty));
+                            error.PrependSegment(
+                                new Reporting.NameSegment(
+                                    "optionalListOverlappingProperty"));
+                            yield return error;
+                        }
+                        indexOptionalListOverlappingProperty++;
+                    }
+                }
             }
         }  // private class Transformer
 

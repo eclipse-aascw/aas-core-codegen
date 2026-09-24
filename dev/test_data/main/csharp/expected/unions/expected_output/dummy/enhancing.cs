@@ -623,6 +623,17 @@ namespace dummy
                 set => _instance.OptionalModelTypedProperty = value;
             }
 
+            public List<OverlappingUnion>? OptionalListOverlappingProperty
+            {
+                get => _instance.OptionalListOverlappingProperty;
+                set => _instance.OptionalListOverlappingProperty = value;
+            }
+
+            public IEnumerable<Aas.OverlappingUnion> OverOptionalListOverlappingPropertyOrEmpty()
+            {
+                return _instance.OverOptionalListOverlappingPropertyOrEmpty();
+            }
+
             public IEnumerable<Aas.IClass> DescendOnce()
             {
                 return _instance.DescendOnce();
@@ -904,6 +915,14 @@ namespace dummy
                 if (that.OptionalModelTypedProperty != null)
                 {
                     that.OptionalModelTypedProperty = Transform(that.OptionalModelTypedProperty);
+                }
+
+                if (that.OptionalListOverlappingProperty != null)
+                {
+                    that.OptionalListOverlappingProperty = (
+                        that.OptionalListOverlappingProperty
+                        .Select(Transform)
+                    ).ToList();
                 }
 
                 var enhancement = _enhancementFactory(that);

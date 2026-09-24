@@ -2458,15 +2458,17 @@ def _generate_over_function(
         named_union = type_annotation.our_type
 
         # NOTE (mristin):
-        # The alternatives of the variant follow the implementers, see
+        # The alternatives of the variant follow the roots, see
         # :py:func:`cpp_common.generate_named_union_variant_definition`.
+        # ``Over`` dispatches dynamically on the instance, so a root with
+        # descendants is handled correctly.
         case_blocks = [
             Stripped(
                 f"""\
 case {i}:
 {I}return Over(*common::get<{i}>(value), recursive);"""
             )
-            for i in range(len(named_union.implementers))
+            for i in range(len(named_union.roots))
         ]
         case_blocks.append(
             Stripped(

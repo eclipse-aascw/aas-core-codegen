@@ -560,6 +560,9 @@ if (obj == null)
         )
     ]  # type: List[Stripped]
 
+    # NOTE (mristin):
+    # We dispatch on the implementers as only the concrete classes appear on
+    # the wire, but wrap each instance in the most specific root of the union.
     implementers_with_model_type = []  # type: List[intermediate.ConcreteClass]
     implementers_without_model_type = []  # type: List[intermediate.ConcreteClass]
     for implementer in named_union.implementers:
@@ -576,8 +579,9 @@ if (obj == null)
         for implementer in implementers_with_model_type:
             model_type = naming.json_model_type(implementer.name)
             implementer_name = csharp_naming.class_name(implementer.name)
+            root = named_union.most_specific_root_of(implementer)
             from_method_name = csharp_naming.method_name(
-                Identifier(f"from_{implementer.name}")
+                Identifier(f"from_{root.name}")
             )
 
             case_blocks.append(
@@ -636,9 +640,8 @@ if (modelTypeNode != null)
 
     for implementer in implementers_without_model_type:
         implementer_name = csharp_naming.class_name(implementer.name)
-        from_method_name = csharp_naming.method_name(
-            Identifier(f"from_{implementer.name}")
-        )
+        root = named_union.most_specific_root_of(implementer)
+        from_method_name = csharp_naming.method_name(Identifier(f"from_{root.name}"))
 
         required_props = [
             prop

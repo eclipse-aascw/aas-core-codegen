@@ -436,6 +436,12 @@ namespace dummy
                     MixedUnionFrom,
                     ModelTypedUnionFrom));
 
+            private static readonly Deserializer<
+                List<OverlappingUnion>
+            > Parse_ListOf_OverlappingUnion = (
+                AsArrayOf<OverlappingUnion>(
+                    OverlappingUnionFrom));
+
             /// <summary>
             /// Deserialize an instance of StructuralFirst from <paramref name="node" />.
             /// </summary>
@@ -1057,7 +1063,7 @@ namespace dummy
                             {
                                 return default!;
                             }
-                            return Aas.MixedUnion.FromMixedConcreteWithDescendantsChild(instance);
+                            return Aas.MixedUnion.FromMixedConcreteWithDescendants(instance);
                         }
                         case "MixedConcreteWithDescendants":
                         {
@@ -1084,7 +1090,7 @@ namespace dummy
                     {
                         return default!;
                     }
-                    return Aas.MixedUnion.FromMixedAbstractDescendantOne(instance);
+                    return Aas.MixedUnion.FromMixedAbstractMember(instance);
                 }
 
                 if (obj.ContainsKey("uniqueToAbstractDescendantTwo"))
@@ -1095,7 +1101,7 @@ namespace dummy
                     {
                         return default!;
                     }
-                    return Aas.MixedUnion.FromMixedAbstractDescendantTwo(instance);
+                    return Aas.MixedUnion.FromMixedAbstractMember(instance);
                 }
 
                 if (obj.ContainsKey("uniqueToConcreteLeaf"))
@@ -1333,6 +1339,91 @@ namespace dummy
             }  // public static Aas.ModelTypedUnion ModelTypedUnionFrom
 
             /// <summary>
+            /// Deserialize an instance of OverlappingUnion by dispatching
+            /// based on <c>modelType</c> or the properties present in
+            /// <paramref name="node" />.
+            /// </summary>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <param name="error">Error, if any, during the deserialization</param>
+            public static Aas.OverlappingUnion OverlappingUnionFrom(
+                Nodes.JsonNode? node,
+                out Reporting.Error? error)
+            {
+                error = null;
+
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
+                if (obj == null)
+                {
+                    error = new Reporting.Error(
+                        $"Expected a JsonObject representing OverlappingUnion, but got {Describe(node)}");
+                    return default!;
+                }
+
+                Nodes.JsonNode? modelTypeNode = obj["modelType"];
+                if (modelTypeNode != null)
+                {
+                    string modelType = StringFrom(modelTypeNode, out error);
+                    if (error != null)
+                    {
+                        return default!;
+                    }
+
+                    switch (modelType)
+                    {
+                        case "ModelTypedFirst":
+                        {
+                            Aas.ModelTypedFirst instance = ModelTypedFirstFrom(
+                                node, out error);
+                            if (error != null)
+                            {
+                                return default!;
+                            }
+                            return Aas.OverlappingUnion.FromModelTypedFirst(instance);
+                        }
+                        case "ModelTypedSecond":
+                        {
+                            Aas.ModelTypedSecond instance = ModelTypedSecondFrom(
+                                node, out error);
+                            if (error != null)
+                            {
+                                return default!;
+                            }
+                            return Aas.OverlappingUnion.FromModelTypedSecond(instance);
+                        }
+                        case "MixedConcreteWithDescendantsChild":
+                        {
+                            Aas.MixedConcreteWithDescendantsChild instance = MixedConcreteWithDescendantsChildFrom(
+                                node, out error);
+                            if (error != null)
+                            {
+                                return default!;
+                            }
+                            return Aas.OverlappingUnion.FromMixedConcreteWithDescendantsChild(instance);
+                        }
+                        case "MixedConcreteWithDescendants":
+                        {
+                            Aas.MixedConcreteWithDescendants instance = MixedConcreteWithDescendantsFrom(
+                                node, out error);
+                            if (error != null)
+                            {
+                                return default!;
+                            }
+                            return Aas.OverlappingUnion.FromMixedConcreteWithDescendants(instance);
+                        }
+                        default:
+                            error = new Reporting.Error(
+                                $"Unexpected model type for the union OverlappingUnion: {modelType}");
+                            return default!;
+                    }
+                }
+
+                error = new Reporting.Error(
+                    "Could not determine the concrete type of the union OverlappingUnion " +
+                    "from the given JSON object; none of its implementers matched");
+                return default!;
+            }  // public static Aas.OverlappingUnion OverlappingUnionFrom
+
+            /// <summary>
             /// Deserialize an instance of Something from <paramref name="node" />.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
@@ -1361,6 +1452,7 @@ namespace dummy
                 StructuralUnion? theOptionalStructuralProperty = null;
                 MixedUnion? theOptionalMixedProperty = null;
                 ModelTypedUnion? theOptionalModelTypedProperty = null;
+                List<OverlappingUnion>? theOptionalListOverlappingProperty = null;
 
                 foreach (var keyValue in obj)
                 {
@@ -1404,6 +1496,10 @@ namespace dummy
                             break;
                         case "optionalModelTypedProperty":
                             theOptionalModelTypedProperty = ModelTypedUnionFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "optionalListOverlappingProperty":
+                            theOptionalListOverlappingProperty = Parse_ListOf_OverlappingUnion(
                                 keyValue.Value, out error);
                             break;
                         default:
@@ -1494,7 +1590,8 @@ namespace dummy
                             "Unexpected null, had to be handled before"),
                     theOptionalStructuralProperty,
                     theOptionalMixedProperty,
-                    theOptionalModelTypedProperty);
+                    theOptionalModelTypedProperty,
+                    theOptionalListOverlappingProperty);
             }  // internal static SomethingFrom
         }  // public static class DeserializeImplementation
 
@@ -1888,6 +1985,29 @@ namespace dummy
             }
 
             /// <summary>
+            /// Deserialize an instance of OverlappingUnion from <paramref name="node" />.
+            /// </summary>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <exception cref="Jsonization.Exception">
+            /// Thrown when <paramref name="node" /> is not a valid JSON
+            /// representation of OverlappingUnion.
+            /// </exception>
+            public static Aas.OverlappingUnion OverlappingUnionFrom(
+                Nodes.JsonNode node)
+            {
+                Aas.OverlappingUnion result = DeserializeImplementation.OverlappingUnionFrom(
+                    node,
+                    out Reporting.Error? error);
+                if (error != null)
+                {
+                    throw new Jsonization.Exception(
+                        Reporting.GenerateJsonPath(error.PathSegments),
+                        error.Cause);
+                }
+                return result;
+            }
+
+            /// <summary>
             /// Deserialize an instance of Something from <paramref name="node" />.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
@@ -2140,6 +2260,12 @@ namespace dummy
                 SerializeTuple3<StructuralUnion, MixedUnion, ModelTypedUnion>(
                     TransformIUnion,
                     TransformIUnion,
+                    TransformIUnion));
+
+            private static readonly Serializer<
+                List<OverlappingUnion>
+            > Serialize_ListOf_OverlappingUnion = (
+                SerializeList<OverlappingUnion>(
                     TransformIUnion));
 
             private static readonly Serializer<string> Serialize_string = ToJsonValue;
@@ -2419,6 +2545,16 @@ namespace dummy
                         "OptionalModelTypedProperty",
                         that.OptionalModelTypedProperty,
                         Serialize_IUnion);
+                }
+
+                if (that.OptionalListOverlappingProperty != null)
+                {
+                    SetProperty(
+                        result,
+                        "optionalListOverlappingProperty",
+                        "OptionalListOverlappingProperty",
+                        that.OptionalListOverlappingProperty,
+                        Serialize_ListOf_OverlappingUnion);
                 }
 
                 return result;

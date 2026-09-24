@@ -708,38 +708,30 @@ namespace dummy
     }
 
     /// <summary>
-    /// Represent a union of <see cref="IMixedAbstractDescendantOne" />, <see cref="IMixedAbstractDescendantTwo" />, <see cref="IMixedConcreteWithDescendantsChild" />, <see cref="IMixedConcreteWithDescendants" /> and <see cref="IMixedConcreteLeaf" />.
+    /// Represent a union of <see cref="IMixedAbstractMember" />, <see cref="IMixedConcreteWithDescendants" /> and <see cref="IMixedConcreteLeaf" />.
     /// </summary>
     public class MixedUnion : IUnion<MixedUnion>
     {
         private enum ValueKind
         {
-            MixedAbstractDescendantOne,
-            MixedAbstractDescendantTwo,
-            MixedConcreteWithDescendantsChild,
+            MixedAbstractMember,
             MixedConcreteWithDescendants,
             MixedConcreteLeaf
         }
 
         private readonly ValueKind _valueKind;
-        private readonly IMixedAbstractDescendantOne? _asMixedAbstractDescendantOne;
-        private readonly IMixedAbstractDescendantTwo? _asMixedAbstractDescendantTwo;
-        private readonly IMixedConcreteWithDescendantsChild? _asMixedConcreteWithDescendantsChild;
+        private readonly IMixedAbstractMember? _asMixedAbstractMember;
         private readonly IMixedConcreteWithDescendants? _asMixedConcreteWithDescendants;
         private readonly IMixedConcreteLeaf? _asMixedConcreteLeaf;
 
         private MixedUnion(
             ValueKind valueKind,
-            IMixedAbstractDescendantOne? asMixedAbstractDescendantOne,
-            IMixedAbstractDescendantTwo? asMixedAbstractDescendantTwo,
-            IMixedConcreteWithDescendantsChild? asMixedConcreteWithDescendantsChild,
+            IMixedAbstractMember? asMixedAbstractMember,
             IMixedConcreteWithDescendants? asMixedConcreteWithDescendants,
             IMixedConcreteLeaf? asMixedConcreteLeaf)
         {
             _valueKind = valueKind;
-            _asMixedAbstractDescendantOne = asMixedAbstractDescendantOne;
-            _asMixedAbstractDescendantTwo = asMixedAbstractDescendantTwo;
-            _asMixedConcreteWithDescendantsChild = asMixedConcreteWithDescendantsChild;
+            _asMixedAbstractMember = asMixedAbstractMember;
             _asMixedConcreteWithDescendants = asMixedConcreteWithDescendants;
             _asMixedConcreteLeaf = asMixedConcreteLeaf;
         }
@@ -750,15 +742,9 @@ namespace dummy
         public IClass Underlying =>
             _valueKind switch
             {
-                ValueKind.MixedAbstractDescendantOne => _asMixedAbstractDescendantOne
+                ValueKind.MixedAbstractMember => _asMixedAbstractMember
                     ?? throw new System.InvalidOperationException(
-                        "Unexpected null _asMixedAbstractDescendantOne"),
-                ValueKind.MixedAbstractDescendantTwo => _asMixedAbstractDescendantTwo
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected null _asMixedAbstractDescendantTwo"),
-                ValueKind.MixedConcreteWithDescendantsChild => _asMixedConcreteWithDescendantsChild
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected null _asMixedConcreteWithDescendantsChild"),
+                        "Unexpected null _asMixedAbstractMember"),
                 ValueKind.MixedConcreteWithDescendants => _asMixedConcreteWithDescendants
                     ?? throw new System.InvalidOperationException(
                         "Unexpected null _asMixedConcreteWithDescendants"),
@@ -772,40 +758,10 @@ namespace dummy
         /// <summary>
         /// Wrap <paramref name="that" /> as an instance of MixedUnion.
         /// </summary>
-        public static MixedUnion FromMixedAbstractDescendantOne(IMixedAbstractDescendantOne that)
+        public static MixedUnion FromMixedAbstractMember(IMixedAbstractMember that)
         {
             return new MixedUnion(
-                ValueKind.MixedAbstractDescendantOne,
-                that,
-                null,
-                null,
-                null,
-                null);
-        }
-
-        /// <summary>
-        /// Wrap <paramref name="that" /> as an instance of MixedUnion.
-        /// </summary>
-        public static MixedUnion FromMixedAbstractDescendantTwo(IMixedAbstractDescendantTwo that)
-        {
-            return new MixedUnion(
-                ValueKind.MixedAbstractDescendantTwo,
-                null,
-                that,
-                null,
-                null,
-                null);
-        }
-
-        /// <summary>
-        /// Wrap <paramref name="that" /> as an instance of MixedUnion.
-        /// </summary>
-        public static MixedUnion FromMixedConcreteWithDescendantsChild(IMixedConcreteWithDescendantsChild that)
-        {
-            return new MixedUnion(
-                ValueKind.MixedConcreteWithDescendantsChild,
-                null,
-                null,
+                ValueKind.MixedAbstractMember,
                 that,
                 null,
                 null);
@@ -818,8 +774,6 @@ namespace dummy
         {
             return new MixedUnion(
                 ValueKind.MixedConcreteWithDescendants,
-                null,
-                null,
                 null,
                 that,
                 null);
@@ -834,8 +788,6 @@ namespace dummy
                 ValueKind.MixedConcreteLeaf,
                 null,
                 null,
-                null,
-                null,
                 that);
         }
 
@@ -847,12 +799,8 @@ namespace dummy
         {
             switch (that)
             {
-                case IMixedAbstractDescendantOne casted:
-                    return FromMixedAbstractDescendantOne(casted);
-                case IMixedAbstractDescendantTwo casted:
-                    return FromMixedAbstractDescendantTwo(casted);
-                case IMixedConcreteWithDescendantsChild casted:
-                    return FromMixedConcreteWithDescendantsChild(casted);
+                case IMixedAbstractMember casted:
+                    return FromMixedAbstractMember(casted);
                 case IMixedConcreteWithDescendants casted:
                     return FromMixedConcreteWithDescendants(casted);
                 case IMixedConcreteLeaf casted:
@@ -1126,6 +1074,152 @@ namespace dummy
         }
     }
 
+    /// <summary>
+    /// Represent a union of <see cref="IModelTypedFirst" />, <see cref="IModelTypedSecond" />, <see cref="IMixedConcreteWithDescendants" /> and <see cref="IMixedConcreteWithDescendantsChild" />.
+    /// </summary>
+    public class OverlappingUnion : IUnion<OverlappingUnion>
+    {
+        private enum ValueKind
+        {
+            ModelTypedFirst,
+            ModelTypedSecond,
+            MixedConcreteWithDescendants,
+            MixedConcreteWithDescendantsChild
+        }
+
+        private readonly ValueKind _valueKind;
+        private readonly IModelTypedFirst? _asModelTypedFirst;
+        private readonly IModelTypedSecond? _asModelTypedSecond;
+        private readonly IMixedConcreteWithDescendants? _asMixedConcreteWithDescendants;
+        private readonly IMixedConcreteWithDescendantsChild? _asMixedConcreteWithDescendantsChild;
+
+        private OverlappingUnion(
+            ValueKind valueKind,
+            IModelTypedFirst? asModelTypedFirst,
+            IModelTypedSecond? asModelTypedSecond,
+            IMixedConcreteWithDescendants? asMixedConcreteWithDescendants,
+            IMixedConcreteWithDescendantsChild? asMixedConcreteWithDescendantsChild)
+        {
+            _valueKind = valueKind;
+            _asModelTypedFirst = asModelTypedFirst;
+            _asModelTypedSecond = asModelTypedSecond;
+            _asMixedConcreteWithDescendants = asMixedConcreteWithDescendants;
+            _asMixedConcreteWithDescendantsChild = asMixedConcreteWithDescendantsChild;
+        }
+
+        /// <summary>
+        /// Get the underlying instance regardless of the concrete case.
+        /// </summary>
+        public IClass Underlying =>
+            _valueKind switch
+            {
+                ValueKind.ModelTypedFirst => _asModelTypedFirst
+                    ?? throw new System.InvalidOperationException(
+                        "Unexpected null _asModelTypedFirst"),
+                ValueKind.ModelTypedSecond => _asModelTypedSecond
+                    ?? throw new System.InvalidOperationException(
+                        "Unexpected null _asModelTypedSecond"),
+                ValueKind.MixedConcreteWithDescendants => _asMixedConcreteWithDescendants
+                    ?? throw new System.InvalidOperationException(
+                        "Unexpected null _asMixedConcreteWithDescendants"),
+                ValueKind.MixedConcreteWithDescendantsChild => _asMixedConcreteWithDescendantsChild
+                    ?? throw new System.InvalidOperationException(
+                        "Unexpected null _asMixedConcreteWithDescendantsChild"),
+                _ => throw new System.InvalidOperationException(
+                    $"Unexpected value kind: {_valueKind}")
+            };
+
+        /// <summary>
+        /// Wrap <paramref name="that" /> as an instance of OverlappingUnion.
+        /// </summary>
+        public static OverlappingUnion FromModelTypedFirst(IModelTypedFirst that)
+        {
+            return new OverlappingUnion(
+                ValueKind.ModelTypedFirst,
+                that,
+                null,
+                null,
+                null);
+        }
+
+        /// <summary>
+        /// Wrap <paramref name="that" /> as an instance of OverlappingUnion.
+        /// </summary>
+        public static OverlappingUnion FromModelTypedSecond(IModelTypedSecond that)
+        {
+            return new OverlappingUnion(
+                ValueKind.ModelTypedSecond,
+                null,
+                that,
+                null,
+                null);
+        }
+
+        /// <summary>
+        /// Wrap <paramref name="that" /> as an instance of OverlappingUnion.
+        /// </summary>
+        public static OverlappingUnion FromMixedConcreteWithDescendants(IMixedConcreteWithDescendants that)
+        {
+            return new OverlappingUnion(
+                ValueKind.MixedConcreteWithDescendants,
+                null,
+                null,
+                that,
+                null);
+        }
+
+        /// <summary>
+        /// Wrap <paramref name="that" /> as an instance of OverlappingUnion.
+        /// </summary>
+        public static OverlappingUnion FromMixedConcreteWithDescendantsChild(IMixedConcreteWithDescendantsChild that)
+        {
+            return new OverlappingUnion(
+                ValueKind.MixedConcreteWithDescendantsChild,
+                null,
+                null,
+                null,
+                that);
+        }
+
+        /// <summary>
+        /// Wrap <paramref name="that" /> as an instance of OverlappingUnion based on
+        /// its run-time type.
+        /// </summary>
+        public static OverlappingUnion FromUnderlying(IClass that)
+        {
+            switch (that)
+            {
+                case IMixedConcreteWithDescendantsChild casted:
+                    return FromMixedConcreteWithDescendantsChild(casted);
+                case IModelTypedFirst casted:
+                    return FromModelTypedFirst(casted);
+                case IModelTypedSecond casted:
+                    return FromModelTypedSecond(casted);
+                case IMixedConcreteWithDescendants casted:
+                    return FromMixedConcreteWithDescendants(casted);
+                default:
+                    throw new System.ArgumentException(
+                        $"Unexpected run-time type for the union OverlappingUnion: " +
+                        $"{that.GetType()}");
+            }
+        }
+
+        /// <summary>
+        /// Wrap <paramref name="that" /> as an instance of OverlappingUnion based on
+        /// its run-time type.
+        /// </summary>
+        /// <remarks>
+        /// This is the instance-level counterpart of <see cref="FromUnderlying" />,
+        /// needed so that a generic method dispatching on <see cref="IUnion{T}" />
+        /// can re-wrap a transformed or copied value without knowing the concrete
+        /// union type at compile time.
+        /// </remarks>
+        public OverlappingUnion WithUnderlying(IClass that)
+        {
+            return OverlappingUnion.FromUnderlying(that);
+        }
+    }
+
     public interface ISomething : IClass
     {
         public StructuralUnion StructuralProperty { get; set; }
@@ -1147,6 +1241,13 @@ namespace dummy
         public MixedUnion? OptionalMixedProperty { get; set; }
 
         public ModelTypedUnion? OptionalModelTypedProperty { get; set; }
+
+        public List<OverlappingUnion>? OptionalListOverlappingProperty { get; set; }
+
+        /// <summary>
+        /// Iterate over OptionalListOverlappingProperty, if set, and otherwise return an empty enumerable.
+        /// </summary>
+        public IEnumerable<OverlappingUnion> OverOptionalListOverlappingPropertyOrEmpty();
     }
 
     public class Something : ISomething
@@ -1170,6 +1271,17 @@ namespace dummy
         public MixedUnion? OptionalMixedProperty { get; set; }
 
         public ModelTypedUnion? OptionalModelTypedProperty { get; set; }
+
+        public List<OverlappingUnion>? OptionalListOverlappingProperty { get; set; }
+
+        /// <summary>
+        /// Iterate over OptionalListOverlappingProperty, if set, and otherwise return an empty enumerable.
+        /// </summary>
+        public IEnumerable<OverlappingUnion> OverOptionalListOverlappingPropertyOrEmpty()
+        {
+            return OptionalListOverlappingProperty
+                ?? System.Linq.Enumerable.Empty<OverlappingUnion>();
+        }
 
         /// <summary>
         /// Iterate over all the class instances referenced from this instance
@@ -1217,6 +1329,14 @@ namespace dummy
             if (OptionalModelTypedProperty != null)
             {
                 yield return OptionalModelTypedProperty.Underlying;
+            }
+
+            if (OptionalListOverlappingProperty != null)
+            {
+                foreach (var anItem in OptionalListOverlappingProperty)
+                {
+                    yield return anItem.Underlying;
+                }
             }
         }
 
@@ -1338,6 +1458,20 @@ namespace dummy
                     yield return anItem;
                 }
             }
+
+            if (OptionalListOverlappingProperty != null)
+            {
+                foreach (var anItem in OptionalListOverlappingProperty)
+                {
+                    yield return anItem.Underlying;
+
+                    // Recurse
+                    foreach (var anotherItem in anItem.Underlying.Descend())
+                    {
+                        yield return anotherItem;
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -1390,7 +1524,8 @@ namespace dummy
             (StructuralUnion, MixedUnion, ModelTypedUnion) tupleProperty,
             StructuralUnion? optionalStructuralProperty = null,
             MixedUnion? optionalMixedProperty = null,
-            ModelTypedUnion? optionalModelTypedProperty = null)
+            ModelTypedUnion? optionalModelTypedProperty = null,
+            List<OverlappingUnion>? optionalListOverlappingProperty = null)
         {
             StructuralProperty = structuralProperty;
             MixedProperty = mixedProperty;
@@ -1402,6 +1537,7 @@ namespace dummy
             OptionalStructuralProperty = optionalStructuralProperty;
             OptionalMixedProperty = optionalMixedProperty;
             OptionalModelTypedProperty = optionalModelTypedProperty;
+            OptionalListOverlappingProperty = optionalListOverlappingProperty;
         }
     }
 }  // namespace dummy

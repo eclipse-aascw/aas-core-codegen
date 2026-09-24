@@ -849,19 +849,19 @@ func readMixedUnionDispatched(
 		var casted aastypes.IMixedAbstractDescendantOne
 		casted, next, err = readMixedAbstractDescendantOneAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewMixedUnionFromMixedAbstractDescendantOne(casted)
+			instance = aastypes.NewMixedUnionFromMixedAbstractMember(casted)
 		}
 	case "mixedAbstractDescendantTwo":
 		var casted aastypes.IMixedAbstractDescendantTwo
 		casted, next, err = readMixedAbstractDescendantTwoAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewMixedUnionFromMixedAbstractDescendantTwo(casted)
+			instance = aastypes.NewMixedUnionFromMixedAbstractMember(casted)
 		}
 	case "mixedConcreteWithDescendantsChild":
 		var casted aastypes.IMixedConcreteWithDescendantsChild
 		casted, next, err = readMixedConcreteWithDescendantsChildAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewMixedUnionFromMixedConcreteWithDescendantsChild(casted)
+			instance = aastypes.NewMixedUnionFromMixedConcreteWithDescendants(casted)
 		}
 	case "mixedConcreteWithDescendants":
 		var casted aastypes.IMixedConcreteWithDescendants
@@ -1041,6 +1041,50 @@ func readModelTypedUnionDispatched(
 	return
 }
 
+// De-serialize an instance of [aastypes.OverlappingUnion] based on the `local` name
+// of its start element.
+//
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readOverlappingUnionDispatched(
+	decoder *xml.Decoder,
+	current xml.Token,
+	local string,
+) (instance *aastypes.OverlappingUnion,
+	next xml.Token,
+	err error,
+) {
+	switch local {
+	case "modelTypedFirst":
+		var casted aastypes.IModelTypedFirst
+		casted, next, err = readModelTypedFirstAsSequence(decoder, current)
+		if err == nil {
+			instance = aastypes.NewOverlappingUnionFromModelTypedFirst(casted)
+		}
+	case "modelTypedSecond":
+		var casted aastypes.IModelTypedSecond
+		casted, next, err = readModelTypedSecondAsSequence(decoder, current)
+		if err == nil {
+			instance = aastypes.NewOverlappingUnionFromModelTypedSecond(casted)
+		}
+	case "mixedConcreteWithDescendantsChild":
+		var casted aastypes.IMixedConcreteWithDescendantsChild
+		casted, next, err = readMixedConcreteWithDescendantsChildAsSequence(decoder, current)
+		if err == nil {
+			instance = aastypes.NewOverlappingUnionFromMixedConcreteWithDescendantsChild(casted)
+		}
+	case "mixedConcreteWithDescendants":
+		var casted aastypes.IMixedConcreteWithDescendants
+		casted, next, err = readMixedConcreteWithDescendantsAsSequence(decoder, current)
+		if err == nil {
+			instance = aastypes.NewOverlappingUnionFromMixedConcreteWithDescendants(casted)
+		}
+	default:
+		err = unexpectedDiscriminator(local, "the union OverlappingUnion")
+	}
+	return
+}
+
 // De-serialize the instance of [aastypes.ISomething]
 // as a sequence of XML elements, each representing a property
 // of [aastypes.ISomething].
@@ -1064,6 +1108,7 @@ func readSomethingAsSequence(
 	var theOptionalStructuralProperty *aastypes.StructuralUnion
 	var theOptionalMixedProperty *aastypes.MixedUnion
 	var theOptionalModelTypedProperty *aastypes.ModelTypedUnion
+	var theOptionalListOverlappingProperty []*aastypes.OverlappingUnion
 
 	foundStructuralProperty := false
 	foundMixedProperty := false
@@ -1075,6 +1120,7 @@ func readSomethingAsSequence(
 	foundOptionalStructuralProperty := false
 	foundOptionalMixedProperty := false
 	foundOptionalModelTypedProperty := false
+	foundOptionalListOverlappingProperty := false
 
 	for {
 		var local string
@@ -1182,6 +1228,15 @@ func readSomethingAsSequence(
 				decoder, current, readModelTypedUnionDispatched,
 			)
 			foundOptionalModelTypedProperty = true
+		case "optionalListOverlappingProperty":
+			if foundOptionalListOverlappingProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
+			theOptionalListOverlappingProperty, current, valueErr = readListOf(
+				decoder, current, readOverlappingUnionDispatched,
+			)
+			foundOptionalListOverlappingProperty = true
 		default:
 			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
@@ -1243,6 +1298,7 @@ func readSomethingAsSequence(
 	instance.SetOptionalStructuralProperty(theOptionalStructuralProperty)
 	instance.SetOptionalMixedProperty(theOptionalMixedProperty)
 	instance.SetOptionalModelTypedProperty(theOptionalModelTypedProperty)
+	instance.SetOptionalListOverlappingProperty(theOptionalListOverlappingProperty)
 	return
 }
 
@@ -1607,6 +1663,18 @@ func writeListOf_ModelTypedUnion(
 ) error {
 	return writeList(
 		encoder, list, writeUnion[*aastypes.ModelTypedUnion],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOf_OverlappingUnion(
+	encoder *xml.Encoder,
+	list []*aastypes.OverlappingUnion,
+) error {
+	return writeList(
+		encoder, list, writeUnion[*aastypes.OverlappingUnion],
 	)
 }
 
@@ -2021,6 +2089,19 @@ func writeSomethingAsSequence(
 			"optionalModelTypedProperty",
 			that.OptionalModelTypedProperty(),
 			writeUnion[*aastypes.ModelTypedUnion],
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"OptionalListOverlappingProperty()",
+		writeOptionalSlice(
+			encoder,
+			"optionalListOverlappingProperty",
+			that.OptionalListOverlappingProperty(),
+			writeListOf_OverlappingUnion,
 		),
 	)
 	if err != nil {

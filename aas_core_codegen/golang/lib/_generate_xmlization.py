@@ -1347,10 +1347,10 @@ def _generate_read_dispatched(
     An instance element is self-describing: its local name *is* its type. This one
     function covers every such case -- an abstract class dispatches over its concrete
     descendants, a concrete class over its concrete descendants and itself, and
-    a named union over its implementers. A concrete class without concrete descendants
-    thus degenerates to a single alternative, which is still worth a function: it is
-    what lets [readListOf] and the ``readTuple*`` functions read an item without
-    knowing anything about it.
+    a named union over its implementers (wrapped in their most specific roots).
+    A concrete class without concrete descendants thus degenerates to a single
+    alternative, which is still worth a function: it is what lets [readListOf] and
+    the ``readTuple*`` functions read an item without knowing anything about it.
 
     The element framing is deliberately *not* part of the generated function. It lives
     in ``xmlcommon.ReadElementDispatched`` alone (see
@@ -1405,8 +1405,13 @@ def _generate_read_dispatched(
 
         if isinstance(our_type, intermediate.NamedUnion):
             alternative_interface_name = golang_naming.interface_name(alternative.name)
+
+            # NOTE (mristin):
+            # We dispatch on the implementers as they appear on the wire, but
+            # the union holds its roots, so we wrap in the most specific one.
+            root = our_type.most_specific_root_of(alternative)
             from_function_name = golang_naming.function_name(
-                Identifier(f"new_{our_type.name}_from_{alternative.name}")
+                Identifier(f"new_{our_type.name}_from_{root.name}")
             )
 
             case_blocks.append(

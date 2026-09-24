@@ -400,7 +400,7 @@ def generate_primitive_type_with_const_ref_if_applicable(
     return code
 
 
-@require(lambda named_union: len(named_union.implementers) > 0)
+@require(lambda named_union: len(named_union.roots) > 0)
 def generate_named_union_variant_definition(
     named_union: intermediate.NamedUnion,
     types_namespace: Optional[Identifier] = None,
@@ -408,16 +408,21 @@ def generate_named_union_variant_definition(
     """
     Generate the right-hand side ``common::variant`` type for a named union.
 
-    This is the ``common::variant`` spelled out over the union's flattened
-    ``implementers`` (one alternative per concrete class) that goes into
+    This is the ``common::variant`` spelled out over the union's ``roots``
+    (one alternative per root, in the order of the roots) that goes into
     the ``using {UnionName} = ...;`` alias declared once per named union
     (see ``_generate_types.py``); call sites elsewhere should reference
     the union by that alias name instead of re-generating this spelling --
     see :py:func:`generate_type`.
+
+    As a root alternative holds an instance of any descendant of the root, and
+    the roots may overlap, two alternatives may accept the same pointer. Hence
+    the variant must be always constructed with an explicit index, see
+    :py:func:`generate_named_union_alternative_index`.
     """
     item_types = []  # type: List[Stripped]
-    for implementer in named_union.implementers:
-        interface_name = cpp_naming.interface_name(implementer.name)
+    for root in named_union.roots:
+        interface_name = cpp_naming.interface_name(root.name)
 
         type_identifier = (
             interface_name

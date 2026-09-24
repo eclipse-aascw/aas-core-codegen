@@ -2342,6 +2342,20 @@ std::pair<
   const types::ISomething& that
 );
 
+/**
+ * \brief Serialize \p that instance of types::IAbstractItem to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value , or an error, if any
+ */
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> SerializeAbstractItem(
+  const types::IAbstractItem& that
+);
+
 nlohmann::json SerializeSomeItem(
   const types::ISomeItem& that
 ) {
@@ -2419,7 +2433,7 @@ std::pair<
     iteration::Property::kSomeItems,
     SerializeListOfInstancesWithFallible(
       that.some_items(),
-      SerializeIClass
+      SerializeAbstractItem
     )
   );
   if (error.has_value()) {
@@ -2440,6 +2454,42 @@ std::pair<
     common::make_optional<nlohmann::json>(std::move(result)),
     common::nullopt
   );
+}
+
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> SerializeAbstractItem(
+  const types::IAbstractItem& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kAnotherItem:
+      return SerializeAnotherItem(
+        dynamic_cast<const types::IAnotherItem&>(that)
+      );
+    case types::ModelType::kSomeItem:
+      return AsFallible(
+        SerializeSomeItem(
+          dynamic_cast<const types::ISomeItem&>(that)
+        )
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
 }
 
 std::pair<

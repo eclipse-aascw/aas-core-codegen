@@ -134,7 +134,8 @@ namespace dummy
                     that.TupleProperty,
                     that.OptionalStructuralProperty,
                     that.OptionalMixedProperty,
-                    that.OptionalModelTypedProperty);
+                    that.OptionalModelTypedProperty,
+                    that.OptionalListOverlappingProperty);
             }
         }  // internal class ShallowCopier
 
@@ -247,6 +248,17 @@ namespace dummy
                     theListModelTypedProperty.Add(Deep(item));
                 }
 
+                List<OverlappingUnion>? theOptionalListOverlappingProperty = null;
+                if (that.OptionalListOverlappingProperty != null)
+                {
+                    theOptionalListOverlappingProperty = new List<OverlappingUnion>(
+                        that.OptionalListOverlappingProperty.Count);
+                    foreach (var item in that.OptionalListOverlappingProperty)
+                    {
+                        theOptionalListOverlappingProperty.Add(Deep(item));
+                    }
+                }
+
                 return new Aas.Something(
                     Deep(that.StructuralProperty),
                     Deep(that.MixedProperty),
@@ -267,7 +279,8 @@ namespace dummy
                         : null,
                     (that.OptionalModelTypedProperty != null)
                         ? Deep(that.OptionalModelTypedProperty)
-                        : null
+                        : null,
+                    theOptionalListOverlappingProperty
                 );
             }
         }  // internal class DeepCopier

@@ -130,6 +130,20 @@ public class EnhancedSomething<EnhancementT>
     instance.setOptionalModelTypedProperty(optionalModelTypedProperty);
   }
 
+  @Override
+  public Optional<List<OverlappingUnion>> getOptionalListOverlappingProperty() {
+    return instance.getOptionalListOverlappingProperty();
+  }
+
+  @Override
+  public void setOptionalListOverlappingProperty(List<OverlappingUnion> optionalListOverlappingProperty) {
+    instance.setOptionalListOverlappingProperty(optionalListOverlappingProperty);
+  }
+
+  public Iterable<OverlappingUnion> overOptionalListOverlappingPropertyOrEmpty() {
+    return instance.overOptionalListOverlappingPropertyOrEmpty();
+  }
+
   public Iterable<IClass> descendOnce() {
     return instance.descendOnce();
   }

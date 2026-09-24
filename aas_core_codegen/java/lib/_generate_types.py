@@ -1825,25 +1825,24 @@ def _generate_named_union_class(named_union: intermediate.NamedUnion) -> Strippe
     since a union does not need to allow custom enhancements or wrappings
     the way our model classes do. Store the single active alternative
     behind a private discriminant enum, in its own separately-typed field
-    per flattened implementer, so that adding an alternative later never
+    per root of the union, so that adding an alternative later never
     requires an open, shared field.
+
+    The alternatives are the roots of the union, not the flattened
+    implementers, so that the union mirrors the meta-model. Each root is
+    typed with its interface, so that a root which is an abstract class, or
+    a concrete class with descendants, holds the instances of its descendants
+    as well.
     """
     name = java_naming.union_name(named_union.name)
 
-    implementers = named_union.implementers
+    roots = named_union.roots
 
-    interface_names = [
-        java_naming.interface_name(implementer.name) for implementer in implementers
-    ]
-    implementer_class_names = [
-        java_naming.class_name(implementer.name) for implementer in implementers
-    ]
-    value_kinds = [
-        java_naming.enum_literal_name(implementer.name) for implementer in implementers
-    ]
+    interface_names = [java_naming.interface_name(root.name) for root in roots]
+    root_class_names = [java_naming.class_name(root.name) for root in roots]
+    value_kinds = [java_naming.enum_literal_name(root.name) for root in roots]
     field_names = [
-        Stripped(f"as{implementer_class_name}")
-        for implementer_class_name in implementer_class_names
+        Stripped(f"as{root_class_name}") for root_class_name in root_class_names
     ]
 
     # region Doc comment
@@ -1903,11 +1902,11 @@ private {name}(
 
     # endregion
 
-    # region Factory methods, one per implementer
+    # region Factory methods, one per root
 
     factory_methods = []  # type: List[Stripped]
-    for i, (interface_name, implementer_class_name, value_kind) in enumerate(
-        zip(interface_names, implementer_class_names, value_kinds)
+    for i, (interface_name, root_class_name, value_kind) in enumerate(
+        zip(interface_names, root_class_names, value_kinds)
     ):
         args = [f"ValueKind.{value_kind}"] + [
             "that" if j == i else "null" for j in range(len(field_names))
@@ -1920,7 +1919,7 @@ private {name}(
 /**
  * Wrap {{@code that}} as an instance of {{@link {name}}}.
  */
-public static {name} from{implementer_class_name}({interface_name} that) {{
+public static {name} from{root_class_name}({interface_name} that) {{
 {I}return new {name}(
 {II}{indent_but_first_line(args_joined, II)});
 }}"""
@@ -1958,14 +1957,17 @@ public IClass getUnderlying() {{
 
     # region From underlying
 
+    # NOTE (mristin):
+    # The roots may overlap, so we test the most specific root first.
     from_underlying_lines = []  # type: List[str]
-    for i, (interface_name, implementer_class_name) in enumerate(
-        zip(interface_names, implementer_class_names)
-    ):
+    for i, root in enumerate(named_union.roots_most_specific_first()):
+        interface_name = java_naming.interface_name(root.name)
+        root_class_name = java_naming.class_name(root.name)
+
         keyword = "if" if i == 0 else "} else if"
         from_underlying_lines.append(f"{keyword} (that instanceof {interface_name}) {{")
         from_underlying_lines.append(
-            f"{I}return from{implementer_class_name}(({interface_name}) that);"
+            f"{I}return from{root_class_name}(({interface_name}) that);"
         )
 
     from_underlying_lines.append("} else {")

@@ -336,6 +336,27 @@ public class Verification {
               }));
       }
 
+      if (that.getOptionalListOverlappingProperty().isPresent()) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Verification.zip(
+            IntStream.iterate(0, i -> i + 1).boxed(),
+            that.getOptionalListOverlappingProperty().get().stream())
+              .flatMap(elemTuple -> {
+                final int index = elemTuple.getFirst();
+                final OverlappingUnion elem = elemTuple.getSecond();
+                return Verification.verifyToErrorStream(elem)
+                  .map(error -> {
+                    error.prependSegment(new Reporting.IndexSegment(index));
+                    return error;
+                  });
+              })
+            .map(error -> {
+              error.prependSegment(
+                new Reporting.NameSegment("optionalListOverlappingProperty"));
+              return error;
+            }));
+      }
+
       return errorStream;
     }
   }

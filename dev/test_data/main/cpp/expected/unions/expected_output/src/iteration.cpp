@@ -30,6 +30,8 @@ std::wstring PropertyToWstring(
       return L"mixed_property";
     case Property::kModelTypedProperty:
       return L"model_typed_property";
+    case Property::kOptionalListOverlappingProperty:
+      return L"optional_list_overlapping_property";
     case Property::kOptionalMixedProperty:
       return L"optional_mixed_property";
     case Property::kOptionalModelTypedProperty:
@@ -751,6 +753,8 @@ using tupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion = std::tuple<
   types::ModelTypedUnion
 >;
 
+using listOf_OverlappingUnion = std::vector<types::OverlappingUnion>;
+
 std::unique_ptr<impl::IIterator> Over_StructuralUnion(
   const types::StructuralUnion& value,
   bool recursive
@@ -776,10 +780,6 @@ std::unique_ptr<impl::IIterator> Over_MixedUnion(
       return OneThenOver(common::get<1>(value), recursive);
     case 2:
       return OneThenOver(common::get<2>(value), recursive);
-    case 3:
-      return OneThenOver(common::get<3>(value), recursive);
-    case 4:
-      return OneThenOver(common::get<4>(value), recursive);
     default:
       throw std::logic_error("Invalid variant index");
   }
@@ -835,6 +835,31 @@ std::unique_ptr<impl::IIterator> Over_tupleOf3_StructuralUnion_MixedUnion_ModelT
       Over_ModelTypedUnion(std::get<2>(value), recursive)
     )
   );
+}
+
+std::unique_ptr<impl::IIterator> Over_OverlappingUnion(
+  const types::OverlappingUnion& value,
+  bool recursive
+) {
+  switch (value.index()) {
+    case 0:
+      return OneThenOver(common::get<0>(value), recursive);
+    case 1:
+      return OneThenOver(common::get<1>(value), recursive);
+    case 2:
+      return OneThenOver(common::get<2>(value), recursive);
+    case 3:
+      return OneThenOver(common::get<3>(value), recursive);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+std::unique_ptr<impl::IIterator> Over_listOf_OverlappingUnion(
+  const listOf_OverlappingUnion& value,
+  bool recursive
+) {
+  return Each(value, &Over_OverlappingUnion, recursive);
 }
 
 std::unique_ptr<impl::IIterator> Over_Something(
@@ -905,6 +930,15 @@ std::unique_ptr<impl::IIterator> Over_Something(
       that.optional_model_typed_property().has_value()
         ? Over_ModelTypedUnion(
             (*that.optional_model_typed_property()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      Property::kOptionalListOverlappingProperty,
+      that.optional_list_overlapping_property().has_value()
+        ? Over_listOf_OverlappingUnion(
+            (*that.optional_list_overlapping_property()),
             recursive
           )
         : Empty()

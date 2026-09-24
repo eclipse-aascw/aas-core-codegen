@@ -1566,6 +1566,9 @@ def _generate_deserialize_impl_named_union_from_element(
 
     blocks = []  # type: List[Stripped]
 
+    # NOTE (mristin):
+    # We dispatch on the implementers as only the concrete classes appear on
+    # the wire, but wrap each instance in the most specific root of the union.
     case_stmts = []  # type: List[Stripped]
     for implementer in named_union.implementers:
         implementer_xml_name_literal = csharp_common.string_literal(
@@ -1573,9 +1576,8 @@ def _generate_deserialize_impl_named_union_from_element(
         )
 
         implementer_name = csharp_naming.class_name(implementer.name)
-        from_method_name = csharp_naming.method_name(
-            Identifier(f"from_{implementer.name}")
-        )
+        root = named_union.most_specific_root_of(implementer)
+        from_method_name = csharp_naming.method_name(Identifier(f"from_{root.name}"))
 
         case_stmts.append(
             Stripped(

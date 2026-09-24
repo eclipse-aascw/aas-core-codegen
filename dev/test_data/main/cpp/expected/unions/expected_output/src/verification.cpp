@@ -883,6 +883,8 @@ using tupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion = std::tuple<
   types::ModelTypedUnion
 >;
 
+using listOf_OverlappingUnion = std::vector<types::OverlappingUnion>;
+
 std::unique_ptr<IIterator> Over_StructuralUnion(
   const types::StructuralUnion& value,
   bool recursive
@@ -908,10 +910,6 @@ std::unique_ptr<IIterator> Over_MixedUnion(
       return Over(*common::get<1>(value), recursive);
     case 2:
       return Over(*common::get<2>(value), recursive);
-    case 3:
-      return Over(*common::get<3>(value), recursive);
-    case 4:
-      return Over(*common::get<4>(value), recursive);
     default:
       throw std::logic_error("Invalid variant index");
   }
@@ -983,6 +981,35 @@ std::unique_ptr<IIterator> Over_tupleOf3_StructuralUnion_MixedUnion_ModelTypedUn
       Over_ModelTypedUnion(std::get<2>(value), recursive)
     )
   );
+}
+
+std::unique_ptr<IIterator> Over_OverlappingUnion(
+  const types::OverlappingUnion& value,
+  bool recursive
+) {
+  switch (value.index()) {
+    case 0:
+      return Over(*common::get<0>(value), recursive);
+    case 1:
+      return Over(*common::get<1>(value), recursive);
+    case 2:
+      return Over(*common::get<2>(value), recursive);
+    case 3:
+      return Over(*common::get<3>(value), recursive);
+    default:
+      throw std::logic_error("Invalid variant index");
+  }
+}
+
+std::unique_ptr<IIterator> Over_listOf_OverlappingUnion(
+  const listOf_OverlappingUnion& value,
+  bool recursive
+) {
+  if (!recursive) {
+    return Empty();
+  }
+
+  return Each(value, &Over_OverlappingUnion, recursive);
 }
 
 std::unique_ptr<IIterator> Over_StructuralFirst(
@@ -1116,6 +1143,15 @@ std::unique_ptr<IIterator> Over_Something(
       that.optional_model_typed_property().has_value()
         ? Over_ModelTypedUnion(
             (*that.optional_model_typed_property()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kOptionalListOverlappingProperty,
+      that.optional_list_overlapping_property().has_value()
+        ? Over_listOf_OverlappingUnion(
+            (*that.optional_list_overlapping_property()),
             recursive
           )
         : Empty()

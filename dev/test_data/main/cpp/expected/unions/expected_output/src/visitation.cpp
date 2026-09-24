@@ -216,20 +216,6 @@ void PassThroughVisitor::VisitSomething(
         )
       );
       break;
-    case 3:
-      Visit(
-        common::get<3>(
-          that->mutable_mixed_property()
-        )
-      );
-      break;
-    case 4:
-      Visit(
-        common::get<4>(
-          that->mutable_mixed_property()
-        )
-      );
-      break;
     default:
       throw std::logic_error("Invalid variant index");
   }
@@ -308,20 +294,6 @@ void PassThroughVisitor::VisitSomething(
       case 2:
         Visit(
           common::get<2>(
-            item
-          )
-        );
-        break;
-      case 3:
-        Visit(
-          common::get<3>(
-            item
-          )
-        );
-        break;
-      case 4:
-        Visit(
-          common::get<4>(
             item
           )
         );
@@ -417,24 +389,6 @@ void PassThroughVisitor::VisitSomething(
         )
       );
       break;
-    case 3:
-      Visit(
-        common::get<3>(
-          std::get<1>(
-            that->mutable_tuple_property()
-          )
-        )
-      );
-      break;
-    case 4:
-      Visit(
-        common::get<4>(
-          std::get<1>(
-            that->mutable_tuple_property()
-          )
-        )
-      );
-      break;
     default:
       throw std::logic_error("Invalid variant index");
   }
@@ -522,20 +476,6 @@ void PassThroughVisitor::VisitSomething(
           )
         );
         break;
-      case 3:
-        Visit(
-          common::get<3>(
-            maybe_optional_mixed_property.value()
-          )
-        );
-        break;
-      case 4:
-        Visit(
-          common::get<4>(
-            maybe_optional_mixed_property.value()
-          )
-        );
-        break;
       default:
         throw std::logic_error("Invalid variant index");
     }
@@ -566,6 +506,55 @@ void PassThroughVisitor::VisitSomething(
         break;
       default:
         throw std::logic_error("Invalid variant index");
+    }
+  }
+  // endregion
+
+  // region mutable_optional_list_overlapping_property
+  const common::optional<
+    std::vector<types::OverlappingUnion>
+  >& maybe_optional_list_overlapping_property(
+    that->mutable_optional_list_overlapping_property()
+  );
+  if (maybe_optional_list_overlapping_property.has_value()) {
+    for (
+      const types::OverlappingUnion& item :
+      maybe_optional_list_overlapping_property.value()
+    ) {
+      switch (
+        (item).index()
+      ) {
+        case 0:
+          Visit(
+            common::get<0>(
+              item
+            )
+          );
+          break;
+        case 1:
+          Visit(
+            common::get<1>(
+              item
+            )
+          );
+          break;
+        case 2:
+          Visit(
+            common::get<2>(
+              item
+            )
+          );
+          break;
+        case 3:
+          Visit(
+            common::get<3>(
+              item
+            )
+          );
+          break;
+        default:
+          throw std::logic_error("Invalid variant index");
+      }
     }
   }
   // endregion
