@@ -927,7 +927,7 @@ AasCommon.at(
         writer.write("(\n")
         for i, value in enumerate(values):
             if i == 0:
-                writer.write(f"{I}{value}\n")
+                writer.write(f"{I}{indent_but_first_line(value, I)}\n")
             else:
                 if isinstance(node, parse_tree.And):
                     writer.write(f"{I}&& {indent_but_first_line(value, I)}\n")
@@ -1255,7 +1255,7 @@ AasCommon.range(
         # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in
         # practice.
-        if "\n" not in value or len(value) > 50:
+        if "\n" not in value and len(value) > 50:
             return (
                 Stripped(
                     f"""\

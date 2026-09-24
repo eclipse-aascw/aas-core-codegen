@@ -193,8 +193,7 @@ export function someVerification(
   x: string,
   y: number
 ): boolean {
-  return (
-    [x, y][0] == x);
+  return [x, y][0] == x;
 }
 
 /**

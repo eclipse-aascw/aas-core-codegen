@@ -211,8 +211,7 @@ export function specifiesTheType(
 export function isAcceptable(
   value: AasTypes.JsonValue
 ): boolean {
-  return (
-    true);
+  return true;
 }
 
 /**

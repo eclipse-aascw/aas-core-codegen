@@ -1755,11 +1755,10 @@ export function isModelReferenceTo(
   expectedType: AasTypes.KeyTypes
 ): boolean {
   return (
-    (
-      reference.type == AasTypes.ReferenceTypes.ModelReference
-      && reference.keys.length != 0
-      && AasCommon.at(reference.keys, -1).type == expectedType
-    ));
+    reference.type == AasTypes.ReferenceTypes.ModelReference
+    && reference.keys.length != 0
+    && AasCommon.at(reference.keys, -1).type == expectedType
+  );
 }
 
 /**
@@ -1769,11 +1768,10 @@ export function isModelReferenceToReferable(
   reference: AasTypes.Reference
 ): boolean {
   return (
-    (
-      reference.type == AasTypes.ReferenceTypes.ModelReference
-      && reference.keys.length != 0
-      && (AasConstants.AAS_REFERABLES.has(AasCommon.at(reference.keys, -1).type))
-    ));
+    reference.type == AasTypes.ReferenceTypes.ModelReference
+    && reference.keys.length != 0
+    && (AasConstants.AAS_REFERABLES.has(AasCommon.at(reference.keys, -1).type))
+  );
 }
 
 /**
@@ -2870,11 +2868,11 @@ class Verifier
     if (!(
       (
         (
-        (
-          (that.globalAssetId !== null)
-          || (that.specificAssetIds !== null)
+          (
+            (that.globalAssetId !== null)
+            || (that.specificAssetIds !== null)
+          )
         )
-      )
         && (
           !(that.specificAssetIds !== null)
           || (that.specificAssetIds.length >= 1)
@@ -7052,27 +7050,27 @@ class Verifier
     if (!(
       (
         (
-        (
-          that.entityType == AasTypes.EntityType.SelfManagedEntity
-          && (
-            (
+          (
+            that.entityType == AasTypes.EntityType.SelfManagedEntity
+            && (
               (
-              (
-                (that.globalAssetId !== null)
-                && (that.specificAssetIds === null)
-              )
-            )
-              || (
                 (
-                  (that.globalAssetId === null)
-                  && (that.specificAssetIds !== null)
-                  && that.specificAssetIds.length >= 1
+                  (
+                    (that.globalAssetId !== null)
+                    && (that.specificAssetIds === null)
+                  )
+                )
+                || (
+                  (
+                    (that.globalAssetId === null)
+                    && (that.specificAssetIds !== null)
+                    && that.specificAssetIds.length >= 1
+                  )
                 )
               )
             )
           )
         )
-      )
         || (
           (
             that.entityType != AasTypes.EntityType.SelfManagedEntity
@@ -7335,9 +7333,9 @@ class Verifier
     if (!(
       (
         isModelReferenceTo(
-        that.source,
-        AasTypes.KeyTypes.EventElement
-      )
+          that.source,
+          AasTypes.KeyTypes.EventElement
+        )
         || isModelReferenceTo(
           that.source,
           AasTypes.KeyTypes.BasicEventElement
@@ -8626,8 +8624,8 @@ class Verifier
       || (
         (
           dataSpecificationIec61360sHaveDefinitionAtLeastInEnglish(
-          that.embeddedDataSpecifications
-        )
+            that.embeddedDataSpecifications
+          )
           || dataSpecificationIec61360sHaveValue(
             that.embeddedDataSpecifications
           )

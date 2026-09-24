@@ -201,23 +201,22 @@ export function hasLeafInTree(
   element: AasTypes.IElement
 ): boolean {
   return (
-    (
-      AasTypes.isLeaf(element)
-      || (
-        (
-          AasTypes.isContainer(element)
-          && (
-            AasCommon.some(
-              AasCommon.map(
-                (element as AasTypes.IContainer).children,
-                child =>
-                  hasLeafInTree(child)
-              )
+    AasTypes.isLeaf(element)
+    || (
+      (
+        AasTypes.isContainer(element)
+        && (
+          AasCommon.some(
+            AasCommon.map(
+              (element as AasTypes.IContainer).children,
+              child =>
+                hasLeafInTree(child)
             )
           )
         )
       )
-    ));
+    )
+  );
 }
 
 /**
@@ -234,23 +233,22 @@ export function leavesInTreeAreNotEmpty(
 ): boolean {
   return (
     (
-      (
       !AasTypes.isLeaf(element)
       || ((element as AasTypes.Leaf).text.length > 0)
     )
-      && (
-        !AasTypes.isContainer(element)
-        || (
-          AasCommon.every(
-            AasCommon.map(
-              (element as AasTypes.IContainer).children,
-              child =>
-                leavesInTreeAreNotEmpty(child)
-            )
+    && (
+      !AasTypes.isContainer(element)
+      || (
+        AasCommon.every(
+          AasCommon.map(
+            (element as AasTypes.IContainer).children,
+            child =>
+              leavesInTreeAreNotEmpty(child)
           )
         )
       )
-    ));
+    )
+  );
 }
 
 /**
@@ -265,11 +263,10 @@ export function isShortLeafOrNoLeaf(
   element: AasTypes.IElement
 ): boolean {
   return (
-    (
-      (!AasTypes.isLeaf(element))
-      || (element as AasTypes.Leaf).text.length == 0
-      || (element as AasTypes.Leaf).text.length < 16
-    ));
+    (!AasTypes.isLeaf(element))
+    || (element as AasTypes.Leaf).text.length == 0
+    || (element as AasTypes.Leaf).text.length < 16
+  );
 }
 
 /**
@@ -283,10 +280,9 @@ export function isContainer(
   element: AasTypes.IElement
 ): boolean {
   return (
-    (
-      AasTypes.isOrderedContainer(element)
-      || AasTypes.isUnorderedContainer(element)
-    ));
+    AasTypes.isOrderedContainer(element)
+    || AasTypes.isUnorderedContainer(element)
+  );
 }
 
 /**
@@ -300,11 +296,10 @@ export function isSortedOrderedContainer(
   element: AasTypes.IElement
 ): boolean {
   return (
-    (
-      AasTypes.isContainer(element)
-      && AasTypes.isOrderedContainer(element)
-      && (element as AasTypes.OrderedContainer).isSorted
-    ));
+    AasTypes.isContainer(element)
+    && AasTypes.isOrderedContainer(element)
+    && (element as AasTypes.OrderedContainer).isSorted
+  );
 }
 
 /**
@@ -313,8 +308,7 @@ export function isSortedOrderedContainer(
 export function containerHasChildren(
   container: AasTypes.IContainer
 ): boolean {
-  return (
-    container.children.length > 0);
+  return container.children.length > 0;
 }
 
 /**
@@ -329,11 +323,10 @@ export function isGlobalAttributeOfKindName(
   value: AasTypes.Value
 ): boolean {
   return (
-    (
-      AasTypes.isAttributeOperand(value)
-      && AasTypes.isGlobalAttribute((value as AasTypes.AttributeOperand).attribute)
-      && ((value as AasTypes.AttributeOperand).attribute as AasTypes.GlobalAttribute).kind == "name"
-    ));
+    AasTypes.isAttributeOperand(value)
+    && AasTypes.isGlobalAttribute((value as AasTypes.AttributeOperand).attribute)
+    && ((value as AasTypes.AttributeOperand).attribute as AasTypes.GlobalAttribute).kind == "name"
+  );
 }
 
 /**
