@@ -1,0 +1,51 @@
+{
+  "defaultLanguage": "de",
+  "langStringSets": [
+    {
+      "langStrings": [
+        {
+          "language": "en",
+          "text": "hello"
+        },
+        {
+          "language": "de",
+          "text": "hallo"
+        }
+      ]
+    },
+    {
+      "langStrings": [
+        {
+          "language": "de",
+          "text": "Welt"
+        },
+        {
+          "language": "en",
+          "text": "world"
+        }
+      ]
+    }
+  ],
+  "specifications": [
+    {
+      "content": {
+        "definition": [
+          {
+            "language": "de",
+            "text": "Definition"
+          },
+          {
+            "language": "en",
+            "text": "definition"
+          }
+        ],
+        "modelType": "IecContent"
+      }
+    },
+    {
+      "content": {
+        "modelType": "OtherContent"
+      }
+    }
+  ]
+}

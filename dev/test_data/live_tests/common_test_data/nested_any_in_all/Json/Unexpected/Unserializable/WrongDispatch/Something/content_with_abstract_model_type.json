@@ -1,0 +1,20 @@
+{
+  "defaultLanguage": "en",
+  "langStringSets": [
+    {
+      "langStrings": [
+        {
+          "language": "en",
+          "text": "hello"
+        }
+      ]
+    }
+  ],
+  "specifications": [
+    {
+      "content": {
+        "modelType": "Content"
+      }
+    }
+  ]
+}

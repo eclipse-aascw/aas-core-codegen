@@ -1,0 +1,25 @@
+{
+  "defaultLanguage": "de",
+  "langStringSets": [
+    {
+      "langStrings": [
+        {
+          "language": "en",
+          "text": "hello"
+        },
+        {
+          "language": "de",
+          "text": "hallo"
+        }
+      ]
+    },
+    {
+      "langStrings": [
+        {
+          "language": "en",
+          "text": "world"
+        }
+      ]
+    }
+  ]
+}
