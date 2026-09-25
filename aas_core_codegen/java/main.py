@@ -114,7 +114,12 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
     ] = [
         (
             project_rel_path / "common",
-            lambda: (java_lib.generate_common(package=package), None),
+            lambda: (
+                java_lib.generate_common(
+                    package=package, symbol_table=context.symbol_table
+                ),
+                None,
+            ),
         ),
         (
             project_rel_path / "constants",
@@ -324,6 +329,20 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             ),
         ),
     ]
+
+    # NOTE (mristin):
+    # The helpers for slicing strings and ``find`` are only generated for
+    # a meta-model which uses them, and so are their tests.
+    if intermediate.uses_string_slicing_or_find(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                tests_rel_path,
+                lambda: (
+                    java_tests.generate_test_string_helpers(package=package),
+                    None,
+                ),
+            ),
+        ]
 
     # NOTE (mristin):
     # The ``xmlrpc`` package is only needed when the meta-model actually uses

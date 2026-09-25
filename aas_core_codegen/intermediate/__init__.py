@@ -81,6 +81,7 @@ over_type_annotation_and_nested_type_annotations = (
 )
 tuple_arities = _types.tuple_arities
 uses_json_types = _types.uses_json_types
+uses_string_slicing_or_find = _types.uses_string_slicing_or_find
 
 NumericPlace = _types.NumericPlace
 numeric_places = _types.numeric_places

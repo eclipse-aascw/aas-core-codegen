@@ -147,6 +147,7 @@ class Transpiler(
             parse_tree.Name,
             parse_tree.Constant,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.Tuple,
         )
 
@@ -154,6 +155,55 @@ class Transpiler(
             collection = Stripped(f"({collection})")
 
         return Stripped(f"{collection}[{index}]"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_slice(
+        self, node: parse_tree.Slice
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+
+        collection, error = self.transform(node.collection)
+        if error is not None:
+            errors.append(error)
+
+        start = None  # type: Optional[Stripped]
+        if node.start is not None:
+            start, error = self.transform(node.start)
+            if error is not None:
+                errors.append(error)
+
+        end = None  # type: Optional[Stripped]
+        if node.end is not None:
+            end, error = self.transform(node.end)
+            if error is not None:
+                errors.append(error)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the slice", errors
+            )
+
+        assert collection is not None
+
+        no_parentheses_types = (
+            parse_tree.Member,
+            parse_tree.FunctionCall,
+            parse_tree.MethodCall,
+            parse_tree.Name,
+            parse_tree.Constant,
+            parse_tree.Index,
+            parse_tree.Slice,
+        )
+        if not isinstance(node.collection, no_parentheses_types):
+            collection = Stripped(f"({collection})")
+
+        # NOTE (mristin):
+        # The other targets follow the semantics of the native Python slicing,
+        # since Python is the language of the meta-model specifications.
+        start_text = start if start is not None else ""
+        end_text = end if end is not None else ""
+
+        return Stripped(f"{collection}[{start_text}:{end_text}]"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_comparison(
@@ -184,6 +234,7 @@ class Transpiler(
             parse_tree.Name,
             parse_tree.Constant,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if isinstance(node.left, no_parentheses_types) and isinstance(
@@ -225,6 +276,7 @@ class Transpiler(
             parse_tree.Name,
             parse_tree.Constant,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if not isinstance(node.container, no_parentheses_types):
@@ -288,6 +340,7 @@ class Transpiler(
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if isinstance(node.antecedent, no_parentheses_types_in_this_context):
@@ -322,6 +375,34 @@ not (
 
         return Stripped(f"{not_antecedent}\nor {consequent}"), None
 
+    @staticmethod
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def _transform_builtin_method_call(
+        node: parse_tree.MethodCall,
+        method: intermediate_type_inference.BuiltinMethod,
+        instance: Stripped,
+        args: Sequence[Stripped],
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        """Transpile the call to a built-in method on the transpiled ``instance``."""
+        if method is intermediate_type_inference.STR_FIND:
+            if not isinstance(
+                node.member.instance,
+                (parse_tree.Name, parse_tree.Member, parse_tree.Slice),
+            ):
+                instance = Stripped(f"({instance})")
+
+            # NOTE (mristin):
+            # The other targets follow the semantics of the native Python
+            # ``str.find``, since Python is the language of the meta-model
+            # specifications.
+            return Stripped(f"{instance}.find({', '.join(args)})"), None
+
+        return None, Error(
+            node.original_node,
+            f"The handling of the built-in method {method.name!r} has not "
+            f"been implemented",
+        )
+
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_method_call(
         self, node: parse_tree.MethodCall
@@ -350,6 +431,17 @@ not (
 
         assert instance is not None
 
+        member_type = self.type_map[node.member]
+        if isinstance(
+            member_type, intermediate_type_inference.BuiltinMethodTypeAnnotation
+        ):
+            return self._transform_builtin_method_call(
+                node=node,
+                method=member_type.method,
+                instance=instance,
+                args=args,
+            )
+
         no_parentheses_types_in_this_context = (
             parse_tree.Member,
             parse_tree.FunctionCall,
@@ -357,6 +449,7 @@ not (
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if not isinstance(node.member.instance, no_parentheses_types_in_this_context):
@@ -535,6 +628,7 @@ not (
             parse_tree.FunctionCall,
             parse_tree.IsInstance,
             parse_tree.Index,
+            parse_tree.Slice,
         )
         if isinstance(node.value, no_parentheses_types):
             return Stripped(f"{value} is None"), None
@@ -555,6 +649,7 @@ not (
             parse_tree.FunctionCall,
             parse_tree.IsInstance,
             parse_tree.Index,
+            parse_tree.Slice,
         )
         if isinstance(node.value, no_parentheses_types_in_this_context):
             return Stripped(f"{value} is not None"), None
@@ -581,6 +676,7 @@ not (
             parse_tree.FunctionCall,
             parse_tree.IsInstance,
             parse_tree.Index,
+            parse_tree.Slice,
         )
         if not isinstance(node.operand, no_parentheses_types_in_this_context):
             return Stripped(f"not ({operand})"), None
@@ -608,6 +704,7 @@ not (
                 parse_tree.IsInstance,
                 parse_tree.Name,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.Comparison,
             )
 
@@ -705,6 +802,7 @@ not (
             parse_tree.Constant,
             parse_tree.Name,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if not isinstance(node.left, no_parentheses_types_in_this_context):
@@ -891,6 +989,7 @@ not (
                 parse_tree.IsInstance,
                 parse_tree.Name,
                 parse_tree.Index,
+                parse_tree.Slice,
             )
 
             if not isinstance(
@@ -1076,6 +1175,7 @@ return (
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
+            parse_tree.Slice,
         )
         if not isinstance(node.subject, no_parentheses_types):
             subject = Stripped(f"({subject})")

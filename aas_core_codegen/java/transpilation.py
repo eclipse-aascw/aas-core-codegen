@@ -313,6 +313,7 @@ class Transpiler(
                 parse_tree.Name,
                 parse_tree.Constant,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.IsIn,
             )
 
@@ -347,6 +348,7 @@ class Transpiler(
             parse_tree.Name,
             parse_tree.Constant,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.IsIn,
         )
 
@@ -377,6 +379,45 @@ class Transpiler(
             )
 
         return java_common.generate_tuple_literal(item_exprs=item_exprs), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_slice(
+        self, node: parse_tree.Slice
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+
+        collection, error = self.transform(node.collection)
+        if error is not None:
+            errors.append(error)
+
+        start = None  # type: Optional[Stripped]
+        if node.start is not None:
+            start, error = self.transform(node.start)
+            if error is not None:
+                errors.append(error)
+
+        end = None  # type: Optional[Stripped]
+        if node.end is not None:
+            end, error = self.transform(node.end)
+            if error is not None:
+                errors.append(error)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the slice", errors
+            )
+
+        assert collection is not None
+
+        # NOTE (mristin):
+        # We do not use the native ``substring`` as it throws on the positions out
+        # of range, and does not count the negative ones from the end, unlike
+        # Python. See ``StringHelpers.slice`` in the generated common package.
+        args = [collection, start if start is not None else "0"]  # type: List[str]
+        if end is not None:
+            args.append(end)
+
+        return Stripped(f"StringHelpers.slice({', '.join(args)})"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_comparison(
@@ -423,6 +464,7 @@ class Transpiler(
             parse_tree.Constant,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if isinstance(node.left, no_parentheses_types) and isinstance(
@@ -461,6 +503,7 @@ class Transpiler(
             parse_tree.Constant,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if not isinstance(node.container, no_parentheses_types):
@@ -509,6 +552,7 @@ class Transpiler(
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if not isinstance(node.value, no_parentheses_types):
@@ -566,6 +610,7 @@ class Transpiler(
             parse_tree.Name,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if isinstance(
@@ -636,6 +681,38 @@ class Transpiler(
             )
 
         assert instance is not None
+
+        member_type = self.type_map[node.member]
+        if isinstance(
+            member_type, intermediate_type_inference.BuiltinMethodTypeAnnotation
+        ):
+            if member_type.method is intermediate_type_inference.STR_FIND:
+                if len(args) == 2:
+                    # NOTE (mristin):
+                    # We do not use the native ``indexOf`` with a start as it
+                    # does not count a negative start from the end, unlike
+                    # Python. See ``StringHelpers.find`` in the generated common
+                    # package.
+                    return (
+                        Stripped(
+                            f"StringHelpers.find({instance}, {args[0]}, {args[1]})"
+                        ),
+                        None,
+                    )
+
+                if not isinstance(
+                    node.member.instance,
+                    (parse_tree.Name, parse_tree.Member, parse_tree.Slice),
+                ):
+                    instance = Stripped(f"({instance})")
+
+                return Stripped(f"{instance}.indexOf({args[0]})"), None
+
+            return None, Error(
+                node.original_node,
+                f"The handling of the built-in method {member_type.method.name!r} "
+                f"has not been implemented",
+            )
 
         if not isinstance(node.member.instance, (parse_tree.Name, parse_tree.Member)):
             instance = Stripped(f"({instance})")
@@ -743,7 +820,12 @@ class Transpiler(
                 collection_node = node.args[0]
                 if not isinstance(
                     collection_node,
-                    (parse_tree.Name, parse_tree.Member, parse_tree.MethodCall),
+                    (
+                        parse_tree.Name,
+                        parse_tree.Member,
+                        parse_tree.MethodCall,
+                        parse_tree.Slice,
+                    ),
                 ):
                     collection = f"({args[0]})"
                 else:
@@ -857,6 +939,7 @@ class Transpiler(
             parse_tree.FunctionCall,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if isinstance(node.value, no_parentheses_types):
@@ -889,6 +972,7 @@ class Transpiler(
             parse_tree.FunctionCall,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if isinstance(node.value, no_parentheses_types_in_this_context):
@@ -922,6 +1006,7 @@ class Transpiler(
             parse_tree.FunctionCall,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
         )
         if not isinstance(
             node.operand, no_parentheses_types_in_this_context
@@ -956,6 +1041,7 @@ class Transpiler(
                 parse_tree.IsIn,
                 parse_tree.IsInstance,
                 parse_tree.Index,
+                parse_tree.Slice,
             )
 
             if not isinstance(value_node, no_parentheses_types_in_this_context):
@@ -1015,6 +1101,7 @@ class Transpiler(
                 parse_tree.IsIn,
                 parse_tree.IsInstance,
                 parse_tree.Index,
+                parse_tree.Slice,
             )
 
             if not isinstance(value_node, no_parentheses_types_in_this_context):
@@ -1082,6 +1169,7 @@ class Transpiler(
             parse_tree.Name,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if not isinstance(node.left, no_parentheses_types_in_this_context):
@@ -1141,6 +1229,7 @@ class Transpiler(
                     parse_tree.Name,
                     parse_tree.Constant,
                     parse_tree.Index,
+                    parse_tree.Slice,
                     parse_tree.IsIn,
                 )
 
@@ -1235,6 +1324,7 @@ class Transpiler(
                 parse_tree.Name,
                 parse_tree.IsIn,
                 parse_tree.Index,
+                parse_tree.Slice,
             )
 
             if not isinstance(
@@ -1434,6 +1524,7 @@ return (
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
+            parse_tree.Slice,
         )
         if not isinstance(node.subject, no_parentheses_types):
             subject = Stripped(f"({subject})")

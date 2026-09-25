@@ -176,6 +176,13 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
             self.is_pointer_map[node] = False
             return None
 
+        if isinstance(
+            self._type_map[node],
+            intermediate_type_inference.BuiltinMethodTypeAnnotation,
+        ):
+            self.is_pointer_map[node] = False
+            return None
+
         if not (
             isinstance(
                 instance_type_anno, intermediate_type_inference.OurTypeAnnotation
@@ -286,6 +293,26 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         self.is_pointer_map[node] = is_pointer_type(items_type_anno)
         return None
 
+    def transform_slice(self, node: parse_tree.Slice) -> Optional[Error]:
+        last_error = None  # type: Optional[Error]
+        for child in (node.collection, node.start, node.end):
+            if child is None:
+                continue
+
+            # NOTE (mristin):
+            # Do not immediately return so that other children are processed as
+            # well. This way we get a longer list of errors which the caller can
+            # report using :py:prop:`errors`.
+            error = self.transform(child)
+            if error is not None:
+                last_error = error
+
+        if last_error is not None:
+            return last_error
+
+        self.is_pointer_map[node] = False
+        return None
+
     def transform_comparison(self, node: parse_tree.Comparison) -> Optional[Error]:
         last_error = None  # type: Optional[Error]
         for operand in (node.left, node.right):
@@ -357,6 +384,15 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
 
         if last_error is not None:
             return last_error
+
+        if isinstance(
+            self._type_map[node.member],
+            intermediate_type_inference.BuiltinMethodTypeAnnotation,
+        ):
+            # NOTE (mristin):
+            # The built-in methods on strings never return a pointer.
+            self.is_pointer_map[node] = False
+            return None
 
         instance_type_anno = intermediate_type_inference.beneath_optional(
             self._type_map[node.member.instance]

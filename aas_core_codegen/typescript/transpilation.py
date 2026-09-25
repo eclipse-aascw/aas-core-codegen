@@ -298,6 +298,7 @@ class Transpiler(
                 parse_tree.Name,
                 parse_tree.Constant,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.Tuple,
             )
             if not isinstance(node.collection, tuple_no_parentheses_types):
@@ -325,6 +326,7 @@ class Transpiler(
             parse_tree.Name,
             parse_tree.Constant,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if not isinstance(node.collection, no_parentheses_types):
@@ -381,6 +383,45 @@ AasCommon.at(
         return Stripped(f"[{joined}]"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_slice(
+        self, node: parse_tree.Slice
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+
+        collection, error = self.transform(node.collection)
+        if error is not None:
+            errors.append(error)
+
+        start = None  # type: Optional[Stripped]
+        if node.start is not None:
+            start, error = self.transform(node.start)
+            if error is not None:
+                errors.append(error)
+
+        end = None  # type: Optional[Stripped]
+        if node.end is not None:
+            end, error = self.transform(node.end)
+            if error is not None:
+                errors.append(error)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the slice", errors
+            )
+
+        assert collection is not None
+
+        # NOTE (mristin):
+        # We do not use the native ``substring`` as it swaps the positions and
+        # does not count the negative ones from the end, unlike Python. See
+        # ``sliceStr`` in the generated common module.
+        args = [collection, start if start is not None else "0"]  # type: List[str]
+        if end is not None:
+            args.append(end)
+
+        return Stripped(f"AasCommon.sliceStr({', '.join(args)})"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_comparison(
         self, node: parse_tree.Comparison
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
@@ -409,6 +450,7 @@ AasCommon.at(
             parse_tree.Name,
             parse_tree.Constant,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if isinstance(node.left, no_parentheses_types) and isinstance(
@@ -450,6 +492,7 @@ AasCommon.at(
             parse_tree.Name,
             parse_tree.Constant,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if not isinstance(node.container, no_parentheses_types):
@@ -562,6 +605,7 @@ AasCommon.at(
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if isinstance(node.antecedent, no_parentheses_types_in_this_context):
@@ -631,10 +675,34 @@ AasCommon.at(
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if not isinstance(node.member.instance, no_parentheses_types_in_this_context):
             instance = Stripped(f"({instance})")
+
+        member_type = self.type_map[node.member]
+        if isinstance(
+            member_type, intermediate_type_inference.BuiltinMethodTypeAnnotation
+        ):
+            if member_type.method is intermediate_type_inference.STR_FIND:
+                if len(args) == 1:
+                    return Stripped(f"{instance}.indexOf({args[0]})"), None
+
+                # NOTE (mristin):
+                # We do not use the native ``indexOf`` with a start as it does not
+                # count a negative start from the end, unlike Python. See
+                # ``findStr`` in the generated common module.
+                return (
+                    Stripped(f"AasCommon.findStr({instance}, {args[0]}, {args[1]})"),
+                    None,
+                )
+
+            return None, Error(
+                node.original_node,
+                f"The handling of the built-in method {member_type.method.name!r} "
+                f"has not been implemented",
+            )
 
         method_name = typescript_naming.method_name(node.member.name)
 
@@ -676,6 +744,7 @@ AasCommon.at(
                 parse_tree.FunctionCall,
                 parse_tree.IsInstance,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.Constant,
             ),
         ):
@@ -877,6 +946,7 @@ AasCommon.at(
             parse_tree.FunctionCall,
             parse_tree.IsInstance,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.Constant,
         )
         if isinstance(node.value, no_parentheses_types):
@@ -898,6 +968,7 @@ AasCommon.at(
             parse_tree.FunctionCall,
             parse_tree.IsInstance,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.Constant,
         )
         if isinstance(node.value, no_parentheses_types_in_this_context):
@@ -925,6 +996,7 @@ AasCommon.at(
             parse_tree.FunctionCall,
             parse_tree.IsInstance,
             parse_tree.Index,
+            parse_tree.Slice,
         )
         if not isinstance(node.operand, no_parentheses_types_in_this_context):
             return Stripped(f"!({operand})"), None
@@ -952,6 +1024,7 @@ AasCommon.at(
                 parse_tree.IsInstance,
                 parse_tree.Name,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.Comparison,
             )
 
@@ -1050,6 +1123,7 @@ AasCommon.at(
             parse_tree.Constant,
             parse_tree.Name,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if not isinstance(node.left, no_parentheses_types_in_this_context):
@@ -1208,6 +1282,7 @@ AasCommon.at(
                 parse_tree.IsInstance,
                 parse_tree.Name,
                 parse_tree.Index,
+                parse_tree.Slice,
             )
 
             if not isinstance(

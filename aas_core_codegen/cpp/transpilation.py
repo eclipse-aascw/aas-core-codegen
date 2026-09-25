@@ -497,6 +497,7 @@ class Transpiler(
                 parse_tree.MethodCall,
                 parse_tree.Name,
                 parse_tree.Index,
+                parse_tree.Slice,
             )
             if isinstance(node, no_parentheses_types):
                 code = Stripped(f"*{code}")
@@ -674,6 +675,7 @@ class Transpiler(
                 parse_tree.Name,
                 parse_tree.Constant,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.Tuple,
             )
             if not isinstance(node.collection, no_parentheses_types):
@@ -802,6 +804,7 @@ std::make_tuple(
             parse_tree.Name,
             parse_tree.Constant,
             parse_tree.Index,
+            parse_tree.Slice,
         )
 
         if isinstance(node.left, no_parentheses_types) and isinstance(
@@ -929,6 +932,7 @@ common::{contains_function}(
                 parse_tree.MethodCall,
                 parse_tree.Name,
                 parse_tree.Index,
+                parse_tree.Slice,
             )
 
             if (
@@ -1005,6 +1009,7 @@ common::{contains_function}(
             parse_tree.IsIn,
             parse_tree.IsInstance,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.All,
             parse_tree.Any,
         )
@@ -1019,10 +1024,130 @@ common::{contains_function}(
 
         return Stripped(f"{not_antecedent}\n|| {consequent}"), None
 
+    def _as_int64_position(self, node: parse_tree.Node, code: Stripped) -> Stripped:
+        """
+        Convert the transpiled position ``node`` to an ``int64_t``.
+
+        The string helpers take the positions as ``int64_t``'s, our integers,
+        while the lengths are ``size_t``'s.
+        """
+        type_anno = self.type_map[node]
+        if (
+            isinstance(type_anno, intermediate_type_inference.PrimitiveTypeAnnotation)
+            and type_anno.a_type is intermediate_type_inference.PrimitiveType.LENGTH
+        ):
+            return Stripped(f"static_cast<int64_t>({code})")
+
+        return code
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_slice(
+        self, node: parse_tree.Slice
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+
+        collection, error = self._transform_and_value_if_necessary(node.collection)
+        if error is not None:
+            errors.append(error)
+
+        start = None  # type: Optional[Stripped]
+        if node.start is not None:
+            start, error = self._transform_and_value_if_necessary(node.start)
+            if error is not None:
+                errors.append(error)
+
+        end = None  # type: Optional[Stripped]
+        if node.end is not None:
+            end, error = self._transform_and_value_if_necessary(node.end)
+            if error is not None:
+                errors.append(error)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the slice", errors
+            )
+
+        assert collection is not None
+
+        if node.start is not None:
+            assert start is not None
+            start = self._as_int64_position(node.start, start)
+
+        if node.end is not None:
+            assert end is not None
+            end = self._as_int64_position(node.end, end)
+
+        # NOTE (mristin):
+        # We do not use the native ``substr`` as it throws on a start out of range,
+        # and does not count the negative positions from the end, unlike Python.
+        # See ``SliceStr`` in the generated common module.
+        args = [collection, start if start is not None else "0"]  # type: List[str]
+        if end is not None:
+            args.append(end)
+
+        return Stripped(f"common::SliceStr({', '.join(args)})"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def _transform_builtin_method_call(
+        self,
+        node: parse_tree.MethodCall,
+        method: intermediate_type_inference.BuiltinMethod,
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        """Transpile the call to a built-in method such as ``str.find``."""
+        errors = []  # type: List[Error]
+
+        instance, error = self._transform_and_value_if_necessary(node.member.instance)
+        if error is not None:
+            errors.append(error)
+
+        args = []  # type: List[Stripped]
+        for arg_node in node.args:
+            arg, error = self._transform_and_value_if_necessary(arg_node)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert arg is not None
+            args.append(arg)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the method call", errors
+            )
+
+        assert instance is not None
+
+        if method is intermediate_type_inference.STR_FIND:
+            # NOTE (mristin):
+            # We do not use the native ``find`` as it gives ``npos`` instead of -1,
+            # and does not count a negative start from the end, unlike Python. See
+            # ``FindStr`` in the generated common module.
+            if len(args) == 2:
+                args[1] = self._as_int64_position(node.args[1], args[1])
+
+            return (
+                Stripped(f"common::FindStr({', '.join([instance] + args)})"),
+                None,
+            )
+
+        return None, Error(
+            node.original_node,
+            f"The handling of the built-in method {method.name!r} "
+            f"has not been implemented",
+        )
+
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_method_call(
         self, node: parse_tree.MethodCall
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        member_type = self.type_map[node.member]
+        if isinstance(
+            member_type, intermediate_type_inference.BuiltinMethodTypeAnnotation
+        ):
+            return self._transform_builtin_method_call(
+                node=node, method=member_type.method
+            )
+
         errors = []  # type: List[Error]
 
         member_access, error = self._transform_and_value_if_necessary(node.member)
@@ -1168,6 +1293,7 @@ common::{contains_function}(
                     parse_tree.IsIn,
                     parse_tree.IsInstance,
                     parse_tree.Index,
+                    parse_tree.Slice,
                     parse_tree.All,
                     parse_tree.Any,
                 )
@@ -1238,6 +1364,7 @@ common::{contains_function}(
             parse_tree.IsIn,
             parse_tree.IsInstance,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.All,
             parse_tree.Any,
         )
@@ -1261,6 +1388,7 @@ common::{contains_function}(
             parse_tree.IsIn,
             parse_tree.IsInstance,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.All,
             parse_tree.Any,
         )
@@ -1290,6 +1418,7 @@ common::{contains_function}(
             parse_tree.IsIn,
             parse_tree.IsInstance,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.All,
             parse_tree.Any,
         )
@@ -1320,6 +1449,7 @@ common::{contains_function}(
                 parse_tree.IsIn,
                 parse_tree.IsInstance,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.All,
                 parse_tree.Any,
                 parse_tree.Comparison,
@@ -1419,6 +1549,7 @@ common::{contains_function}(
             parse_tree.IsIn,
             parse_tree.IsInstance,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.All,
             parse_tree.Any,
         )
@@ -1604,6 +1735,7 @@ common::{concat}(
                 parse_tree.IsIn,
                 parse_tree.IsInstance,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.All,
                 parse_tree.Any,
             )
@@ -1852,6 +1984,7 @@ return (
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
+            parse_tree.Slice,
         )
         if not isinstance(node.subject, no_parentheses_types):
             subject = Stripped(f"({subject})")

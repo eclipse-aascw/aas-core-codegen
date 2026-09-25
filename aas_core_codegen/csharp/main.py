@@ -319,6 +319,20 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
     ]
 
     # NOTE (mristin):
+    # The helpers for slicing strings and ``find`` are only generated for
+    # a meta-model which uses them, and so are their tests.
+    if intermediate.uses_string_slicing_or_find(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                tests_rel_path / "TestStringHelpers.cs",
+                lambda: (
+                    csharp_tests.generate_test_string_helpers(namespace=namespace),
+                    None,
+                ),
+            ),
+        ]
+
+    # NOTE (mristin):
     # ``xmlrpc.cs``, ``jsonvalueverification.cs`` and the former's isolated
     # unit test are only needed when the meta-model actually uses
     # a JSON-able type (``JSONValue``, ``JSONArray`` or ``JSONObject[K]``)

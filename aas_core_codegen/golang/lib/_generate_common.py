@@ -5,6 +5,7 @@ from typing import List
 
 from icontract import ensure
 
+from aas_core_codegen import intermediate
 from aas_core_codegen.common import (
     Stripped,
     indent_but_first_line,
@@ -12,7 +13,11 @@ from aas_core_codegen.common import (
 from aas_core_codegen.golang import (
     common as golang_common,
 )
-from aas_core_codegen.golang.common import INDENT as I, INDENT2 as II, INDENT3 as III
+from aas_core_codegen.golang.common import (
+    INDENT as I,
+    INDENT2 as II,
+    INDENT3 as III,
+)
 
 
 def _generate_tuple_struct(arity: int) -> Stripped:
@@ -38,7 +43,7 @@ type {name}[{type_params}] struct {{
     "Trailing newline mandatory for valid end-of-files"
 )
 # fmt: on
-def generate() -> str:
+def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code of common functionality."""
     blocks = [
         Stripped(
@@ -161,6 +166,96 @@ func NewString(value string) *string {{
         _generate_tuple_struct(arity=arity)
         for arity in range(1, golang_common.MAX_TUPLE_ARITY + 1)
     )
+
+    # NOTE (mristin):
+    # The native slicing panics on the positions out of range, does not count
+    # the negative ones from the end, and ``strings.Index`` has no start. We need
+    # helpers which follow the Python implementation of slicing and
+    # ``str.find``. The helpers are generated only for a meta-model which slices
+    # strings or calls ``find`` on them.
+    if intermediate.uses_string_slicing_or_find(symbol_table):
+        blocks.extend(
+            [
+                Stripped(
+                    f"""\
+// Resolve `position` in a string of `length` as Python does in slicing.
+//
+// A negative position counts from the end, and the positions out of range are
+// clamped to the string.
+func resolvePosition(position int64, length int) int {{
+{I}if position < 0 {{
+{II}position += int64(length)
+{II}if position < 0 {{
+{III}return 0
+{II}}}
+{II}return int(position)
+{I}}}
+
+{I}if position > int64(length) {{
+{II}return length
+{I}}}
+{I}return int(position)
+}}"""
+                ),
+                Stripped(
+                    f"""\
+// Slice `text` from `start` up to `end`, exclusive.
+//
+// We follow the Python implementation of slicing, since Python is
+// the language of the meta-model specifications. Hence, a negative position
+// counts from the end, the positions out of range are clamped to the string,
+// and the slice is empty if `start` is not before `end`.
+func SliceStr(text string, start int64, end int64) string {{
+{I}theStart := resolvePosition(start, len(text))
+{I}theEnd := resolvePosition(end, len(text))
+
+{I}if theStart >= theEnd {{
+{II}return ""
+{I}}}
+
+{I}return text[theStart:theEnd]
+}}"""
+                ),
+                Stripped(
+                    f"""\
+// Slice `text` from `start` up to its end.
+//
+// See [SliceStr] for the semantics.
+func SliceStrFrom(text string, start int64) string {{
+{I}return text[resolvePosition(start, len(text)):]
+}}"""
+                ),
+                Stripped(
+                    f"""\
+// Find the first `sub` in `text` from `start` on.
+//
+// Return the position of `sub` in `text`, or -1 if `sub` could not be found.
+//
+// We follow the Python implementation of `str.find`, since Python is
+// the language of the meta-model specifications. Hence, a negative `start`
+// counts from the end, and a `start` beyond the end of `text` gives -1.
+func FindStr(text string, sub string, start int64) int64 {{
+{I}if start < 0 {{
+{II}start += int64(len(text))
+{II}if start < 0 {{
+{III}start = 0
+{II}}}
+{I}}}
+
+{I}if start > int64(len(text)) {{
+{II}return -1
+{I}}}
+
+{I}index := strings.Index(text[start:], sub)
+{I}if index == -1 {{
+{II}return -1
+{I}}}
+
+{I}return start + int64(index)
+}}"""
+                ),
+            ]
+        )
 
     blocks.append(golang_common.WARNING)
 

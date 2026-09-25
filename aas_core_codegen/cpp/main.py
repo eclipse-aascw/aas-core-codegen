@@ -111,7 +111,8 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             src_dir / "common.cpp",
             lambda: (
                 cpp_lib.generate_common_implementation(
-                    library_namespace=library_namespace
+                    symbol_table=context.symbol_table,
+                    library_namespace=library_namespace,
                 ),
                 None,
             ),
@@ -580,6 +581,22 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
                 test_dir / "test_json_value_verification.cpp",
                 lambda: (
                     cpp_tests.generate_test_json_value_verification_implementation(
+                        library_namespace=library_namespace
+                    ),
+                    None,
+                ),
+            ),
+        ]
+
+    # NOTE (mristin):
+    # The helpers for slicing strings and ``find`` are only generated for
+    # a meta-model which uses them, and so are their tests.
+    if intermediate.uses_string_slicing_or_find(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                test_dir / "test_string_helpers.cpp",
+                lambda: (
+                    cpp_tests.generate_test_string_helpers_implementation(
                         library_namespace=library_namespace
                     ),
                     None,

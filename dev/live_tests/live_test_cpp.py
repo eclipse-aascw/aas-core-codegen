@@ -50,7 +50,10 @@ def _cmake_target_prefix(namespace: Stripped) -> Stripped:
 
 
 def _generate_cmake_lists(
-    namespace: Stripped, uses_xml_rpc: bool, uses_variant: bool
+    namespace: Stripped,
+    uses_xml_rpc: bool,
+    uses_variant: bool,
+    uses_string_helpers: bool,
 ) -> Stripped:
     project_name = _cmake_project_name(namespace)
     variable_prefix = _cmake_variable_prefix(namespace)
@@ -85,6 +88,20 @@ def _generate_cmake_lists(
     )
 """
         if uses_xml_rpc
+        else ""
+    )
+
+    test_string_helpers_block = (
+        f"""\
+
+    add_executable(test_string_helpers test/test_string_helpers.cpp)
+    target_link_libraries(test_string_helpers {target_prefix}_static)
+    add_test(
+            NAME test_string_helpers
+            COMMAND $<TARGET_FILE:test_string_helpers>
+    )
+"""
+        if uses_string_helpers
         else ""
     )
 
@@ -482,7 +499,7 @@ if (${{BUILD_TESTS}})
             COMMAND $<TARGET_FILE:test_x_or_default>
     )
     # endregion
-{test_xml_rpc_block}endif ()"""
+{test_xml_rpc_block}{test_string_helpers_block}endif ()"""
     )
 
 
@@ -674,10 +691,18 @@ def main() -> int:
                 encoding="utf-8"
             )
 
+            # NOTE (mristin):
+            # Likewise, the tests of the string helpers are only generated for
+            # a meta-model which slices strings or calls ``find``.
+            uses_string_helpers = (
+                case_dir / "expected_output" / "test" / "test_string_helpers.cpp"
+            ).exists()
+
             cmake_lists_text = _generate_cmake_lists(
                 namespace=namespace,
                 uses_xml_rpc=uses_xml_rpc,
                 uses_variant=uses_variant,
+                uses_string_helpers=uses_string_helpers,
             )
             (project_dir / "CMakeLists.txt").write_text(
                 cmake_lists_text, encoding="utf-8"

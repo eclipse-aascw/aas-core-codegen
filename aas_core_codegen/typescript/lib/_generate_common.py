@@ -4,6 +4,7 @@ import io
 
 from icontract import ensure
 
+from aas_core_codegen import intermediate
 from aas_core_codegen.common import (
     Stripped,
 )
@@ -26,7 +27,7 @@ from aas_core_codegen.typescript.common import (
     "Trailing newline mandatory for valid end-of-files"
 )
 # fmt: on
-def generate() -> str:
+def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code of common functionality."""
     blocks = [
         Stripped(
@@ -459,6 +460,98 @@ export function base64UrlDecode(text: string): Either<Uint8Array, string> {{
         ),
         typescript_common.WARNING,
     ]
+
+    # NOTE (mristin):
+    # The native ``substring`` swaps the positions and does not count the negative
+    # ones from the end, and ``indexOf`` does not count a negative start from
+    # the end either. We need helpers which follow the Python implementation of
+    # slicing and ``str.find``. The helpers are generated only for a meta-model
+    # which slices strings or calls ``find``.
+    if intermediate.uses_string_slicing_or_find(symbol_table):
+        blocks.insert(
+            len(blocks) - 1,
+            Stripped(
+                f"""\
+/**
+ * Resolve `position` in a string of `length` as Python does in slicing.
+ *
+ * @remarks
+ * A negative position counts from the end, and the positions out of range are
+ * clamped to the string.
+ *
+ * @param position - to be resolved
+ * @param length - of the string
+ * @returns the resolved position within `[0, length]`
+ */
+function resolvePosition(position: number, length: number): number {{
+{I}if (position < 0) {{
+{II}return Math.max(position + length, 0);
+{I}}}
+
+{I}return Math.min(position, length);
+}}"""
+            ),
+        )
+
+        blocks.insert(
+            len(blocks) - 1,
+            Stripped(
+                f"""\
+/**
+ * Slice `text` from `start` up to `end`, exclusive.
+ *
+ * @remarks
+ * We follow the Python implementation of slicing, since Python is
+ * the language of the meta-model specifications. Hence, a negative position
+ * counts from the end, the positions out of range are clamped to the string,
+ * and the slice is empty if `start` is not before `end`.
+ *
+ * @param text - to be sliced
+ * @param start - of the slice, inclusive
+ * @param end - of the slice, exclusive; if not given, the length of `text`
+ * @returns the slice
+ */
+export function sliceStr(text: string, start: number, end?: number): string {{
+{I}const theStart = resolvePosition(start, text.length);
+{I}const theEnd =
+{II}end === undefined ? text.length : resolvePosition(end, text.length);
+
+{I}if (theStart >= theEnd) {{
+{II}return "";
+{I}}}
+
+{I}return text.substring(theStart, theEnd);
+}}"""
+            ),
+        )
+
+        blocks.insert(
+            len(blocks) - 1,
+            Stripped(
+                f"""\
+/**
+ * Find the first `sub` in `text` from `start` on.
+ *
+ * @remarks
+ * We follow the Python implementation of `str.find`, since Python is
+ * the language of the meta-model specifications. Hence, a negative `start`
+ * counts from the end, and a `start` beyond the end of `text` gives -1.
+ *
+ * @param text - to be searched in
+ * @param sub - to be searched for
+ * @param start - of the search
+ * @returns the position of `sub` in `text`, or -1 if `sub` could not be found
+ */
+export function findStr(text: string, sub: string, start: number): number {{
+{I}const theStart = start < 0 ? Math.max(start + text.length, 0) : start;
+{I}if (theStart > text.length) {{
+{II}return -1;
+{I}}}
+
+{I}return text.indexOf(sub, theStart);
+}}"""
+            ),
+        )
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

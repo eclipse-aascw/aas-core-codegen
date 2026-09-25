@@ -98,7 +98,7 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
     ] = [
         (
             base_rel_path / "common/common.go",
-            lambda: (golang_lib.generate_common(), None),
+            lambda: (golang_lib.generate_common(context.symbol_table), None),
         ),
         (
             base_rel_path / "constants/constants.go",
@@ -325,6 +325,20 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             (
                 base_rel_path / "xmlrpc/xmlrpc.go",
                 lambda: (golang_lib.generate_xml_rpc(repo_url=repo_url), None),
+            ),
+        ]
+
+    # NOTE (mristin):
+    # The helpers for slicing strings and ``find`` are only generated for
+    # a meta-model which uses them, and so are their tests.
+    if intermediate.uses_string_slicing_or_find(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                base_rel_path / "common/string_helpers_test/string_helpers_test.go",
+                lambda: (
+                    golang_tests.generate_string_helpers_test(repo_url=repo_url),
+                    None,
+                ),
             ),
         ]
 

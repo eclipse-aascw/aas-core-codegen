@@ -208,6 +208,63 @@ class BuiltinFunctionTypeAnnotation(FunctionTypeAnnotation):
         return self.func.name
 
 
+class BuiltinMethod:
+    """
+    Represent a built-in method of a primitive type such as ``str.find``.
+
+    Unlike our methods, which the meta-model defines on its classes, the built-in
+    methods come with the language of the meta-model, Python, and each target
+    needs to transpile them explicitly.
+    """
+
+    def __init__(
+        self,
+        name: Identifier,
+        returns: "TypeAnnotationUnion",
+        min_arg_count: int,
+        max_arg_count: int,
+    ) -> None:
+        """Initialize with the given values."""
+        self.name = name
+        self.returns = returns
+        self.min_arg_count = min_arg_count
+        self.max_arg_count = max_arg_count
+
+
+class BuiltinMethodTypeAnnotation(AtomicTypeAnnotation):
+    """Represent a type of built-in method bound to an instance of a primitive."""
+
+    def __init__(self, method: BuiltinMethod) -> None:
+        """Initialize with the given values."""
+        self.method = method
+
+    def __str__(self) -> str:
+        return self.method.name
+
+
+#: Represent ``str.find(sub)`` and ``str.find(sub, start)``.
+#:
+#: The result is the position of the first occurrence of ``sub``, or -1 if there
+#: is none.
+#:
+#: The transpiled code follows the Python implementation of ``str.find``, since
+#: Python is the language of the meta-model specifications. Hence, a negative
+#: ``start`` counts from the end of the string, and a ``start`` beyond the end
+#: of the string gives -1.
+STR_FIND = BuiltinMethod(
+    name=Identifier("find"),
+    returns=PrimitiveTypeAnnotation(PrimitiveType.INT),
+    min_arg_count=1,
+    max_arg_count=2,
+)
+
+
+#: Map the names of the built-in methods on strings to their definitions
+STR_METHODS_BY_NAME: Mapping[Identifier, BuiltinMethod] = {
+    STR_FIND.name: STR_FIND,
+}
+
+
 class MethodTypeAnnotation(AtomicTypeAnnotation):
     """Represent a type of class method."""
 
@@ -372,6 +429,12 @@ def _type_annotations_equal(
         else:
             return that.func is other.func
 
+    elif isinstance(that, BuiltinMethodTypeAnnotation):
+        if not isinstance(other, BuiltinMethodTypeAnnotation):
+            return False
+        else:
+            return that.method is other.method
+
     elif isinstance(that, MethodTypeAnnotation):
         if not isinstance(other, MethodTypeAnnotation):
             return False
@@ -527,6 +590,12 @@ def _assignable(
             return False
         else:
             return target_type.func is value_type.func
+
+    elif isinstance(target_type, BuiltinMethodTypeAnnotation):
+        if not isinstance(value_type, BuiltinMethodTypeAnnotation):
+            return False
+        else:
+            return target_type.method is value_type.method
 
     elif isinstance(target_type, MethodTypeAnnotation):
         if not isinstance(value_type, MethodTypeAnnotation):
@@ -874,6 +943,18 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
             index_repr=index_repr,
         )
 
+        self.representation_map[node] = result
+        return result
+
+    def transform_slice(self, node: parse_tree.Slice) -> str:
+        collection_repr = self.transform(node.collection)
+        if not _Canonicalizer._needs_no_brackets(node.collection):
+            collection_repr = f"({collection_repr})"
+
+        start_repr = self.transform(node.start) if node.start is not None else ""
+        end_repr = self.transform(node.end) if node.end is not None else ""
+
+        result = f"{collection_repr}[{start_repr}:{end_repr}]"
         self.representation_map[node] = result
         return result
 
@@ -1244,6 +1325,7 @@ TypeAnnotationUnion = Union[
     OurTypeAnnotation,
     VerificationTypeAnnotation,
     BuiltinFunctionTypeAnnotation,
+    BuiltinMethodTypeAnnotation,
     MethodTypeAnnotation,
     ListTypeAnnotation,
     SetTypeAnnotation,
@@ -1578,6 +1660,25 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         if instance_type is None:
             return None
 
+        if try_primitive_type(instance_type) is PrimitiveType.STR:
+            builtin_method = STR_METHODS_BY_NAME.get(node.name, None)
+            if builtin_method is None:
+                supported = ", ".join(
+                    repr(name) for name in sorted(STR_METHODS_BY_NAME.keys())
+                )
+                self.errors.append(
+                    Error(
+                        node.original_node,
+                        f"The member {node.name!r} is not supported on strings; "
+                        f"we support only the following methods: {supported}",
+                    )
+                )
+                return None
+
+            builtin_method_type = BuiltinMethodTypeAnnotation(method=builtin_method)
+            self.type_map[node] = builtin_method_type
+            return builtin_method_type
+
         if isinstance(instance_type, OurTypeAnnotation):
             if not isinstance(instance_type.our_type, _types.Class):
                 self.errors.append(
@@ -1815,6 +1916,99 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             return None
 
         result = collection_type.items
+        self.type_map[node] = result
+        return result
+
+    def _check_position_in_string(
+        self,
+        node: parse_tree.Expression,
+        type_annotation: "TypeAnnotationUnion",
+        what: str,
+    ) -> bool:
+        """
+        Check that ``node`` can denote a position in a string.
+
+        A position is an integer. The transpiled code follows the Python
+        implementation of the slicing and of ``str.find``, since Python is
+        the language of the meta-model specifications. Hence, a negative position
+        counts from the end of the string, and the positions out of range are
+        clamped to the string.
+
+        Return ``False`` and append to :py:attr:`errors` if the check fails.
+        """
+        if not (
+            isinstance(type_annotation, PrimitiveTypeAnnotation)
+            and type_annotation.a_type in (PrimitiveType.INT, PrimitiveType.LENGTH)
+        ):
+            self.errors.append(
+                Error(
+                    node.original_node,
+                    f"Expected {what} to be an integer, but got: {type_annotation}",
+                )
+            )
+            return False
+
+        return True
+
+    def transform_slice(
+        self, node: parse_tree.Slice
+    ) -> Optional["TypeAnnotationUnion"]:
+        success = True
+
+        collection_type = self.transform(node.collection)
+        if collection_type is None:
+            success = False
+
+        start_type = None  # type: Optional[TypeAnnotationUnion]
+        if node.start is not None:
+            start_type = self.transform(node.start)
+            if start_type is None:
+                success = False
+
+        end_type = None  # type: Optional[TypeAnnotationUnion]
+        if node.end is not None:
+            end_type = self.transform(node.end)
+            if end_type is None:
+                success = False
+
+        if not success:
+            return None
+
+        assert collection_type is not None
+
+        if try_primitive_type(collection_type) is not PrimitiveType.STR:
+            self.errors.append(
+                Error(
+                    node.collection.original_node,
+                    f"We support slicing only of non-None strings, "
+                    f"but got: {collection_type}",
+                )
+            )
+            success = False
+
+        if node.start is not None:
+            assert start_type is not None
+            if not self._check_position_in_string(
+                node=node.start,
+                type_annotation=start_type,
+                what="the start of a slice",
+            ):
+                success = False
+
+        if node.end is not None:
+            assert end_type is not None
+            if not self._check_position_in_string(
+                node=node.end, type_annotation=end_type, what="the end of a slice"
+            ):
+                success = False
+
+        if not success:
+            return None
+
+        # NOTE (mristin):
+        # A slice of a constrained primitive does not necessarily satisfy
+        # the constraints, so we infer a plain string.
+        result = PrimitiveTypeAnnotation(PrimitiveType.STR)
         self.type_map[node] = result
         return result
 
@@ -2087,15 +2281,73 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         self.type_map[node] = result
         return result
 
+    def _transform_builtin_method_call(
+        self,
+        node: parse_tree.MethodCall,
+        method: BuiltinMethod,
+        arg_types: Sequence["TypeAnnotationUnion"],
+    ) -> Optional["TypeAnnotationUnion"]:
+        """Check the arguments of a call to a built-in method, and infer the result."""
+        if not method.min_arg_count <= len(node.args) <= method.max_arg_count:
+            if method.min_arg_count == method.max_arg_count:
+                expected = f"{method.min_arg_count}"
+            else:
+                expected = f"between {method.min_arg_count} and {method.max_arg_count}"
+
+            self.errors.append(
+                Error(
+                    node.original_node,
+                    f"Expected {expected} argument(s) to the built-in method "
+                    f"{method.name!r}, but got {len(node.args)}",
+                )
+            )
+            return None
+
+        if method is STR_FIND:
+            success = True
+
+            if try_primitive_type(arg_types[0]) is not PrimitiveType.STR:
+                self.errors.append(
+                    Error(
+                        node.args[0].original_node,
+                        f"Expected the searched value of ``find`` to be a string, "
+                        f"but got: {arg_types[0]}",
+                    )
+                )
+                success = False
+
+            if len(arg_types) == 2:
+                if not self._check_position_in_string(
+                    node=node.args[1],
+                    type_annotation=arg_types[1],
+                    what="the start of ``find``",
+                ):
+                    success = False
+
+            if not success:
+                return None
+        else:
+            raise AssertionError(f"Unexpected built-in method: {method.name!r}")
+
+        result = method.returns
+        self.type_map[node] = result
+        return result
+
     def transform_method_call(
         self, node: parse_tree.MethodCall
     ) -> Optional["TypeAnnotationUnion"]:
-        # Simply recurse to track the type, but we don't care about the arguments
+        # NOTE (mristin):
+        # We recurse to track the types of the arguments. We check them only for
+        # the built-in methods, as we have not implemented the checks against
+        # the signatures of our methods.
         failed = False
+        arg_types = []  # type: List[TypeAnnotationUnion]
         for arg in node.args:
             arg_type = self.transform(arg)
             if arg_type is None:
                 failed = True
+            else:
+                arg_types.append(arg_type)
 
         member_type = self.transform(node.member)
 
@@ -2115,6 +2367,11 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
 
         if failed:
             return None
+
+        if isinstance(member_type, BuiltinMethodTypeAnnotation):
+            return self._transform_builtin_method_call(
+                node=node, method=member_type.method, arg_types=arg_types
+            )
 
         if not isinstance(member_type, MethodTypeAnnotation):
             self.errors.append(
@@ -2170,6 +2427,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                 (
                     PrimitiveTypeAnnotation,
                     OurTypeAnnotation,
+                    BuiltinMethodTypeAnnotation,
                     MethodTypeAnnotation,
                     ListTypeAnnotation,
                     SetTypeAnnotation,
@@ -3319,6 +3577,7 @@ TypeAnnotationExceptOptional = Union[
     OurTypeAnnotation,
     VerificationTypeAnnotation,
     BuiltinFunctionTypeAnnotation,
+    BuiltinMethodTypeAnnotation,
     MethodTypeAnnotation,
     ListTypeAnnotation,
     SetTypeAnnotation,
