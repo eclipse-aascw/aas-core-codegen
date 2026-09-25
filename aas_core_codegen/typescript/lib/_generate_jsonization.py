@@ -1176,7 +1176,11 @@ case {model_type_literal}: {{
 
     blocks = []  # type: List[Stripped]
 
-    if len(parse_cases) > 0:
+    # NOTE (mristin):
+    # A class without properties has nothing to parse. We skip the loop even if
+    # the class carries the model type, since the loop would only skip it, and
+    # the linter rejects the loop variables which are never used.
+    if len(cls.properties) > 0:
         blocks.append(Stripped("\n".join(var_declarations)))
 
         parse_cases.append(
