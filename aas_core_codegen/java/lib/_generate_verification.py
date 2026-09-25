@@ -1527,9 +1527,23 @@ def generate(
                 Stripped("import com.fasterxml.jackson.databind.node.ArrayNode;"),
                 Stripped("import com.fasterxml.jackson.databind.node.ObjectNode;"),
                 Stripped("import java.util.ArrayList;"),
-                Stripped("import java.util.List;"),
             ]
         )
+
+    # NOTE (mristin):
+    # A transpiled verification function which takes a list as an argument needs
+    # the import of ``List`` in its signature. The implementation-specific ones
+    # come with their signatures written by hand, so we leave them out.
+    if intermediate.uses_json_types(symbol_table) or any(
+        isinstance(verification, intermediate.TranspilableVerification)
+        and isinstance(
+            intermediate.beneath_optional(arg.type_annotation),
+            intermediate.ListTypeAnnotation,
+        )
+        for verification in symbol_table.verification_functions
+        for arg in verification.arguments
+    ):
+        imports.append(Stripped("import java.util.List;"))
 
     verification_blocks = []  # type: List[Stripped]
     errors = []  # type: List[Error]
