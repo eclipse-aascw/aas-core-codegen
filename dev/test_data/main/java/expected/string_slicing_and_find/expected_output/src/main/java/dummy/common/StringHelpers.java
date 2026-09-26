@@ -83,7 +83,7 @@ public final class StringHelpers {
    * @param start of the search
    * @return the position of {@code sub} in {@code text}, or -1 if not found
    */
-  public static int find(String text, String sub, long start) {
+  public static long find(String text, String sub, long start) {
     final long theStart = start < 0 ? Math.max(start + text.length(), 0) : start;
     if (theStart > text.length()) {
       return -1;

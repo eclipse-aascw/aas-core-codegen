@@ -150,25 +150,25 @@ public class TestStringHelpers {
   @Test
   @DisplayName("\'abcabc\'.find(\'b\') gives 1: found")
   public void testFindFound() {
-    assertEquals(1, "abcabc".indexOf("b"));
+    assertEquals(1, (long) "abcabc".indexOf("b"));
   }
 
   @Test
   @DisplayName("\'abcabc\'.find(\'x\') gives -1: not found")
   public void testFindNotFound() {
-    assertEquals(-1, "abcabc".indexOf("x"));
+    assertEquals(-1, (long) "abcabc".indexOf("x"));
   }
 
   @Test
   @DisplayName("\'abcabc\'.find(\'\') gives 0: empty sub")
   public void testFindEmptySub() {
-    assertEquals(0, "abcabc".indexOf(""));
+    assertEquals(0, (long) "abcabc".indexOf(""));
   }
 
   @Test
   @DisplayName("\'ab\'.find(\'abc\') gives -1: sub longer than text")
   public void testFindSubLongerThanText() {
-    assertEquals(-1, "ab".indexOf("abc"));
+    assertEquals(-1, (long) "ab".indexOf("abc"));
   }
 
   @Test
@@ -222,7 +222,7 @@ public class TestStringHelpers {
   @Test
   @DisplayName("\'\'.find(\'\') gives 0: empty sub in empty text")
   public void testFindEmptySubInEmptyText() {
-    assertEquals(0, "".indexOf(""));
+    assertEquals(0, (long) "".indexOf(""));
   }
 
   @Test
@@ -234,7 +234,7 @@ public class TestStringHelpers {
   @Test
   @DisplayName("\'\'.find(\'x\') gives -1: not found in empty text")
   public void testFindNotFoundInEmptyText() {
-    assertEquals(-1, "".indexOf("x"));
+    assertEquals(-1, (long) "".indexOf("x"));
   }
 } // class TestStringHelpers
 

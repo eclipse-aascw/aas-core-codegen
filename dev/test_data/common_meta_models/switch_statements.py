@@ -124,6 +124,19 @@ def nested_switches(kind: Kind, number: int) -> bool:
     return True
 
 
+@verification
+def switch_with_reassigned_int(kind: Kind, number: int) -> bool:
+    """
+    Check the integer variable defined with a literal, and re-assigned
+    an integer argument in a branch of the switch.
+    """
+    result = 0
+    if kind == Kind.Beta:
+        result = number
+
+    return result < 1000
+
+
 @invariant(
     lambda self: switch_on_enum_with_a_single_case(self.kind),
     "Kind must not be delta",
@@ -153,6 +166,10 @@ def nested_switches(kind: Kind, number: int) -> bool:
 @invariant(
     lambda self: nested_switches(self.kind, self.number),
     "Kind and number must be consistent",
+)
+@invariant(
+    lambda self: switch_with_reassigned_int(self.kind, self.number),
+    "Number must be small for beta",
 )
 class Something(DBC):
     kind: Kind

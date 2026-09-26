@@ -60,7 +60,7 @@ public void {_method_name("Slice", slice_case.description)}() {{
         # We call the native ``indexOf`` or the helper just as the transpiled code
         # does.
         call = (
-            f"{text}.indexOf({sub})"
+            f"(long) {text}.indexOf({sub})"
             if find_case.start is None
             else f"StringHelpers.find({text}, {sub}, {find_case.start})"
         )

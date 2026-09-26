@@ -1869,7 +1869,20 @@ common::{qualifier_function}(
             return None, error
         assert value is not None
 
-        maybe_definition_prefix = "" if not is_definition else "auto "
+        maybe_definition_prefix = ""
+        if is_definition:
+            # NOTE (mristin):
+            # We spell out the primitive types, as ``auto`` would deduce the type
+            # from the literal, *e.g.*, ``int`` instead of ``int64_t`` for ``0``, or
+            # ``const wchar_t*`` instead of ``std::wstring`` for ``L"..."``.
+            if isinstance(
+                value_type, intermediate_type_inference.PrimitiveTypeAnnotation
+            ) and value_type.a_type is not (
+                intermediate_type_inference.PrimitiveType.NONE
+            ):
+                maybe_definition_prefix = f"{PRIMITIVE_TYPE_MAP[value_type.a_type]} "
+            else:
+                maybe_definition_prefix = "auto "
 
         # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in

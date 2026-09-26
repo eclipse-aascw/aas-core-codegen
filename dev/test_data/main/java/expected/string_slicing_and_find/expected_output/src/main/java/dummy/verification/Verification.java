@@ -34,7 +34,7 @@ public class Verification {
    */
   public static Boolean dateBeforeTimeIsLongEnough(
     String text) {
-    var position = text.indexOf("T");
+    long position = (long) text.indexOf("T");
     if (position == -1) {
         return true;
     }
@@ -47,7 +47,7 @@ public class Verification {
    */
   public static Boolean timeAfterDateIsLongEnough(
     String text) {
-    var position = text.indexOf("T");
+    long position = (long) text.indexOf("T");
     if (position == -1) {
         return true;
     }
@@ -60,11 +60,11 @@ public class Verification {
    */
   public static Boolean monthIsSeptember(
     String text) {
-    var first = text.indexOf("-");
+    long first = (long) text.indexOf("-");
     if (first == -1) {
         return true;
     }
-    var second = StringHelpers.find(text, "-", first + 1);
+    long second = StringHelpers.find(text, "-", first + 1);
     if (second == -1) {
         return false;
     }
@@ -77,7 +77,7 @@ public class Verification {
    */
   public static Boolean secondsFollowColon(
     String text) {
-    var position = text.indexOf("T");
+    long position = (long) text.indexOf("T");
     if (position == -1) {
         return true;
     }
@@ -97,7 +97,7 @@ public class Verification {
    */
   public static Boolean lastCharacterIsNotZ(
     String text) {
-    var position = text.indexOf("#");
+    long position = (long) text.indexOf("#");
     return !Objects.equals(StringHelpers.slice(text, position), "Z")
     && Objects.equals(StringHelpers.slice(text, -100, 100), text)
     && Objects.equals(StringHelpers.slice(text, 3, 1), "")
@@ -120,7 +120,7 @@ public class Verification {
   public static Boolean nameHasNoSpaceAfterPrefix(
     String name) {
     return name.length() < 4
-    || StringHelpers.slice(name, 4).indexOf(" ") == -1;
+    || (long) StringHelpers.slice(name, 4).indexOf(" ") == -1;
   }
 
   /**

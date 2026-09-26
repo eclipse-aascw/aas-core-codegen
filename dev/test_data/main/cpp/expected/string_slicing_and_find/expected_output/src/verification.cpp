@@ -42,7 +42,7 @@ Error::Error(
 bool DateBeforeTimeIsLongEnough(
   const std::wstring& text
 ) {
-  auto position = common::FindStr(text, L"T");
+  int64_t position = common::FindStr(text, L"T");
   switch (position) {
     case -1:
       return true;
@@ -53,7 +53,7 @@ bool DateBeforeTimeIsLongEnough(
 bool TimeAfterDateIsLongEnough(
   const std::wstring& text
 ) {
-  auto position = common::FindStr(text, L"T");
+  int64_t position = common::FindStr(text, L"T");
   switch (position) {
     case -1:
       return true;
@@ -64,12 +64,12 @@ bool TimeAfterDateIsLongEnough(
 bool MonthIsSeptember(
   const std::wstring& text
 ) {
-  auto first = common::FindStr(text, L"-");
+  int64_t first = common::FindStr(text, L"-");
   switch (first) {
     case -1:
       return true;
   }
-  auto second = common::FindStr(text, L"-", first + (1));
+  int64_t second = common::FindStr(text, L"-", first + (1));
   switch (second) {
     case -1:
       return false;
@@ -82,7 +82,7 @@ bool MonthIsSeptember(
 bool SecondsFollowColon(
   const std::wstring& text
 ) {
-  auto position = common::FindStr(text, L"T");
+  int64_t position = common::FindStr(text, L"T");
   switch (position) {
     case -1:
       return true;
@@ -104,7 +104,7 @@ bool SecondsFollowColon(
 bool LastCharacterIsNotZ(
   const std::wstring& text
 ) {
-  auto position = common::FindStr(text, L"#");
+  int64_t position = common::FindStr(text, L"#");
   return (
     (
       common::SliceStr(text, position) != L"Z"

@@ -77,7 +77,7 @@ public void {method_name}()
         # We call the native ``IndexOf`` or the helper just as the transpiled code
         # does.
         call = (
-            f"{text}.IndexOf({sub}, System.StringComparison.Ordinal)"
+            f"(long){text}.IndexOf({sub}, System.StringComparison.Ordinal)"
             if find_case.start is None
             else f"Aas.Verification.StringHelpers.Find({text}, {sub}, {find_case.start})"
         )

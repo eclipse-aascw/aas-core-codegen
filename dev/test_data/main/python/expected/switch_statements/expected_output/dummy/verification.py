@@ -191,6 +191,21 @@ def nested_switches(
     return True
 
 
+def switch_with_reassigned_int(
+    kind: aas_types.Kind,
+    number: int
+) -> bool:
+    """
+    Check the integer variable defined with a literal, and re-assigned
+    an integer argument in a branch of the switch.
+    """
+    # pylint: disable=all
+    result = 0
+    if kind == aas_types.Kind.BETA:
+        result = number
+    return result < 1000
+
+
 class _Transformer(
         aas_types.AbstractTransformer[
             Iterator[Error]
@@ -201,6 +216,11 @@ class _Transformer(
             self,
             that: aas_types.Something
     ) -> Iterator[Error]:
+        if not switch_with_reassigned_int(that.kind, that.number):
+            yield Error(
+                'Number must be small for beta'
+            )
+
         if not nested_switches(that.kind, that.number):
             yield Error(
                 'Kind and number must be consistent'

@@ -81,7 +81,7 @@ bool SwitchOnEnumWithLabelsInTuple(
 bool SwitchOnEnumWithPass(
   types::Kind kind
 ) {
-  auto result = true;
+  bool result = true;
   switch (kind) {
     case types::Kind::kAlpha:
     case types::Kind::kBeta:
@@ -101,11 +101,11 @@ bool SwitchOnEnumWithVariablesInCases(
 ) {
   switch (kind) {
     case types::Kind::kAlpha: {
-      auto length = text.size();
+      size_t length = text.size();
       return length > 1;
     }
     case types::Kind::kBeta: {
-      auto length = text.size();
+      size_t length = text.size();
       return length > 2;
     }
     default:
@@ -182,6 +182,21 @@ bool NestedSwitches(
   return true;
 }
 
+bool SwitchWithReassignedInt(
+  types::Kind kind,
+  int64_t number
+) {
+  int64_t result = 0;
+  switch (kind) {
+    case types::Kind::kBeta:
+      result = number;
+      break;
+    default:
+      break;
+  }
+  return result < 1000;
+}
+
 // endregion Verification functions
 
 namespace {
@@ -228,7 +243,7 @@ bool Something_0(
   const types::ISomething* that = (
     static_cast<const types::ISomething*>(value)
   );
-  return verification::NestedSwitches(
+  return verification::SwitchWithReassignedInt(
     that->kind(),
     that->number()
   );
@@ -240,7 +255,8 @@ bool Something_1(
   const types::ISomething* that = (
     static_cast<const types::ISomething*>(value)
   );
-  return verification::SwitchOnInt(
+  return verification::NestedSwitches(
+    that->kind(),
     that->number()
   );
 }
@@ -251,12 +267,23 @@ bool Something_2(
   const types::ISomething* that = (
     static_cast<const types::ISomething*>(value)
   );
+  return verification::SwitchOnInt(
+    that->number()
+  );
+}
+
+bool Something_3(
+  const void* value
+) {
+  const types::ISomething* that = (
+    static_cast<const types::ISomething*>(value)
+  );
   return verification::SwitchOnConstrainedStr(
     that->name()
   );
 }
 
-bool Something_3(
+bool Something_4(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -267,7 +294,7 @@ bool Something_3(
   );
 }
 
-bool Something_4(
+bool Something_5(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -279,7 +306,7 @@ bool Something_4(
   );
 }
 
-bool Something_5(
+bool Something_6(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -290,7 +317,7 @@ bool Something_5(
   );
 }
 
-bool Something_6(
+bool Something_7(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -301,7 +328,7 @@ bool Something_6(
   );
 }
 
-bool Something_7(
+bool Something_8(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -312,7 +339,7 @@ bool Something_7(
   );
 }
 
-bool Something_8(
+bool Something_9(
   const void* value
 ) {
   const types::ISomething* that = (
@@ -341,38 +368,42 @@ const std::vector<Check>& ChecksOf(Shape shape) {
       static const std::vector<Check> checks = {
         {
           &Something_0,
-          L"Kind and number must be consistent"
+          L"Number must be small for beta"
         },
         {
           &Something_1,
-          L"Number must be acceptable"
+          L"Kind and number must be consistent"
         },
         {
           &Something_2,
-          L"Name must not be forbidden"
+          L"Number must be acceptable"
         },
         {
           &Something_3,
-          L"Text must be acceptable"
+          L"Name must not be forbidden"
         },
         {
           &Something_4,
-          L"Text must be long enough for the kind"
+          L"Text must be acceptable"
         },
         {
           &Something_5,
-          L"Kind must not be gamma"
+          L"Text must be long enough for the kind"
         },
         {
           &Something_6,
-          L"Kind must be alpha, beta or gamma"
+          L"Kind must not be gamma"
         },
         {
           &Something_7,
-          L"Kind must be neither beta nor gamma"
+          L"Kind must be alpha, beta or gamma"
         },
         {
           &Something_8,
+          L"Kind must be neither beta nor gamma"
+        },
+        {
+          &Something_9,
           L"Kind must not be delta"
         }
       };

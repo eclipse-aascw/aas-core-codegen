@@ -193,6 +193,22 @@ public class Verification {
   }
 
   /**
+   * Check the integer variable defined with a literal, and re-assigned
+   * an integer argument in a branch of the switch.
+   */
+  public static Boolean switchWithReassignedInt(
+    Kind kind,
+    Long number) {
+    long result = 0;
+    switch (kind) {
+        case BETA -> {
+            result = number;
+        }
+    }
+    return result < 1000;
+  }
+
+  /**
    * Hash allowed enum values for efficient validation of enums.
    */
   private static class _EnumValueSet {
@@ -220,6 +236,14 @@ public class Verification {
     public Stream<Reporting.Error> transformSomething(
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
+
+      if (!(
+        switchWithReassignedInt(that.getKind(), that.getNumber()))) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "Number must be small for beta")));
+      }
 
       if (!nestedSwitches(that.getKind(), that.getNumber())) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,

@@ -1523,6 +1523,18 @@ aascommon.{qualifier_function}(
         if target_is_pointer:
             target = Stripped(f"*{target}")
 
+        # NOTE (mristin):
+        # The integer literals are untyped in Go, and would be inferred as ``int`` in
+        # the short variable declaration, while we represent the integers as
+        # ``int64``. Hence, we need to explicitly convert them.
+        if (
+            is_definition
+            and isinstance(node.value, parse_tree.Constant)
+            and isinstance(node.value.value, int)
+            and not isinstance(node.value.value, bool)
+        ):
+            value = Stripped(f"int64({value})")
+
         assignment = "=" if not is_definition else ":="
 
         # NOTE (mristin):

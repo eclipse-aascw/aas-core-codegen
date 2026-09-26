@@ -145,6 +145,26 @@ UnverifiedSymbolTable(
           body=...)],
       invariants=[
         Invariant(
+          description='Number must be small for beta',
+          body=textwrap.dedent("""\
+            FunctionCall(
+              name='switch_with_reassigned_int',
+              args=[
+                Member(
+                  instance=Name(
+                    identifier='self',
+                    original_node=...),
+                  name='kind',
+                  original_node=...),
+                Member(
+                  instance=Name(
+                    identifier='self',
+                    original_node=...),
+                  name='number',
+                  original_node=...)],
+              original_node=...)"""),
+          node=...),
+        Invariant(
           description='Kind and number must be consistent',
           body=textwrap.dedent("""\
             FunctionCall(
@@ -1035,6 +1055,85 @@ UnverifiedSymbolTable(
           Return(
             value=Constant(
               value=True,
+              original_node=...),
+            original_node=...)""")],
+      node=...,
+      arguments_by_name=...),
+    UnderstoodMethod(
+      name='switch_with_reassigned_int',
+      verification=True,
+      arguments=[
+        Argument(
+          name='kind',
+          type_annotation=AtomicTypeAnnotation(
+            identifier='Kind',
+            node=...),
+          default=None,
+          node=...),
+        Argument(
+          name='number',
+          type_annotation=AtomicTypeAnnotation(
+            identifier='int',
+            node=...),
+          default=None,
+          node=...)],
+      returns=AtomicTypeAnnotation(
+        identifier='bool',
+        node=...),
+      description=Description(
+        document=...,
+        node=...),
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      non_mutating=False,
+      body=[
+        textwrap.dedent("""\
+          Assignment(
+            target=Name(
+              identifier='result',
+              original_node=...),
+            value=Constant(
+              value=0,
+              original_node=...),
+            original_node=...)"""),
+        textwrap.dedent("""\
+          Switch(
+            subject=Name(
+              identifier='kind',
+              original_node=...),
+            cases=[
+              SwitchCase(
+                labels=[
+                  Member(
+                    instance=Name(
+                      identifier='Kind',
+                      original_node=...),
+                    name='Beta',
+                    original_node=...)],
+                body=[
+                  Assignment(
+                    target=Name(
+                      identifier='result',
+                      original_node=...),
+                    value=Name(
+                      identifier='number',
+                      original_node=...),
+                    original_node=...)],
+                original_node=...)],
+            default=None,
+            original_node=...)"""),
+        textwrap.dedent("""\
+          Return(
+            value=Comparison(
+              left=Name(
+                identifier='result',
+                original_node=...),
+              op='LT',
+              right=Constant(
+                value=1000,
+                original_node=...),
               original_node=...),
             original_node=...)""")],
       node=...,

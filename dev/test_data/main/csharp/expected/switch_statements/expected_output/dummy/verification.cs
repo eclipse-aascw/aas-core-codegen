@@ -228,6 +228,25 @@ namespace dummy
         }  // public static bool NestedSwitches
 
         /// <summary>
+        /// Check the integer variable defined with a literal, and re-assigned
+        /// an integer argument in a branch of the switch.
+        /// </summary>
+        public static bool SwitchWithReassignedInt(
+            Kind kind,
+            long number
+        )
+        {
+            long result = 0;
+            switch (kind)
+            {
+                case Kind.Beta:
+                    result = number;
+                    break;
+            }
+            return result < 1000;
+        }  // public static bool SwitchWithReassignedInt
+
+        /// <summary>
         /// Hash allowed enum values for efficient validation of enums.
         /// </summary>
         internal static class EnumValueSet
@@ -254,6 +273,14 @@ namespace dummy
                 Aas.ISomething that
             )
             {
+                if (!(
+                    Verification.SwitchWithReassignedInt(that.Kind, that.Number)))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "Number must be small for beta");
+                }
+
                 if (!(
                     Verification.NestedSwitches(that.Kind, that.Number)))
                 {
