@@ -1,0 +1,25 @@
+{
+  "defaultLanguage": "en",
+  "langStringSets": [
+    {
+      "langStrings": [
+        {
+          "language": "en",
+          "text": "hello"
+        }
+      ]
+    }
+  ],
+  "specifications": [
+    {
+      "content": {
+        "modelType": "OtherContent"
+      }
+    },
+    {
+      "content": {
+        "modelType": "IecContent"
+      }
+    }
+  ]
+}

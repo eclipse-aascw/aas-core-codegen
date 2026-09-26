@@ -1,0 +1,13 @@
+{
+  "defaultLanguage": 42,
+  "langStringSets": [
+    {
+      "langStrings": [
+        {
+          "language": "en",
+          "text": "hello"
+        }
+      ]
+    }
+  ]
+}
