@@ -706,7 +706,11 @@ class Transpiler(
                 ):
                     instance = Stripped(f"({instance})")
 
-                return Stripped(f"{instance}.indexOf({args[0]})"), None
+                # NOTE (mristin):
+                # We cast the position to ``long`` as we represent all
+                # the integers of the meta-model as ``long``'s. Otherwise, a boxed
+                # position would never equal a boxed ``Long``.
+                return Stripped(f"(long) {instance}.indexOf({args[0]})"), None
 
             return None, Error(
                 node.original_node,
@@ -1394,6 +1398,15 @@ IntStream.range(
                 target, error = self.transform_name(node=node.target)
                 if error is not None:
                     errors.append(error)
+                elif (
+                    intermediate_type_inference.try_primitive_type(type_anno)
+                    is intermediate_type_inference.PrimitiveType.INT
+                ):
+                    # NOTE (mristin):
+                    # We represent the integers as ``long``, while ``var`` would
+                    # infer ``int`` from an integer literal, and the variable could
+                    # not be re-assigned a ``long`` later.
+                    target = Stripped(f"long {target}")
                 else:
                     # NOTE (mristin):
                     # We infer the type of the local variable with ``var``, which

@@ -261,6 +261,13 @@ bool NestedSwitches(
   int64_t number
 );
 
+/// \brief Check the integer variable defined with a literal, and re-assigned
+/// an integer argument in a branch of the switch.
+bool SwitchWithReassignedInt(
+  types::Kind kind,
+  int64_t number
+);
+
 // endregion Verification functions
 
 // region Verification of constrained primitives

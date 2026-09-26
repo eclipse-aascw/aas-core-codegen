@@ -183,6 +183,20 @@ func NestedSwitches(
 	return true
 }
 
+// Check the integer variable defined with a literal, and re-assigned
+// an integer argument in a branch of the switch.
+func SwitchWithReassignedInt(
+	kind aastypes.Kind,
+	number int64,
+) bool {
+	result := int64(0)
+	switch kind {
+	case aastypes.KindBeta:
+		result = number
+	}
+	return result < 1000
+}
+
 // Verify `that` instance of [aastypes.ISomething].
 //
 // You have to supply the callback `onError` to iterate over the errors.
@@ -194,6 +208,17 @@ func VerifySomething(
 	onError func(*VerificationError) bool,
 ) (abort bool) {
 	abort = false
+
+	if !(
+		SwitchWithReassignedInt(that.Kind(), that.Number())) {
+		abort = onError(
+			newVerificationError(
+				"Number must be small for beta",),
+		)
+		if abort {
+			return
+		}
+	}
 
 	if !NestedSwitches(that.Kind(), that.Number()) {
 		abort = onError(

@@ -363,6 +363,23 @@ export function nestedSwitches(
 }
 
 /**
+ * Check the integer variable defined with a literal, and re-assigned
+ * an integer argument in a branch of the switch.
+ */
+export function switchWithReassignedInt(
+  kind: AasTypes.Kind,
+  number: number
+): boolean {
+  let result = 0;
+  switch (kind) {
+    case AasTypes.Kind.Beta:
+      result = number;
+      break;
+  }
+  return result < 1000;
+}
+
+/**
  * Verify an instance of the model recursively or non-recursively (depending on the context).
  */
 class Verifier
@@ -374,6 +391,12 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
+    if (!switchWithReassignedInt(that.kind, that.number)) {
+      yield new VerificationError(
+        "Number must be small for beta"
+      )
+    }
+
     if (!nestedSwitches(that.kind, that.number)) {
       yield new VerificationError(
         "Kind and number must be consistent"

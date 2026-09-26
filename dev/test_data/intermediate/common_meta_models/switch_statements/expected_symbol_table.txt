@@ -196,6 +196,27 @@ SymbolTable(
               default=None)""")]),
       invariants=[
         Invariant(
+          description='Number must be small for beta',
+          body=textwrap.dedent("""\
+            FunctionCall(
+              name='switch_with_reassigned_int',
+              args=[
+                Member(
+                  instance=Name(
+                    identifier='self',
+                    original_node=...),
+                  name='kind',
+                  original_node=...),
+                Member(
+                  instance=Name(
+                    identifier='self',
+                    original_node=...),
+                  name='number',
+                  original_node=...)],
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Something',
+          parsed=...),
+        Invariant(
           description='Kind and number must be consistent',
           body=textwrap.dedent("""\
             FunctionCall(
@@ -595,6 +616,40 @@ SymbolTable(
         parsed=...),
       description=DescriptionOfSignature(
         summary='<paragraph>Check the nested switches, including an <literal>elif</literal> on another subject.</paragraph>',
+        remarks=[],
+        arguments_by_name=[],
+        returns=None,
+        parsed=...),
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      parsed=...,
+      arguments_by_name=...),
+    TranspilableVerification(
+      name='switch_with_reassigned_int',
+      arguments=[
+        Argument(
+          name='kind',
+          type_annotation=OurTypeAnnotation(
+            our_type='Reference to our type Kind',
+            parsed=...),
+          default=None,
+          parsed=...),
+        Argument(
+          name='number',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='INT',
+            parsed=...),
+          default=None,
+          parsed=...)],
+      returns=PrimitiveTypeAnnotation(
+        a_type='BOOL',
+        parsed=...),
+      description=DescriptionOfSignature(
+        summary=textwrap.dedent("""\
+          <paragraph>Check the integer variable defined with a literal, and re-assigned
+          an integer argument in a branch of the switch.</paragraph>"""),
         remarks=[],
         arguments_by_name=[],
         returns=None,

@@ -152,7 +152,7 @@ namespace dummy.Tests
         {
             Assert.AreEqual(
                 1,
-                "abcabc".IndexOf("b", System.StringComparison.Ordinal));
+                (long)"abcabc".IndexOf("b", System.StringComparison.Ordinal));
         }  // void Test_find_found
 
         [Test, Description("'abcabc'.find('x') gives -1: not found")]
@@ -160,7 +160,7 @@ namespace dummy.Tests
         {
             Assert.AreEqual(
                 -1,
-                "abcabc".IndexOf("x", System.StringComparison.Ordinal));
+                (long)"abcabc".IndexOf("x", System.StringComparison.Ordinal));
         }  // void Test_find_not_found
 
         [Test, Description("'abcabc'.find('') gives 0: empty sub")]
@@ -168,7 +168,7 @@ namespace dummy.Tests
         {
             Assert.AreEqual(
                 0,
-                "abcabc".IndexOf("", System.StringComparison.Ordinal));
+                (long)"abcabc".IndexOf("", System.StringComparison.Ordinal));
         }  // void Test_find_empty_sub
 
         [Test, Description("'ab'.find('abc') gives -1: sub longer than text")]
@@ -176,7 +176,7 @@ namespace dummy.Tests
         {
             Assert.AreEqual(
                 -1,
-                "ab".IndexOf("abc", System.StringComparison.Ordinal));
+                (long)"ab".IndexOf("abc", System.StringComparison.Ordinal));
         }  // void Test_find_sub_longer_than_text
 
         [Test, Description("'abcabc'.find('b', 2) gives 4: found after start")]
@@ -248,7 +248,7 @@ namespace dummy.Tests
         {
             Assert.AreEqual(
                 0,
-                "".IndexOf("", System.StringComparison.Ordinal));
+                (long)"".IndexOf("", System.StringComparison.Ordinal));
         }  // void Test_find_empty_sub_in_empty_text
 
         [Test, Description("''.find('', 1) gives -1: empty sub beyond the end of empty text gives -1")]
@@ -264,7 +264,7 @@ namespace dummy.Tests
         {
             Assert.AreEqual(
                 -1,
-                "".IndexOf("x", System.StringComparison.Ordinal));
+                (long)"".IndexOf("x", System.StringComparison.Ordinal));
         }  // void Test_find_not_found_in_empty_text
     }  // class TestStringHelpers
 }  // namespace dummy.Tests

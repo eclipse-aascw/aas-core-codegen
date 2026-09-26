@@ -627,11 +627,12 @@ class Transpiler(
             if member_type.method is intermediate_type_inference.STR_FIND:
                 # NOTE (mristin):
                 # We compare ordinally as ``IndexOf`` is culture-sensitive
-                # by default.
+                # by default. We cast the position to ``long`` as we represent
+                # all the integers of the meta-model as ``long``'s.
                 if len(args) == 1:
                     return (
                         Stripped(
-                            f"{instance}.IndexOf({args[0]}, "
+                            f"(long){instance}.IndexOf({args[0]}, "
                             f"System.StringComparison.Ordinal)"
                         ),
                         None,
@@ -1290,6 +1291,18 @@ Enumerable.Range(
                 target, error = self.transform_name(node=node.target)
                 if error is not None:
                     errors.append(error)
+                elif (
+                    isinstance(
+                        type_anno, intermediate_type_inference.PrimitiveTypeAnnotation
+                    )
+                    and type_anno.a_type
+                    is intermediate_type_inference.PrimitiveType.INT
+                ):
+                    # NOTE (mristin):
+                    # The integers of the meta-model are ``long``'s in C#, while
+                    # C# infers ``int`` for the integer literals with ``var``, so
+                    # that the subsequent assignments of ``long``'s would fail.
+                    target = Stripped(f"long {target}")
                 else:
                     target = Stripped(f"var {target}")
             else:

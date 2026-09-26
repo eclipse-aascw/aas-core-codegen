@@ -740,7 +740,7 @@ public static class StringHelpers
 {I}/// The position of <paramref name="sub" /> in <paramref name="text" />,
 {I}/// or -1 if not found
 {I}/// </returns>
-{I}public static int Find(string text, string sub, long start)
+{I}public static long Find(string text, string sub, long start)
 {I}{{
 {II}long theStart = start < 0
 {III}? System.Math.Max(start + text.Length, 0)

@@ -38,7 +38,8 @@ namespace dummy
             string text
         )
         {
-            var position = text.IndexOf("T", System.StringComparison.Ordinal);
+            long position = (
+                (long)text.IndexOf("T", System.StringComparison.Ordinal));
             switch (position)
             {
                 case -1:
@@ -55,7 +56,8 @@ namespace dummy
             string text
         )
         {
-            var position = text.IndexOf("T", System.StringComparison.Ordinal);
+            long position = (
+                (long)text.IndexOf("T", System.StringComparison.Ordinal));
             switch (position)
             {
                 case -1:
@@ -72,13 +74,14 @@ namespace dummy
             string text
         )
         {
-            var first = text.IndexOf("-", System.StringComparison.Ordinal);
+            long first = (
+                (long)text.IndexOf("-", System.StringComparison.Ordinal));
             switch (first)
             {
                 case -1:
                     return true;
             }
-            var second = StringHelpers.Find(text, "-", first + 1);
+            long second = StringHelpers.Find(text, "-", first + 1);
             switch (second)
             {
                 case -1:
@@ -95,7 +98,8 @@ namespace dummy
             string text
         )
         {
-            var position = text.IndexOf("T", System.StringComparison.Ordinal);
+            long position = (
+                (long)text.IndexOf("T", System.StringComparison.Ordinal));
             switch (position)
             {
                 case -1:
@@ -120,7 +124,8 @@ namespace dummy
             string text
         )
         {
-            var position = text.IndexOf("#", System.StringComparison.Ordinal);
+            long position = (
+                (long)text.IndexOf("#", System.StringComparison.Ordinal));
             return StringHelpers.Slice(text, position) != "Z"
             && StringHelpers.Slice(text, -100, 100) == text
             && StringHelpers.Slice(text, 3, 1) == ""
@@ -147,7 +152,7 @@ namespace dummy
         )
         {
             return name.Length < 4
-            || StringHelpers.Slice(name, 4).IndexOf(" ", System.StringComparison.Ordinal) == -1;
+            || (long)StringHelpers.Slice(name, 4).IndexOf(" ", System.StringComparison.Ordinal) == -1;
         }  // public static bool NameHasNoSpaceAfterPrefix
 
         /// <summary>
@@ -224,7 +229,7 @@ namespace dummy
             /// The position of <paramref name="sub" /> in <paramref name="text" />,
             /// or -1 if not found
             /// </returns>
-            public static int Find(string text, string sub, long start)
+            public static long Find(string text, string sub, long start)
             {
                 long theStart = start < 0
                     ? System.Math.Max(start + text.Length, 0)
