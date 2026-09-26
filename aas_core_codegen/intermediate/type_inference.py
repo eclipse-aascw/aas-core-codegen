@@ -1251,6 +1251,15 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
         self.representation_map[node] = result
         return result
 
+    def transform_for(self, node: parse_tree.For) -> str:
+        generator = self.transform(node.generator)
+        stmts = "; ".join(self.transform(stmt) for stmt in node.body)
+
+        result = f"{generator}: {{{stmts}}}"
+
+        self.representation_map[node] = result
+        return result
+
 
 #: Map a comparator to the comparator which says the same about the flipped operands
 _FLIPPED_COMPARATOR = {
@@ -1394,18 +1403,43 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         self._narrowings = dict()  # type: MutableMapping[str, List[OurTypeAnnotation]]
 
         # NOTE (mristin):
-        # We keep track of the names of the variables defined in the nested scopes,
-        # *i.e.*, the switch branches, which have been already closed. The variables
-        # themselves are not visible anymore, as their environments have been
-        # discarded. We keep only their names to refuse the re-declarations of
-        # the same names in the enclosing scope. See
-        # :py:meth:`_transform_in_new_scope` for more details.
+        # We keep track of the variables defined in the nested scopes, *i.e.*,
+        # the switch branches and the bodies of the for-loops, which have been
+        # already closed. The variables themselves are not visible anymore, as
+        # their environments have been discarded. We keep their names to refuse
+        # the re-declarations of the same names in the enclosing scope, see
+        # :py:meth:`_transform_in_new_scope`. We keep their types to refuse
+        # the re-definitions of the same names with different types, see
+        # :py:meth:`_check_consistent_type_of_definition`.
         #
         # Each entry of the stack belongs to a scope, and the top of the stack
         # belongs to the current scope.
-        self._names_of_variables_in_closed_scopes = [
-            set()
-        ]  # type: List[Set[Identifier]]
+        self._types_of_variables_in_closed_scopes = [
+            dict()
+        ]  # type: List[MutableMapping[Identifier, TypeAnnotationUnion]]
+
+        # NOTE (mristin):
+        # We keep track of the loop variables of the for-loops enclosing the current
+        # statement, so that we can refuse the assignments to them in the loop
+        # bodies. An assignment to a loop variable behaves differently in Python
+        # than in the targets:
+        #
+        # * Python re-binds the loop variable to the next item or integer on each
+        #   iteration, so an assignment does not affect the iteration. In contrast,
+        #   the targets loop over ``range(start, end)`` with a counter,
+        #   *e.g.*, ``for (i = start; i < end; i++)``, so an assignment to
+        #   the counter would skip or repeat the iterations.
+        # * The targets define the loop variable over a collection as read-only,
+        #   *e.g.*, ``const`` in TypeScript, a ``foreach`` iteration variable in C#,
+        #   or a constant reference in C++, so an assignment does not compile.
+        #
+        # The environment can not tell us whether a variable is a loop variable,
+        # since the loop variable is an ordinary entry in the scope of the loop
+        # body. We add the loop variable when we enter the body, and remove it
+        # when we leave. A set suffices for the nested for-loops, as a loop
+        # variable must not shadow any visible variable, including the loop
+        # variables of the enclosing for-loops.
+        self._loop_variable_set = set()  # type: Set[Identifier]
 
         self.type_map = dict()
         self.downcast_map = dict()
@@ -2638,6 +2672,22 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
     def transform_name(self, node: parse_tree.Name) -> Optional["TypeAnnotationUnion"]:
         type_in_env = self._environment.find(node.identifier)
         if type_in_env is None:
+            if any(
+                node.identifier in types
+                for types in self._types_of_variables_in_closed_scopes
+            ):
+                self.errors.append(
+                    Error(
+                        node.original_node,
+                        f"The variable {node.identifier!r} has been defined in "
+                        f"a nested block before, such as a for-loop or a branch of "
+                        f"a switch, and is not visible here. While Python keeps "
+                        f"the variable after the block, the other targets scope it "
+                        f"to the block. Please define the variable before the block.",
+                    )
+                )
+                return None
+
             self.errors.append(
                 Error(
                     node.original_node,
@@ -3140,6 +3190,51 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
     def transform_all(self, node: parse_tree.All) -> Optional["TypeAnnotationUnion"]:
         return self._transform_any_or_all(node)
 
+    def _check_consistent_type_of_definition(
+        self, variable: parse_tree.Name, type_annotation: "TypeAnnotationUnion"
+    ) -> bool:
+        """
+        Check that the ``variable`` is always defined with the same type.
+
+        Python has only function-level scopes, so the static type checkers such as
+        mypy refuse two definitions of the same name with different types, even if
+        they live in sibling blocks in the target languages, *e.g.*, the loop
+        variables of two sibling for-loops.
+
+        A previous definition of the same name can only live in a closed scope.
+        If it were still visible, the new definition would be either
+        an assignment, which we check against the type of the variable, or
+        a loop variable shadowing it, which we refuse.
+
+        Record the error, if any, and return ``True`` if the check passed.
+        """
+        previous_type = None  # type: Optional[TypeAnnotationUnion]
+        for types in reversed(self._types_of_variables_in_closed_scopes):
+            previous_type = types.get(variable.identifier, None)
+            if previous_type is not None:
+                break
+
+        if previous_type is None:
+            return True
+
+        # NOTE (mristin):
+        # We compare the string representations, since the type annotations do not
+        # implement the equality, and the string representations are unique.
+        if str(previous_type) != str(type_annotation):
+            self.errors.append(
+                Error(
+                    variable.original_node,
+                    f"The variable {variable.identifier!r} has been already "
+                    f"defined before with the type {previous_type}, but now we "
+                    f"inferred its type to be {type_annotation}. Python has only "
+                    f"function-level scopes, and the static type checkers such as "
+                    f"mypy refuse such re-definitions. Please use a different name.",
+                )
+            )
+            return False
+
+        return True
+
     def transform_assignment(
         self, node: parse_tree.Assignment
     ) -> Optional["TypeAnnotationUnion"]:
@@ -3148,6 +3243,21 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         target_type: Optional[TypeAnnotationUnion]
 
         if isinstance(node.target, parse_tree.Name):
+            if node.target.identifier in self._loop_variable_set:
+                self.errors.append(
+                    Error(
+                        node.original_node,
+                        f"The loop variable {node.target.identifier!r} can not be "
+                        f"assigned to in the body of the for-loop. Python does not "
+                        f"change the iteration on such an assignment, while "
+                        f"the targets would skip or repeat the iterations over "
+                        f"a range, or refuse to compile the assignment to "
+                        f"a read-only loop variable. Please use a different "
+                        f"variable.",
+                    )
+                )
+                return None
+
             target_type = self._environment.find(node.target.identifier)
             if target_type is None:
                 is_new_variable = True
@@ -3161,12 +3271,13 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
 
         if is_new_variable:
             assert isinstance(node.target, parse_tree.Name)
-            if node.target.identifier in self._names_of_variables_in_closed_scopes[-1]:
+            if node.target.identifier in self._types_of_variables_in_closed_scopes[-1]:
                 self.errors.append(
                     Error(
                         node.original_node,
                         f"The variable {node.target.identifier!r} has been already "
-                        f"defined in a branch of a switch before. In Python, both "
+                        f"defined in a nested block before, such as a for-loop or "
+                        f"a branch of a switch. In Python, both "
                         f"definitions denote the same variable, while they denote "
                         f"two different variables in the target languages with "
                         f"block scopes, and some target languages, such as C#, "
@@ -3203,6 +3314,11 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                 identifier=node.target.identifier, type_annotation=value_type
             )
 
+            if not self._check_consistent_type_of_definition(
+                variable=node.target, type_annotation=value_type
+            ):
+                return None
+
         result = PrimitiveTypeAnnotation(PrimitiveType.NONE)
         self.type_map[node] = result
         return result
@@ -3223,17 +3339,23 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         return result
 
     def _transform_in_new_scope(
-        self, statements: Sequence[parse_tree.StatementUnion]
+        self,
+        statements: Sequence[parse_tree.StatementUnion],
+        variables: Optional[Mapping[Identifier, "TypeAnnotationUnion"]] = None,
     ) -> bool:
         """
         Transform the ``statements`` in a new scope, and return ``True`` on success.
+
+        The ``variables``, such as a loop variable, are defined in the new scope
+        before the ``statements``.
 
         A scope is the region of the code where a variable is visible. Python has
         only function-level scopes, so a variable assigned in a branch of an ``if``
         stays visible after the ``if``. The target languages with C-like syntax
         (C++, C#, Java, TypeScript and Go) scope the variables to the enclosing block,
-        and we generate a separate block for each branch of a switch. Hence, we
-        model the branches as block scopes here as well:
+        and we generate a separate block for each branch of a switch and for the body
+        of a for-loop, including its loop variable. Hence, we model the branches and
+        the loop bodies as block scopes here as well:
 
         * The statements see the variables of the enclosing scopes, and can assign
           to them.
@@ -3261,8 +3383,8 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
           would denote the same variable, while they denote two different
           variables with block scopes. Moreover, some target languages, such as
           C#, refuse such re-declarations altogether. To that end, we remember
-          the names (but not the variables themselves!) of the closed scopes in
-          :attr:`_names_of_variables_in_closed_scopes`.
+          the names and the types (but not the variables themselves!) of
+          the closed scopes in :attr:`_types_of_variables_in_closed_scopes`.
         * Assigning in a branch to a variable defined before the switch is
           an assignment to that very variable, both in Python and in the block
           scopes, so it is allowed.
@@ -3273,8 +3395,14 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         """
         parent_environment = self._environment
         scope_environment = MutableEnvironment(parent=parent_environment)
+        if variables is not None:
+            for identifier, type_annotation in variables.items():
+                scope_environment.set(
+                    identifier=identifier, type_annotation=type_annotation
+                )
+
         self._environment = scope_environment
-        self._names_of_variables_in_closed_scopes.append(set())
+        self._types_of_variables_in_closed_scopes.append(dict())
 
         success = True
         try:
@@ -3284,17 +3412,18 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         finally:
             # NOTE (mristin):
             # We discard the environment of the scope so that its variables are not
-            # visible anymore. However, we pass on the names of its variables, and
-            # the names of the variables of its own closed nested scopes, to
-            # the enclosing scope so that it can refuse their re-declarations.
-            names_of_variables_in_nested_scopes = (
-                self._names_of_variables_in_closed_scopes.pop()
+            # visible anymore. However, we pass on the types of its variables, and
+            # the types of the variables of its own closed nested scopes, to
+            # the enclosing scope so that it can refuse their re-declarations and
+            # their re-definitions with different types.
+            types_of_variables_in_nested_scopes = (
+                self._types_of_variables_in_closed_scopes.pop()
             )
-            self._names_of_variables_in_closed_scopes[-1].update(
-                names_of_variables_in_nested_scopes
+            self._types_of_variables_in_closed_scopes[-1].update(
+                types_of_variables_in_nested_scopes
             )
-            self._names_of_variables_in_closed_scopes[-1].update(
-                scope_environment.mapping.keys()
+            self._types_of_variables_in_closed_scopes[-1].update(
+                scope_environment.mapping
             )
 
             self._environment = parent_environment
@@ -3389,6 +3518,42 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         if node.default is not None:
             if not self._transform_in_new_scope(node.default):
                 success = False
+
+        if not success:
+            return None
+
+        result = PrimitiveTypeAnnotation(PrimitiveType.NONE)
+        self.type_map[node] = result
+        return result
+
+    def transform_for(self, node: parse_tree.For) -> Optional["TypeAnnotationUnion"]:
+        # NOTE (mristin):
+        # The generator refuses the loop variables which shadow the variables
+        # of the enclosing scopes, and sets the type of the loop variable.
+        if self.transform(node.generator) is None:
+            return None
+
+        if not self._check_consistent_type_of_definition(
+            variable=node.generator.variable,
+            type_annotation=self.type_map[node.generator.variable],
+        ):
+            return None
+
+        loop_variable = node.generator.variable.identifier
+
+        # NOTE (mristin):
+        # The generator refused the shadowing, so the loop variable can not be
+        # the loop variable of an enclosing for-loop.
+        assert loop_variable not in self._loop_variable_set
+
+        self._loop_variable_set.add(loop_variable)
+        try:
+            success = self._transform_in_new_scope(
+                node.body,
+                variables={loop_variable: self.type_map[node.generator.variable]},
+            )
+        finally:
+            self._loop_variable_set.remove(loop_variable)
 
         if not success:
             return None
@@ -3499,6 +3664,20 @@ def infer_for_verification(
 
     for node in verification.parsed.body:
         _ = type_inferrer.transform(node)
+
+    # NOTE (mristin):
+    # Some targets, such as Go or Java, refuse to compile a function which misses
+    # a return statement at the end, so we refuse it here already.
+    if verification.returns is not None and parse_tree.can_complete_normally(
+        verification.parsed.body  # type: ignore
+    ):
+        type_inferrer.errors.append(
+            Error(
+                verification.parsed.node,
+                f"Expected the verification function {verification.name!r} "
+                f"to end with a return statement, since it returns a value",
+            )
+        )
 
     if len(type_inferrer.errors):
         return None, Error(

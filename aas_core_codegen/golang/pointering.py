@@ -763,7 +763,9 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         self, statements: Sequence[parse_tree.StatementUnion]
     ) -> Optional[Error]:
         """
-        Transform the ``statements`` of a switch branch in a new block scope.
+        Transform the ``statements`` of a block in a new block scope.
+
+        The block is a switch branch or the body of a for-loop.
 
         A scope is the region of the code where a variable is visible. We look up
         the variables in the scopes, *i.e.*, in :attr:`_environment`, to infer
@@ -818,6 +820,43 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
             error = self._transform_in_new_scope(node.default)
             if error is not None:
                 return error
+
+        self.is_pointer_map[node] = False
+        return None
+
+    def transform_for(self, node: parse_tree.For) -> Optional[Error]:
+        error = self.transform(node.generator)
+        if error is not None:
+            return error
+
+        # NOTE (mristin):
+        # The for-each in a generator does not descend into the iteration, but we
+        # need to infer the is-pointer of the collection that we loop over as we
+        # transpile it.
+        if isinstance(node.generator, parse_tree.ForEach):
+            error = self.transform(node.generator.iteration)
+            if error is not None:
+                return error
+
+        # NOTE (mristin):
+        # The loop variable is scoped to the loop, so we define it in its own
+        # environment enclosing the body.
+        parent_environment = self._environment
+        loop_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        loop_environment.set(
+            identifier=node.generator.variable.identifier,
+            type_annotation=self._type_map[node.generator.variable],
+        )
+
+        self._environment = loop_environment
+        try:
+            error = self._transform_in_new_scope(node.body)
+            if error is not None:
+                return error
+        finally:
+            self._environment = parent_environment
 
         self.is_pointer_map[node] = False
         return None

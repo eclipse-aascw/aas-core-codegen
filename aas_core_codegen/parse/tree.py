@@ -683,7 +683,36 @@ class Switch(Statement):
         visitor.visit_switch(self)
 
 
-StatementUnion = Union[Assignment, Return, Switch]
+class For(Statement):
+    """Represent a for-loop statement over a collection or a range of integers."""
+
+    #: Loop variable together with the collection or the range we iterate over
+    generator: ForUnion
+
+    #: Statements executed on each iteration; empty if the original body was ``pass``
+    body: Sequence["StatementUnion"]
+
+    def __init__(
+        self,
+        generator: ForUnion,
+        body: Sequence["StatementUnion"],
+        original_node: ast.AST,
+    ) -> None:
+        """Initialize with the given values."""
+        Statement.__init__(self, original_node=original_node)
+        self.generator = generator
+        self.body = body
+
+    def transform(self, transformer: "Transformer[T]") -> T:
+        """Accept the transformer."""
+        return transformer.transform_for(self)
+
+    def visit(self, visitor: "Visitor") -> None:
+        """Accept the visitor."""
+        visitor.visit_for(self)
+
+
+StatementUnion = Union[Assignment, Return, Switch, For]
 
 
 def can_complete_normally(statements: Sequence[StatementUnion]) -> bool:
@@ -692,6 +721,8 @@ def can_complete_normally(statements: Sequence[StatementUnion]) -> bool:
 
     The execution can not continue if the last statement is a return, or a switch
     with a default where none of the branches can complete normally.
+
+    A for-loop can always complete normally, since its body might not execute at all.
     """
     if len(statements) == 0:
         return True
@@ -874,6 +905,12 @@ class Visitor(DBC):
             for stmt in node.default:
                 self.visit(stmt)
 
+    def visit_for(self, node: For) -> None:
+        """Visit a for-loop statement."""
+        self.visit(node.generator)
+        for stmt in node.body:
+            self.visit(stmt)
+
 
 class Transformer(Generic[T], DBC):
     """Transform our AST into something."""
@@ -1020,6 +1057,11 @@ class Transformer(Generic[T], DBC):
     @abc.abstractmethod
     def transform_switch(self, node: Switch) -> T:
         """Transform a switch statement into something."""
+        raise NotImplementedError(f"{node=}")
+
+    @abc.abstractmethod
+    def transform_for(self, node: For) -> T:
+        """Transform a for-loop statement into something."""
         raise NotImplementedError(f"{node=}")
 
 
@@ -1358,6 +1400,18 @@ class _StringifyTransformer(Transformer[stringify.Entity]):
             ],
         )
 
+    def transform_for(self, node: For) -> stringify.Entity:
+        return stringify.Entity(
+            name=node.__class__.__name__,
+            properties=[
+                stringify.Property("generator", self.transform(node.generator)),
+                stringify.Property(
+                    "body", [self.transform(stmt) for stmt in node.body]
+                ),
+                stringify.PropertyEllipsis("original_node", node.original_node),
+            ],
+        )
+
 
 def dump(node: Node) -> str:
     """Produce a string representation of the tree."""
@@ -1483,6 +1537,10 @@ class RestrictedTransformer(Transformer[T]):
 
     def transform_switch(self, node: Switch) -> T:
         """Transform a switch statement into something."""
+        raise AssertionError(f"Unexpected node: {dump(node)}")
+
+    def transform_for(self, node: For) -> T:
+        """Transform a for-loop statement into something."""
         raise AssertionError(f"Unexpected node: {dump(node)}")
 
 
@@ -1646,6 +1704,12 @@ class _IterationTransformer(Transformer[Iterator[Node]]):
         if node.default is not None:
             for stmt in node.default:
                 yield from self.transform(stmt)
+
+    def transform_for(self, node: For) -> Iterator[Node]:
+        yield node
+        yield from self.transform(node.generator)
+        for stmt in node.body:
+            yield from self.transform(stmt)
 
 
 _ITERATION_TRANSFORMER = _IterationTransformer()

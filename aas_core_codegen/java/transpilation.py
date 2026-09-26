@@ -1665,6 +1665,101 @@ return (
 
         return Stripped(writer.getvalue()), None
 
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_for(
+        self, node: parse_tree.For
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+
+        variable_name = node.generator.variable.identifier
+        variable_type = self.type_map[node.generator.variable]
+        variable = java_naming.variable_name(variable_name)
+
+        header = None  # type: Optional[str]
+        if isinstance(node.generator, parse_tree.ForEach):
+            iteration, error = self.transform(node.generator.iteration)
+            if error is not None:
+                errors.append(error)
+            else:
+                assert iteration is not None
+                header = f"for (var {variable} : {indent_but_first_line(iteration, I)})"
+
+        elif isinstance(node.generator, parse_tree.ForRange):
+            start, error = self.transform(node.generator.start)
+            if error is not None:
+                errors.append(error)
+
+            end, error = self.transform(node.generator.end)
+            if error is not None:
+                errors.append(error)
+
+            if start is not None and end is not None:
+                # NOTE (mristin):
+                # We represent the lengths as ``int``, since the collections are
+                # indexed by ``int``'s in Java, while we represent the other integers
+                # as ``long``.
+                primitive_type = intermediate_type_inference.try_primitive_type(
+                    variable_type
+                )
+                if primitive_type is intermediate_type_inference.PrimitiveType.LENGTH:
+                    variable_java_type = "int"
+                elif primitive_type is intermediate_type_inference.PrimitiveType.INT:
+                    variable_java_type = "long"
+                else:
+                    raise AssertionError(
+                        f"Unexpected type of the loop variable over a range: "
+                        f"{variable_type}"
+                    )
+
+                if "\n" not in start and "\n" not in end:
+                    header = (
+                        f"for ({variable_java_type} {variable} = {start}; "
+                        f"{variable} < {end}; {variable}++)"
+                    )
+                else:
+                    header = f"""\
+for (
+{I}{variable_java_type} {variable} = {indent_but_first_line(start, I)};
+{I}{variable} < {indent_but_first_line(end, I)};
+{I}{variable}++
+)"""
+
+        else:
+            assert_never(node.generator)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the for-loop", errors
+            )
+
+        assert header is not None
+
+        # NOTE (mristin):
+        # The loop variable is scoped to the loop, so we define it in its own
+        # environment enclosing the body.
+        parent_environment = self._environment
+        loop_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        loop_environment.set(identifier=variable_name, type_annotation=variable_type)
+        self._variable_name_set.add(variable_name)
+
+        self._environment = loop_environment
+        try:
+            stmts_and_defines, error = self._transform_branch(node.body)
+        finally:
+            self._environment = parent_environment
+
+        if error is not None:
+            return None, Error(
+                node.original_node, "Failed to transpile the for-loop", [error]
+            )
+
+        assert stmts_and_defines is not None
+        stmts, _ = stmts_and_defines
+
+        return Stripped(f"{header} {Transpiler._block(stmts)}"), None
+
 
 # noinspection PyProtectedMember,PyProtectedMember
 assert all(op in Transpiler._JAVA_COMPARISON_MAP for op in parse_tree.Comparator)

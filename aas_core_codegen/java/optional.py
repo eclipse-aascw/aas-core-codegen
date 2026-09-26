@@ -645,3 +645,31 @@ class OptionalInferrer(parse_tree.Transformer[Optional[Error]]):
 
         self.is_optional_map[node] = False
         return None
+
+    def transform_for(self, node: parse_tree.For) -> Optional[Error]:
+        error = self.transform(node.generator)
+        if error is not None:
+            return error
+
+        # NOTE (mristin):
+        # The loop variable is scoped to the loop, so we define it in its own
+        # environment enclosing the body.
+        parent_environment = self._environment
+        loop_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        loop_environment.set(
+            identifier=node.generator.variable.identifier,
+            type_annotation=self._type_map[node.generator.variable],
+        )
+
+        self._environment = loop_environment
+        try:
+            error = self._transform_in_new_scope(node.body)
+            if error is not None:
+                return error
+        finally:
+            self._environment = parent_environment
+
+        self.is_optional_map[node] = False
+        return None

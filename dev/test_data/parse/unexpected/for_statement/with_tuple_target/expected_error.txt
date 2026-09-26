@@ -1,0 +1,1 @@
+Expected the target of the generator to be a name, but got: Tuple(elts=[Name(id='number', ctx=Store()), Name(id='text', ctx=Store())], ctx=Store())

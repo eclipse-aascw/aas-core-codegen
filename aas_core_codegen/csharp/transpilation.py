@@ -1365,10 +1365,10 @@ return (
         self, statements: Sequence[parse_tree.StatementUnion]
     ) -> Tuple[Optional[Tuple[List[Stripped], bool]], Optional[Error]]:
         """
-        Transpile the ``statements`` of a switch branch in a new scope.
+        Transpile the ``statements`` of a block in a new scope.
 
-        The variables defined in the ``statements`` are not visible after
-        the branch.
+        The block is a switch branch or the body of a for-loop. The variables defined
+        in the ``statements`` are not visible after the block.
 
         Return the transpiled statements, and whether they define any variables.
         We leave the layout of the statements to the caller.
@@ -1395,7 +1395,7 @@ return (
 
         if len(errors) > 0:
             return None, Error(
-                None, "Failed to transpile the statements of a switch branch", errors
+                None, "Failed to transpile the statements of a block", errors
             )
 
         return (stmts, len(scope_environment.mapping) > 0), None
@@ -1474,6 +1474,108 @@ return (
             return None, Error(
                 node.original_node, "Failed to transpile the switch", errors
             )
+
+        return Stripped(writer.getvalue()), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_for(
+        self, node: parse_tree.For
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+
+        variable_name = node.generator.variable.identifier
+        variable_type = self.type_map[node.generator.variable]
+        variable = csharp_naming.variable_name(variable_name)
+
+        header: Optional[str] = None
+        if isinstance(node.generator, parse_tree.ForEach):
+            iteration, error = self.transform(node.generator.iteration)
+            if error is not None:
+                errors.append(error)
+            else:
+                assert iteration is not None
+                header = (
+                    f"foreach (var {variable} in "
+                    f"{indent_but_first_line(iteration, I)})"
+                )
+
+        elif isinstance(node.generator, parse_tree.ForRange):
+            start, error = self.transform(node.generator.start)
+            if error is not None:
+                errors.append(error)
+
+            end, error = self.transform(node.generator.end)
+            if error is not None:
+                errors.append(error)
+
+            # NOTE (mristin):
+            # The lengths of the collections are ``int``'s in C#, and so are
+            # the indices of the lists, while the integers of the meta-model are
+            # ``long``'s.
+            assert isinstance(
+                variable_type, intermediate_type_inference.PrimitiveTypeAnnotation
+            )
+            if variable_type.a_type is intermediate_type_inference.PrimitiveType.LENGTH:
+                variable_type_code = "int"
+            elif variable_type.a_type is intermediate_type_inference.PrimitiveType.INT:
+                variable_type_code = "long"
+            else:
+                raise AssertionError(f"Unexpected {variable_type=}")
+
+            if start is not None and end is not None:
+                if "\n" not in start and "\n" not in end:
+                    header = (
+                        f"for ({variable_type_code} {variable} = {start}; "
+                        f"{variable} < {end}; {variable}++)"
+                    )
+                else:
+                    header = f"""\
+for (
+{I}{variable_type_code} {variable} = {indent_but_first_line(start, I)};
+{I}{variable} < {indent_but_first_line(end, I)};
+{I}{variable}++
+)"""
+
+        else:
+            assert_never(node.generator)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the for-loop", errors
+            )
+
+        assert header is not None
+
+        # NOTE (mristin):
+        # The loop variable is scoped to the loop, so we define it in its own
+        # environment enclosing the body.
+        parent_environment = self._environment
+        loop_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        loop_environment.set(identifier=variable_name, type_annotation=variable_type)
+        self._variable_name_set.add(variable_name)
+
+        self._environment = loop_environment
+        try:
+            stmts_and_defines, error = self._transform_branch(node.body)
+        finally:
+            self._environment = parent_environment
+
+        if error is not None:
+            return None, Error(
+                node.original_node, "Failed to transpile the for-loop", [error]
+            )
+
+        assert stmts_and_defines is not None
+        stmts, _ = stmts_and_defines
+
+        writer = io.StringIO()
+        writer.write(f"{header}\n{{")
+        for stmt in stmts:
+            writer.write("\n")
+            writer.write(textwrap.indent(stmt, I))
+        writer.write("\n}")
 
         return Stripped(writer.getvalue()), None
 

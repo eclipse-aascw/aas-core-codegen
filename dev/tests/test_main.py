@@ -283,6 +283,11 @@ class Test_cpp(_TestCase):
             target=aas_core_codegen.main.Target.CPP, case_name="float_only"
         )
 
+    def test_expected_for_statements(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CPP, case_name="for_statements"
+        )
+
     def test_expected_implementation_specific(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.CPP,
@@ -442,6 +447,11 @@ class Test_csharp(_TestCase):
             target=aas_core_codegen.main.Target.CSHARP, case_name="float_only"
         )
 
+    def test_expected_for_statements(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CSHARP, case_name="for_statements"
+        )
+
     def test_expected_implementation_specific(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.CSHARP,
@@ -570,6 +580,11 @@ class Test_golang(_TestCase):
     def test_expected_float_only(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.GOLANG, case_name="float_only"
+        )
+
+    def test_expected_for_statements(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.GOLANG, case_name="for_statements"
         )
 
     def test_expected_implementation_specific(self) -> None:
@@ -707,6 +722,11 @@ class Test_java(_TestCase):
             target=aas_core_codegen.main.Target.JAVA, case_name="float_only"
         )
 
+    def test_expected_for_statements(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.JAVA, case_name="for_statements"
+        )
+
     def test_expected_implementation_specific(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.JAVA,
@@ -836,6 +856,11 @@ class Test_jsonschema(_TestCase):
     def test_expected_float_only(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.JSONSCHEMA, case_name="float_only"
+        )
+
+    def test_expected_for_statements(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.JSONSCHEMA, case_name="for_statements"
         )
 
     def test_expected_implementation_specific(self) -> None:
@@ -984,6 +1009,11 @@ class Test_python(_TestCase):
             target=aas_core_codegen.main.Target.PYTHON, case_name="float_only"
         )
 
+    def test_expected_for_statements(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.PYTHON, case_name="for_statements"
+        )
+
     def test_expected_implementation_specific(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.PYTHON,
@@ -1122,6 +1152,11 @@ class Test_typescript(_TestCase):
             target=aas_core_codegen.main.Target.TYPESCRIPT, case_name="float_only"
         )
 
+    def test_expected_for_statements(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.TYPESCRIPT, case_name="for_statements"
+        )
+
     def test_expected_implementation_specific(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.TYPESCRIPT,
@@ -1256,6 +1291,11 @@ class Test_xsd(_TestCase):
     def test_expected_float_only(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.XSD, case_name="float_only"
+        )
+
+    def test_expected_for_statements(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.XSD, case_name="for_statements"
         )
 
     def test_expected_implementation_specific(self) -> None:

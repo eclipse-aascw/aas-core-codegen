@@ -294,6 +294,36 @@ def determine_whether_referencable(
     raise AssertionError("Should not have gotten here")
 
 
+_ARITHMETIC_PRIMITIVE_TYPES = (
+    intermediate_type_inference.PrimitiveType.BOOL,
+    intermediate_type_inference.PrimitiveType.INT,
+    intermediate_type_inference.PrimitiveType.FLOAT,
+    intermediate_type_inference.PrimitiveType.LENGTH,
+)
+
+
+def _is_cheap_to_copy(
+    type_annotation: intermediate_type_inference.TypeAnnotationUnion,
+) -> bool:
+    """Check whether the value is arithmetic or an enumeration literal."""
+    if isinstance(type_annotation, intermediate_type_inference.PrimitiveTypeAnnotation):
+        return type_annotation.a_type in _ARITHMETIC_PRIMITIVE_TYPES
+
+    if isinstance(type_annotation, intermediate_type_inference.OurTypeAnnotation):
+        our_type = type_annotation.our_type
+        if isinstance(our_type, intermediate.Enumeration):
+            return True
+
+        if isinstance(our_type, intermediate.ConstrainedPrimitive):
+            return our_type.constrainee in (
+                intermediate.PrimitiveType.BOOL,
+                intermediate.PrimitiveType.INT,
+                intermediate.PrimitiveType.FLOAT,
+            )
+
+    return False
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def generate_type_with_const_ref_if_applicable(
     type_annotation: intermediate_type_inference.TypeAnnotationUnion,
@@ -1933,10 +1963,10 @@ return (
         self, statements: Sequence[parse_tree.StatementUnion]
     ) -> Tuple[Optional[Tuple[List[Stripped], bool]], Optional[Error]]:
         """
-        Transpile the ``statements`` of a switch branch in a new scope.
+        Transpile the ``statements`` of a block in a new scope.
 
-        The variables defined in the ``statements`` are not visible after
-        the branch.
+        The block is a switch branch or the body of a for-loop. The variables defined
+        in the ``statements`` are not visible after the block.
 
         Return the transpiled statements, and whether they define any variables.
         We leave the layout of the statements to the caller.
@@ -1963,7 +1993,7 @@ return (
 
         if len(errors) > 0:
             return None, Error(
-                None, "Failed to transpile the statements of a switch branch", errors
+                None, "Failed to transpile the statements of a block", errors
             )
 
         return (stmts, len(scope_environment.mapping) > 0), None
@@ -2141,6 +2171,121 @@ return (
             )
 
         return Stripped(writer.getvalue()), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_for(
+        self, node: parse_tree.For
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+
+        variable_name = node.generator.variable.identifier
+        variable_type_annotation = self.type_map[node.generator.variable]
+
+        variable_name_cpp = cpp_naming.variable_name(variable_name)
+
+        header: Optional[str] = None
+        if isinstance(node.generator, parse_tree.ForEach):
+            variable_type_cpp, error_msg = generate_type(
+                type_annotation=variable_type_annotation,
+                types_namespace=self._types_namespace,
+            )
+            if error_msg is not None:
+                errors.append(Error(node.generator.variable.original_node, error_msg))
+
+            # NOTE (mristin):
+            # We iterate over the items by constant reference to avoid the copies,
+            # except for the arithmetic values and the enumerations which are cheap
+            # to copy.
+            if variable_type_cpp is not None and not _is_cheap_to_copy(
+                variable_type_annotation
+            ):
+                variable_type_cpp = Stripped(f"const {variable_type_cpp}&")
+
+            iteration, error = self._transform_and_value_if_necessary(
+                node.generator.iteration
+            )
+            if error is not None:
+                errors.append(error)
+
+            if variable_type_cpp is not None and iteration is not None:
+                if "\n" not in iteration:
+                    header = (
+                        f"for ({variable_type_cpp} {variable_name_cpp} : {iteration})"
+                    )
+                else:
+                    header = f"""\
+for (
+{I}{variable_type_cpp} {variable_name_cpp} :
+{I}{indent_but_first_line(iteration, I)}
+)"""
+
+        elif isinstance(node.generator, parse_tree.ForRange):
+            variable_type_cpp, error_msg = generate_type(
+                type_annotation=variable_type_annotation,
+                types_namespace=self._types_namespace,
+            )
+            if error_msg is not None:
+                errors.append(Error(node.generator.variable.original_node, error_msg))
+
+            start, error = self._transform_and_value_if_necessary(node.generator.start)
+            if error is not None:
+                errors.append(error)
+
+            end, error = self._transform_and_value_if_necessary(node.generator.end)
+            if error is not None:
+                errors.append(error)
+
+            if variable_type_cpp is not None and start is not None and end is not None:
+                if "\n" not in start and "\n" not in end:
+                    header = (
+                        f"for ({variable_type_cpp} {variable_name_cpp} = {start}; "
+                        f"{variable_name_cpp} < {end}; ++{variable_name_cpp})"
+                    )
+                else:
+                    header = f"""\
+for (
+{I}{variable_type_cpp} {variable_name_cpp} = {indent_but_first_line(start, I)};
+{I}{variable_name_cpp} < {indent_but_first_line(end, I)};
+{I}++{variable_name_cpp}
+)"""
+
+        else:
+            assert_never(node.generator)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the for-loop", errors
+            )
+
+        assert header is not None
+
+        # NOTE (mristin):
+        # The loop variable is scoped to the loop, so we define it in its own
+        # environment enclosing the body.
+        parent_environment = self._environment
+        loop_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        loop_environment.set(
+            identifier=variable_name, type_annotation=variable_type_annotation
+        )
+        self._variable_name_set.add(variable_name)
+
+        self._environment = loop_environment
+        try:
+            stmts_and_defines, error = self._transform_branch(node.body)
+        finally:
+            self._environment = parent_environment
+
+        if error is not None:
+            return None, Error(
+                node.original_node, "Failed to transpile the for-loop", [error]
+            )
+
+        assert stmts_and_defines is not None
+        stmts, _ = stmts_and_defines
+
+        return Stripped(f"{header} {Transpiler._block(stmts)}"), None
 
 
 # noinspection PyProtectedMember,PyProtectedMember

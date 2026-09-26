@@ -1,0 +1,57 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="https://dummy.com" elementFormDefault="qualified" targetNamespace="https://dummy.com">
+  <xs:group name="item">
+    <xs:sequence>
+      <xs:element name="texts">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="v" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="something">
+    <xs:sequence>
+      <xs:element name="kind" type="kind_t"/>
+      <xs:element name="numbers">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="v" type="xs:long" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="texts">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="v" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="items">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="item" type="item_t" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:simpleType name="kind_t">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="alpha"/>
+      <xs:enumeration value="beta"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="item_t">
+    <xs:sequence>
+      <xs:group ref="item"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="something_t">
+    <xs:sequence>
+      <xs:group ref="something"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="something" type="something_t"/>
+</xs:schema>

@@ -1116,11 +1116,11 @@ return (
         self, statements: Sequence[parse_tree.StatementUnion]
     ) -> Tuple[Optional[Tuple[List[Stripped], bool]], Optional[Error]]:
         """
-        Transpile the ``statements`` of a switch branch in a new scope.
+        Transpile the ``statements`` of a block in a new scope.
 
-        Python has only function-level scopes, but we keep the environment in line
-        with the other targets where the variables of a branch are not visible
-        after it.
+        The block is a switch branch or the body of a for-loop. Python has only
+        function-level scopes, but we keep the environment in line with the other
+        targets where the variables of a block are not visible after it.
 
         The type inference refused all the collisions of variable names where
         the function-level scope and the block scopes of the other targets
@@ -1154,7 +1154,7 @@ return (
 
         if len(errors) > 0:
             return None, Error(
-                None, "Failed to transpile the statements of a switch branch", errors
+                None, "Failed to transpile the statements of a block", errors
             )
 
         return (stmts, len(scope_environment.mapping) > 0), None
@@ -1237,6 +1237,98 @@ return (
             return None, Error(
                 node.original_node, "Failed to transpile the switch", errors
             )
+
+        return Stripped(writer.getvalue()), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_for(
+        self, node: parse_tree.For
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+
+        source = None  # type: Optional[Stripped]
+        if isinstance(node.generator, parse_tree.ForEach):
+            source, error = self.transform(node.generator.iteration)
+            if error is not None:
+                errors.append(error)
+
+        elif isinstance(node.generator, parse_tree.ForRange):
+            start, error = self.transform(node.generator.start)
+            if error is not None:
+                errors.append(error)
+
+            end, error = self.transform(node.generator.end)
+            if error is not None:
+                errors.append(error)
+
+            if start is not None and end is not None:
+                if "\n" not in start and "\n" not in end:
+                    source = Stripped(f"range({start}, {end})")
+                else:
+                    source = Stripped(
+                        f"""\
+range(
+{I}{indent_but_first_line(start, I)},
+{I}{indent_but_first_line(end, I)}
+)"""
+                    )
+
+        else:
+            assert_never(node.generator)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the for-loop", errors
+            )
+
+        assert source is not None
+
+        # NOTE (mristin):
+        # The loop variable is scoped to the loop in the other targets, so we
+        # define it in its own environment enclosing the body. The type inference
+        # refused all the usages of the loop variable after the loop.
+        variable_name = node.generator.variable.identifier
+
+        parent_environment = self._environment
+        loop_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        loop_environment.set(
+            identifier=variable_name,
+            type_annotation=self.type_map[node.generator.variable],
+        )
+        self._variable_name_set.add(variable_name)
+
+        self._environment = loop_environment
+        try:
+            variable, error = self.transform(node.generator.variable)
+            if error is not None:
+                errors.append(error)
+
+            stmts_and_defines, error = self._transform_branch(node.body)
+            if error is not None:
+                errors.append(error)
+        finally:
+            self._environment = parent_environment
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the for-loop", errors
+            )
+
+        assert variable is not None
+        assert stmts_and_defines is not None
+        stmts, _ = stmts_and_defines
+
+        writer = io.StringIO()
+        writer.write(f"for {variable} in {source}:")
+
+        if len(stmts) == 0:
+            writer.write(f"\n{I}pass")
+        else:
+            for stmt in stmts:
+                writer.write("\n")
+                writer.write(textwrap.indent(stmt, I))
 
         return Stripped(writer.getvalue()), None
 

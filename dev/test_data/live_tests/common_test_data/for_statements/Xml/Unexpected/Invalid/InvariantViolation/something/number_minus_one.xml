@@ -1,0 +1,1 @@
+<something xmlns="https://dummy.com"><kind>alpha</kind><numbers><v>3</v><v>-1</v></numbers><texts><v>hello</v><v>world</v></texts><items><item><texts><v>a</v><v>b</v></texts></item><item><texts /></item></items></something>
