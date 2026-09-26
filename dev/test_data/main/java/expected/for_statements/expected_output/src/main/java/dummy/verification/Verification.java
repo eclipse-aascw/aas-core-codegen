@@ -36,7 +36,7 @@ public class Verification {
   public static Boolean firstTextIsNotEmpty(
     List<String> texts) {
     for (var text : texts) {
-        return text.length() > 0;
+        return StringHelpers.len(text) > 0;
     }
     return true;
   }

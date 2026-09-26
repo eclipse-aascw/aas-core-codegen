@@ -338,7 +338,7 @@ export function *verifyPositivefloat(
 export function *verifyNonemptystring(
   that: string
 ): IterableIterator<VerificationError> {
-  if (!(that.length > 0)) {
+  if (!(AasCommon.lenStr(that) > 0)) {
     yield new VerificationError(
       "At least one character"
     )

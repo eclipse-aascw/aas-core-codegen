@@ -71,7 +71,7 @@ func LeavesInTreeAreNotEmpty(
 	element aastypes.IElement,
 ) bool {
 	return (!aastypes.IsLeaf(element) ||
-		(len(element.(aastypes.ILeaf).Text()) > 0)) &&
+		(aascommon.LenStr(element.(aastypes.ILeaf).Text()) > 0)) &&
 		(!aastypes.IsContainer(element) ||
 		aascommon.All(
 			func(child aastypes.IElement) bool {
@@ -89,8 +89,8 @@ func IsShortLeafOrNoLeaf(
 	element aastypes.IElement,
 ) bool {
 	return (!aastypes.IsLeaf(element)) ||
-		len(element.(aastypes.ILeaf).Text()) == 0 ||
-		len(element.(aastypes.ILeaf).Text()) < 16
+		aascommon.LenStr(element.(aastypes.ILeaf).Text()) == 0 ||
+		aascommon.LenStr(element.(aastypes.ILeaf).Text()) < 16
 }
 
 // Check that element is a container.
@@ -454,7 +454,7 @@ func VerifySomething(
 	if !(
 		!((that.OptionalElement() != nil) &&
 		aastypes.IsLeaf(that.OptionalElement())) ||
-		(len(that.OptionalElement().(aastypes.ILeaf).Text()) > 0)) {
+		(aascommon.LenStr(that.OptionalElement().(aastypes.ILeaf).Text()) > 0)) {
 		abort = onError(
 			newVerificationError(
 				"The optional element, if a leaf, must have a non-empty text.",),

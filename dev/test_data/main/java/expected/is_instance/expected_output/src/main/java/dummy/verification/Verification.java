@@ -58,7 +58,7 @@ public class Verification {
     IElement element) {
     return (
         !(element instanceof ILeaf)
-        || (((ILeaf) element).getText().length() > 0)
+        || (StringHelpers.len(((ILeaf) element).getText()) > 0)
     )
     && (
         !(element instanceof IContainer)
@@ -78,8 +78,8 @@ public class Verification {
   public static Boolean isShortLeafOrNoLeaf(
     IElement element) {
     return (!(element instanceof ILeaf))
-    || ((ILeaf) element).getText().length() == 0
-    || ((ILeaf) element).getText().length() < 16;
+    || StringHelpers.len(((ILeaf) element).getText()) == 0
+    || StringHelpers.len(((ILeaf) element).getText()) < 16;
   }
 
   /**
@@ -322,7 +322,7 @@ public class Verification {
             (that.getOptionalElement().isPresent())
             && that.getOptionalElement().get() instanceof ILeaf
         )
-        || (((ILeaf) that.getOptionalElement().get()).getText().length() > 0))) {
+        || (StringHelpers.len(((ILeaf) that.getOptionalElement().get()).getText()) > 0))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +

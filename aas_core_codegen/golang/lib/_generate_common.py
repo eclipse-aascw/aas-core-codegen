@@ -56,6 +56,12 @@ package common"""
             f"""\
 import (
 {I}"strings"
+{I}"unicode/utf8"
+)"""
+            if intermediate.uses_len_slicing_or_find(symbol_table)
+            else f"""\
+import (
+{I}"strings"
 )"""
         ),
         Stripped(
@@ -168,12 +174,19 @@ func NewString(value string) *string {{
     )
 
     # NOTE (mristin):
-    # The native slicing panics on the positions out of range, does not count
-    # the negative ones from the end, and ``strings.Index`` has no start. We need
-    # helpers which follow the Python implementation of slicing and
-    # ``str.find``. The helpers are generated only for a meta-model which slices
-    # strings or calls ``find`` on them.
-    if intermediate.uses_string_slicing_or_find(symbol_table):
+    # The Go strings count the UTF-8 bytes, while Python counts the characters
+    # (code points). Moreover, the native slicing panics on the positions out of
+    # range, does not count the negative ones from the end, and ``strings.Index``
+    # has no start. We need helpers which follow the Python implementation of
+    # ``len``, slicing and ``str.find``. The helpers are generated only for
+    # a meta-model which might take ``len`` of strings, slice them or call ``find``
+    # on them.
+    #
+    # We walk over the byte offsets of the characters instead of converting
+    # the strings to ``[]rune``, so that we neither copy the strings nor replace
+    # the invalid UTF-8 bytes. Each invalid byte counts as a character of its own,
+    # as in ``utf8.RuneCountInString`` and in the ``range`` loop over a string.
+    if intermediate.uses_len_slicing_or_find(symbol_table):
         blocks.extend(
             [
                 Stripped(
@@ -199,21 +212,51 @@ func resolvePosition(position int64, length int) int {{
                 ),
                 Stripped(
                     f"""\
+// Compute the byte offset of the character at `position` in `text`.
+//
+// The `position` counts the characters (code points), and must not exceed
+// the number of characters in `text`.
+func byteOffsetOf(text string, position int) int {{
+{I}count := 0
+{I}for offset := range text {{
+{II}if count == position {{
+{III}return offset
+{II}}}
+{II}count++
+{I}}}
+{I}return len(text)
+}}"""
+                ),
+                Stripped(
+                    f"""\
+// Count the characters (code points) of `text`.
+//
+// We follow the Python implementation of `len`, since Python is the language of
+// the meta-model specifications. Hence, we count the characters instead of
+// the UTF-8 bytes as the native `len` does.
+func LenStr(text string) int {{
+{I}return utf8.RuneCountInString(text)
+}}"""
+                ),
+                Stripped(
+                    f"""\
 // Slice `text` from `start` up to `end`, exclusive.
 //
 // We follow the Python implementation of slicing, since Python is
-// the language of the meta-model specifications. Hence, a negative position
-// counts from the end, the positions out of range are clamped to the string,
-// and the slice is empty if `start` is not before `end`.
+// the language of the meta-model specifications. Hence, the positions count
+// the characters (code points), a negative position counts from the end,
+// the positions out of range are clamped to the string, and the slice is empty
+// if `start` is not before `end`.
 func SliceStr(text string, start int64, end int64) string {{
-{I}theStart := resolvePosition(start, len(text))
-{I}theEnd := resolvePosition(end, len(text))
+{I}length := LenStr(text)
+{I}theStart := resolvePosition(start, length)
+{I}theEnd := resolvePosition(end, length)
 
 {I}if theStart >= theEnd {{
 {II}return ""
 {I}}}
 
-{I}return text[theStart:theEnd]
+{I}return text[byteOffsetOf(text, theStart):byteOffsetOf(text, theEnd)]
 }}"""
                 ),
                 Stripped(
@@ -222,7 +265,8 @@ func SliceStr(text string, start int64, end int64) string {{
 //
 // See [SliceStr] for the semantics.
 func SliceStrFrom(text string, start int64) string {{
-{I}return text[resolvePosition(start, len(text)):]
+{I}theStart := resolvePosition(start, LenStr(text))
+{I}return text[byteOffsetOf(text, theStart):]
 }}"""
                 ),
                 Stripped(
@@ -232,26 +276,29 @@ func SliceStrFrom(text string, start int64) string {{
 // Return the position of `sub` in `text`, or -1 if `sub` could not be found.
 //
 // We follow the Python implementation of `str.find`, since Python is
-// the language of the meta-model specifications. Hence, a negative `start`
-// counts from the end, and a `start` beyond the end of `text` gives -1.
+// the language of the meta-model specifications. Hence, the positions count
+// the characters (code points), a negative `start` counts from the end, and
+// a `start` beyond the end of `text` gives -1.
 func FindStr(text string, sub string, start int64) int64 {{
+{I}length := int64(LenStr(text))
 {I}if start < 0 {{
-{II}start += int64(len(text))
+{II}start += length
 {II}if start < 0 {{
 {III}start = 0
 {II}}}
 {I}}}
 
-{I}if start > int64(len(text)) {{
+{I}if start > length {{
 {II}return -1
 {I}}}
 
-{I}index := strings.Index(text[start:], sub)
+{I}startOffset := byteOffsetOf(text, int(start))
+{I}index := strings.Index(text[startOffset:], sub)
 {I}if index == -1 {{
 {II}return -1
 {I}}}
 
-{I}return start + int64(index)
+{I}return start + int64(LenStr(text[startOffset:startOffset+index]))
 }}"""
                 ),
             ]

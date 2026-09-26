@@ -81,7 +81,7 @@ bool StructuralFirst_0(
   const types::IStructuralFirst* that = (
     static_cast<const types::IStructuralFirst*>(value)
   );
-  return that->unique_to_first().size() > 0;
+  return common::LenStr(that->unique_to_first()) > 0;
 }
 
 bool StructuralSecond_0(
@@ -90,7 +90,7 @@ bool StructuralSecond_0(
   const types::IStructuralSecond* that = (
     static_cast<const types::IStructuralSecond*>(value)
   );
-  return that->unique_to_second().size() > 0;
+  return common::LenStr(that->unique_to_second()) > 0;
 }
 
 bool MixedAbstractDescendantOne_0(
@@ -99,7 +99,7 @@ bool MixedAbstractDescendantOne_0(
   const types::IMixedAbstractDescendantOne* that = (
     static_cast<const types::IMixedAbstractDescendantOne*>(value)
   );
-  return that->unique_to_abstract_descendant_one().size() > 0;
+  return common::LenStr(that->unique_to_abstract_descendant_one()) > 0;
 }
 
 bool MixedAbstractDescendantTwo_0(
@@ -108,7 +108,7 @@ bool MixedAbstractDescendantTwo_0(
   const types::IMixedAbstractDescendantTwo* that = (
     static_cast<const types::IMixedAbstractDescendantTwo*>(value)
   );
-  return that->unique_to_abstract_descendant_two().size() > 0;
+  return common::LenStr(that->unique_to_abstract_descendant_two()) > 0;
 }
 
 bool MixedConcreteWithDescendants_0(
@@ -117,7 +117,7 @@ bool MixedConcreteWithDescendants_0(
   const types::IMixedConcreteWithDescendants* that = (
     static_cast<const types::IMixedConcreteWithDescendants*>(value)
   );
-  return that->some_base_property().size() > 0;
+  return common::LenStr(that->some_base_property()) > 0;
 }
 
 bool MixedConcreteWithDescendantsChild_0(
@@ -126,7 +126,7 @@ bool MixedConcreteWithDescendantsChild_0(
   const types::IMixedConcreteWithDescendantsChild* that = (
     static_cast<const types::IMixedConcreteWithDescendantsChild*>(value)
   );
-  return that->some_base_property().size() > 0;
+  return common::LenStr(that->some_base_property()) > 0;
 }
 
 bool MixedConcreteWithDescendantsChild_1(
@@ -135,7 +135,7 @@ bool MixedConcreteWithDescendantsChild_1(
   const types::IMixedConcreteWithDescendantsChild* that = (
     static_cast<const types::IMixedConcreteWithDescendantsChild*>(value)
   );
-  return that->some_child_property().size() > 0;
+  return common::LenStr(that->some_child_property()) > 0;
 }
 
 bool MixedConcreteLeaf_0(
@@ -144,7 +144,7 @@ bool MixedConcreteLeaf_0(
   const types::IMixedConcreteLeaf* that = (
     static_cast<const types::IMixedConcreteLeaf*>(value)
   );
-  return that->unique_to_concrete_leaf().size() > 0;
+  return common::LenStr(that->unique_to_concrete_leaf()) > 0;
 }
 
 bool ModelTypedFirst_0(
@@ -153,7 +153,7 @@ bool ModelTypedFirst_0(
   const types::IModelTypedFirst* that = (
     static_cast<const types::IModelTypedFirst*>(value)
   );
-  return that->some_property().size() > 0;
+  return common::LenStr(that->some_property()) > 0;
 }
 
 bool ModelTypedSecond_0(
@@ -162,7 +162,7 @@ bool ModelTypedSecond_0(
   const types::IModelTypedSecond* that = (
     static_cast<const types::IModelTypedSecond*>(value)
   );
-  return that->some_property().size() > 0;
+  return common::LenStr(that->some_property()) > 0;
 }
 
 /**

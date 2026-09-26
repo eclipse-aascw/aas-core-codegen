@@ -14,19 +14,32 @@ from aas_core_codegen.java.common import (
 
 def _generate_string_helpers(package: java_common.PackageIdentifier) -> Stripped:
     """
-    Generate the helpers for slicing strings and for ``find`` with a start.
+    Generate the helpers for ``len``, slicing strings and ``find``.
 
     The helpers follow the Python implementation, since Python is the language of
-    the meta-model specifications. The native ``String.substring`` throws on
-    the positions out of range, and neither ``substring`` nor ``indexOf`` count
+    the meta-model specifications. Hence, the lengths and the positions count
+    the characters (code points), while the Java strings count the UTF-16 code
+    units, where a character beyond the Basic Multilingual Plane takes two
+    of them (a surrogate pair). Moreover, the native ``String.substring`` throws
+    on the positions out of range, and neither ``substring`` nor ``indexOf`` count
     the negative positions from the end. We also accept the positions as
     ``long``'s, since our integers are ``long``'s in Java.
     """
+    # NOTE (mristin):
+    # The native ``codePointCount`` and ``offsetByCodePoints`` count a lone
+    # surrogate as a character of its own, as Python does. We do not check whether
+    # ``indexOf`` matches in the middle of a surrogate pair, as that could only
+    # happen if the searched text started or ended with a lone surrogate.
     code = Stripped(
         f"""\
 /**
  * Provide string operations which follow the Python implementation, since
  * Python is the language of the meta-model specifications.
+ *
+ * <p>The lengths and the positions count the characters (code points), and not
+ * the UTF-16 code units of the Java strings. Hence, a character beyond the Basic
+ * Multilingual Plane counts as one, though it takes two UTF-16 code units
+ * (a surrogate pair).
  */
 public final class StringHelpers {{
 {I}private StringHelpers() {{
@@ -53,12 +66,27 @@ public final class StringHelpers {{
 {I}}}
 
 {I}/**
+{I} * Count the characters (code points) of {{@code text}}.
+{I} *
+{I} * <p>We follow the Python implementation of {{@code len}}, since Python is
+{I} * the language of the meta-model specifications. Hence, a character beyond
+{I} * the Basic Multilingual Plane counts as one, unlike in {{@code text.length()}}.
+{I} *
+{I} * @param text to be measured
+{I} * @return the number of characters
+{I} */
+{I}public static int len(String text) {{
+{II}return text.codePointCount(0, text.length());
+{I}}}
+
+{I}/**
 {I} * Slice {{@code text}} from {{@code start}} up to {{@code end}}, exclusive.
 {I} *
 {I} * <p>We follow the Python implementation of slicing, since Python is
-{I} * the language of the meta-model specifications. Hence, a negative position
-{I} * counts from the end, the positions out of range are clamped to the string,
-{I} * and the slice is empty if {{@code start}} is not before {{@code end}}.
+{I} * the language of the meta-model specifications. Hence, the positions count
+{I} * the characters (code points), a negative position counts from the end,
+{I} * the positions out of range are clamped to the string, and the slice is empty
+{I} * if {{@code start}} is not before {{@code end}}.
 {I} *
 {I} * @param text to be sliced
 {I} * @param start of the slice, inclusive
@@ -66,14 +94,17 @@ public final class StringHelpers {{
 {I} * @return the slice
 {I} */
 {I}public static String slice(String text, long start, long end) {{
-{II}final int theStart = resolvePosition(start, text.length());
-{II}final int theEnd = resolvePosition(end, text.length());
+{II}final int length = len(text);
+{II}final int theStart = resolvePosition(start, length);
+{II}final int theEnd = resolvePosition(end, length);
 
 {II}if (theStart >= theEnd) {{
 {III}return "";
 {II}}}
 
-{II}return text.substring(theStart, theEnd);
+{II}final int startOffset = text.offsetByCodePoints(0, theStart);
+{II}final int endOffset = text.offsetByCodePoints(startOffset, theEnd - theStart);
+{II}return text.substring(startOffset, endOffset);
 {I}}}
 
 {I}/**
@@ -86,16 +117,16 @@ public final class StringHelpers {{
 {I} * @return the slice
 {I} */
 {I}public static String slice(String text, long start) {{
-{II}return slice(text, start, text.length());
+{II}return slice(text, start, Long.MAX_VALUE);
 {I}}}
 
 {I}/**
 {I} * Find the first {{@code sub}} in {{@code text}} from {{@code start}} on.
 {I} *
 {I} * <p>We follow the Python implementation of {{@code str.find}}, since Python
-{I} * is the language of the meta-model specifications. Hence, a negative
-{I} * {{@code start}} counts from the end, and a {{@code start}} beyond the end of
-{I} * {{@code text}} gives -1.
+{I} * is the language of the meta-model specifications. Hence, the positions count
+{I} * the characters (code points), a negative {{@code start}} counts from the end,
+{I} * and a {{@code start}} beyond the end of {{@code text}} gives -1.
 {I} *
 {I} * @param text to be searched in
 {I} * @param sub to be searched for
@@ -103,12 +134,32 @@ public final class StringHelpers {{
 {I} * @return the position of {{@code sub}} in {{@code text}}, or -1 if not found
 {I} */
 {I}public static long find(String text, String sub, long start) {{
-{II}final long theStart = start < 0 ? Math.max(start + text.length(), 0) : start;
-{II}if (theStart > text.length()) {{
+{II}final int length = len(text);
+{II}final long theStart = start < 0 ? Math.max(start + length, 0) : start;
+{II}if (theStart > length) {{
 {III}return -1;
 {II}}}
 
-{II}return text.indexOf(sub, (int) theStart);
+{II}final int startOffset = text.offsetByCodePoints(0, (int) theStart);
+{II}final int offset = text.indexOf(sub, startOffset);
+{II}if (offset == -1) {{
+{III}return -1;
+{II}}}
+
+{II}return theStart + text.codePointCount(startOffset, offset);
+{I}}}
+
+{I}/**
+{I} * Find the first {{@code sub}} in {{@code text}}.
+{I} *
+{I} * <p>See {{@link #find(String, String, long)}} for the semantics.
+{I} *
+{I} * @param text to be searched in
+{I} * @param sub to be searched for
+{I} * @return the position of {{@code sub}} in {{@code text}}, or -1 if not found
+{I} */
+{I}public static long find(String text, String sub) {{
+{II}return find(text, sub, 0);
 {I}}}
 }}"""
     )
@@ -134,12 +185,12 @@ def generate(
     actually uses them, since the ``Tuple1`` .. ``Tuple8`` records are generic
     infrastructure, and not meta-model-derived types.
 
-    The string helpers are generated only if the meta-model slices strings or
-    calls ``find`` on them.
+    The string helpers are generated only if the meta-model might take ``len`` of
+    strings, slice them or call ``find`` on them.
     """
     files = []  # type: List[java_common.JavaFile]
 
-    if intermediate.uses_string_slicing_or_find(symbol_table):
+    if intermediate.uses_len_slicing_or_find(symbol_table):
         files.append(
             java_common.JavaFile(
                 "StringHelpers.java", f"{_generate_string_helpers(package)}\n"

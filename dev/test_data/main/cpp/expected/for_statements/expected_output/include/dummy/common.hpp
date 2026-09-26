@@ -47,6 +47,11 @@
 #pragma warning(pop)
 #endif
 
+#pragma warning(push, 0)
+#include <cstdint>
+#include <cwchar>
+#pragma warning(pop)
+
 namespace dummy {
 
 /**
@@ -10082,6 +10087,86 @@ std::wstring Utf8ToWstring(
  * \return wide string
  */
 std::wstring Utf8ToWstring(const std::string& utf8_text);
+
+/**
+ * Count the characters (code points) of \p text.
+ *
+ * We follow the Python implementation of `len`, since Python is the language of
+ * the meta-model specifications. Hence, a character beyond the Basic
+ * Multilingual Plane counts as one, unlike in `text.size()` on the platforms
+ * where `wchar_t` is a UTF-16 code unit, such as Windows.
+ *
+ * \param text to be measured
+ * \return the number of characters
+ */
+size_t LenStr(const std::wstring& text);
+
+/**
+ * Slice \p text from \p start up to \p end, exclusive.
+ *
+ * We follow the Python implementation of slicing, since Python is the language
+ * of the meta-model specifications. Hence, the positions count the characters
+ * (code points), a negative position counts from the end, the positions out of
+ * range are clamped to the string, and the slice is empty if \p start is not
+ * before \p end.
+ *
+ * \param text to be sliced
+ * \param start of the slice, inclusive
+ * \param end of the slice, exclusive
+ * \return the slice
+ */
+std::wstring SliceStr(
+  const std::wstring& text,
+  int64_t start,
+  int64_t end
+);
+
+/**
+ * Slice \p text from \p start up to its end.
+ *
+ * See the other overload for the semantics.
+ *
+ * \param text to be sliced
+ * \param start of the slice, inclusive
+ * \return the slice
+ */
+std::wstring SliceStr(
+  const std::wstring& text,
+  int64_t start
+);
+
+/**
+ * Find the first \p sub in \p text.
+ *
+ * See the other overload for the semantics.
+ *
+ * \param text to be searched in
+ * \param sub to be searched for
+ * \return the position of \p sub in \p text, or -1 if not found
+ */
+int64_t FindStr(
+  const std::wstring& text,
+  const std::wstring& sub
+);
+
+/**
+ * Find the first \p sub in \p text from \p start on.
+ *
+ * We follow the Python implementation of `str.find`, since Python is
+ * the language of the meta-model specifications. Hence, the positions count
+ * the characters (code points), a negative \p start counts from the end, and
+ * a \p start beyond the end of \p text gives -1.
+ *
+ * \param text to be searched in
+ * \param sub to be searched for
+ * \param start of the search
+ * \return the position of \p sub in \p text, or -1 if not found
+ */
+int64_t FindStr(
+  const std::wstring& text,
+  const std::wstring& sub,
+  int64_t start
+);
 
 }  // namespace common
 /**@}*/

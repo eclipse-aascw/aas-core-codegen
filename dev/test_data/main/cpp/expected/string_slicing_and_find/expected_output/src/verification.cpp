@@ -47,7 +47,9 @@ bool DateBeforeTimeIsLongEnough(
     case -1:
       return true;
   }
-  return common::SliceStr(text, 0, position).size() == 10;
+  return (
+    common::LenStr(common::SliceStr(text, 0, position)) == 10
+  );
 }
 
 bool TimeAfterDateIsLongEnough(
@@ -58,7 +60,9 @@ bool TimeAfterDateIsLongEnough(
     case -1:
       return true;
   }
-  return common::SliceStr(text, position + (1)).size() == 8;
+  return (
+    common::LenStr(common::SliceStr(text, position + (1))) == 8
+  );
 }
 
 bool MonthIsSeptember(
@@ -89,12 +93,12 @@ bool SecondsFollowColon(
   }
   return (
     (
-      text.size() < 10
+      common::LenStr(text) < 10
       || (
         (
           common::SliceStr(text, -3, -2) == L":"
           && common::FindStr(text, L":", -3) != -1
-          && common::SliceStr(text, 0, -9).size() > 0
+          && common::LenStr(common::SliceStr(text, 0, -9)) > 0
         )
       )
     )
@@ -121,7 +125,7 @@ bool NameStartsWithPrefix(
 ) {
   return (
     (
-      name.size() < 4
+      common::LenStr(name) < 4
       || common::SliceStr(name, 0, 4) == L"name"
     )
   );
@@ -132,7 +136,7 @@ bool NameHasNoSpaceAfterPrefix(
 ) {
   return (
     (
-      name.size() < 4
+      common::LenStr(name) < 4
       || common::FindStr(common::SliceStr(name, 4), L" ") == -1
     )
   );
@@ -175,7 +179,7 @@ bool NonEmptyString_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() > 0;
+  return common::LenStr(that) > 0;
 }
 
 bool Something_0(
@@ -184,7 +188,7 @@ bool Something_0(
   const types::ISomething* that = (
     static_cast<const types::ISomething*>(value)
   );
-  return !(that->text().size() >= 1)
+  return !(common::LenStr(that->text()) >= 1)
   || (common::SliceStr(that->text(), 0, 1) != L"X");
 }
 

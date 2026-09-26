@@ -71,7 +71,7 @@ bool Name_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() > 0;
+  return common::LenStr(that) > 0;
 }
 
 /**

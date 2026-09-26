@@ -1,8 +1,9 @@
 """
-Test the slicing of strings and ``find`` as used in the transpiled code.
+Test ``len``, the slicing of strings and ``find`` as used in the transpiled code.
 
 The transpiled code follows the Python implementation, since Python is
-the language of the meta-model specifications. The other SDKs test against
+the language of the meta-model specifications. Hence, the lengths and
+the positions count the characters (code points). The other SDKs test against
 the very same cases.
 """
 
@@ -17,7 +18,37 @@ the very same cases.
 import unittest
 
 
-class Test_slicing_and_find(unittest.TestCase):
+class Test_len_slicing_and_find(unittest.TestCase):
+    def test_len_empty_text(self) -> None:
+        self.assertEqual(
+            0,
+            len('')
+        )
+
+    def test_len_ascii_text(self) -> None:
+        self.assertEqual(
+            3,
+            len('abc')
+        )
+
+    def test_len_character_of_two_utf_8_bytes(self) -> None:
+        self.assertEqual(
+            2,
+            len('é-')
+        )
+
+    def test_len_character_beyond_the_basic_multilingual_plane(self) -> None:
+        self.assertEqual(
+            2,
+            len('😀-')
+        )
+
+    def test_len_mixed_characters(self) -> None:
+        self.assertEqual(
+            5,
+            len('aé😀b😀')
+        )
+
     def test_slice_start_and_end(self) -> None:
         self.assertEqual(
             'bc',
@@ -114,6 +145,36 @@ class Test_slicing_and_find(unittest.TestCase):
             ''[:5]
         )
 
+    def test_slice_after_a_character_of_two_utf_8_bytes(self) -> None:
+        self.assertEqual(
+            '-x',
+            'é-x'[1:]
+        )
+
+    def test_slice_character_of_two_utf_8_bytes(self) -> None:
+        self.assertEqual(
+            'é',
+            'aéb'[1:2]
+        )
+
+    def test_slice_character_beyond_the_basic_multilingual_plane(self) -> None:
+        self.assertEqual(
+            '😀',
+            'a😀b'[1:2]
+        )
+
+    def test_slice_after_a_character_beyond_the_basic_multilingual_plane(self) -> None:
+        self.assertEqual(
+            '-x',
+            '😀-x'[1:]
+        )
+
+    def test_slice_negative_start_on_characters_beyond_ascii(self) -> None:
+        self.assertEqual(
+            '😀b',
+            'aé😀b😀'[-3:-1]
+        )
+
     def test_find_found(self) -> None:
         self.assertEqual(
             1,
@@ -202,6 +263,42 @@ class Test_slicing_and_find(unittest.TestCase):
         self.assertEqual(
             -1,
             ''.find('x')
+        )
+
+    def test_find_after_a_character_of_two_utf_8_bytes(self) -> None:
+        self.assertEqual(
+            1,
+            'é-'.find('-')
+        )
+
+    def test_find_after_a_character_beyond_the_basic_multilingual_plane(self) -> None:
+        self.assertEqual(
+            1,
+            '😀-'.find('-')
+        )
+
+    def test_find_character_beyond_the_basic_multilingual_plane(self) -> None:
+        self.assertEqual(
+            1,
+            'a😀b'.find('😀')
+        )
+
+    def test_find_start_after_a_character_beyond_ascii(self) -> None:
+        self.assertEqual(
+            3,
+            '😀a😀a'.find('a', 2)
+        )
+
+    def test_find_negative_start_on_characters_beyond_ascii(self) -> None:
+        self.assertEqual(
+            2,
+            '😀a😀a'.find('😀', -2)
+        )
+
+    def test_find_start_beyond_the_end_of_characters_beyond_ascii(self) -> None:
+        self.assertEqual(
+            -1,
+            'é😀'.find('', 3)
         )
 
 

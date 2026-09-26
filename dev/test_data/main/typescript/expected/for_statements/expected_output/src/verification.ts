@@ -196,7 +196,7 @@ export function firstTextIsNotEmpty(
   texts: Array<string>
 ): boolean {
   for (const text of texts) {
-    return text.length > 0;
+    return AasCommon.lenStr(text) > 0;
   }
   return true;
 }

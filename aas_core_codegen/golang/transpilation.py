@@ -559,9 +559,10 @@ len(
         assert collection is not None
 
         # NOTE (mristin):
-        # We do not use the native slicing as it panics on the positions out of
-        # range, and does not count the negative ones from the end, unlike Python.
-        # See ``SliceStr`` in the generated common package.
+        # We do not use the native slicing as it counts the UTF-8 bytes instead of
+        # the characters, panics on the positions out of range, and does not count
+        # the negative ones from the end, unlike Python. See ``SliceStr`` in
+        # the generated common package.
         start_int64 = (
             self._as_int64_position(node.start, start)
             if node.start is not None and start is not None
@@ -841,17 +842,15 @@ aascommon.MapContains(
             member_type, intermediate_type_inference.BuiltinMethodTypeAnnotation
         ):
             if member_type.method is intermediate_type_inference.STR_FIND:
-                if len(args) == 1:
-                    return (
-                        Stripped(f"int64(strings.Index({instance}, {args[0]}))"),
-                        None,
-                    )
-
                 # NOTE (mristin):
-                # The ``strings.Index`` has no start, so we use a helper which
-                # follows the Python implementation of ``str.find``. See
-                # ``FindStr`` in the generated common package.
-                start = self._as_int64_position(node.args[1], args[1])
+                # We do not use the native ``strings.Index`` as it counts the UTF-8
+                # bytes instead of the characters, and has no start, unlike Python.
+                # See ``FindStr`` in the generated common package.
+                start = (
+                    self._as_int64_position(node.args[1], args[1])
+                    if len(args) == 2
+                    else Stripped("0")
+                )
                 return (
                     Stripped(f"aascommon.FindStr({instance}, {args[0]}, {start})"),
                     None,
@@ -959,18 +958,34 @@ aascommon.MapContains(
                     f"this should have been caught before."
                 )
 
+                len_function = "len"
+
+                # NOTE (mristin):
+                # We do not use the native ``len`` on strings as it counts
+                # the UTF-8 bytes instead of the characters, unlike Python. See
+                # ``LenStr`` in the generated common package.
+                if (
+                    intermediate_type_inference.try_primitive_type(
+                        intermediate_type_inference.beneath_optional(
+                            self.type_map[node.args[0]]
+                        )
+                    )
+                    is intermediate_type_inference.PrimitiveType.STR
+                ):
+                    len_function = "aascommon.LenStr"
+
                 if "\n" in args[0]:
                     return (
                         Stripped(
                             f"""\
-len(
+{len_function}(
 {I}{indent_but_first_line(args[0], I)},
 )"""
                         ),
                         None,
                     )
 
-                return Stripped(f"len({args[0]})"), None
+                return Stripped(f"{len_function}({args[0]})"), None
 
             else:
                 return None, Error(

@@ -1,11 +1,12 @@
 """
-Specify the slicing and ``str.find`` of the transpiled code by example.
+Specify ``len``, the slicing and ``str.find`` on strings in the transpiled code by example.
 
-The transpiled code follows the Python implementation of the slicing and of
-``str.find``, since Python is the language of the meta-model specifications.
-Hence, a negative position counts from the end of the string, the positions out
-of range are clamped to the string, and ``str.find`` gives -1 for a start
-beyond the end of the string.
+The transpiled code follows the Python implementation of ``len``, the slicing
+and ``str.find``, since Python is the language of the meta-model specifications.
+Hence, the lengths and the positions count the characters (code points), and not
+the UTF-16 code units or the UTF-8 bytes of the target, a negative position
+counts from the end of the string, the positions out of range are clamped to
+the string, and ``str.find`` gives -1 for a start beyond the end of the string.
 
 The targets generate unit tests from these cases so that the users can inspect
 the behavior of the generated code. We compute the expected results with Python
@@ -13,6 +14,29 @@ itself, so that the Python implementation serves as the reference.
 """
 
 from typing import Final, Optional, Sequence
+
+
+class LenCase:
+    """Represent a case of ``len(text)``."""
+
+    #: Short description of what the case demonstrates
+    description: Final[str]
+
+    #: Text to be measured
+    text: Final[str]
+
+    #: Expected length, as given by Python
+    expected: Final[int]
+
+    def __init__(self, description: str, text: str) -> None:
+        """Initialize with the given values, and compute the expected length."""
+        self.description = description
+        self.text = text
+        self.expected = len(text)
+
+    def python_expression(self) -> str:
+        """Render the case in Python notation, *e.g.*, for the names of the tests."""
+        return f"len({self.text!r})"
 
 
 class SliceCase:
@@ -90,6 +114,20 @@ class FindCase:
         return f"{self.text!r}.find({self.sub!r}, {self.start})"
 
 
+# NOTE (mristin):
+# We include the characters beyond ASCII since the targets represent the strings
+# differently. The character "é" takes one UTF-16 code unit, but two UTF-8 bytes,
+# while the character "😀" lies beyond the Basic Multilingual Plane, and takes two
+# UTF-16 code units (a surrogate pair) and four UTF-8 bytes.
+
+LEN_CASES: Sequence[LenCase] = (
+    LenCase("empty text", ""),
+    LenCase("ASCII text", "abc"),
+    LenCase("character of two UTF-8 bytes", "é-"),
+    LenCase("character beyond the Basic Multilingual Plane", "😀-"),
+    LenCase("mixed characters", "aé😀b😀"),
+)
+
 SLICE_CASES: Sequence[SliceCase] = (
     SliceCase("start and end", "abcde", 1, 3),
     SliceCase("no start", "abcde", None, 2),
@@ -107,6 +145,11 @@ SLICE_CASES: Sequence[SliceCase] = (
     SliceCase("empty text", "", 0, 0),
     SliceCase("negative start on empty text", "", -1, None),
     SliceCase("end beyond the end of empty text", "", None, 5),
+    SliceCase("after a character of two UTF-8 bytes", "é-x", 1, None),
+    SliceCase("character of two UTF-8 bytes", "aéb", 1, 2),
+    SliceCase("character beyond the Basic Multilingual Plane", "a😀b", 1, 2),
+    SliceCase("after a character beyond the Basic Multilingual Plane", "😀-x", 1, None),
+    SliceCase("negative start on characters beyond ASCII", "aé😀b😀", -3, -1),
 )
 
 FIND_CASES: Sequence[FindCase] = (
@@ -125,4 +168,10 @@ FIND_CASES: Sequence[FindCase] = (
     FindCase("empty sub in empty text", "", "", None),
     FindCase("empty sub beyond the end of empty text gives -1", "", "", 1),
     FindCase("not found in empty text", "", "x", None),
+    FindCase("after a character of two UTF-8 bytes", "é-", "-", None),
+    FindCase("after a character beyond the Basic Multilingual Plane", "😀-", "-", None),
+    FindCase("character beyond the Basic Multilingual Plane", "a😀b", "😀", None),
+    FindCase("start after a character beyond ASCII", "😀a😀a", "a", 2),
+    FindCase("negative start on characters beyond ASCII", "😀a😀a", "😀", -2),
+    FindCase("start beyond the end of characters beyond ASCII", "é😀", "", 3),
 )

@@ -201,7 +201,7 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.uniqueToFirst.length > 0)) {
+    if (!(AasCommon.lenStr(that.uniqueToFirst) > 0)) {
       yield new VerificationError(
         "The value must not be empty."
       )
@@ -213,7 +213,7 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.uniqueToSecond.length > 0)) {
+    if (!(AasCommon.lenStr(that.uniqueToSecond) > 0)) {
       yield new VerificationError(
         "The value must not be empty."
       )
@@ -225,7 +225,9 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.uniqueToAbstractDescendantOne.length > 0)) {
+    if (!(
+      AasCommon.lenStr(that.uniqueToAbstractDescendantOne) > 0
+    )) {
       yield new VerificationError(
         "The value must not be empty."
       )
@@ -237,7 +239,9 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.uniqueToAbstractDescendantTwo.length > 0)) {
+    if (!(
+      AasCommon.lenStr(that.uniqueToAbstractDescendantTwo) > 0
+    )) {
       yield new VerificationError(
         "The value must not be empty."
       )
@@ -249,7 +253,7 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.someBaseProperty.length > 0)) {
+    if (!(AasCommon.lenStr(that.someBaseProperty) > 0)) {
       yield new VerificationError(
         "The value must not be empty."
       )
@@ -261,13 +265,13 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.someBaseProperty.length > 0)) {
+    if (!(AasCommon.lenStr(that.someBaseProperty) > 0)) {
       yield new VerificationError(
         "The value must not be empty."
       )
     }
 
-    if (!(that.someChildProperty.length > 0)) {
+    if (!(AasCommon.lenStr(that.someChildProperty) > 0)) {
       yield new VerificationError(
         "The child value must not be empty."
       )
@@ -279,7 +283,7 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.uniqueToConcreteLeaf.length > 0)) {
+    if (!(AasCommon.lenStr(that.uniqueToConcreteLeaf) > 0)) {
       yield new VerificationError(
         "The value must not be empty."
       )
@@ -291,7 +295,7 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.someProperty.length > 0)) {
+    if (!(AasCommon.lenStr(that.someProperty) > 0)) {
       yield new VerificationError(
         "The value must not be empty."
       )
@@ -303,7 +307,7 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.someProperty.length > 0)) {
+    if (!(AasCommon.lenStr(that.someProperty) > 0)) {
       yield new VerificationError(
         "The value must not be empty."
       )

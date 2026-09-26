@@ -39,6 +39,172 @@ namespace dummy
 
         }  // internal static class EnumValueSet
 
+        /// <summary>
+        /// Provide string operations which follow the Python implementation, since
+        /// Python is the language of the meta-model specifications.
+        /// </summary>
+        /// <remarks>
+        /// The lengths and the positions count the characters (code points), and not
+        /// the UTF-16 code units of the C# strings. Hence, a character beyond the Basic
+        /// Multilingual Plane counts as one, though it takes two UTF-16 code units
+        /// (a surrogate pair).
+        /// </remarks>
+        public static class StringHelpers
+        {
+            /// <summary>
+            /// Check whether a surrogate pair starts at <paramref name="offset" />
+            /// in <paramref name="text" />.
+            /// </summary>
+            private static bool IsSurrogatePairAt(string text, int offset)
+            {
+                return (
+                    offset + 1 < text.Length
+                    && char.IsHighSurrogate(text[offset])
+                    && char.IsLowSurrogate(text[offset + 1])
+                );
+            }
+
+            /// <summary>
+            /// Count the characters of <paramref name="text" /> between the UTF-16
+            /// offsets <paramref name="startOffset" /> and <paramref name="endOffset" />.
+            /// </summary>
+            private static int CountCharacters(
+                string text,
+                int startOffset,
+                int endOffset
+            )
+            {
+                int count = 0;
+                int offset = startOffset;
+                while (offset < endOffset)
+                {
+                    offset += IsSurrogatePairAt(text, offset) ? 2 : 1;
+                    count++;
+                }
+
+                return count;
+            }
+
+            /// <summary>
+            /// Compute the UTF-16 offset of the character at <paramref name="position" />
+            /// in <paramref name="text" />.
+            /// </summary>
+            private static int OffsetOf(string text, int position)
+            {
+                int offset = 0;
+                for (int i = 0; i < position; i++)
+                {
+                    offset += IsSurrogatePairAt(text, offset) ? 2 : 1;
+                }
+
+                return offset;
+            }
+
+            /// <summary>
+            /// Resolve <paramref name="position" /> in a string of
+            /// <paramref name="length" /> as Python does in slicing.
+            /// </summary>
+            /// <remarks>
+            /// A negative position counts from the end, and the positions out of range
+            /// are clamped to the string.
+            /// </remarks>
+            private static int ResolvePosition(long position, int length)
+            {
+                if (position < 0)
+                {
+                    return (int)System.Math.Max(position + length, 0);
+                }
+
+                return (int)System.Math.Min(position, length);
+            }
+
+            /// <summary>
+            /// Count the characters (code points) of <paramref name="text" />.
+            /// </summary>
+            /// <remarks>
+            /// We follow the Python implementation of <c>len</c>, since Python is
+            /// the language of the meta-model specifications. Hence, a character beyond
+            /// the Basic Multilingual Plane counts as one, unlike in <c>text.Length</c>.
+            /// </remarks>
+            public static int Len(string text)
+            {
+                return CountCharacters(text, 0, text.Length);
+            }
+
+            /// <summary>
+            /// Slice <paramref name="text" /> from <paramref name="start" /> up to
+            /// <paramref name="end" />, exclusive.
+            /// </summary>
+            /// <remarks>
+            /// We follow the Python implementation of slicing, since Python is
+            /// the language of the meta-model specifications. Hence, the positions count
+            /// the characters (code points), a negative position counts from the end,
+            /// the positions out of range are clamped to the string, and the slice is
+            /// empty if <paramref name="start" /> is not before <paramref name="end" />.
+            /// If <paramref name="end" /> is not given, we slice up to the end of
+            /// <paramref name="text" />.
+            /// </remarks>
+            public static string Slice(string text, long start, long? end = null)
+            {
+                int length = Len(text);
+                int theStart = ResolvePosition(start, length);
+                int theEnd = end is null
+                    ? length
+                    : ResolvePosition(end.Value, length);
+
+                if (theStart >= theEnd)
+                {
+                    return "";
+                }
+
+                int startOffset = OffsetOf(text, theStart);
+                int endOffset = OffsetOf(text, theEnd);
+                return text.Substring(startOffset, endOffset - startOffset);
+            }
+
+            /// <summary>
+            /// Find the first <paramref name="sub" /> in <paramref name="text" /> from
+            /// <paramref name="start" /> on.
+            /// </summary>
+            /// <remarks>
+            /// We follow the Python implementation of <c>str.find</c>, since Python is
+            /// the language of the meta-model specifications. Hence, the positions count
+            /// the characters (code points), a negative <paramref name="start" /> counts
+            /// from the end, and a <paramref name="start" /> beyond the end of
+            /// <paramref name="text" /> gives -1. We compare the strings ordinally.
+            /// </remarks>
+            /// <returns>
+            /// The position of <paramref name="sub" /> in <paramref name="text" />,
+            /// or -1 if not found
+            /// </returns>
+            public static long Find(string text, string sub, long start = 0)
+            {
+                int length = Len(text);
+                long theStart = start < 0
+                    ? System.Math.Max(start + length, 0)
+                    : start;
+
+                if (theStart > length)
+                {
+                    return -1;
+                }
+
+                int startOffset = OffsetOf(text, (int)theStart);
+                int offset = text.IndexOf(
+                    sub,
+                    startOffset,
+                    System.StringComparison.Ordinal
+                );
+
+                if (offset == -1)
+                {
+                    return -1;
+                }
+
+                return theStart + CountCharacters(text, startOffset, offset);
+            }
+        }  // public static class StringHelpers
+
         [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
         private static readonly Verification.Transformer _transformer = (
             new Verification.Transformer());
@@ -51,7 +217,7 @@ namespace dummy
                 Aas.IStructuralFirst that
             )
             {
-                if (!(that.UniqueToFirst.Length > 0))
+                if (!(StringHelpers.Len(that.UniqueToFirst) > 0))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -64,7 +230,7 @@ namespace dummy
                 Aas.IStructuralSecond that
             )
             {
-                if (!(that.UniqueToSecond.Length > 0))
+                if (!(StringHelpers.Len(that.UniqueToSecond) > 0))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -77,7 +243,8 @@ namespace dummy
                 Aas.IMixedAbstractDescendantOne that
             )
             {
-                if (!(that.UniqueToAbstractDescendantOne.Length > 0))
+                if (!(
+                    StringHelpers.Len(that.UniqueToAbstractDescendantOne) > 0))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -90,7 +257,8 @@ namespace dummy
                 Aas.IMixedAbstractDescendantTwo that
             )
             {
-                if (!(that.UniqueToAbstractDescendantTwo.Length > 0))
+                if (!(
+                    StringHelpers.Len(that.UniqueToAbstractDescendantTwo) > 0))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -103,7 +271,7 @@ namespace dummy
                 Aas.IMixedConcreteWithDescendants that
             )
             {
-                if (!(that.SomeBaseProperty.Length > 0))
+                if (!(StringHelpers.Len(that.SomeBaseProperty) > 0))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -116,14 +284,14 @@ namespace dummy
                 Aas.IMixedConcreteWithDescendantsChild that
             )
             {
-                if (!(that.SomeBaseProperty.Length > 0))
+                if (!(StringHelpers.Len(that.SomeBaseProperty) > 0))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
                         "The value must not be empty.");
                 }
 
-                if (!(that.SomeChildProperty.Length > 0))
+                if (!(StringHelpers.Len(that.SomeChildProperty) > 0))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -136,7 +304,7 @@ namespace dummy
                 Aas.IMixedConcreteLeaf that
             )
             {
-                if (!(that.UniqueToConcreteLeaf.Length > 0))
+                if (!(StringHelpers.Len(that.UniqueToConcreteLeaf) > 0))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -149,7 +317,7 @@ namespace dummy
                 Aas.IModelTypedFirst that
             )
             {
-                if (!(that.SomeProperty.Length > 0))
+                if (!(StringHelpers.Len(that.SomeProperty) > 0))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -162,7 +330,7 @@ namespace dummy
                 Aas.IModelTypedSecond that
             )
             {
-                if (!(that.SomeProperty.Length > 0))
+                if (!(StringHelpers.Len(that.SomeProperty) > 0))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +

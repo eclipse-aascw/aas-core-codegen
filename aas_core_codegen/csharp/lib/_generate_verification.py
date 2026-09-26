@@ -664,22 +664,85 @@ yield return new Reporting.Error(
 
 def _generate_string_helpers() -> Stripped:
     """
-    Generate the helpers for slicing strings and for ``find`` with a start.
+    Generate the helpers for ``len``, slicing strings and ``find``.
 
     The helpers follow the Python implementation, since Python is the language of
-    the meta-model specifications. The native ``Substring`` and ``IndexOf`` throw
-    on the positions out of range, and do not count the negative positions from
-    the end. We also accept the positions as ``long``'s, since our integers are
-    ``long``'s in C#.
+    the meta-model specifications. Hence, the lengths and the positions count
+    the characters (code points), while the C# strings count the UTF-16 code
+    units, where a character beyond the Basic Multilingual Plane takes two
+    of them (a surrogate pair). Moreover, the native ``Substring`` and ``IndexOf``
+    throw on the positions out of range, and do not count the negative positions
+    from the end. We also accept the positions as ``long``'s, since our integers
+    are ``long``'s in C#.
     """
+    # NOTE (mristin):
+    # We count a lone surrogate as a character of its own, as Python does. We do
+    # not check whether ``IndexOf`` matches in the middle of a surrogate pair, as
+    # that could only happen if the searched text started or ended with a lone
+    # surrogate.
     return Stripped(
         f"""\
 /// <summary>
 /// Provide string operations which follow the Python implementation, since
 /// Python is the language of the meta-model specifications.
 /// </summary>
+/// <remarks>
+/// The lengths and the positions count the characters (code points), and not
+/// the UTF-16 code units of the C# strings. Hence, a character beyond the Basic
+/// Multilingual Plane counts as one, though it takes two UTF-16 code units
+/// (a surrogate pair).
+/// </remarks>
 public static class StringHelpers
 {{
+{I}/// <summary>
+{I}/// Check whether a surrogate pair starts at <paramref name="offset" />
+{I}/// in <paramref name="text" />.
+{I}/// </summary>
+{I}private static bool IsSurrogatePairAt(string text, int offset)
+{I}{{
+{II}return (
+{III}offset + 1 < text.Length
+{III}&& char.IsHighSurrogate(text[offset])
+{III}&& char.IsLowSurrogate(text[offset + 1])
+{II});
+{I}}}
+
+{I}/// <summary>
+{I}/// Count the characters of <paramref name="text" /> between the UTF-16
+{I}/// offsets <paramref name="startOffset" /> and <paramref name="endOffset" />.
+{I}/// </summary>
+{I}private static int CountCharacters(
+{II}string text,
+{II}int startOffset,
+{II}int endOffset
+{I})
+{I}{{
+{II}int count = 0;
+{II}int offset = startOffset;
+{II}while (offset < endOffset)
+{II}{{
+{III}offset += IsSurrogatePairAt(text, offset) ? 2 : 1;
+{III}count++;
+{II}}}
+
+{II}return count;
+{I}}}
+
+{I}/// <summary>
+{I}/// Compute the UTF-16 offset of the character at <paramref name="position" />
+{I}/// in <paramref name="text" />.
+{I}/// </summary>
+{I}private static int OffsetOf(string text, int position)
+{I}{{
+{II}int offset = 0;
+{II}for (int i = 0; i < position; i++)
+{II}{{
+{III}offset += IsSurrogatePairAt(text, offset) ? 2 : 1;
+{II}}}
+
+{II}return offset;
+{I}}}
+
 {I}/// <summary>
 {I}/// Resolve <paramref name="position" /> in a string of
 {I}/// <paramref name="length" /> as Python does in slicing.
@@ -699,30 +762,47 @@ public static class StringHelpers
 {I}}}
 
 {I}/// <summary>
+{I}/// Count the characters (code points) of <paramref name="text" />.
+{I}/// </summary>
+{I}/// <remarks>
+{I}/// We follow the Python implementation of <c>len</c>, since Python is
+{I}/// the language of the meta-model specifications. Hence, a character beyond
+{I}/// the Basic Multilingual Plane counts as one, unlike in <c>text.Length</c>.
+{I}/// </remarks>
+{I}public static int Len(string text)
+{I}{{
+{II}return CountCharacters(text, 0, text.Length);
+{I}}}
+
+{I}/// <summary>
 {I}/// Slice <paramref name="text" /> from <paramref name="start" /> up to
 {I}/// <paramref name="end" />, exclusive.
 {I}/// </summary>
 {I}/// <remarks>
 {I}/// We follow the Python implementation of slicing, since Python is
-{I}/// the language of the meta-model specifications. Hence, a negative position
-{I}/// counts from the end, the positions out of range are clamped to the string,
-{I}/// and the slice is empty if <paramref name="start" /> is not before
-{I}/// <paramref name="end" />. If <paramref name="end" /> is not given, we slice
-{I}/// up to the end of <paramref name="text" />.
+{I}/// the language of the meta-model specifications. Hence, the positions count
+{I}/// the characters (code points), a negative position counts from the end,
+{I}/// the positions out of range are clamped to the string, and the slice is
+{I}/// empty if <paramref name="start" /> is not before <paramref name="end" />.
+{I}/// If <paramref name="end" /> is not given, we slice up to the end of
+{I}/// <paramref name="text" />.
 {I}/// </remarks>
 {I}public static string Slice(string text, long start, long? end = null)
 {I}{{
-{II}int theStart = ResolvePosition(start, text.Length);
+{II}int length = Len(text);
+{II}int theStart = ResolvePosition(start, length);
 {II}int theEnd = end is null
-{III}? text.Length
-{III}: ResolvePosition(end.Value, text.Length);
+{III}? length
+{III}: ResolvePosition(end.Value, length);
 
 {II}if (theStart >= theEnd)
 {II}{{
 {III}return "";
 {II}}}
 
-{II}return text.Substring(theStart, theEnd - theStart);
+{II}int startOffset = OffsetOf(text, theStart);
+{II}int endOffset = OffsetOf(text, theEnd);
+{II}return text.Substring(startOffset, endOffset - startOffset);
 {I}}}
 
 {I}/// <summary>
@@ -731,27 +811,40 @@ public static class StringHelpers
 {I}/// </summary>
 {I}/// <remarks>
 {I}/// We follow the Python implementation of <c>str.find</c>, since Python is
-{I}/// the language of the meta-model specifications. Hence, a negative
-{I}/// <paramref name="start" /> counts from the end, and
-{I}/// a <paramref name="start" /> beyond the end of <paramref name="text" />
-{I}/// gives -1.
+{I}/// the language of the meta-model specifications. Hence, the positions count
+{I}/// the characters (code points), a negative <paramref name="start" /> counts
+{I}/// from the end, and a <paramref name="start" /> beyond the end of
+{I}/// <paramref name="text" /> gives -1. We compare the strings ordinally.
 {I}/// </remarks>
 {I}/// <returns>
 {I}/// The position of <paramref name="sub" /> in <paramref name="text" />,
 {I}/// or -1 if not found
 {I}/// </returns>
-{I}public static long Find(string text, string sub, long start)
+{I}public static long Find(string text, string sub, long start = 0)
 {I}{{
+{II}int length = Len(text);
 {II}long theStart = start < 0
-{III}? System.Math.Max(start + text.Length, 0)
+{III}? System.Math.Max(start + length, 0)
 {III}: start;
 
-{II}if (theStart > text.Length)
+{II}if (theStart > length)
 {II}{{
 {III}return -1;
 {II}}}
 
-{II}return text.IndexOf(sub, (int)theStart, System.StringComparison.Ordinal);
+{II}int startOffset = OffsetOf(text, (int)theStart);
+{II}int offset = text.IndexOf(
+{III}sub,
+{III}startOffset,
+{III}System.StringComparison.Ordinal
+{II});
+
+{II}if (offset == -1)
+{II}{{
+{III}return -1;
+{II}}}
+
+{II}return theStart + CountCharacters(text, startOffset, offset);
 {I}}}
 }}  // public static class StringHelpers"""
     )
@@ -1556,7 +1649,7 @@ using System.Linq;  // can't alias"""
 
     verification_blocks.append(_generate_enum_value_sets(symbol_table=symbol_table))
 
-    if intermediate.uses_string_slicing_or_find(symbol_table):
+    if intermediate.uses_len_slicing_or_find(symbol_table):
         verification_blocks.append(_generate_string_helpers())
 
     verification_blocks.append(

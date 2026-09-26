@@ -264,11 +264,11 @@ export function switchOnEnumWithVariablesInCases(
 ): boolean {
   switch (kind) {
     case AasTypes.Kind.Alpha: {
-      const length = text.length;
+      const length = AasCommon.lenStr(text);
       return length > 1;
     }
     case AasTypes.Kind.Beta: {
-      const length = text.length;
+      const length = AasCommon.lenStr(text);
       return length > 2;
     }
     default:
@@ -292,7 +292,7 @@ export function switchOnStr(
     case "epsilon":
       return false;
     default:
-      return text.length > 0;
+      return AasCommon.lenStr(text) > 0;
   }
 }
 
@@ -493,7 +493,7 @@ export function *verify(
 export function *verifyNonEmptyString(
   that: string
 ): IterableIterator<VerificationError> {
-  if (!(that.length > 0)) {
+  if (!(AasCommon.lenStr(that) > 0)) {
     yield new VerificationError(
       "At least one character"
     )

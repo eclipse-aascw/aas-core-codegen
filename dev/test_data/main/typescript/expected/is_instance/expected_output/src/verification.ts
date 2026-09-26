@@ -234,7 +234,7 @@ export function leavesInTreeAreNotEmpty(
   return (
     (
       !AasTypes.isLeaf(element)
-      || ((element as AasTypes.Leaf).text.length > 0)
+      || (AasCommon.lenStr((element as AasTypes.Leaf).text) > 0)
     )
     && (
       !AasTypes.isContainer(element)
@@ -264,8 +264,8 @@ export function isShortLeafOrNoLeaf(
 ): boolean {
   return (
     (!AasTypes.isLeaf(element))
-    || (element as AasTypes.Leaf).text.length == 0
-    || (element as AasTypes.Leaf).text.length < 16
+    || AasCommon.lenStr((element as AasTypes.Leaf).text) == 0
+    || AasCommon.lenStr((element as AasTypes.Leaf).text) < 16
   );
 }
 
@@ -535,7 +535,7 @@ class Verifier
           && AasTypes.isLeaf(that.optionalElement)
         )
       )
-      || ((that.optionalElement as AasTypes.Leaf).text.length > 0)
+      || (AasCommon.lenStr((that.optionalElement as AasTypes.Leaf).text) > 0)
     )) {
       yield new VerificationError(
         "The optional element, if a leaf, must have a non-empty text."

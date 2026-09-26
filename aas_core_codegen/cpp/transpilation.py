@@ -1108,7 +1108,8 @@ common::{contains_function}(
             end = self._as_int64_position(node.end, end)
 
         # NOTE (mristin):
-        # We do not use the native ``substr`` as it throws on a start out of range,
+        # We do not use the native ``substr`` as it counts the UTF-16 code units
+        # instead of the characters on Windows, throws on a start out of range,
         # and does not count the negative positions from the end, unlike Python.
         # See ``SliceStr`` in the generated common module.
         args = [collection, start if start is not None else "0"]  # type: List[str]
@@ -1149,7 +1150,8 @@ common::{contains_function}(
 
         if method is intermediate_type_inference.STR_FIND:
             # NOTE (mristin):
-            # We do not use the native ``find`` as it gives ``npos`` instead of -1,
+            # We do not use the native ``find`` as it counts the UTF-16 code units
+            # instead of the characters on Windows, gives ``npos`` instead of -1,
             # and does not count a negative start from the end, unlike Python. See
             # ``FindStr`` in the generated common module.
             if len(args) == 2:
@@ -1333,6 +1335,20 @@ common::{contains_function}(
                     return None, error
 
                 assert first_arg is not None
+
+                # NOTE (mristin):
+                # We do not use the native ``size()`` on strings as it counts
+                # the UTF-16 code units instead of the characters on Windows,
+                # unlike Python. See ``LenStr`` in the generated common module.
+                if (
+                    intermediate_type_inference.try_primitive_type(
+                        intermediate_type_inference.beneath_optional(
+                            self.type_map[node.args[0]]
+                        )
+                    )
+                    is intermediate_type_inference.PrimitiveType.STR
+                ):
+                    return Stripped(f"common::LenStr({first_arg})"), None
 
                 if not isinstance(node.args[0], no_parentheses_types_in_this_context):
                     first_arg = Stripped(f"({first_arg})")

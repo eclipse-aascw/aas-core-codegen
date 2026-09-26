@@ -146,24 +146,43 @@ def _generate_concatenate_implementations_for_2_parts_and_above() -> List[Stripp
 
 def _generate_string_helper_declarations() -> List[Stripped]:
     """
-    Generate the declarations of the helpers for slicing strings and for ``find``.
+    Generate the declarations of the helpers for ``len``, slicing strings and ``find``.
 
     The helpers follow the Python implementation, since Python is the language of
-    the meta-model specifications. The native ``std::wstring::substr`` throws on
-    a start out of range, and neither ``substr`` nor ``find`` count the negative
-    positions from the end. We also accept the positions as ``int64_t``'s, since
-    our integers are ``int64_t``'s in C++.
+    the meta-model specifications. Hence, the lengths and the positions count
+    the characters (code points), while ``std::wstring`` counts the ``wchar_t``'s,
+    which are UTF-16 code units on Windows, where a character beyond the Basic
+    Multilingual Plane takes two of them (a surrogate pair). Moreover, the native
+    ``std::wstring::substr`` throws on a start out of range, and neither ``substr``
+    nor ``find`` count the negative positions from the end. We also accept
+    the positions as ``int64_t``'s, since our integers are ``int64_t``'s in C++.
     """
     return [
+        Stripped(
+            """\
+/**
+ * Count the characters (code points) of \\p text.
+ *
+ * We follow the Python implementation of `len`, since Python is the language of
+ * the meta-model specifications. Hence, a character beyond the Basic
+ * Multilingual Plane counts as one, unlike in `text.size()` on the platforms
+ * where `wchar_t` is a UTF-16 code unit, such as Windows.
+ *
+ * \\param text to be measured
+ * \\return the number of characters
+ */
+size_t LenStr(const std::wstring& text);"""
+        ),
         Stripped(
             f"""\
 /**
  * Slice \\p text from \\p start up to \\p end, exclusive.
  *
  * We follow the Python implementation of slicing, since Python is the language
- * of the meta-model specifications. Hence, a negative position counts from
- * the end, the positions out of range are clamped to the string, and the slice
- * is empty if \\p start is not before \\p end.
+ * of the meta-model specifications. Hence, the positions count the characters
+ * (code points), a negative position counts from the end, the positions out of
+ * range are clamped to the string, and the slice is empty if \\p start is not
+ * before \\p end.
  *
  * \\param text to be sliced
  * \\param start of the slice, inclusive
@@ -197,6 +216,8 @@ std::wstring SliceStr(
 /**
  * Find the first \\p sub in \\p text.
  *
+ * See the other overload for the semantics.
+ *
  * \\param text to be searched in
  * \\param sub to be searched for
  * \\return the position of \\p sub in \\p text, or -1 if not found
@@ -212,8 +233,9 @@ int64_t FindStr(
  * Find the first \\p sub in \\p text from \\p start on.
  *
  * We follow the Python implementation of `str.find`, since Python is
- * the language of the meta-model specifications. Hence, a negative \\p start
- * counts from the end, and a \\p start beyond the end of \\p text gives -1.
+ * the language of the meta-model specifications. Hence, the positions count
+ * the characters (code points), a negative \\p start counts from the end, and
+ * a \\p start beyond the end of \\p text gives -1.
  *
  * \\param text to be searched in
  * \\param sub to be searched for
@@ -230,11 +252,88 @@ int64_t FindStr(
 
 
 def _generate_string_helper_definitions() -> List[Stripped]:
-    """Generate the definitions of the helpers for slicing strings and ``find``."""
+    """Generate the definitions of the helpers for ``len``, slicing strings and ``find``."""
+    # NOTE (mristin):
+    # We count a lone surrogate as a character of its own, as Python does. We do
+    # not check whether ``find`` matches in the middle of a surrogate pair, as
+    # that could only happen if the searched text started or ended with a lone
+    # surrogate.
     return [
         Stripped(
             f"""\
 namespace {{
+
+// NOTE (mristin):
+// The type wchar_t is a UTF-16 code unit on Windows, where a character beyond
+// the Basic Multilingual Plane takes two of them (a surrogate pair). On the other
+// platforms, wchar_t is a UTF-32 code unit, so that each character takes exactly
+// one wchar_t.
+#if WCHAR_MAX <= 0xFFFF
+/**
+ * Check whether a surrogate pair starts at \\p offset in \\p text.
+ */
+bool IsSurrogatePairAt(const std::wstring& text, size_t offset) {{
+{I}return (
+{II}offset + 1 < text.size()
+{II}&& text[offset] >= 0xD800
+{II}&& text[offset] <= 0xDBFF
+{II}&& text[offset + 1] >= 0xDC00
+{II}&& text[offset + 1] <= 0xDFFF
+{I});
+}}
+
+/**
+ * Count the characters of \\p text between \\p start_offset and
+ * \\p end_offset, both in wchar_t's.
+ */
+size_t CountCharacters(
+{I}const std::wstring& text,
+{I}size_t start_offset,
+{I}size_t end_offset
+) {{
+{I}size_t count = 0;
+{I}size_t offset = start_offset;
+{I}while (offset < end_offset) {{
+{II}offset += IsSurrogatePairAt(text, offset) ? 2 : 1;
+{II}++count;
+{I}}}
+
+{I}return count;
+}}
+
+/**
+ * Compute the offset in wchar_t's of the character at \\p position
+ * in \\p text.
+ */
+size_t OffsetOf(const std::wstring& text, size_t position) {{
+{I}size_t offset = 0;
+{I}for (size_t i = 0; i < position; ++i) {{
+{II}offset += IsSurrogatePairAt(text, offset) ? 2 : 1;
+{I}}}
+
+{I}return offset;
+}}
+#else
+/**
+ * Count the characters of a text between \\p start_offset and
+ * \\p end_offset, both in wchar_t's.
+ */
+size_t CountCharacters(
+{I}const std::wstring&,
+{I}size_t start_offset,
+{I}size_t end_offset
+) {{
+{I}return end_offset - start_offset;
+}}
+
+/**
+ * Compute the offset in wchar_t's of the character at \\p position
+ * in a text.
+ */
+size_t OffsetOf(const std::wstring&, size_t position) {{
+{I}return position;
+}}
+#endif
 
 /**
  * Resolve \\p position in a string of \\p length as Python does in slicing.
@@ -261,19 +360,28 @@ size_t ResolvePosition(int64_t position, size_t length) {{
         ),
         Stripped(
             f"""\
+size_t LenStr(const std::wstring& text) {{
+{I}return CountCharacters(text, 0, text.size());
+}}"""
+        ),
+        Stripped(
+            f"""\
 std::wstring SliceStr(
 {I}const std::wstring& text,
 {I}int64_t start,
 {I}int64_t end
 ) {{
-{I}const size_t the_start = ResolvePosition(start, text.size());
-{I}const size_t the_end = ResolvePosition(end, text.size());
+{I}const size_t length = LenStr(text);
+{I}const size_t the_start = ResolvePosition(start, length);
+{I}const size_t the_end = ResolvePosition(end, length);
 
 {I}if (the_start >= the_end) {{
 {II}return L"";
 {I}}}
 
-{I}return text.substr(the_start, the_end - the_start);
+{I}const size_t start_offset = OffsetOf(text, the_start);
+{I}const size_t end_offset = OffsetOf(text, the_end);
+{I}return text.substr(start_offset, end_offset - start_offset);
 }}"""
         ),
         Stripped(
@@ -282,7 +390,9 @@ std::wstring SliceStr(
 {I}const std::wstring& text,
 {I}int64_t start
 ) {{
-{I}return text.substr(ResolvePosition(start, text.size()));
+{I}return text.substr(
+{II}OffsetOf(text, ResolvePosition(start, LenStr(text)))
+{I});
 }}"""
         ),
         Stripped(
@@ -291,12 +401,7 @@ int64_t FindStr(
 {I}const std::wstring& text,
 {I}const std::wstring& sub
 ) {{
-{I}const size_t position = text.find(sub);
-{I}if (position == std::wstring::npos) {{
-{II}return -1;
-{I}}}
-
-{I}return static_cast<int64_t>(position);
+{I}return FindStr(text, sub, 0);
 }}"""
         ),
         Stripped(
@@ -306,26 +411,29 @@ int64_t FindStr(
 {I}const std::wstring& sub,
 {I}int64_t start
 ) {{
-{I}const int64_t size = static_cast<int64_t>(text.size());
+{I}const int64_t length = static_cast<int64_t>(LenStr(text));
 
 {I}int64_t the_start = start;
 {I}if (the_start < 0) {{
-{II}the_start += size;
+{II}the_start += length;
 {II}if (the_start < 0) {{
 {III}the_start = 0;
 {II}}}
 {I}}}
 
-{I}if (the_start > size) {{
+{I}if (the_start > length) {{
 {II}return -1;
 {I}}}
 
-{I}const size_t position = text.find(sub, static_cast<size_t>(the_start));
-{I}if (position == std::wstring::npos) {{
+{I}const size_t start_offset = OffsetOf(text, static_cast<size_t>(the_start));
+{I}const size_t offset = text.find(sub, start_offset);
+{I}if (offset == std::wstring::npos) {{
 {II}return -1;
 {I}}}
 
-{I}return static_cast<int64_t>(position);
+{I}return the_start + static_cast<int64_t>(
+{II}CountCharacters(text, start_offset, offset)
+{I});
 }}"""
         ),
     ]
@@ -443,15 +551,17 @@ std::unique_ptr<T> make_unique(
     ]  # type: List[Stripped]
 
     # NOTE (mristin):
-    # The string helpers take the positions as ``int64_t``'s, so we need
-    # the fixed-width integers only for a meta-model which slices strings or
-    # calls ``find`` on them.
-    if intermediate.uses_string_slicing_or_find(symbol_table):
+    # The string helpers take the positions as ``int64_t``'s, and need
+    # ``WCHAR_MAX`` to tell whether ``wchar_t`` is a UTF-16 code unit. Hence, we
+    # include these headers only for a meta-model which might take ``len`` of
+    # strings, slice them or call ``find`` on them.
+    if intermediate.uses_len_slicing_or_find(symbol_table):
         blocks.append(
             Stripped(
                 """\
 #pragma warning(push, 0)
 #include <cstdint>
+#include <cwchar>
 #pragma warning(pop)"""
             )
         )
@@ -714,7 +824,7 @@ std::wstring Utf8ToWstring(const std::string& utf8_text);"""
             ),
             *(
                 _generate_string_helper_declarations()
-                if intermediate.uses_string_slicing_or_find(symbol_table)
+                if intermediate.uses_len_slicing_or_find(symbol_table)
                 else []
             ),
             Stripped(
@@ -967,7 +1077,7 @@ std::wstring Utf8ToWstring(const std::string& utf8_text) {{
         ),
         *(
             _generate_string_helper_definitions()
-            if intermediate.uses_string_slicing_or_find(symbol_table)
+            if intermediate.uses_len_slicing_or_find(symbol_table)
             else []
         ),
         cpp_common.generate_namespace_closing(namespace),

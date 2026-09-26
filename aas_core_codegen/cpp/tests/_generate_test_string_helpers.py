@@ -1,11 +1,11 @@
-"""Generate the unit tests for the helpers of slicing strings and of ``find``."""
+"""Generate the unit tests for the helpers of ``len``, slicing strings and ``find``."""
 
 import io
 from typing import List
 
 from icontract import ensure
 
-from aas_core_codegen import slicing_and_find_cases
+from aas_core_codegen import len_slicing_and_find_cases
 from aas_core_codegen.common import Stripped
 from aas_core_codegen.cpp import common as cpp_common
 from aas_core_codegen.cpp.common import (
@@ -22,7 +22,7 @@ from aas_core_codegen.cpp.common import (
 )
 # fmt: on
 def generate_implementation(library_namespace: Stripped) -> str:
-    """Generate the unit tests for the helpers of slicing strings and of ``find``."""
+    """Generate the unit tests for the helpers of ``len``, slicing strings and ``find``."""
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
     blocks = [
@@ -30,11 +30,12 @@ def generate_implementation(library_namespace: Stripped) -> str:
         Stripped(
             """\
 /**
- * Test the slicing of strings and `find` as used in the transpiled code.
+ * Test `len`, the slicing of strings and `find` as used in the transpiled code.
  *
  * The transpiled code follows the Python implementation, since Python is
- * the language of the meta-model specifications. The expected values have been
- * computed with Python.
+ * the language of the meta-model specifications. Hence, the lengths and
+ * the positions count the characters (code points). The expected values have
+ * been computed with Python, and all the SDKs test against the very same cases.
  */"""
         ),
         Stripped(f'#include "{include_prefix_path}/common.hpp"'),
@@ -46,7 +47,25 @@ def generate_implementation(library_namespace: Stripped) -> str:
         Stripped(f"namespace aas = {library_namespace};"),
     ]  # type: List[Stripped]
 
-    for slice_case in slicing_and_find_cases.SLICE_CASES:
+    for len_case in len_slicing_and_find_cases.LEN_CASES:
+        name = cpp_common.string_literal(
+            f"{len_case.python_expression()} gives {len_case.expected}: "
+            f"{len_case.description}"
+        )
+
+        blocks.append(
+            Stripped(
+                f"""\
+TEST_CASE({name}) {{
+{I}REQUIRE(
+{II}aas::common::LenStr({cpp_common.wstring_literal(len_case.text)})
+{II}== {len_case.expected}U
+{I});
+}}"""
+            )
+        )
+
+    for slice_case in len_slicing_and_find_cases.SLICE_CASES:
         name = cpp_common.string_literal(
             f"{slice_case.python_expression()} gives {slice_case.expected!r}: "
             f"{slice_case.description}"
@@ -73,7 +92,7 @@ TEST_CASE({name}) {{
             )
         )
 
-    for find_case in slicing_and_find_cases.FIND_CASES:
+    for find_case in len_slicing_and_find_cases.FIND_CASES:
         name = cpp_common.string_literal(
             f"{find_case.python_expression()} gives {find_case.expected}: "
             f"{find_case.description}"

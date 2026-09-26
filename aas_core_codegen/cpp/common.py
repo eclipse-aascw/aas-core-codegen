@@ -41,6 +41,11 @@ def wstring_literal(text: str) -> Stripped:
     """Generate a C++ string literal from the ``text``."""
     escaped = []  # type: List[str]
 
+    # NOTE (mristin):
+    # We escape with the universal character names (``\\u`` and ``\\U``) as they
+    # have a fixed width. The hexadecimal escapes are greedy in C++, so that
+    # ``L"\\xe9b"`` would denote a single character ``0xe9b`` instead of ``0xe9``
+    # followed by ``b``.
     for character in text:
         code_point = ord(character)
 
@@ -64,13 +69,13 @@ def wstring_literal(text: str) -> Stripped:
             escaped.append("\\\\")
         elif code_point < 32:
             # Non-printable ASCII characters
-            escaped.append(f"\\x{ord(character):x}")
+            escaped.append(f"\\u{ord(character):04x}")
         elif code_point <= 127:
             # ASCII
             escaped.append(character)
         elif 127 < code_point < 255:
             # Above ASCII, but can be encoded as a single byte
-            escaped.append(f"\\x{ord(character):x}")
+            escaped.append(f"\\u{ord(character):04x}")
         elif 255 <= code_point < 65536:
             # Above ASCII
             escaped.append(f"\\u{ord(character):04x}")
@@ -83,6 +88,32 @@ def wstring_literal(text: str) -> Stripped:
     # NOTE (mristin):
     # We use std::wstring, therefore ``L`` prefix.
     return Stripped('L"{}"'.format("".join(escaped)))
+
+
+# NOTE (mristin):
+# The hexadecimal escapes in C++ are greedy: ``"\\xe9b"`` denotes a single
+# character ``0xe9b``, not ``0xe9`` followed by ``b``. Therefore, we escape
+# the bytes of the narrow string literals with the octal escapes, which take at
+# most three digits, and always write all three of them.
+
+
+def _octal_escape(value: int) -> str:
+    """Escape ``value`` as an octal escape of exactly three digits."""
+    assert 0 <= value <= 0o777
+    return f"\\{value:03o}"
+
+
+_SIMPLE_ESCAPES = {
+    "\a": "\\a",
+    "\b": "\\b",
+    "\f": "\\f",
+    "\n": "\\n",
+    "\r": "\\r",
+    "\t": "\\t",
+    "\v": "\\v",
+    '"': '\\"',
+    "\\": "\\\\",
+}
 
 
 @require(lambda character: len(character) == 1)
@@ -143,56 +174,37 @@ def wchar_literal(character: str) -> Stripped:
     return Stripped(escaped)
 
 
-# fmt: off
-# NOTE (mristin):
-# We use a pre-condition here to simplify the client code. The client must check
-# before if the input text is all in ASCII, and report to the user if there are
-# any non-ASCII characters in the input.
-@require(
-    lambda text:
-    all(
-        ord(character) <= 127
-        for character in text
-    ),
-    "Only ASCII text can be converted to a C++ string literal, otherwise encoding "
-    "must be assumed."
-)
 @ensure(lambda result: result.startswith('"'))
 @ensure(lambda result: result.endswith('"'))
-# fmt: on
 def string_literal(text: str) -> Stripped:
-    """Generate a C++ string literal from the ``text``."""
+    """
+    Generate a C++ string literal from the ``text``.
+
+    We encode the characters beyond ASCII in UTF-8, and escape each of their bytes,
+    since we use UTF-8 in ``std::string``'s. This way, the literal does not depend
+    on the encoding of the source file nor on the execution character set of
+    the compiler.
+    """
     escaped = []  # type: List[str]
 
     for character in text:
         code_point = ord(character)
 
-        if character == "\a":
-            escaped.append("\\a")
-        elif character == "\b":
-            escaped.append("\\b")
-        elif character == "\f":
-            escaped.append("\\f")
-        elif character == "\n":
-            escaped.append("\\n")
-        elif character == "\r":
-            escaped.append("\\r")
-        elif character == "\t":
-            escaped.append("\\t")
-        elif character == "\v":
-            escaped.append("\\v")
-        elif character == '"':
-            escaped.append('\\"')
-        elif character == "\\":
-            escaped.append("\\\\")
-        elif code_point < 32:
-            # Non-printable ASCII characters
-            escaped.append(f"\\x{ord(character):x}")
-        elif code_point <= 127:
+        simple_escape = _SIMPLE_ESCAPES.get(character, None)
+        if simple_escape is not None:
+            escaped.append(simple_escape)
+        elif code_point < 32 or code_point == 127:
+            # Control characters
+            escaped.append(_octal_escape(code_point))
+        elif code_point < 127:
+            # Printable ASCII
             escaped.append(character)
         else:
-            # Above ASCII
-            raise ValueError(r"Unexpected non-ascii code point: {character!r}")
+            # Beyond ASCII
+            escaped.extend(
+                _octal_escape(byte)
+                for byte in character.encode("utf-8", errors="surrogatepass")
+            )
 
     return Stripped('"{}"'.format("".join(escaped)))
 

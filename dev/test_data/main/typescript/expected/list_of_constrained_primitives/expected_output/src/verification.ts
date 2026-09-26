@@ -249,7 +249,7 @@ export function *verify(
 export function *verifyName(
   that: string
 ): IterableIterator<VerificationError> {
-  if (!(that.length > 0)) {
+  if (!(AasCommon.lenStr(that) > 0)) {
     yield new VerificationError(
       "Non-empty"
     )

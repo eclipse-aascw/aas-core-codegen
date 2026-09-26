@@ -43,7 +43,7 @@ bool FirstTextIsNotEmpty(
   const std::vector<std::wstring>& texts
 ) {
   for (const std::wstring& text : texts) {
-    return text.size() > 0;
+    return common::LenStr(text) > 0;
   }
   return true;
 }

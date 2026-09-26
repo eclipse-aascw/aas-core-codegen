@@ -12,7 +12,6 @@ package verification
 
 import (
 	"fmt"
-	"strings"
 	aascommon "github.com/dummy-works/dummy/common"
 	aasreporting "github.com/dummy-works/dummy/reporting"
 	aastypes "github.com/dummy-works/dummy/types"
@@ -50,31 +49,31 @@ func (ve *VerificationError) PathString() string {
 func DateBeforeTimeIsLongEnough(
 	text string,
 ) bool {
-	position := int64(strings.Index(text, "T"))
+	position := aascommon.FindStr(text, "T", 0)
 	switch position {
 	case -1:
 		return true
 	}
-	return len(aascommon.SliceStr(text, 0, position)) == 10
+	return aascommon.LenStr(aascommon.SliceStr(text, 0, position)) == 10
 }
 
 // Check the slice from the position after the one found with `find`.
 func TimeAfterDateIsLongEnough(
 	text string,
 ) bool {
-	position := int64(strings.Index(text, "T"))
+	position := aascommon.FindStr(text, "T", 0)
 	switch position {
 	case -1:
 		return true
 	}
-	return len(aascommon.SliceStrFrom(text, position + 1)) == 8
+	return aascommon.LenStr(aascommon.SliceStrFrom(text, position + 1)) == 8
 }
 
 // Check `find` with a start and the slice between the found positions.
 func MonthIsSeptember(
 	text string,
 ) bool {
-	first := int64(strings.Index(text, "-"))
+	first := aascommon.FindStr(text, "-", 0)
 	switch first {
 	case -1:
 		return true
@@ -91,15 +90,15 @@ func MonthIsSeptember(
 func SecondsFollowColon(
 	text string,
 ) bool {
-	position := int64(strings.Index(text, "T"))
+	position := aascommon.FindStr(text, "T", 0)
 	switch position {
 	case -1:
 		return true
 	}
-	return len(text) < 10 ||
+	return aascommon.LenStr(text) < 10 ||
 		(aascommon.SliceStr(text, -3, -2) == ":" &&
 		aascommon.FindStr(text, ":", -3) != -1 &&
-		len(aascommon.SliceStr(text, 0, -9)) > 0)
+		aascommon.LenStr(aascommon.SliceStr(text, 0, -9)) > 0)
 }
 
 // Check the positions computed at run time which are negative or out of range.
@@ -109,7 +108,7 @@ func SecondsFollowColon(
 func LastCharacterIsNotZ(
 	text string,
 ) bool {
-	position := int64(strings.Index(text, "#"))
+	position := aascommon.FindStr(text, "#", 0)
 	return aascommon.SliceStrFrom(text, position) != "Z" &&
 		aascommon.SliceStr(text, -100, 100) == text &&
 		aascommon.SliceStr(text, 3, 1) == "" &&
@@ -121,7 +120,7 @@ func LastCharacterIsNotZ(
 func NameStartsWithPrefix(
 	name string,
 ) bool {
-	return len(name) < 4 ||
+	return aascommon.LenStr(name) < 4 ||
 		aascommon.SliceStr(name, 0, 4) == "name"
 }
 
@@ -129,8 +128,8 @@ func NameStartsWithPrefix(
 func NameHasNoSpaceAfterPrefix(
 	name string,
 ) bool {
-	return len(name) < 4 ||
-		int64(strings.Index(aascommon.SliceStrFrom(name, 4), " ")) == -1
+	return aascommon.LenStr(name) < 4 ||
+		aascommon.FindStr(aascommon.SliceStrFrom(name, 4), " ", 0) == -1
 }
 
 // Verify `that` instance of [aastypes.ISomething].
@@ -146,7 +145,7 @@ func VerifySomething(
 	abort = false
 
 	if !(
-		!(len(that.Text()) >= 1) ||
+		!(aascommon.LenStr(that.Text()) >= 1) ||
 		(aascommon.SliceStr(that.Text(), 0, 1) != "X")) {
 		abort = onError(
 			newVerificationError(
@@ -257,7 +256,7 @@ func VerifyNonEmptyString(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that) > 0) {
+	if !(aascommon.LenStr(that) > 0) {
 		abort = onError(
 			newVerificationError(
 				"At least one character",),

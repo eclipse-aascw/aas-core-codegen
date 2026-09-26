@@ -4130,17 +4130,19 @@ def uses_json_types(symbol_table: SymbolTable) -> bool:
     return False
 
 
-def uses_string_slicing_or_find(symbol_table: SymbolTable) -> bool:
+def uses_len_slicing_or_find(symbol_table: SymbolTable) -> bool:
     """
-    Check whether any transpiled code slices a string or calls ``find`` on it.
+    Check whether any transpiled code might take ``len`` of, slice or search a string.
 
-    The targets use this check to generate the helper functions for slicing and
-    ``find`` only if the meta-model needs them.
+    The targets use this check to generate the string helpers only if the meta-model
+    needs them. The helpers count the characters (code points) as Python does,
+    since Python is the language of the meta-model specifications.
 
     We check the parse trees of the invariants and of the transpilable
     verification functions. As we do not have the types at hand here, we
-    over-approximate and count every method call named ``find``, even if it
-    were a method of our class. In the worst case, we generate unused helpers.
+    over-approximate and count every call to ``len``, even if it were on a list,
+    and every method call named ``find``, even if it were a method of our class.
+    In the worst case, we generate unused helpers.
     """
     roots = []  # type: List[parse_tree.Node]
 
@@ -4158,6 +4160,12 @@ def uses_string_slicing_or_find(symbol_table: SymbolTable) -> bool:
                 return True
 
             if isinstance(node, parse_tree.MethodCall) and node.member.name == "find":
+                return True
+
+            if (
+                isinstance(node, parse_tree.FunctionCall)
+                and node.name.identifier == "len"
+            ):
                 return True
 
     return False

@@ -44,19 +44,19 @@ Error::Error(
 bool Each(
   const std::wstring& text
 ) {
-  return text.size() > 0;
+  return common::LenStr(text) > 0;
 }
 
 bool Chain(
   const std::wstring& text
 ) {
-  return text.size() > 1;
+  return common::LenStr(text) > 1;
 }
 
 bool Check(
   const std::wstring& text
 ) {
-  return text.size() > 2;
+  return common::LenStr(text) > 2;
 }
 
 // endregion Verification functions
@@ -102,7 +102,7 @@ bool Name_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() > 0;
+  return common::LenStr(that) > 0;
 }
 
 bool Instance_0(
@@ -144,7 +144,7 @@ bool JsonObjectOfName_0(
   const types::IJsonObjectOfName* that = (
     static_cast<const types::IJsonObjectOfName*>(value)
   );
-  return that->text().size() > 0;
+  return common::LenStr(that->text()) > 0;
 }
 
 bool ListOf_0(
@@ -153,7 +153,7 @@ bool ListOf_0(
   const types::IListOf* that = (
     static_cast<const types::IListOf*>(value)
   );
-  return that->text().size() > 0;
+  return common::LenStr(that->text()) > 0;
 }
 
 /**

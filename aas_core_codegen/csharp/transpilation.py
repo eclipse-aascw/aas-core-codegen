@@ -337,9 +337,10 @@ class Transpiler(
         assert collection is not None
 
         # NOTE (mristin):
-        # We do not use the native ``Substring`` as it throws on the positions out
-        # of range, and does not count the negative ones from the end, unlike
-        # Python. See ``StringHelpers.Slice`` in the generated verification.
+        # We do not use the native ``Substring`` as it counts the UTF-16 code units
+        # instead of the characters, throws on the positions out of range, and does
+        # not count the negative ones from the end, unlike Python. See
+        # ``StringHelpers.Slice`` in the generated verification.
         args = [collection, start if start is not None else "0"]  # type: List[str]
         if end is not None:
             args.append(end)
@@ -626,25 +627,12 @@ class Transpiler(
         ):
             if member_type.method is intermediate_type_inference.STR_FIND:
                 # NOTE (mristin):
-                # We compare ordinally as ``IndexOf`` is culture-sensitive
-                # by default. We cast the position to ``long`` as we represent
-                # all the integers of the meta-model as ``long``'s.
-                if len(args) == 1:
-                    return (
-                        Stripped(
-                            f"(long){instance}.IndexOf({args[0]}, "
-                            f"System.StringComparison.Ordinal)"
-                        ),
-                        None,
-                    )
-
-                # NOTE (mristin):
-                # We do not use the native ``IndexOf`` with a start as it throws
-                # on a start out of range, and does not count a negative start
-                # from the end, unlike Python. See ``StringHelpers.Find`` in
-                # the generated verification.
+                # We do not use the native ``IndexOf`` as it counts the UTF-16
+                # code units instead of the characters, throws on a start out of
+                # range, and does not count a negative start from the end, unlike
+                # Python. See ``StringHelpers.Find`` in the generated verification.
                 return (
-                    Stripped(f"StringHelpers.Find({instance}, {args[0]}, {args[1]})"),
+                    Stripped(f"StringHelpers.Find({instance}, {', '.join(args)})"),
                     None,
                 )
 
@@ -766,27 +754,20 @@ class Transpiler(
                 ):
                     arg_type = arg_type.value
 
-                if isinstance(
-                    arg_type, intermediate_type_inference.PrimitiveTypeAnnotation
-                ) and (
-                    arg_type.a_type
-                    in (
-                        intermediate_type_inference.PrimitiveType.STR,
-                        intermediate_type_inference.PrimitiveType.BYTEARRAY,
-                    )
-                ):
-                    return Stripped(f"{collection}.Length"), None
+                primitive_type = intermediate_type_inference.try_primitive_type(
+                    arg_type
+                )
+
+                if primitive_type is intermediate_type_inference.PrimitiveType.STR:
+                    # NOTE (mristin):
+                    # We do not use the native ``Length`` as it counts the UTF-16
+                    # code units instead of the characters, unlike Python. See
+                    # ``StringHelpers.Len`` in the generated verification.
+                    return Stripped(f"StringHelpers.Len({args[0]})"), None
 
                 elif (
-                    isinstance(arg_type, intermediate_type_inference.OurTypeAnnotation)
-                    and isinstance(arg_type.our_type, intermediate.ConstrainedPrimitive)
-                    and (
-                        arg_type.our_type.constrainee
-                        in (
-                            intermediate.PrimitiveType.STR,
-                            intermediate.PrimitiveType.BYTEARRAY,
-                        )
-                    )
+                    primitive_type
+                    is intermediate_type_inference.PrimitiveType.BYTEARRAY
                 ):
                     return Stripped(f"{collection}.Length"), None
 

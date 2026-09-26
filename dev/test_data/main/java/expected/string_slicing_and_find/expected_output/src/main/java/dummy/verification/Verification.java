@@ -34,12 +34,12 @@ public class Verification {
    */
   public static Boolean dateBeforeTimeIsLongEnough(
     String text) {
-    long position = (long) text.indexOf("T");
+    long position = StringHelpers.find(text, "T");
     if (position == -1) {
         return true;
     }
     return (
-        StringHelpers.slice(text, 0, position).length() == 10);
+        StringHelpers.len(StringHelpers.slice(text, 0, position)) == 10);
   }
 
   /**
@@ -47,12 +47,12 @@ public class Verification {
    */
   public static Boolean timeAfterDateIsLongEnough(
     String text) {
-    long position = (long) text.indexOf("T");
+    long position = StringHelpers.find(text, "T");
     if (position == -1) {
         return true;
     }
     return (
-        StringHelpers.slice(text, position + 1).length() == 8);
+        StringHelpers.len(StringHelpers.slice(text, position + 1)) == 8);
   }
 
   /**
@@ -60,7 +60,7 @@ public class Verification {
    */
   public static Boolean monthIsSeptember(
     String text) {
-    long first = (long) text.indexOf("-");
+    long first = StringHelpers.find(text, "-");
     if (first == -1) {
         return true;
     }
@@ -77,15 +77,15 @@ public class Verification {
    */
   public static Boolean secondsFollowColon(
     String text) {
-    long position = (long) text.indexOf("T");
+    long position = StringHelpers.find(text, "T");
     if (position == -1) {
         return true;
     }
-    return text.length() < 10
+    return StringHelpers.len(text) < 10
     || (
         Objects.equals(StringHelpers.slice(text, -3, -2), ":")
         && StringHelpers.find(text, ":", -3) != -1
-        && StringHelpers.slice(text, 0, -9).length() > 0
+        && StringHelpers.len(StringHelpers.slice(text, 0, -9)) > 0
     );
   }
 
@@ -97,7 +97,7 @@ public class Verification {
    */
   public static Boolean lastCharacterIsNotZ(
     String text) {
-    long position = (long) text.indexOf("#");
+    long position = StringHelpers.find(text, "#");
     return !Objects.equals(StringHelpers.slice(text, position), "Z")
     && Objects.equals(StringHelpers.slice(text, -100, 100), text)
     && Objects.equals(StringHelpers.slice(text, 3, 1), "")
@@ -110,7 +110,7 @@ public class Verification {
    */
   public static Boolean nameStartsWithPrefix(
     String name) {
-    return name.length() < 4
+    return StringHelpers.len(name) < 4
     || Objects.equals(StringHelpers.slice(name, 0, 4), "name");
   }
 
@@ -119,8 +119,8 @@ public class Verification {
    */
   public static Boolean nameHasNoSpaceAfterPrefix(
     String name) {
-    return name.length() < 4
-    || (long) StringHelpers.slice(name, 4).indexOf(" ") == -1;
+    return StringHelpers.len(name) < 4
+    || StringHelpers.find(StringHelpers.slice(name, 4), " ") == -1;
   }
 
   /**
@@ -139,7 +139,7 @@ public class Verification {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
       if (!(
-        !(that.getText().length() >= 1)
+        !(StringHelpers.len(that.getText()) >= 1)
         || (!Objects.equals(StringHelpers.slice(that.getText(), 0, 1), "X")))) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
@@ -262,7 +262,7 @@ public class Verification {
     String that) {
     Stream<Reporting.Error> errorStream = Stream.empty();
 
-    if (!(that.length() > 0)) {
+    if (!(StringHelpers.len(that) > 0)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
