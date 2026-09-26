@@ -662,6 +662,101 @@ yield return new Reporting.Error(
     return Stripped(writer.getvalue()), None
 
 
+def _generate_string_helpers() -> Stripped:
+    """
+    Generate the helpers for slicing strings and for ``find`` with a start.
+
+    The helpers follow the Python implementation, since Python is the language of
+    the meta-model specifications. The native ``Substring`` and ``IndexOf`` throw
+    on the positions out of range, and do not count the negative positions from
+    the end. We also accept the positions as ``long``'s, since our integers are
+    ``long``'s in C#.
+    """
+    return Stripped(
+        f"""\
+/// <summary>
+/// Provide string operations which follow the Python implementation, since
+/// Python is the language of the meta-model specifications.
+/// </summary>
+public static class StringHelpers
+{{
+{I}/// <summary>
+{I}/// Resolve <paramref name="position" /> in a string of
+{I}/// <paramref name="length" /> as Python does in slicing.
+{I}/// </summary>
+{I}/// <remarks>
+{I}/// A negative position counts from the end, and the positions out of range
+{I}/// are clamped to the string.
+{I}/// </remarks>
+{I}private static int ResolvePosition(long position, int length)
+{I}{{
+{II}if (position < 0)
+{II}{{
+{III}return (int)System.Math.Max(position + length, 0);
+{II}}}
+
+{II}return (int)System.Math.Min(position, length);
+{I}}}
+
+{I}/// <summary>
+{I}/// Slice <paramref name="text" /> from <paramref name="start" /> up to
+{I}/// <paramref name="end" />, exclusive.
+{I}/// </summary>
+{I}/// <remarks>
+{I}/// We follow the Python implementation of slicing, since Python is
+{I}/// the language of the meta-model specifications. Hence, a negative position
+{I}/// counts from the end, the positions out of range are clamped to the string,
+{I}/// and the slice is empty if <paramref name="start" /> is not before
+{I}/// <paramref name="end" />. If <paramref name="end" /> is not given, we slice
+{I}/// up to the end of <paramref name="text" />.
+{I}/// </remarks>
+{I}public static string Slice(string text, long start, long? end = null)
+{I}{{
+{II}int theStart = ResolvePosition(start, text.Length);
+{II}int theEnd = end is null
+{III}? text.Length
+{III}: ResolvePosition(end.Value, text.Length);
+
+{II}if (theStart >= theEnd)
+{II}{{
+{III}return "";
+{II}}}
+
+{II}return text.Substring(theStart, theEnd - theStart);
+{I}}}
+
+{I}/// <summary>
+{I}/// Find the first <paramref name="sub" /> in <paramref name="text" /> from
+{I}/// <paramref name="start" /> on.
+{I}/// </summary>
+{I}/// <remarks>
+{I}/// We follow the Python implementation of <c>str.find</c>, since Python is
+{I}/// the language of the meta-model specifications. Hence, a negative
+{I}/// <paramref name="start" /> counts from the end, and
+{I}/// a <paramref name="start" /> beyond the end of <paramref name="text" />
+{I}/// gives -1.
+{I}/// </remarks>
+{I}/// <returns>
+{I}/// The position of <paramref name="sub" /> in <paramref name="text" />,
+{I}/// or -1 if not found
+{I}/// </returns>
+{I}public static int Find(string text, string sub, long start)
+{I}{{
+{II}long theStart = start < 0
+{III}? System.Math.Max(start + text.Length, 0)
+{III}: start;
+
+{II}if (theStart > text.Length)
+{II}{{
+{III}return -1;
+{II}}}
+
+{II}return text.IndexOf(sub, (int)theStart, System.StringComparison.Ordinal);
+{I}}}
+}}  // public static class StringHelpers"""
+    )
+
+
 def _generate_enum_value_sets(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate a class that pre-computes the sets of allowed enumeration literals."""
     blocks = []  # type: List[Stripped]
@@ -1460,6 +1555,9 @@ using System.Linq;  // can't alias"""
             assert_never(verification)
 
     verification_blocks.append(_generate_enum_value_sets(symbol_table=symbol_table))
+
+    if intermediate.uses_string_slicing_or_find(symbol_table):
+        verification_blocks.append(_generate_string_helpers())
 
     verification_blocks.append(
         Stripped(

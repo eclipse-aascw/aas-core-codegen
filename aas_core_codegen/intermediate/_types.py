@@ -4130,6 +4130,39 @@ def uses_json_types(symbol_table: SymbolTable) -> bool:
     return False
 
 
+def uses_string_slicing_or_find(symbol_table: SymbolTable) -> bool:
+    """
+    Check whether any transpiled code slices a string or calls ``find`` on it.
+
+    The targets use this check to generate the helper functions for slicing and
+    ``find`` only if the meta-model needs them.
+
+    We check the parse trees of the invariants and of the transpilable
+    verification functions. As we do not have the types at hand here, we
+    over-approximate and count every method call named ``find``, even if it
+    were a method of our class. In the worst case, we generate unused helpers.
+    """
+    roots = []  # type: List[parse_tree.Node]
+
+    for our_type in symbol_table.our_types:
+        if isinstance(our_type, (ConstrainedPrimitive, AbstractClass, ConcreteClass)):
+            roots.extend(invariant.body for invariant in our_type.invariants)
+
+    for verification in symbol_table.verification_functions:
+        if isinstance(verification, TranspilableVerification):
+            roots.extend(verification.parsed.body)
+
+    for root in roots:
+        for node in parse_tree.over_nodes(root):
+            if isinstance(node, parse_tree.Slice):
+                return True
+
+            if isinstance(node, parse_tree.MethodCall) and node.member.name == "find":
+                return True
+
+    return False
+
+
 def collect_ids_of_our_types_in_properties(
     symbol_table: SymbolTable,
 ) -> Set[IdOfOurType]:

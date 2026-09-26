@@ -12,6 +12,7 @@ from aas_core_codegen.java.tests import (
     _generate_test_jsonization_of_enums,
     _generate_test_jsonization_of_interfaces,
     _generate_test_over_x_or_empty,
+    _generate_test_string_helpers,
     _generate_test_verification_of_enums,
     _generate_test_x_or_default,
     _generate_test_xmlization_of_concrete_classes,
@@ -35,6 +36,7 @@ generate_test_jsonization_of_interfaces = (
     _generate_test_jsonization_of_interfaces.generate
 )
 generate_test_over_x_or_empty = _generate_test_over_x_or_empty.generate
+generate_test_string_helpers = _generate_test_string_helpers.generate
 generate_test_verification_of_enums = _generate_test_verification_of_enums.generate
 generate_test_x_or_default = _generate_test_x_or_default.generate
 generate_test_xmlization_of_concrete_classes = (

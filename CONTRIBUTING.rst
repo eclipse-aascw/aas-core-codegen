@@ -88,6 +88,8 @@ The repository is organized as follows:
     │   ├── run.py              Run logic shared across generators
                                 (coupled to main.py, but also used in tests)
     │   ├── naming.py           Generation of target-specific names based on identifiers
+    │   ├── slicing_and_find_cases.py  Cases of string slicing and find
+                                (the generated unit tests follow Python on them)
     │   ├── specific_implementations.py  Look-up of implementation-specific snippets
     │   ├── stringify.py        Debug stringification of internal structures
     │   ├── parse/              Parsing meta-model source files into an AST

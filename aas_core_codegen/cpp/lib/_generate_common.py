@@ -144,6 +144,193 @@ def _generate_concatenate_implementations_for_2_parts_and_above() -> List[Stripp
     return concat_funcs
 
 
+def _generate_string_helper_declarations() -> List[Stripped]:
+    """
+    Generate the declarations of the helpers for slicing strings and for ``find``.
+
+    The helpers follow the Python implementation, since Python is the language of
+    the meta-model specifications. The native ``std::wstring::substr`` throws on
+    a start out of range, and neither ``substr`` nor ``find`` count the negative
+    positions from the end. We also accept the positions as ``int64_t``'s, since
+    our integers are ``int64_t``'s in C++.
+    """
+    return [
+        Stripped(
+            f"""\
+/**
+ * Slice \\p text from \\p start up to \\p end, exclusive.
+ *
+ * We follow the Python implementation of slicing, since Python is the language
+ * of the meta-model specifications. Hence, a negative position counts from
+ * the end, the positions out of range are clamped to the string, and the slice
+ * is empty if \\p start is not before \\p end.
+ *
+ * \\param text to be sliced
+ * \\param start of the slice, inclusive
+ * \\param end of the slice, exclusive
+ * \\return the slice
+ */
+std::wstring SliceStr(
+{I}const std::wstring& text,
+{I}int64_t start,
+{I}int64_t end
+);"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Slice \\p text from \\p start up to its end.
+ *
+ * See the other overload for the semantics.
+ *
+ * \\param text to be sliced
+ * \\param start of the slice, inclusive
+ * \\return the slice
+ */
+std::wstring SliceStr(
+{I}const std::wstring& text,
+{I}int64_t start
+);"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Find the first \\p sub in \\p text.
+ *
+ * \\param text to be searched in
+ * \\param sub to be searched for
+ * \\return the position of \\p sub in \\p text, or -1 if not found
+ */
+int64_t FindStr(
+{I}const std::wstring& text,
+{I}const std::wstring& sub
+);"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Find the first \\p sub in \\p text from \\p start on.
+ *
+ * We follow the Python implementation of `str.find`, since Python is
+ * the language of the meta-model specifications. Hence, a negative \\p start
+ * counts from the end, and a \\p start beyond the end of \\p text gives -1.
+ *
+ * \\param text to be searched in
+ * \\param sub to be searched for
+ * \\param start of the search
+ * \\return the position of \\p sub in \\p text, or -1 if not found
+ */
+int64_t FindStr(
+{I}const std::wstring& text,
+{I}const std::wstring& sub,
+{I}int64_t start
+);"""
+        ),
+    ]
+
+
+def _generate_string_helper_definitions() -> List[Stripped]:
+    """Generate the definitions of the helpers for slicing strings and ``find``."""
+    return [
+        Stripped(
+            f"""\
+namespace {{
+
+/**
+ * Resolve \\p position in a string of \\p length as Python does in slicing.
+ *
+ * A negative position counts from the end, and the positions out of range are
+ * clamped to the string.
+ *
+ * \\param position to be resolved
+ * \\param length of the string
+ * \\return the resolved position within `[0, length]`
+ */
+size_t ResolvePosition(int64_t position, size_t length) {{
+{I}const int64_t signed_length = static_cast<int64_t>(length);
+
+{I}if (position < 0) {{
+{II}const int64_t resolved = position + signed_length;
+{II}return resolved < 0 ? 0 : static_cast<size_t>(resolved);
+{I}}}
+
+{I}return position > signed_length ? length : static_cast<size_t>(position);
+}}
+
+}}  // namespace"""
+        ),
+        Stripped(
+            f"""\
+std::wstring SliceStr(
+{I}const std::wstring& text,
+{I}int64_t start,
+{I}int64_t end
+) {{
+{I}const size_t the_start = ResolvePosition(start, text.size());
+{I}const size_t the_end = ResolvePosition(end, text.size());
+
+{I}if (the_start >= the_end) {{
+{II}return L"";
+{I}}}
+
+{I}return text.substr(the_start, the_end - the_start);
+}}"""
+        ),
+        Stripped(
+            f"""\
+std::wstring SliceStr(
+{I}const std::wstring& text,
+{I}int64_t start
+) {{
+{I}return text.substr(ResolvePosition(start, text.size()));
+}}"""
+        ),
+        Stripped(
+            f"""\
+int64_t FindStr(
+{I}const std::wstring& text,
+{I}const std::wstring& sub
+) {{
+{I}const size_t position = text.find(sub);
+{I}if (position == std::wstring::npos) {{
+{II}return -1;
+{I}}}
+
+{I}return static_cast<int64_t>(position);
+}}"""
+        ),
+        Stripped(
+            f"""\
+int64_t FindStr(
+{I}const std::wstring& text,
+{I}const std::wstring& sub,
+{I}int64_t start
+) {{
+{I}const int64_t size = static_cast<int64_t>(text.size());
+
+{I}int64_t the_start = start;
+{I}if (the_start < 0) {{
+{II}the_start += size;
+{II}if (the_start < 0) {{
+{III}the_start = 0;
+{II}}}
+{I}}}
+
+{I}if (the_start > size) {{
+{II}return -1;
+{I}}}
+
+{I}const size_t position = text.find(sub, static_cast<size_t>(the_start));
+{I}if (position == std::wstring::npos) {{
+{II}return -1;
+{I}}}
+
+{I}return static_cast<int64_t>(position);
+}}"""
+        ),
+    ]
+
+
 # fmt: off
 @ensure(
     lambda result:
@@ -254,6 +441,20 @@ std::unique_ptr<T> make_unique(
 #endif"""
         ),
     ]  # type: List[Stripped]
+
+    # NOTE (mristin):
+    # The string helpers take the positions as ``int64_t``'s, so we need
+    # the fixed-width integers only for a meta-model which slices strings or
+    # calls ``find`` on them.
+    if intermediate.uses_string_slicing_or_find(symbol_table):
+        blocks.append(
+            Stripped(
+                """\
+#pragma warning(push, 0)
+#include <cstdint>
+#pragma warning(pop)"""
+            )
+        )
 
     # NOTE (mristin):
     # Only the named unions need a variant, so we do not burden the users of
@@ -511,6 +712,11 @@ std::wstring Utf8ToWstring(
  */
 std::wstring Utf8ToWstring(const std::string& utf8_text);"""
             ),
+            *(
+                _generate_string_helper_declarations()
+                if intermediate.uses_string_slicing_or_find(symbol_table)
+                else []
+            ),
             Stripped(
                 f"""\
 }}  // namespace {cpp_common.COMMON_NAMESPACE}
@@ -541,7 +747,9 @@ std::wstring Utf8ToWstring(const std::string& utf8_text);"""
     "Trailing newline mandatory for valid end-of-files"
 )
 # fmt: on
-def generate_implementation(library_namespace: Stripped) -> str:
+def generate_implementation(
+    symbol_table: intermediate.SymbolTable, library_namespace: Stripped
+) -> str:
     """Generate implementation of common functionality."""
     namespace = Stripped(f"{library_namespace}::{cpp_common.COMMON_NAMESPACE}")
 
@@ -756,6 +964,11 @@ std::wstring Utf8ToWstring(
 std::wstring Utf8ToWstring(const std::string& utf8_text) {{
 {I}return Utf8ToWstring(&(utf8_text[0]), utf8_text.size());
 }}"""
+        ),
+        *(
+            _generate_string_helper_definitions()
+            if intermediate.uses_string_slicing_or_find(symbol_table)
+            else []
         ),
         cpp_common.generate_namespace_closing(namespace),
         cpp_common.WARNING,

@@ -1,0 +1,1 @@
+We do not support the step in slices, as it is not available in all the target languages

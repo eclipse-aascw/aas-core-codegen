@@ -263,6 +263,7 @@ class Transpiler(
             parse_tree.MethodCall,
             parse_tree.Name,
             parse_tree.Index,
+            parse_tree.Slice,
         )
         if not isinstance(node, no_parentheses_types):
             code = Stripped(f"({code})")
@@ -454,6 +455,7 @@ class Transpiler(
                 parse_tree.Name,
                 parse_tree.Constant,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.IsIn,
             )
 
@@ -495,6 +497,7 @@ len(
             parse_tree.Name,
             parse_tree.Constant,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.IsIn,
         )
 
@@ -509,6 +512,75 @@ len(
         # all the index access.
 
         return Stripped(f"{collection}[{index}]"), None
+
+    def _as_int64_position(self, node: parse_tree.Node, code: Stripped) -> Stripped:
+        """
+        Convert the transpiled position ``node`` to an ``int64``.
+
+        The string helpers take the positions as ``int64``'s, our integers,
+        while the lengths are ``int``'s.
+        """
+        type_anno = self.type_map[node]
+        if (
+            isinstance(type_anno, intermediate_type_inference.PrimitiveTypeAnnotation)
+            and type_anno.a_type is intermediate_type_inference.PrimitiveType.LENGTH
+        ):
+            return Stripped(f"int64({code})")
+
+        return code
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_slice(
+        self, node: parse_tree.Slice
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+
+        collection, error = self.transform(node.collection)
+        if error is not None:
+            errors.append(error)
+
+        start = None  # type: Optional[Stripped]
+        if node.start is not None:
+            start, error = self.transform(node.start)
+            if error is not None:
+                errors.append(error)
+
+        end = None  # type: Optional[Stripped]
+        if node.end is not None:
+            end, error = self.transform(node.end)
+            if error is not None:
+                errors.append(error)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the slice", errors
+            )
+
+        assert collection is not None
+
+        # NOTE (mristin):
+        # We do not use the native slicing as it panics on the positions out of
+        # range, and does not count the negative ones from the end, unlike Python.
+        # See ``SliceStr`` in the generated common package.
+        start_int64 = (
+            self._as_int64_position(node.start, start)
+            if node.start is not None and start is not None
+            else Stripped("0")
+        )
+
+        if node.end is None:
+            return (
+                Stripped(f"aascommon.SliceStrFrom({collection}, {start_int64})"),
+                None,
+            )
+
+        assert end is not None
+        end_int64 = self._as_int64_position(node.end, end)
+
+        return (
+            Stripped(f"aascommon.SliceStr({collection}, {start_int64}, {end_int64})"),
+            None,
+        )
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_comparison(
@@ -540,6 +612,7 @@ len(
             parse_tree.Constant,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.All,
             parse_tree.Any,
         )
@@ -642,6 +715,7 @@ aascommon.MapContains(
                 parse_tree.MethodCall,
                 parse_tree.Name,
                 parse_tree.Index,
+                parse_tree.Slice,
             )
             if not isinstance(node.value, no_parentheses_types):
                 value = Stripped(f"({value})")
@@ -717,6 +791,7 @@ aascommon.MapContains(
             parse_tree.Name,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.All,
             parse_tree.Any,
         )
@@ -760,6 +835,33 @@ aascommon.MapContains(
             )
 
         assert instance is not None
+
+        member_type = self.type_map[node.member]
+        if isinstance(
+            member_type, intermediate_type_inference.BuiltinMethodTypeAnnotation
+        ):
+            if member_type.method is intermediate_type_inference.STR_FIND:
+                if len(args) == 1:
+                    return (
+                        Stripped(f"int64(strings.Index({instance}, {args[0]}))"),
+                        None,
+                    )
+
+                # NOTE (mristin):
+                # The ``strings.Index`` has no start, so we use a helper which
+                # follows the Python implementation of ``str.find``. See
+                # ``FindStr`` in the generated common package.
+                start = self._as_int64_position(node.args[1], args[1])
+                return (
+                    Stripped(f"aascommon.FindStr({instance}, {args[0]}, {start})"),
+                    None,
+                )
+
+            return None, Error(
+                node.original_node,
+                f"The handling of the built-in method {member_type.method.name!r} "
+                f"has not been implemented",
+            )
 
         if not isinstance(node.member.instance, (parse_tree.Name, parse_tree.Member)):
             instance = Stripped(f"({instance})")
@@ -956,6 +1058,7 @@ len(
             parse_tree.IsInstance,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.All,
             parse_tree.Any,
         )
@@ -979,6 +1082,7 @@ len(
             parse_tree.IsInstance,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.All,
             parse_tree.Any,
         )
@@ -1008,6 +1112,7 @@ len(
             parse_tree.IsInstance,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.All,
             parse_tree.Any,
         )
@@ -1039,6 +1144,7 @@ len(
                 parse_tree.Name,
                 parse_tree.IsIn,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.All,
                 parse_tree.Any,
             )
@@ -1079,6 +1185,7 @@ len(
                 parse_tree.Name,
                 parse_tree.IsIn,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.All,
                 parse_tree.Any,
             )
@@ -1131,6 +1238,7 @@ len(
             parse_tree.Name,
             parse_tree.IsIn,
             parse_tree.Index,
+            parse_tree.Slice,
             parse_tree.All,
             parse_tree.Any,
         )
@@ -1305,6 +1413,7 @@ fmt.Sprintf(
                 parse_tree.Name,
                 parse_tree.IsIn,
                 parse_tree.Index,
+                parse_tree.Slice,
                 parse_tree.All,
                 parse_tree.Any,
             )

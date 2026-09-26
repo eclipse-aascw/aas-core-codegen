@@ -7,6 +7,7 @@ from aas_core_codegen.python.tests import (
     _generate_test_descend_and_pass_through_visitor,
     _generate_test_descend_once,
     _generate_test_json_value_verification,
+    _generate_test_slicing_and_find,
     _generate_test_jsonization_of_classes_with_descendants,
     _generate_test_jsonization_of_concrete_classes,
     _generate_test_jsonization_of_enums,
@@ -26,6 +27,7 @@ generate_test_descend_and_pass_through_visitor = (
 )
 generate_test_descend_once = _generate_test_descend_once.generate
 generate_test_json_value_verification = _generate_test_json_value_verification.generate
+generate_test_slicing_and_find = _generate_test_slicing_and_find.generate
 generate_test_jsonization_of_classes_with_descendants = (
     _generate_test_jsonization_of_classes_with_descendants.generate
 )

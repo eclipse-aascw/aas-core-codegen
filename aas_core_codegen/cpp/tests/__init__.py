@@ -11,6 +11,7 @@ from aas_core_codegen.cpp.tests import (
     _generate_test_jsonization_of_concrete_classes,
     _generate_test_revm,
     _generate_test_stringification_base64,
+    _generate_test_string_helpers,
     _generate_test_stringification_of_enums,
     _generate_test_verification,
     _generate_test_wstringification_of_enums,
@@ -51,6 +52,9 @@ generate_test_jsonization_of_concrete_classes_implementation = (
     _generate_test_jsonization_of_concrete_classes.generate_implementation
 )
 generate_test_revm_implementation = _generate_test_revm.generate_implementation
+generate_test_string_helpers_implementation = (
+    _generate_test_string_helpers.generate_implementation
+)
 generate_test_stringification_base64_implementation = (
     _generate_test_stringification_base64.generate_implementation
 )

@@ -517,6 +517,51 @@ class _ParseMember(_Parse):
         )
 
 
+class _ParseSlice(_Parse):
+    def matches(self, node: ast.AST) -> bool:
+        return isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Slice)
+
+    # noinspection PyTypeChecker
+    def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
+        assert isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Slice)
+
+        if node.slice.step is not None:
+            return None, Error(
+                node.slice.step,
+                "We do not support the step in slices, "
+                "as it is not available in all the target languages",
+            )
+
+        collection, error = ast_node_to_our_node(node.value)
+        if error is not None:
+            return None, error
+
+        assert isinstance(collection, tree.Expression), f"{collection=}"
+
+        start = None  # type: Optional[tree.Expression]
+        if node.slice.lower is not None:
+            start_node, error = ast_node_to_our_node(node.slice.lower)
+            if error is not None:
+                return None, error
+
+            assert isinstance(start_node, tree.Expression), f"{start_node=}"
+            start = start_node
+
+        end = None  # type: Optional[tree.Expression]
+        if node.slice.upper is not None:
+            end_node, error = ast_node_to_our_node(node.slice.upper)
+            if error is not None:
+                return None, error
+
+            assert isinstance(end_node, tree.Expression), f"{end_node=}"
+            end = end_node
+
+        return (
+            tree.Slice(collection=collection, start=start, end=end, original_node=node),
+            None,
+        )
+
+
 class _ParseIndex(_Parse):
     def matches(self, node: ast.AST) -> bool:
         return isinstance(node, ast.Subscript)
@@ -1080,6 +1125,7 @@ _CHAIN_OF_RULES = [
     _ParseTuple(),
     _ParseImplication(),
     _ParseMember(),
+    _ParseSlice(),
     _ParseIndex(),
     _ParseName(),
     _ParseIsNoneOrIsNotNone(),

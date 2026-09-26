@@ -4,6 +4,7 @@ from aas_core_codegen.typescript.tests import (
     _generate_common,
     _generate_common_base64_spec,
     _generate_common_base64url_spec,
+    _generate_common_string_helpers_spec,
     _generate_common_jsonization,
     _generate_common_xmlization,
     _generate_jsonization_common_spec,
@@ -34,6 +35,7 @@ from aas_core_codegen.typescript.tests import (
 generate_common = _generate_common.generate
 generate_common_base64_spec = _generate_common_base64_spec.generate
 generate_common_base64url_spec = _generate_common_base64url_spec.generate
+generate_common_string_helpers_spec = _generate_common_string_helpers_spec.generate
 generate_common_jsonization = _generate_common_jsonization.generate
 generate_common_xmlization = _generate_common_xmlization.generate
 generate_jsonization_common_spec = _generate_jsonization_common_spec.generate

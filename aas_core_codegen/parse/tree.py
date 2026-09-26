@@ -110,6 +110,36 @@ class Index(Expression):
         visitor.visit_index(self)
 
 
+class Slice(Expression):
+    """
+    Represent a slice of a string such as ``text[start:end]``.
+
+    The ``start`` and the ``end`` are optional. A missing ``start`` denotes
+    the beginning of the string, and a missing ``end`` denotes its end.
+    """
+
+    def __init__(
+        self,
+        collection: "Expression",
+        start: Optional["Expression"],
+        end: Optional["Expression"],
+        original_node: ast.AST,
+    ) -> None:
+        """Initialize with the given values."""
+        Expression.__init__(self, original_node=original_node)
+        self.collection = collection
+        self.start = start
+        self.end = end
+
+    def transform(self, transformer: "Transformer[T]") -> T:
+        """Accept the transformer."""
+        return transformer.transform_slice(self)
+
+    def visit(self, visitor: "Visitor") -> None:
+        """Accept the visitor."""
+        visitor.visit_slice(self)
+
+
 class Comparator(enum.Enum):
     """List comparison operands."""
 
@@ -700,6 +730,16 @@ class Visitor(DBC):
         self.visit(node.collection)
         self.visit(node.index)
 
+    def visit_slice(self, node: Slice) -> None:
+        """Visit a slice."""
+        self.visit(node.collection)
+
+        if node.start is not None:
+            self.visit(node.start)
+
+        if node.end is not None:
+            self.visit(node.end)
+
     def visit_comparison(self, node: Comparison) -> None:
         """Visit a comparison."""
         self.visit(node.left)
@@ -853,6 +893,11 @@ class Transformer(Generic[T], DBC):
         raise NotImplementedError(f"{node=}")
 
     @abc.abstractmethod
+    def transform_slice(self, node: Slice) -> T:
+        """Transform a slice to something."""
+        raise NotImplementedError(f"{node=}")
+
+    @abc.abstractmethod
     def transform_comparison(self, node: Comparison) -> T:
         """Transform a comparison to something."""
         raise NotImplementedError(f"{node=}")
@@ -1003,6 +1048,23 @@ class _StringifyTransformer(Transformer[stringify.Entity]):
             properties=[
                 stringify.Property("collection", self.transform(node.collection)),
                 stringify.Property("index", self.transform(node.index)),
+                stringify.PropertyEllipsis("original_node", node.original_node),
+            ],
+        )
+
+    def transform_slice(self, node: Slice) -> stringify.Entity:
+        return stringify.Entity(
+            name=node.__class__.__name__,
+            properties=[
+                stringify.Property("collection", self.transform(node.collection)),
+                stringify.Property(
+                    "start",
+                    self.transform(node.start) if node.start is not None else None,
+                ),
+                stringify.Property(
+                    "end",
+                    self.transform(node.end) if node.end is not None else None,
+                ),
                 stringify.PropertyEllipsis("original_node", node.original_node),
             ],
         )
@@ -1319,6 +1381,10 @@ class RestrictedTransformer(Transformer[T]):
         """Transform an index access to something."""
         raise AssertionError(f"Unexpected node: {dump(node)}")
 
+    def transform_slice(self, node: Slice) -> T:
+        """Transform a slice to something."""
+        raise AssertionError(f"Unexpected node: {dump(node)}")
+
     def transform_comparison(self, node: Comparison) -> T:
         """Transform a comparison to something."""
         raise AssertionError(f"Unexpected node: {dump(node)}")
@@ -1435,6 +1501,16 @@ class _IterationTransformer(Transformer[Iterator[Node]]):
         yield node
         yield from self.transform(node.collection)
         yield from self.transform(node.index)
+
+    def transform_slice(self, node: Slice) -> Iterator[Node]:
+        yield node
+        yield from self.transform(node.collection)
+
+        if node.start is not None:
+            yield from self.transform(node.start)
+
+        if node.end is not None:
+            yield from self.transform(node.end)
 
     def transform_comparison(self, node: Comparison) -> Iterator[Node]:
         yield node

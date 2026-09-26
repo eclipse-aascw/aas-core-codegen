@@ -2,7 +2,7 @@
 
 import ast
 import unittest
-from typing import List, Tuple
+from typing import List, Mapping, Tuple
 
 import tests.common
 from aas_core_codegen import intermediate
@@ -1730,6 +1730,202 @@ __xml_namespace__ = "https://dummy.com"
             "Expected the class 'Wrapper' to be a root of the named union "
             "'Inner' of the value in ``isinstance``, or a descendant of "
             "a root, but it is not. The roots are: Leaf, Other_leaf",
+        )
+
+
+class Test_string_slicing_and_find(unittest.TestCase):
+    @staticmethod
+    def source_with_invariant(condition: str, property_type: str = "str") -> str:
+        """Generate the source of a meta-model with a single invariant."""
+        return f"""\
+@invariant(
+    lambda self: {condition},
+    "Dummy invariant description"
+)
+class Something(DBC):
+    text: {property_type}
+
+    def __init__(self, text: {property_type}) -> None:
+        self.text = text
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+    @staticmethod
+    def infer_type_map(source: str) -> Mapping[str, str]:
+        """Infer the types in the only invariant, keyed by the source code."""
+        symbol_table, error = tests.common.translate_source_to_intermediate(
+            source=source
+        )
+        assert error is None, tests.common.most_underlying_messages(error)
+        assert symbol_table is not None
+
+        something = symbol_table.must_find_concrete_class(Identifier("Something"))
+        assert len(something.invariants) == 1
+
+        environment = intermediate_type_inference.MutableEnvironment(
+            parent=intermediate_type_inference.populate_base_environment(
+                symbol_table=symbol_table
+            )
+        )
+        environment.set(
+            Identifier("self"),
+            intermediate_type_inference.OurTypeAnnotation(our_type=something),
+        )
+
+        inference, inference_error = intermediate_type_inference.infer_for_invariant(
+            invariant=something.invariants[0], environment=environment
+        )
+
+        if inference_error is not None:
+            raise AssertionError(
+                tests.common.most_underlying_messages([inference_error])
+            )
+
+        assert inference is not None
+        return {
+            ast.unparse(node.original_node): str(type_anno)
+            for node, type_anno in inference.type_map.items()
+        }
+
+    def expect_error(
+        self, condition: str, expected_message: str, property_type: str = "str"
+    ) -> None:
+        source = Test_string_slicing_and_find.source_with_invariant(
+            condition=condition, property_type=property_type
+        )
+        with self.assertRaises(AssertionError) as context:
+            Test_string_slicing_and_find.infer_type_map(source)
+
+        self.assertEqual(expected_message, str(context.exception))
+
+    def test_slice_and_find(self) -> None:
+        type_map = Test_string_slicing_and_find.infer_type_map(
+            Test_string_slicing_and_find.source_with_invariant(
+                'self.text[self.text.find("-", 1) + 1 : len(self.text)] != "x"'
+            )
+        )
+
+        self.assertEqual("find", type_map["self.text.find"])
+        self.assertEqual("int", type_map["self.text.find('-', 1)"])
+        self.assertEqual(
+            "str", type_map["self.text[self.text.find('-', 1) + 1:len(self.text)]"]
+        )
+
+    def test_negative_literal_positions(self) -> None:
+        type_map = Test_string_slicing_and_find.infer_type_map(
+            Test_string_slicing_and_find.source_with_invariant(
+                'self.text[-3:-1] != "x" and self.text.find("x", -2) == -1'
+            )
+        )
+
+        self.assertEqual("str", type_map["self.text[-3:-1]"])
+        self.assertEqual("int", type_map["self.text.find('x', -2)"])
+
+    def test_slice_of_a_constrained_primitive_is_a_plain_string(self) -> None:
+        source = """\
+@invariant(lambda self: len(self) > 0, "Dummy constraint")
+class Non_empty_string(str, DBC):
+    pass
+
+
+@invariant(
+    lambda self: self.text[:1].find("x") == -1,
+    "Dummy invariant description"
+)
+class Something(DBC):
+    text: Non_empty_string
+
+    def __init__(self, text: Non_empty_string) -> None:
+        self.text = text
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+        type_map = Test_string_slicing_and_find.infer_type_map(source)
+
+        self.assertEqual("Non_empty_string", type_map["self.text"])
+        self.assertEqual("str", type_map["self.text[:1]"])
+        self.assertEqual("int", type_map["self.text[:1].find('x')"])
+
+    def test_slice_of_a_list_fails(self) -> None:
+        self.expect_error(
+            "len(self.text[0:1]) == 1",
+            "We support slicing only of non-None strings, but got: List[str]",
+            property_type="List[str]",
+        )
+
+    def test_slice_of_a_tuple_fails(self) -> None:
+        self.expect_error(
+            "len(self.text[0:1]) == 1",
+            "We support slicing only of non-None strings, but got: Tuple[int, int]",
+            property_type="Tuple[int, int]",
+        )
+
+    def test_slice_of_an_optional_string_fails(self) -> None:
+        source = """\
+@invariant(
+    lambda self: self.text[0:1] == "a",
+    "Dummy invariant description"
+)
+class Something(DBC):
+    text: Optional[str]
+
+    def __init__(self, text: Optional[str] = None) -> None:
+        self.text = text
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+        with self.assertRaises(AssertionError) as context:
+            Test_string_slicing_and_find.infer_type_map(source)
+
+        self.assertEqual(
+            "We support slicing only of non-None strings, but got: Optional[str]",
+            str(context.exception),
+        )
+
+    def test_slice_with_a_string_end_fails(self) -> None:
+        self.expect_error(
+            'self.text[:"1"] == "a"',
+            "Expected the end of a slice to be an integer, but got: str",
+        )
+
+    def test_find_with_a_non_string_argument_fails(self) -> None:
+        self.expect_error(
+            "self.text.find(1) == 0",
+            "Expected the searched value of ``find`` to be a string, but got: int",
+        )
+
+    def test_find_with_no_arguments_fails(self) -> None:
+        self.expect_error(
+            "self.text.find() == 0",
+            "Expected between 1 and 2 argument(s) to the built-in method 'find', "
+            "but got 0",
+        )
+
+    def test_find_with_too_many_arguments_fails(self) -> None:
+        self.expect_error(
+            'self.text.find("a", 0, 1) == 0',
+            "Expected between 1 and 2 argument(s) to the built-in method 'find', "
+            "but got 3",
+        )
+
+    def test_find_with_a_string_start_fails(self) -> None:
+        self.expect_error(
+            'self.text.find("a", "0") == 0',
+            "Expected the start of ``find`` to be an integer, but got: str",
+        )
+
+    def test_unsupported_string_method_fails(self) -> None:
+        self.expect_error(
+            'self.text.upper() == "A"',
+            "The member 'upper' is not supported on strings; we support only "
+            "the following methods: 'find'",
         )
 
 

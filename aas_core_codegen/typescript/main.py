@@ -90,7 +90,10 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
     rel_paths_generators: Sequence[
         Tuple[pathlib.Path, Callable[[], Tuple[Optional[str], Optional[List[Error]]]]]
     ] = [
-        (src_rel_path / "common.ts", lambda: (typescript_lib.generate_common(), None)),
+        (
+            src_rel_path / "common.ts",
+            lambda: (typescript_lib.generate_common(context.symbol_table), None),
+        ),
         (
             src_rel_path / "constants.ts",
             lambda: typescript_lib.generate_constants(
@@ -396,6 +399,20 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
                     typescript_tests.generate_xml_rpc_spec(
                         symbol_table=context.symbol_table,
                     ),
+                    None,
+                ),
+            ),
+        ]
+
+    # NOTE (mristin):
+    # The helpers for slicing strings and ``find`` are only generated for
+    # a meta-model which uses them, and so are their tests.
+    if intermediate.uses_string_slicing_or_find(context.symbol_table):
+        rel_paths_generators = list(rel_paths_generators) + [
+            (
+                test_rel_path / "common.stringHelpers.spec.ts",
+                lambda: (
+                    typescript_tests.generate_common_string_helpers_spec(),
                     None,
                 ),
             ),
