@@ -4422,10 +4422,14 @@ def _verify_named_unions_are_dispatchable_in_json(
       unique across the whole meta-model, so no two such implementers can ever
       be confused for one another; or
     * structurally -- among *only* the implementers of the same union which do
-      *not* have ``with_model_type`` set, every required (non-optional)
-      property must be required by at most one such implementer, so the set of
-      keys present in a JSON object lacking a ``modelType`` field is enough to
-      unambiguously tell them apart.
+      *not* have ``with_model_type`` set, the JSON name of every required
+      (non-optional) property must be required by at most one such implementer,
+      so the set of keys present in a JSON object lacking a ``modelType`` field
+      is enough to unambiguously tell them apart.
+
+    We compare the JSON names, not the property names, since the JSON names are
+    what the de-serializer sees on the wire. Two properties with different names
+    might still share the same JSON name given an explicit ``json_name`` marker.
 
     These two dispatch mechanisms do not need to agree union-wide -- a single
     union may freely mix implementers dispatched by ``modelType`` with
@@ -4446,9 +4450,9 @@ def _verify_named_unions_are_dispatchable_in_json(
 
         # region Check required properties disjoint among non-modelType implementers
 
-        required_property_names_by_implementer = {
+        required_json_names_by_implementer = {
             implementer: [
-                prop.name
+                prop.json_name
                 for prop in implementer.properties
                 if not isinstance(prop.type_annotation, OptionalTypeAnnotation)
             ]
@@ -4457,7 +4461,7 @@ def _verify_named_unions_are_dispatchable_in_json(
 
         implementers_without_a_required_property = [
             implementer
-            for implementer, required in required_property_names_by_implementer.items()
+            for implementer, required in required_json_names_by_implementer.items()
             if len(required) == 0
         ]
 
@@ -4484,18 +4488,18 @@ def _verify_named_unions_are_dispatchable_in_json(
             )
             continue
 
-        implementers_by_required_property_name = collections.defaultdict(
+        implementers_by_required_json_name = collections.defaultdict(
             list
-        )  # type: MutableMapping[Identifier, List[ConcreteClass]]
+        )  # type: MutableMapping[NonEmptyString, List[ConcreteClass]]
 
-        for implementer, required in required_property_names_by_implementer.items():
-            for prop_name in required:
-                implementers_by_required_property_name[prop_name].append(implementer)
+        for implementer, required in required_json_names_by_implementer.items():
+            for json_name in required:
+                implementers_by_required_json_name[json_name].append(implementer)
 
         conflicts = [
-            f"the required property {prop_name!r} is shared "
+            f"the JSON name {json_name!r} of a required property is shared "
             f"between {', '.join(repr(implementer.name) for implementer in conflicting)}"
-            for prop_name, conflicting in implementers_by_required_property_name.items()
+            for json_name, conflicting in implementers_by_required_json_name.items()
             if len(conflicting) > 1
         ]
 
