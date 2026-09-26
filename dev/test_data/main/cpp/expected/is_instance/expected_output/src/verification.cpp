@@ -69,7 +69,7 @@ bool LeavesInTreeAreNotEmpty(
     (
       (
         !types::IsLeaf(*element)
-        || (std::dynamic_pointer_cast<types::ILeaf>(element)->text().size() > 0)
+        || (common::LenStr(std::dynamic_pointer_cast<types::ILeaf>(element)->text()) > 0)
       )
       && (
         !types::IsContainer(*element)
@@ -92,8 +92,8 @@ bool IsShortLeafOrNoLeaf(
   return (
     (
       (!types::IsLeaf(*element))
-      || std::dynamic_pointer_cast<types::ILeaf>(element)->text().size() == 0
-      || std::dynamic_pointer_cast<types::ILeaf>(element)->text().size() < 16
+      || common::LenStr(std::dynamic_pointer_cast<types::ILeaf>(element)->text()) == 0
+      || common::LenStr(std::dynamic_pointer_cast<types::ILeaf>(element)->text()) < 16
     )
   );
 }
@@ -268,7 +268,7 @@ bool Something_5(
     (that->optional_element().has_value())
     && types::IsLeaf(*(*(that->optional_element())))
   ))
-  || (std::dynamic_pointer_cast<types::ILeaf>(*that->optional_element())->text().size() > 0);
+  || (common::LenStr(std::dynamic_pointer_cast<types::ILeaf>(*that->optional_element())->text()) > 0);
 }
 
 /**

@@ -195,12 +195,13 @@ export class VerificationError {
 export function dateBeforeTimeIsLongEnough(
   text: string
 ): boolean {
-  const position = text.indexOf("T");
+  const position = AasCommon.findStr(text, "T");
   switch (position) {
     case -1:
       return true;
   }
-  return AasCommon.sliceStr(text, 0, position).length == 10;
+  return (
+    AasCommon.lenStr(AasCommon.sliceStr(text, 0, position)) == 10);
 }
 
 /**
@@ -209,12 +210,13 @@ export function dateBeforeTimeIsLongEnough(
 export function timeAfterDateIsLongEnough(
   text: string
 ): boolean {
-  const position = text.indexOf("T");
+  const position = AasCommon.findStr(text, "T");
   switch (position) {
     case -1:
       return true;
   }
-  return AasCommon.sliceStr(text, position + 1).length == 8;
+  return (
+    AasCommon.lenStr(AasCommon.sliceStr(text, position + 1)) == 8);
 }
 
 /**
@@ -223,7 +225,7 @@ export function timeAfterDateIsLongEnough(
 export function monthIsSeptember(
   text: string
 ): boolean {
-  const first = text.indexOf("-");
+  const first = AasCommon.findStr(text, "-");
   switch (first) {
     case -1:
       return true;
@@ -243,18 +245,18 @@ export function monthIsSeptember(
 export function secondsFollowColon(
   text: string
 ): boolean {
-  const position = text.indexOf("T");
+  const position = AasCommon.findStr(text, "T");
   switch (position) {
     case -1:
       return true;
   }
   return (
-    text.length < 10
+    AasCommon.lenStr(text) < 10
     || (
       (
         AasCommon.sliceStr(text, -3, -2) == ":"
         && AasCommon.findStr(text, ":", -3) != -1
-        && AasCommon.sliceStr(text, 0, -9).length > 0
+        && AasCommon.lenStr(AasCommon.sliceStr(text, 0, -9)) > 0
       )
     )
   );
@@ -271,7 +273,7 @@ export function secondsFollowColon(
 export function lastCharacterIsNotZ(
   text: string
 ): boolean {
-  const position = text.indexOf("#");
+  const position = AasCommon.findStr(text, "#");
   return (
     AasCommon.sliceStr(text, position) != "Z"
     && AasCommon.sliceStr(text, -100, 100) == text
@@ -288,7 +290,7 @@ export function nameStartsWithPrefix(
   name: string
 ): boolean {
   return (
-    name.length < 4
+    AasCommon.lenStr(name) < 4
     || AasCommon.sliceStr(name, 0, 4) == "name"
   );
 }
@@ -300,8 +302,8 @@ export function nameHasNoSpaceAfterPrefix(
   name: string
 ): boolean {
   return (
-    name.length < 4
-    || AasCommon.sliceStr(name, 4).indexOf(" ") == -1
+    AasCommon.lenStr(name) < 4
+    || AasCommon.findStr(AasCommon.sliceStr(name, 4), " ") == -1
   );
 }
 
@@ -318,7 +320,7 @@ class Verifier
     context: boolean
   ): IterableIterator<VerificationError> {
     if (!(
-      !(that.text.length >= 1)
+      !(AasCommon.lenStr(that.text) >= 1)
       || (AasCommon.sliceStr(that.text, 0, 1) != "X")
     )) {
       yield new VerificationError(
@@ -405,7 +407,7 @@ export function *verify(
 export function *verifyNonEmptyString(
   that: string
 ): IterableIterator<VerificationError> {
-  if (!(that.length > 0)) {
+  if (!(AasCommon.lenStr(that) > 0)) {
     yield new VerificationError(
       "At least one character"
     )

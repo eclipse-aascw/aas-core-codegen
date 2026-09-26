@@ -101,11 +101,11 @@ bool SwitchOnEnumWithVariablesInCases(
 ) {
   switch (kind) {
     case types::Kind::kAlpha: {
-      size_t length = text.size();
+      size_t length = common::LenStr(text);
       return length > 1;
     }
     case types::Kind::kBeta: {
-      size_t length = text.size();
+      size_t length = common::LenStr(text);
       return length > 2;
     }
     default:
@@ -123,7 +123,7 @@ bool SwitchOnStr(
   } else if (text == L"delta" || text == L"epsilon") {
     return false;
   } else {
-    return text.size() > 0;
+    return common::LenStr(text) > 0;
   }
 }
 
@@ -234,7 +234,7 @@ bool NonEmptyString_0(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() > 0;
+  return common::LenStr(that) > 0;
 }
 
 bool Something_0(

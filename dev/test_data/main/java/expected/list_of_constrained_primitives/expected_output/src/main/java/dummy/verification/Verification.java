@@ -120,7 +120,7 @@ public class Verification {
     String that) {
     Stream<Reporting.Error> errorStream = Stream.empty();
 
-    if (!(that.length() > 0)) {
+    if (!(StringHelpers.len(that) > 0)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +

@@ -12,6 +12,7 @@ package verification
 
 import (
 	"fmt"
+	aascommon "github.com/dummy-works/dummy/common"
 	aasreporting "github.com/dummy-works/dummy/reporting"
 	aastypes "github.com/dummy-works/dummy/types"
 )
@@ -106,7 +107,7 @@ func VerifyName(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that) > 0) {
+	if !(aascommon.LenStr(that) > 0) {
 		abort = onError(
 			newVerificationError(
 				"Non-empty",),

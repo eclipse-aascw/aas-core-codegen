@@ -9130,7 +9130,7 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.text.length <= 128)) {
+    if (!(AasCommon.lenStr(that.text) <= 128)) {
       yield new VerificationError(
         "String shall have a maximum length of 128 characters."
       )
@@ -9162,7 +9162,7 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.text.length <= 1023)) {
+    if (!(AasCommon.lenStr(that.text) <= 1023)) {
       yield new VerificationError(
         "String shall have a maximum length of 1023 characters."
       )
@@ -9396,7 +9396,7 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.text.length <= 255)) {
+    if (!(AasCommon.lenStr(that.text) <= 255)) {
       yield new VerificationError(
         "String shall have a maximum length of 255 characters."
       )
@@ -9428,7 +9428,7 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.text.length <= 18)) {
+    if (!(AasCommon.lenStr(that.text) <= 18)) {
       yield new VerificationError(
         "String shall have a maximum length of 18 characters."
       )
@@ -9460,7 +9460,7 @@ class Verifier
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     context: boolean
   ): IterableIterator<VerificationError> {
-    if (!(that.text.length <= 1023)) {
+    if (!(AasCommon.lenStr(that.text) <= 1023)) {
       yield new VerificationError(
         "String shall have a maximum length of 1023 characters."
       )
@@ -9810,7 +9810,7 @@ export function *verifyNonEmptyXmlSerializableString(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
@@ -9887,13 +9887,13 @@ export function *verifyIdentifier(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
   }
 
-  if (!(that.length <= 2000)) {
+  if (!(AasCommon.lenStr(that) <= 2000)) {
     yield new VerificationError(
       "Identifier shall have a maximum length of 2000 characters."
     )
@@ -9917,13 +9917,13 @@ export function *verifyValueTypeIec61360(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
   }
 
-  if (!(that.length <= 2000)) {
+  if (!(AasCommon.lenStr(that) <= 2000)) {
     yield new VerificationError(
       "Value type IEC 61360 shall have a maximum length of 2000 " +
       "characters."
@@ -9948,13 +9948,13 @@ export function *verifyNameType(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
   }
 
-  if (!(that.length <= 128)) {
+  if (!(AasCommon.lenStr(that) <= 128)) {
     yield new VerificationError(
       "Name type shall have a maximum length of 128 characters."
     )
@@ -9978,7 +9978,7 @@ export function *verifyVersionType(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
@@ -9990,7 +9990,7 @@ export function *verifyVersionType(
     )
   }
 
-  if (!(that.length <= 4)) {
+  if (!(AasCommon.lenStr(that) <= 4)) {
     yield new VerificationError(
       "Version type shall have a maximum length of 4 characters."
     )
@@ -10014,7 +10014,7 @@ export function *verifyRevisionType(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
@@ -10026,7 +10026,7 @@ export function *verifyRevisionType(
     )
   }
 
-  if (!(that.length <= 4)) {
+  if (!(AasCommon.lenStr(that) <= 4)) {
     yield new VerificationError(
       "Revision type shall have a maximum length of 4 characters."
     )
@@ -10050,13 +10050,13 @@ export function *verifyLabelType(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
   }
 
-  if (!(that.length <= 64)) {
+  if (!(AasCommon.lenStr(that) <= 64)) {
     yield new VerificationError(
       "Label type shall have a maximum length of 64 characters."
     )
@@ -10080,13 +10080,13 @@ export function *verifyMessageTopicType(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
   }
 
-  if (!(that.length <= 255)) {
+  if (!(AasCommon.lenStr(that) <= 255)) {
     yield new VerificationError(
       "Message topic type shall have a maximum length of 255 " +
       "characters."
@@ -10128,13 +10128,13 @@ export function *verifyContentType(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
   }
 
-  if (!(that.length <= 100)) {
+  if (!(AasCommon.lenStr(that) <= 100)) {
     yield new VerificationError(
       "Content type shall have a maximum length of 100 characters."
     )
@@ -10165,13 +10165,13 @@ export function *verifyPathType(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
   }
 
-  if (!(that.length <= 2000)) {
+  if (!(AasCommon.lenStr(that) <= 2000)) {
     yield new VerificationError(
       "Identifier shall have a maximum length of 2000 characters."
     )
@@ -10195,13 +10195,13 @@ export function *verifyQualifierType(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
   }
 
-  if (!(that.length <= 128)) {
+  if (!(AasCommon.lenStr(that) <= 128)) {
     yield new VerificationError(
       "Name type shall have a maximum length of 128 characters."
     )
@@ -10243,13 +10243,13 @@ export function *verifyIdShortType(
     )
   }
 
-  if (!(that.length >= 1)) {
+  if (!(AasCommon.lenStr(that) >= 1)) {
     yield new VerificationError(
       "The value must not be empty."
     )
   }
 
-  if (!(that.length <= 128)) {
+  if (!(AasCommon.lenStr(that) <= 128)) {
     yield new VerificationError(
       "Name type shall have a maximum length of 128 characters."
     )

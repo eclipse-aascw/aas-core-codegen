@@ -14060,6 +14060,171 @@ std::wstring Utf8ToWstring(const std::string& utf8_text) {
   return Utf8ToWstring(&(utf8_text[0]), utf8_text.size());
 }
 
+namespace {
+
+// NOTE (mristin):
+// The type wchar_t is a UTF-16 code unit on Windows, where a character beyond
+// the Basic Multilingual Plane takes two of them (a surrogate pair). On the other
+// platforms, wchar_t is a UTF-32 code unit, so that each character takes exactly
+// one wchar_t.
+#if WCHAR_MAX <= 0xFFFF
+/**
+ * Check whether a surrogate pair starts at \p offset in \p text.
+ */
+bool IsSurrogatePairAt(const std::wstring& text, size_t offset) {
+  return (
+    offset + 1 < text.size()
+    && text[offset] >= 0xD800
+    && text[offset] <= 0xDBFF
+    && text[offset + 1] >= 0xDC00
+    && text[offset + 1] <= 0xDFFF
+  );
+}
+
+/**
+ * Count the characters of \p text between \p start_offset and
+ * \p end_offset, both in wchar_t's.
+ */
+size_t CountCharacters(
+  const std::wstring& text,
+  size_t start_offset,
+  size_t end_offset
+) {
+  size_t count = 0;
+  size_t offset = start_offset;
+  while (offset < end_offset) {
+    offset += IsSurrogatePairAt(text, offset) ? 2 : 1;
+    ++count;
+  }
+
+  return count;
+}
+
+/**
+ * Compute the offset in wchar_t's of the character at \p position
+ * in \p text.
+ */
+size_t OffsetOf(const std::wstring& text, size_t position) {
+  size_t offset = 0;
+  for (size_t i = 0; i < position; ++i) {
+    offset += IsSurrogatePairAt(text, offset) ? 2 : 1;
+  }
+
+  return offset;
+}
+#else
+/**
+ * Count the characters of a text between \p start_offset and
+ * \p end_offset, both in wchar_t's.
+ */
+size_t CountCharacters(
+  const std::wstring&,
+  size_t start_offset,
+  size_t end_offset
+) {
+  return end_offset - start_offset;
+}
+
+/**
+ * Compute the offset in wchar_t's of the character at \p position
+ * in a text.
+ */
+size_t OffsetOf(const std::wstring&, size_t position) {
+  return position;
+}
+#endif
+
+/**
+ * Resolve \p position in a string of \p length as Python does in slicing.
+ *
+ * A negative position counts from the end, and the positions out of range are
+ * clamped to the string.
+ *
+ * \param position to be resolved
+ * \param length of the string
+ * \return the resolved position within `[0, length]`
+ */
+size_t ResolvePosition(int64_t position, size_t length) {
+  const int64_t signed_length = static_cast<int64_t>(length);
+
+  if (position < 0) {
+    const int64_t resolved = position + signed_length;
+    return resolved < 0 ? 0 : static_cast<size_t>(resolved);
+  }
+
+  return position > signed_length ? length : static_cast<size_t>(position);
+}
+
+}  // namespace
+
+size_t LenStr(const std::wstring& text) {
+  return CountCharacters(text, 0, text.size());
+}
+
+std::wstring SliceStr(
+  const std::wstring& text,
+  int64_t start,
+  int64_t end
+) {
+  const size_t length = LenStr(text);
+  const size_t the_start = ResolvePosition(start, length);
+  const size_t the_end = ResolvePosition(end, length);
+
+  if (the_start >= the_end) {
+    return L"";
+  }
+
+  const size_t start_offset = OffsetOf(text, the_start);
+  const size_t end_offset = OffsetOf(text, the_end);
+  return text.substr(start_offset, end_offset - start_offset);
+}
+
+std::wstring SliceStr(
+  const std::wstring& text,
+  int64_t start
+) {
+  return text.substr(
+    OffsetOf(text, ResolvePosition(start, LenStr(text)))
+  );
+}
+
+int64_t FindStr(
+  const std::wstring& text,
+  const std::wstring& sub
+) {
+  return FindStr(text, sub, 0);
+}
+
+int64_t FindStr(
+  const std::wstring& text,
+  const std::wstring& sub,
+  int64_t start
+) {
+  const int64_t length = static_cast<int64_t>(LenStr(text));
+
+  int64_t the_start = start;
+  if (the_start < 0) {
+    the_start += length;
+    if (the_start < 0) {
+      the_start = 0;
+    }
+  }
+
+  if (the_start > length) {
+    return -1;
+  }
+
+  const size_t start_offset = OffsetOf(text, static_cast<size_t>(the_start));
+  const size_t offset = text.find(sub, start_offset);
+  if (offset == std::wstring::npos) {
+    return -1;
+  }
+
+  return the_start + static_cast<int64_t>(
+    CountCharacters(text, start_offset, offset)
+  );
+}
+
 }  // namespace common
 }  // namespace dummy
 

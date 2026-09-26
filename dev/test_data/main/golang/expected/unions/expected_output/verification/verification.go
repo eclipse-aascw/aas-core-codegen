@@ -12,6 +12,7 @@ package verification
 
 import (
 	"fmt"
+	aascommon "github.com/dummy-works/dummy/common"
 	aasreporting "github.com/dummy-works/dummy/reporting"
 	aastypes "github.com/dummy-works/dummy/types"
 )
@@ -56,7 +57,7 @@ func VerifyStructuralFirst(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.UniqueToFirst()) > 0) {
+	if !(aascommon.LenStr(that.UniqueToFirst()) > 0) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -81,7 +82,7 @@ func VerifyStructuralSecond(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.UniqueToSecond()) > 0) {
+	if !(aascommon.LenStr(that.UniqueToSecond()) > 0) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -106,7 +107,8 @@ func VerifyMixedAbstractDescendantOne(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.UniqueToAbstractDescendantOne()) > 0) {
+	if !(
+		aascommon.LenStr(that.UniqueToAbstractDescendantOne()) > 0) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -131,7 +133,8 @@ func VerifyMixedAbstractDescendantTwo(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.UniqueToAbstractDescendantTwo()) > 0) {
+	if !(
+		aascommon.LenStr(that.UniqueToAbstractDescendantTwo()) > 0) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -156,7 +159,7 @@ func VerifyMixedConcreteWithDescendants(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.SomeBaseProperty()) > 0) {
+	if !(aascommon.LenStr(that.SomeBaseProperty()) > 0) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -181,7 +184,7 @@ func VerifyMixedConcreteWithDescendantsChild(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.SomeBaseProperty()) > 0) {
+	if !(aascommon.LenStr(that.SomeBaseProperty()) > 0) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -191,7 +194,7 @@ func VerifyMixedConcreteWithDescendantsChild(
 		}
 	}
 
-	if !(len(that.SomeChildProperty()) > 0) {
+	if !(aascommon.LenStr(that.SomeChildProperty()) > 0) {
 		abort = onError(
 			newVerificationError(
 				"The child value must not be empty.",),
@@ -216,7 +219,7 @@ func VerifyMixedConcreteLeaf(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.UniqueToConcreteLeaf()) > 0) {
+	if !(aascommon.LenStr(that.UniqueToConcreteLeaf()) > 0) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -241,7 +244,7 @@ func VerifyModelTypedFirst(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.SomeProperty()) > 0) {
+	if !(aascommon.LenStr(that.SomeProperty()) > 0) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -266,7 +269,7 @@ func VerifyModelTypedSecond(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.SomeProperty()) > 0) {
+	if !(aascommon.LenStr(that.SomeProperty()) > 0) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),

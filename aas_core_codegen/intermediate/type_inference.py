@@ -248,9 +248,9 @@ class BuiltinMethodTypeAnnotation(AtomicTypeAnnotation):
 #: is none.
 #:
 #: The transpiled code follows the Python implementation of ``str.find``, since
-#: Python is the language of the meta-model specifications. Hence, a negative
-#: ``start`` counts from the end of the string, and a ``start`` beyond the end
-#: of the string gives -1.
+#: Python is the language of the meta-model specifications. Hence, the positions
+#: count the characters (code points), a negative ``start`` counts from the end
+#: of the string, and a ``start`` beyond the end of the string gives -1.
 STR_FIND = BuiltinMethod(
     name=Identifier("find"),
     returns=PrimitiveTypeAnnotation(PrimitiveType.INT),
@@ -1964,9 +1964,9 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
 
         A position is an integer. The transpiled code follows the Python
         implementation of the slicing and of ``str.find``, since Python is
-        the language of the meta-model specifications. Hence, a negative position
-        counts from the end of the string, and the positions out of range are
-        clamped to the string.
+        the language of the meta-model specifications. Hence, a position counts
+        the characters (code points), a negative position counts from the end of
+        the string, and the positions out of range are clamped to the string.
 
         Return ``False`` and append to :py:attr:`errors` if the check fails.
         """

@@ -1,4 +1,4 @@
-"""Generate the unit tests for slicing strings and for ``find``."""
+"""Generate the unit tests for ``len``, slicing strings and ``find``."""
 
 import io
 import re
@@ -6,7 +6,7 @@ from typing import List
 
 from icontract import ensure
 
-from aas_core_codegen import slicing_and_find_cases
+from aas_core_codegen import len_slicing_and_find_cases
 from aas_core_codegen.common import Stripped, indent_but_first_line
 from aas_core_codegen.python import common as python_common
 from aas_core_codegen.python.common import (
@@ -30,15 +30,28 @@ def _method_name(prefix: str, description: str) -> str:
 # fmt: on
 def generate() -> str:
     """
-    Generate the unit tests for slicing strings and for ``find``.
+    Generate the unit tests for ``len``, slicing strings and ``find``.
 
-    The Python SDK uses the native slicing and ``str.find``, which serve as
+    The Python SDK uses the native ``len``, slicing and ``str.find``, which serve as
     the reference for the other SDKs. We still generate the tests so that
     the users can inspect the same cases in all the SDKs.
     """
     methods = []  # type: List[Stripped]
 
-    for slice_case in slicing_and_find_cases.SLICE_CASES:
+    for len_case in len_slicing_and_find_cases.LEN_CASES:
+        name = _method_name("len", len_case.description)
+        methods.append(
+            Stripped(
+                f"""\
+def {name}(self) -> None:
+{I}self.assertEqual(
+{II}{len_case.expected},
+{II}{len_case.python_expression()}
+{I})"""
+            )
+        )
+
+    for slice_case in len_slicing_and_find_cases.SLICE_CASES:
         name = _method_name("slice", slice_case.description)
         methods.append(
             Stripped(
@@ -51,7 +64,7 @@ def {name}(self) -> None:
             )
         )
 
-    for find_case in slicing_and_find_cases.FIND_CASES:
+    for find_case in len_slicing_and_find_cases.FIND_CASES:
         name = _method_name("find", find_case.description)
         methods.append(
             Stripped(
@@ -67,7 +80,7 @@ def {name}(self) -> None:
     writer = io.StringIO()
     writer.write(
         """\
-class Test_slicing_and_find(unittest.TestCase):
+class Test_len_slicing_and_find(unittest.TestCase):
 """
     )
     for i, method in enumerate(methods):
@@ -80,10 +93,11 @@ class Test_slicing_and_find(unittest.TestCase):
         Stripped(
             '''\
 """
-Test the slicing of strings and ``find`` as used in the transpiled code.
+Test ``len``, the slicing of strings and ``find`` as used in the transpiled code.
 
 The transpiled code follows the Python implementation, since Python is
-the language of the meta-model specifications. The other SDKs test against
+the language of the meta-model specifications. Hence, the lengths and
+the positions count the characters (code points). The other SDKs test against
 the very same cases.
 """'''
         ),

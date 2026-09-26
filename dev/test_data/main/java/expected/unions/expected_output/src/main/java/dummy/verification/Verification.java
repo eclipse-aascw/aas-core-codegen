@@ -44,7 +44,7 @@ public class Verification {
       IStructuralFirst that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getUniqueToFirst().length() > 0)) {
+      if (!(StringHelpers.len(that.getUniqueToFirst()) > 0)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -59,7 +59,7 @@ public class Verification {
       IStructuralSecond that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getUniqueToSecond().length() > 0)) {
+      if (!(StringHelpers.len(that.getUniqueToSecond()) > 0)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -75,7 +75,7 @@ public class Verification {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
       if (!(
-        that.getUniqueToAbstractDescendantOne().length() > 0)) {
+        StringHelpers.len(that.getUniqueToAbstractDescendantOne()) > 0)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -91,7 +91,7 @@ public class Verification {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
       if (!(
-        that.getUniqueToAbstractDescendantTwo().length() > 0)) {
+        StringHelpers.len(that.getUniqueToAbstractDescendantTwo()) > 0)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -106,7 +106,7 @@ public class Verification {
       IMixedConcreteWithDescendants that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getSomeBaseProperty().length() > 0)) {
+      if (!(StringHelpers.len(that.getSomeBaseProperty()) > 0)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -121,14 +121,14 @@ public class Verification {
       IMixedConcreteWithDescendantsChild that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getSomeBaseProperty().length() > 0)) {
+      if (!(StringHelpers.len(that.getSomeBaseProperty()) > 0)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "The value must not be empty.")));
       }
 
-      if (!(that.getSomeChildProperty().length() > 0)) {
+      if (!(StringHelpers.len(that.getSomeChildProperty()) > 0)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -143,7 +143,8 @@ public class Verification {
       IMixedConcreteLeaf that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getUniqueToConcreteLeaf().length() > 0)) {
+      if (!(
+        StringHelpers.len(that.getUniqueToConcreteLeaf()) > 0)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -158,7 +159,7 @@ public class Verification {
       IModelTypedFirst that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getSomeProperty().length() > 0)) {
+      if (!(StringHelpers.len(that.getSomeProperty()) > 0)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -173,7 +174,7 @@ public class Verification {
       IModelTypedSecond that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getSomeProperty().length() > 0)) {
+      if (!(StringHelpers.len(that.getSomeProperty()) > 0)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +

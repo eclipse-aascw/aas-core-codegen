@@ -410,9 +410,10 @@ class Transpiler(
         assert collection is not None
 
         # NOTE (mristin):
-        # We do not use the native ``substring`` as it throws on the positions out
-        # of range, and does not count the negative ones from the end, unlike
-        # Python. See ``StringHelpers.slice`` in the generated common package.
+        # We do not use the native ``substring`` as it counts the UTF-16 code units
+        # instead of the characters, throws on the positions out of range, and does
+        # not count the negative ones from the end, unlike Python. See
+        # ``StringHelpers.slice`` in the generated common package.
         args = [collection, start if start is not None else "0"]  # type: List[str]
         if end is not None:
             args.append(end)
@@ -687,30 +688,15 @@ class Transpiler(
             member_type, intermediate_type_inference.BuiltinMethodTypeAnnotation
         ):
             if member_type.method is intermediate_type_inference.STR_FIND:
-                if len(args) == 2:
-                    # NOTE (mristin):
-                    # We do not use the native ``indexOf`` with a start as it
-                    # does not count a negative start from the end, unlike
-                    # Python. See ``StringHelpers.find`` in the generated common
-                    # package.
-                    return (
-                        Stripped(
-                            f"StringHelpers.find({instance}, {args[0]}, {args[1]})"
-                        ),
-                        None,
-                    )
-
-                if not isinstance(
-                    node.member.instance,
-                    (parse_tree.Name, parse_tree.Member, parse_tree.Slice),
-                ):
-                    instance = Stripped(f"({instance})")
-
                 # NOTE (mristin):
-                # We cast the position to ``long`` as we represent all
-                # the integers of the meta-model as ``long``'s. Otherwise, a boxed
-                # position would never equal a boxed ``Long``.
-                return Stripped(f"(long) {instance}.indexOf({args[0]})"), None
+                # We do not use the native ``indexOf`` as it counts the UTF-16
+                # code units instead of the characters, and does not count
+                # a negative start from the end, unlike Python. See
+                # ``StringHelpers.find`` in the generated common package.
+                return (
+                    Stripped(f"StringHelpers.find({instance}, {', '.join(args)})"),
+                    None,
+                )
 
             return None, Error(
                 node.original_node,
@@ -842,35 +828,20 @@ class Transpiler(
                 ):
                     arg_type = arg_type.value
 
-                if (
-                    isinstance(
-                        arg_type, intermediate_type_inference.PrimitiveTypeAnnotation
-                    )
-                    and arg_type.a_type == intermediate_type_inference.PrimitiveType.STR
-                ):
-                    return Stripped(f"{collection}.length()"), None
+                primitive_type = intermediate_type_inference.try_primitive_type(
+                    arg_type
+                )
+
+                if primitive_type is intermediate_type_inference.PrimitiveType.STR:
+                    # NOTE (mristin):
+                    # We do not use the native ``length()`` as it counts the UTF-16
+                    # code units instead of the characters, unlike Python. See
+                    # ``StringHelpers.len`` in the generated common package.
+                    return Stripped(f"StringHelpers.len({args[0]})"), None
 
                 elif (
-                    isinstance(arg_type, intermediate_type_inference.OurTypeAnnotation)
-                    and isinstance(arg_type.our_type, intermediate.ConstrainedPrimitive)
-                    and arg_type.our_type.constrainee == intermediate.PrimitiveType.STR
-                ):
-                    return Stripped(f"{collection}.length()"), None
-
-                elif (
-                    isinstance(
-                        arg_type, intermediate_type_inference.PrimitiveTypeAnnotation
-                    )
-                    and arg_type.a_type
-                    == intermediate_type_inference.PrimitiveType.BYTEARRAY
-                ):
-                    return Stripped(f"{collection}.length"), None
-
-                elif (
-                    isinstance(arg_type, intermediate_type_inference.OurTypeAnnotation)
-                    and isinstance(arg_type.our_type, intermediate.ConstrainedPrimitive)
-                    and arg_type.our_type.constrainee
-                    == intermediate.PrimitiveType.BYTEARRAY
+                    primitive_type
+                    is intermediate_type_inference.PrimitiveType.BYTEARRAY
                 ):
                     return Stripped(f"{collection}.length"), None
 

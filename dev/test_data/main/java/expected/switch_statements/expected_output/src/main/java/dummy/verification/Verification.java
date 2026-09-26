@@ -99,11 +99,11 @@ public class Verification {
     String text) {
     switch (kind) {
         case ALPHA -> {
-            var length = text.length();
+            var length = StringHelpers.len(text);
             return length > 1;
         }
         case BETA -> {
-            var length = text.length();
+            var length = StringHelpers.len(text);
             return length > 2;
         }
         default -> {
@@ -128,7 +128,7 @@ public class Verification {
             return false;
         }
         default -> {
-            return text.length() > 0;
+            return StringHelpers.len(text) > 0;
         }
     }
   }
@@ -397,7 +397,7 @@ public class Verification {
     String that) {
     Stream<Reporting.Error> errorStream = Stream.empty();
 
-    if (!(that.length() > 0)) {
+    if (!(StringHelpers.len(that) > 0)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +

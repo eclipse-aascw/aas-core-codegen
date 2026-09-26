@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	aascommon "github.com/dummy-works/dummy/common"
 	aasreporting "github.com/dummy-works/dummy/reporting"
 	aastypes "github.com/dummy-works/dummy/types"
 )
@@ -342,7 +343,7 @@ func VerifyNonEmptyString(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that) > 0) {
+	if !(aascommon.LenStr(that) > 0) {
 		abort = onError(
 			newVerificationError(
 				"At least one character",),

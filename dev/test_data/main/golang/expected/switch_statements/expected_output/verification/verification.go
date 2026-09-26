@@ -12,6 +12,7 @@ package verification
 
 import (
 	"fmt"
+	aascommon "github.com/dummy-works/dummy/common"
 	aasreporting "github.com/dummy-works/dummy/reporting"
 	aastypes "github.com/dummy-works/dummy/types"
 )
@@ -102,10 +103,10 @@ func SwitchOnEnumWithVariablesInCases(
 ) bool {
 	switch kind {
 	case aastypes.KindAlpha:
-		length := len(text)
+		length := aascommon.LenStr(text)
 		return length > 1
 	case aastypes.KindBeta:
-		length := len(text)
+		length := aascommon.LenStr(text)
 		return length > 2
 	default:
 		return true
@@ -124,7 +125,7 @@ func SwitchOnStr(
 	case "delta", "epsilon":
 		return false
 	default:
-		return len(text) > 0
+		return aascommon.LenStr(text) > 0
 	}
 }
 
@@ -388,7 +389,7 @@ func VerifyNonEmptyString(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that) > 0) {
+	if !(aascommon.LenStr(that) > 0) {
 		abort = onError(
 			newVerificationError(
 				"At least one character",),

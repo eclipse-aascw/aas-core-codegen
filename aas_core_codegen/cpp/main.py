@@ -589,9 +589,9 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
         ]
 
     # NOTE (mristin):
-    # The helpers for slicing strings and ``find`` are only generated for
+    # The helpers for ``len``, slicing strings and ``find`` are only generated for
     # a meta-model which uses them, and so are their tests.
-    if intermediate.uses_string_slicing_or_find(context.symbol_table):
+    if intermediate.uses_len_slicing_or_find(context.symbol_table):
         rel_paths_generators = list(rel_paths_generators) + [
             (
                 test_dir / "test_string_helpers.cpp",

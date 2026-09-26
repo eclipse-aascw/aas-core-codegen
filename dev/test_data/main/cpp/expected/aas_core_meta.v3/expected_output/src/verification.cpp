@@ -2342,7 +2342,7 @@ bool NonEmptyXmlSerializableString_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool DateTimeUtc_0(
@@ -2385,14 +2385,14 @@ bool Identifier_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool Identifier_2(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() <= 2000;
+  return common::LenStr(that) <= 2000;
 }
 
 bool ValueTypeIec61360_0(
@@ -2408,14 +2408,14 @@ bool ValueTypeIec61360_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool ValueTypeIec61360_2(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() <= 2000;
+  return common::LenStr(that) <= 2000;
 }
 
 bool NameType_0(
@@ -2431,14 +2431,14 @@ bool NameType_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool NameType_2(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() <= 128;
+  return common::LenStr(that) <= 128;
 }
 
 bool VersionType_0(
@@ -2454,7 +2454,7 @@ bool VersionType_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool VersionType_2(
@@ -2470,7 +2470,7 @@ bool VersionType_3(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() <= 4;
+  return common::LenStr(that) <= 4;
 }
 
 bool RevisionType_0(
@@ -2486,7 +2486,7 @@ bool RevisionType_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool RevisionType_2(
@@ -2502,7 +2502,7 @@ bool RevisionType_3(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() <= 4;
+  return common::LenStr(that) <= 4;
 }
 
 bool LabelType_0(
@@ -2518,14 +2518,14 @@ bool LabelType_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool LabelType_2(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() <= 64;
+  return common::LenStr(that) <= 64;
 }
 
 bool MessageTopicType_0(
@@ -2541,14 +2541,14 @@ bool MessageTopicType_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool MessageTopicType_2(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() <= 255;
+  return common::LenStr(that) <= 255;
 }
 
 bool Bcp47LanguageTag_0(
@@ -2573,14 +2573,14 @@ bool ContentType_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool ContentType_2(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() <= 100;
+  return common::LenStr(that) <= 100;
 }
 
 bool ContentType_3(
@@ -2605,14 +2605,14 @@ bool PathType_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool PathType_2(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() <= 2000;
+  return common::LenStr(that) <= 2000;
 }
 
 bool QualifierType_0(
@@ -2628,14 +2628,14 @@ bool QualifierType_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool QualifierType_2(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() <= 128;
+  return common::LenStr(that) <= 128;
 }
 
 bool ValueDataType_0(
@@ -2660,14 +2660,14 @@ bool IdShortType_1(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() >= 1;
+  return common::LenStr(that) >= 1;
 }
 
 bool IdShortType_2(
   const void* value
 ) {
   const std::wstring& that = *static_cast<const std::wstring*>(value);
-  return that.size() <= 128;
+  return common::LenStr(that) <= 128;
 }
 
 bool IdShortType_3(
@@ -5648,7 +5648,7 @@ bool LangStringNameType_0(
   const types::ILangStringNameType* that = (
     static_cast<const types::ILangStringNameType*>(value)
   );
-  return that->text().size() <= 128;
+  return common::LenStr(that->text()) <= 128;
 }
 
 bool LangStringTextType_0(
@@ -5657,7 +5657,7 @@ bool LangStringTextType_0(
   const types::ILangStringTextType* that = (
     static_cast<const types::ILangStringTextType*>(value)
   );
-  return that->text().size() <= 1023;
+  return common::LenStr(that->text()) <= 1023;
 }
 
 bool Environment_0(
@@ -5705,7 +5705,7 @@ bool LangStringPreferredNameTypeIec61360_0(
   const types::ILangStringPreferredNameTypeIec61360* that = (
     static_cast<const types::ILangStringPreferredNameTypeIec61360*>(value)
   );
-  return that->text().size() <= 255;
+  return common::LenStr(that->text()) <= 255;
 }
 
 bool LangStringShortNameTypeIec61360_0(
@@ -5714,7 +5714,7 @@ bool LangStringShortNameTypeIec61360_0(
   const types::ILangStringShortNameTypeIec61360* that = (
     static_cast<const types::ILangStringShortNameTypeIec61360*>(value)
   );
-  return that->text().size() <= 18;
+  return common::LenStr(that->text()) <= 18;
 }
 
 bool LangStringDefinitionTypeIec61360_0(
@@ -5723,7 +5723,7 @@ bool LangStringDefinitionTypeIec61360_0(
   const types::ILangStringDefinitionTypeIec61360* that = (
     static_cast<const types::ILangStringDefinitionTypeIec61360*>(value)
   );
-  return that->text().size() <= 1023;
+  return common::LenStr(that->text()) <= 1023;
 }
 
 bool DataSpecificationIec61360_0(

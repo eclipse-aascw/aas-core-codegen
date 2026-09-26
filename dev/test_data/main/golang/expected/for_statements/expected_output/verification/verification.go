@@ -12,6 +12,7 @@ package verification
 
 import (
 	"fmt"
+	aascommon "github.com/dummy-works/dummy/common"
 	aasreporting "github.com/dummy-works/dummy/reporting"
 	aastypes "github.com/dummy-works/dummy/types"
 )
@@ -49,7 +50,7 @@ func FirstTextIsNotEmpty(
 	texts []string,
 ) bool {
 	for _, text := range texts {
-		return len(text) > 0
+		return aascommon.LenStr(text) > 0
 	}
 	return true
 }

@@ -417,9 +417,10 @@ AasCommon.at(
         assert collection is not None
 
         # NOTE (mristin):
-        # We do not use the native ``substring`` as it swaps the positions and
-        # does not count the negative ones from the end, unlike Python. See
-        # ``sliceStr`` in the generated common module.
+        # We do not use the native ``substring`` as it counts the UTF-16 code units
+        # instead of the characters, swaps the positions and does not count
+        # the negative ones from the end, unlike Python. See ``sliceStr`` in
+        # the generated common module.
         args = [collection, start if start is not None else "0"]  # type: List[str]
         if end is not None:
             args.append(end)
@@ -691,15 +692,13 @@ AasCommon.at(
             member_type, intermediate_type_inference.BuiltinMethodTypeAnnotation
         ):
             if member_type.method is intermediate_type_inference.STR_FIND:
-                if len(args) == 1:
-                    return Stripped(f"{instance}.indexOf({args[0]})"), None
-
                 # NOTE (mristin):
-                # We do not use the native ``indexOf`` with a start as it does not
-                # count a negative start from the end, unlike Python. See
-                # ``findStr`` in the generated common module.
+                # We do not use the native ``indexOf`` as it counts the UTF-16 code
+                # units instead of the characters, and does not count a negative
+                # start from the end, unlike Python. See ``findStr`` in
+                # the generated common module.
                 return (
-                    Stripped(f"AasCommon.findStr({instance}, {args[0]}, {args[1]})"),
+                    Stripped(f"AasCommon.findStr({instance}, {', '.join(args)})"),
                     None,
                 )
 
@@ -761,10 +760,14 @@ AasCommon.at(
 
         primitive_type = intermediate_type_inference.try_primitive_type(collection_type)
 
-        if primitive_type in (
-            intermediate_type_inference.PrimitiveType.STR,
-            intermediate_type_inference.PrimitiveType.BYTEARRAY,
-        ):
+        if primitive_type is intermediate_type_inference.PrimitiveType.STR:
+            # NOTE (mristin):
+            # We do not use the native ``length`` as it counts the UTF-16 code units
+            # instead of the characters, unlike Python. See ``lenStr`` in
+            # the generated common module.
+            return Stripped(f"AasCommon.lenStr({collection})"), None
+
+        elif primitive_type is intermediate_type_inference.PrimitiveType.BYTEARRAY:
             return Stripped(f"{collection}.length"), None
 
         elif isinstance(

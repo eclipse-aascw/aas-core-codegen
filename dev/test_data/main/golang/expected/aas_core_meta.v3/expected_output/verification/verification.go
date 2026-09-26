@@ -12014,7 +12014,7 @@ func VerifyLangStringNameType(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.Text()) <= 128) {
+	if !(aascommon.LenStr(that.Text()) <= 128) {
 		abort = onError(
 			newVerificationError(
 				"String shall have a maximum length of 128 characters.",),
@@ -12069,7 +12069,7 @@ func VerifyLangStringTextType(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.Text()) <= 1023) {
+	if !(aascommon.LenStr(that.Text()) <= 1023) {
 		abort = onError(
 			newVerificationError(
 				"String shall have a maximum length of 1023 characters.",),
@@ -12457,7 +12457,7 @@ func VerifyLangStringPreferredNameTypeIEC61360(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.Text()) <= 255) {
+	if !(aascommon.LenStr(that.Text()) <= 255) {
 		abort = onError(
 			newVerificationError(
 				"String shall have a maximum length of 255 characters.",),
@@ -12512,7 +12512,7 @@ func VerifyLangStringShortNameTypeIEC61360(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.Text()) <= 18) {
+	if !(aascommon.LenStr(that.Text()) <= 18) {
 		abort = onError(
 			newVerificationError(
 				"String shall have a maximum length of 18 characters.",),
@@ -12567,7 +12567,7 @@ func VerifyLangStringDefinitionTypeIEC61360(
 ) (abort bool) {
 	abort = false
 
-	if !(len(that.Text()) <= 1023) {
+	if !(aascommon.LenStr(that.Text()) <= 1023) {
 		abort = onError(
 			newVerificationError(
 				"String shall have a maximum length of 1023 characters.",),
@@ -13358,7 +13358,7 @@ func VerifyNonEmptyXMLSerializableString(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -13477,7 +13477,7 @@ func VerifyIdentifier(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -13487,7 +13487,7 @@ func VerifyIdentifier(
 		}
 	}
 
-	if !(len(that) <= 2000) {
+	if !(aascommon.LenStr(that) <= 2000) {
 		abort = onError(
 			newVerificationError(
 				"Identifier shall have a maximum length of 2000 characters.",),
@@ -13525,7 +13525,7 @@ func VerifyValueTypeIEC61360(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -13535,7 +13535,7 @@ func VerifyValueTypeIEC61360(
 		}
 	}
 
-	if !(len(that) <= 2000) {
+	if !(aascommon.LenStr(that) <= 2000) {
 		abort = onError(
 			newVerificationError(
 				"Value type IEC 61360 shall have a maximum length of 2000 " +
@@ -13575,7 +13575,7 @@ func VerifyNameType(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -13585,7 +13585,7 @@ func VerifyNameType(
 		}
 	}
 
-	if !(len(that) <= 128) {
+	if !(aascommon.LenStr(that) <= 128) {
 		abort = onError(
 			newVerificationError(
 				"Name type shall have a maximum length of 128 characters.",),
@@ -13623,7 +13623,7 @@ func VerifyVersionType(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -13643,7 +13643,7 @@ func VerifyVersionType(
 		}
 	}
 
-	if !(len(that) <= 4) {
+	if !(aascommon.LenStr(that) <= 4) {
 		abort = onError(
 			newVerificationError(
 				"Version type shall have a maximum length of 4 characters.",),
@@ -13681,7 +13681,7 @@ func VerifyRevisionType(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -13701,7 +13701,7 @@ func VerifyRevisionType(
 		}
 	}
 
-	if !(len(that) <= 4) {
+	if !(aascommon.LenStr(that) <= 4) {
 		abort = onError(
 			newVerificationError(
 				"Revision type shall have a maximum length of 4 characters.",),
@@ -13739,7 +13739,7 @@ func VerifyLabelType(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -13749,7 +13749,7 @@ func VerifyLabelType(
 		}
 	}
 
-	if !(len(that) <= 64) {
+	if !(aascommon.LenStr(that) <= 64) {
 		abort = onError(
 			newVerificationError(
 				"Label type shall have a maximum length of 64 characters.",),
@@ -13787,7 +13787,7 @@ func VerifyMessageTopicType(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -13797,7 +13797,7 @@ func VerifyMessageTopicType(
 		}
 	}
 
-	if !(len(that) <= 255) {
+	if !(aascommon.LenStr(that) <= 255) {
 		abort = onError(
 			newVerificationError(
 				"Message topic type shall have a maximum length of 255 " +
@@ -13864,7 +13864,7 @@ func VerifyContentType(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -13874,7 +13874,7 @@ func VerifyContentType(
 		}
 	}
 
-	if !(len(that) <= 100) {
+	if !(aascommon.LenStr(that) <= 100) {
 		abort = onError(
 			newVerificationError(
 				"Content type shall have a maximum length of 100 characters.",),
@@ -13924,7 +13924,7 @@ func VerifyPathType(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -13934,7 +13934,7 @@ func VerifyPathType(
 		}
 	}
 
-	if !(len(that) <= 2000) {
+	if !(aascommon.LenStr(that) <= 2000) {
 		abort = onError(
 			newVerificationError(
 				"Identifier shall have a maximum length of 2000 characters.",),
@@ -13972,7 +13972,7 @@ func VerifyQualifierType(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -13982,7 +13982,7 @@ func VerifyQualifierType(
 		}
 	}
 
-	if !(len(that) <= 128) {
+	if !(aascommon.LenStr(that) <= 128) {
 		abort = onError(
 			newVerificationError(
 				"Name type shall have a maximum length of 128 characters.",),
@@ -14048,7 +14048,7 @@ func VerifyIDShortType(
 		}
 	}
 
-	if !(len(that) >= 1) {
+	if !(aascommon.LenStr(that) >= 1) {
 		abort = onError(
 			newVerificationError(
 				"The value must not be empty.",),
@@ -14058,7 +14058,7 @@ func VerifyIDShortType(
 		}
 	}
 
-	if !(len(that) <= 128) {
+	if !(aascommon.LenStr(that) <= 128) {
 		abort = onError(
 			newVerificationError(
 				"Name type shall have a maximum length of 128 characters.",),

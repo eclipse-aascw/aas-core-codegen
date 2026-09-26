@@ -417,6 +417,66 @@ export function base64UrlDecode(text: string): Either<Uint8Array, string> {
 
 
 /**
+ * Check whether a surrogate pair starts at `offset` in `text`.
+ *
+ * @param text - to be inspected
+ * @param offset - in UTF-16 code units
+ * @returns whether a surrogate pair starts at `offset`
+ */
+function isSurrogatePairAt(text: string, offset: number): boolean {
+  if (offset + 1 >= text.length) {
+    return false;
+  }
+
+  const high = text.charCodeAt(offset);
+  const low = text.charCodeAt(offset + 1);
+  return high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff;
+}
+
+
+/**
+ * Count the characters of `text` between the UTF-16 offsets `startOffset` and
+ * `endOffset`.
+ *
+ * @param text - to be inspected
+ * @param startOffset - in UTF-16 code units, inclusive
+ * @param endOffset - in UTF-16 code units, exclusive
+ * @returns the number of characters (code points)
+ */
+function countCharacters(
+  text: string,
+  startOffset: number,
+  endOffset: number
+): number {
+  let count = 0;
+  let offset = startOffset;
+  while (offset < endOffset) {
+    offset += isSurrogatePairAt(text, offset) ? 2 : 1;
+    count++;
+  }
+
+  return count;
+}
+
+
+/**
+ * Compute the UTF-16 offset of the character at `position` in `text`.
+ *
+ * @param text - to be inspected
+ * @param position - of the character, in characters (code points)
+ * @returns the offset in UTF-16 code units
+ */
+function offsetOf(text: string, position: number): number {
+  let offset = 0;
+  for (let i = 0; i < position; i++) {
+    offset += isSurrogatePairAt(text, offset) ? 2 : 1;
+  }
+
+  return offset;
+}
+
+
+/**
  * Resolve `position` in a string of `length` as Python does in slicing.
  *
  * @remarks
@@ -437,13 +497,30 @@ function resolvePosition(position: number, length: number): number {
 
 
 /**
+ * Count the characters (code points) of `text`.
+ *
+ * @remarks
+ * We follow the Python implementation of `len`, since Python is the language of
+ * the meta-model specifications. Hence, a character beyond the Basic
+ * Multilingual Plane counts as one, unlike in `text.length`.
+ *
+ * @param text - to be measured
+ * @returns the number of characters
+ */
+export function lenStr(text: string): number {
+  return countCharacters(text, 0, text.length);
+}
+
+
+/**
  * Slice `text` from `start` up to `end`, exclusive.
  *
  * @remarks
  * We follow the Python implementation of slicing, since Python is
- * the language of the meta-model specifications. Hence, a negative position
- * counts from the end, the positions out of range are clamped to the string,
- * and the slice is empty if `start` is not before `end`.
+ * the language of the meta-model specifications. Hence, the positions count
+ * the characters (code points), a negative position counts from the end,
+ * the positions out of range are clamped to the string, and the slice is empty
+ * if `start` is not before `end`.
  *
  * @param text - to be sliced
  * @param start - of the slice, inclusive
@@ -451,15 +528,15 @@ function resolvePosition(position: number, length: number): number {
  * @returns the slice
  */
 export function sliceStr(text: string, start: number, end?: number): string {
-  const theStart = resolvePosition(start, text.length);
-  const theEnd =
-    end === undefined ? text.length : resolvePosition(end, text.length);
+  const length = lenStr(text);
+  const theStart = resolvePosition(start, length);
+  const theEnd = end === undefined ? length : resolvePosition(end, length);
 
   if (theStart >= theEnd) {
     return "";
   }
 
-  return text.substring(theStart, theEnd);
+  return text.substring(offsetOf(text, theStart), offsetOf(text, theEnd));
 }
 
 
@@ -468,21 +545,29 @@ export function sliceStr(text: string, start: number, end?: number): string {
  *
  * @remarks
  * We follow the Python implementation of `str.find`, since Python is
- * the language of the meta-model specifications. Hence, a negative `start`
- * counts from the end, and a `start` beyond the end of `text` gives -1.
+ * the language of the meta-model specifications. Hence, the positions count
+ * the characters (code points), a negative `start` counts from the end, and
+ * a `start` beyond the end of `text` gives -1.
  *
  * @param text - to be searched in
  * @param sub - to be searched for
- * @param start - of the search
+ * @param start - of the search; if not given, the beginning of `text`
  * @returns the position of `sub` in `text`, or -1 if `sub` could not be found
  */
-export function findStr(text: string, sub: string, start: number): number {
-  const theStart = start < 0 ? Math.max(start + text.length, 0) : start;
-  if (theStart > text.length) {
+export function findStr(text: string, sub: string, start = 0): number {
+  const length = lenStr(text);
+  const theStart = start < 0 ? Math.max(start + length, 0) : start;
+  if (theStart > length) {
     return -1;
   }
 
-  return text.indexOf(sub, theStart);
+  const startOffset = offsetOf(text, theStart);
+  const offset = text.indexOf(sub, startOffset);
+  if (offset === -1) {
+    return -1;
+  }
+
+  return theStart + countCharacters(text, startOffset, offset);
 }
 
 

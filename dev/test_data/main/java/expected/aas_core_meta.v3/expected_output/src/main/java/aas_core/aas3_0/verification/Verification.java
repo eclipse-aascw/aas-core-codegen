@@ -8705,7 +8705,7 @@ public class Verification {
       ILangStringNameType that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getText().length() <= 128)) {
+      if (!(StringHelpers.len(that.getText()) <= 128)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -8738,7 +8738,7 @@ public class Verification {
       ILangStringTextType that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getText().length() <= 1023)) {
+      if (!(StringHelpers.len(that.getText()) <= 1023)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -8967,7 +8967,7 @@ public class Verification {
       ILangStringPreferredNameTypeIec61360 that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getText().length() <= 255)) {
+      if (!(StringHelpers.len(that.getText()) <= 255)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -9000,7 +9000,7 @@ public class Verification {
       ILangStringShortNameTypeIec61360 that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getText().length() <= 18)) {
+      if (!(StringHelpers.len(that.getText()) <= 18)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -9033,7 +9033,7 @@ public class Verification {
       ILangStringDefinitionTypeIec61360 that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
 
-      if (!(that.getText().length() <= 1023)) {
+      if (!(StringHelpers.len(that.getText()) <= 1023)) {
         errorStream = Stream.<Reporting.Error>concat(errorStream,
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
@@ -9399,7 +9399,7 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9480,14 +9480,14 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
           "The value must not be empty.")));
     }
 
-    if (!(that.length() <= 2000)) {
+    if (!(StringHelpers.len(that) <= 2000)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9513,14 +9513,14 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
           "The value must not be empty.")));
     }
 
-    if (!(that.length() <= 2000)) {
+    if (!(StringHelpers.len(that) <= 2000)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9547,14 +9547,14 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
           "The value must not be empty.")));
     }
 
-    if (!(that.length() <= 128)) {
+    if (!(StringHelpers.len(that) <= 128)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9580,7 +9580,7 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9594,7 +9594,7 @@ public class Verification {
           "Version type shall match the version pattern.")));
     }
 
-    if (!(that.length() <= 4)) {
+    if (!(StringHelpers.len(that) <= 4)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9620,7 +9620,7 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9634,7 +9634,7 @@ public class Verification {
           "Revision type shall match the revision pattern.")));
     }
 
-    if (!(that.length() <= 4)) {
+    if (!(StringHelpers.len(that) <= 4)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9660,14 +9660,14 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
           "The value must not be empty.")));
     }
 
-    if (!(that.length() <= 64)) {
+    if (!(StringHelpers.len(that) <= 64)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9693,14 +9693,14 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
           "The value must not be empty.")));
     }
 
-    if (!(that.length() <= 255)) {
+    if (!(StringHelpers.len(that) <= 255)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9745,14 +9745,14 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
           "The value must not be empty.")));
     }
 
-    if (!(that.length() <= 100)) {
+    if (!(StringHelpers.len(that) <= 100)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9786,14 +9786,14 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
           "The value must not be empty.")));
     }
 
-    if (!(that.length() <= 2000)) {
+    if (!(StringHelpers.len(that) <= 2000)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9819,14 +9819,14 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
           "The value must not be empty.")));
     }
 
-    if (!(that.length() <= 128)) {
+    if (!(StringHelpers.len(that) <= 128)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
@@ -9871,14 +9871,14 @@ public class Verification {
           "^[\\x09\\x0A\\x0D\\x20-\\uD7FF\\uE000-\\uFFFD\\U00010000-\\U0010FFFF]*$.")));
     }
 
-    if (!(that.length() >= 1)) {
+    if (!(StringHelpers.len(that) >= 1)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
           "The value must not be empty.")));
     }
 
-    if (!(that.length() <= 128)) {
+    if (!(StringHelpers.len(that) <= 128)) {
       errorStream = Stream.<Reporting.Error>concat(errorStream,
         Stream.of(new Reporting.Error(
           "Invariant violated:\n" +
