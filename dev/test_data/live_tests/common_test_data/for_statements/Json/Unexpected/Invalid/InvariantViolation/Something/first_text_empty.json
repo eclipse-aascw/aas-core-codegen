@@ -1,0 +1,23 @@
+{
+  "kind": "alpha",
+  "numbers": [
+    3,
+    4,
+    5
+  ],
+  "texts": [
+    "",
+    "world"
+  ],
+  "items": [
+    {
+      "texts": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "texts": []
+    }
+  ]
+}

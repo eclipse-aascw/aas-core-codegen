@@ -535,11 +535,11 @@ __xml_namespace__ = "https://dummy.com"
         self.expect_type_inference_to_fail(
             source=source,
             expected_joined_message=(
-                "We do not know how to infer the type of the variable with "
-                "the identifier 'x' from the given environment. Mind that we "
-                "do not consider the module scope nor handle all built-in "
-                "functions due to simplicity! If you believe this needs to "
-                "work, please notify the developers."
+                "The variable 'x' has been defined in a nested block before, "
+                "such as a for-loop or a branch of a switch, and is not visible "
+                "here. While Python keeps the variable after the block, the other "
+                "targets scope it to the block. Please define the variable before "
+                "the block."
             ),
         )
 
@@ -570,11 +570,11 @@ __xml_namespace__ = "https://dummy.com"
         self.expect_type_inference_to_fail(
             source=source,
             expected_joined_message=(
-                "We do not know how to infer the type of the variable with "
-                "the identifier 'x' from the given environment. Mind that we "
-                "do not consider the module scope nor handle all built-in "
-                "functions due to simplicity! If you believe this needs to "
-                "work, please notify the developers."
+                "The variable 'x' has been defined in a nested block before, "
+                "such as a for-loop or a branch of a switch, and is not visible "
+                "here. While Python keeps the variable after the block, the other "
+                "targets scope it to the block. Please define the variable before "
+                "the block."
             ),
         )
 
@@ -606,12 +606,12 @@ __xml_namespace__ = "https://dummy.com"
         self.expect_type_inference_to_fail(
             source=source,
             expected_joined_message=(
-                "The variable 'x' has been already defined in a branch of a "
-                "switch before. In Python, both definitions denote the same "
-                "variable, while they denote two different variables in the "
-                "target languages with block scopes, and some target "
-                "languages, such as C#, refuse such re-declarations "
-                "altogether. Please use a different name."
+                "The variable 'x' has been already defined in a nested block "
+                "before, such as a for-loop or a branch of a switch. In Python, "
+                "both definitions denote the same variable, while they denote "
+                "two different variables in the target languages with block "
+                "scopes, and some target languages, such as C#, refuse such "
+                "re-declarations altogether. Please use a different name."
             ),
         )
 
@@ -646,12 +646,12 @@ __xml_namespace__ = "https://dummy.com"
         self.expect_type_inference_to_fail(
             source=source,
             expected_joined_message=(
-                "The variable 'x' has been already defined in a branch of a "
-                "switch before. In Python, both definitions denote the same "
-                "variable, while they denote two different variables in the "
-                "target languages with block scopes, and some target "
-                "languages, such as C#, refuse such re-declarations "
-                "altogether. Please use a different name."
+                "The variable 'x' has been already defined in a nested block "
+                "before, such as a for-loop or a branch of a switch. In Python, "
+                "both definitions denote the same variable, while they denote "
+                "two different variables in the target languages with block "
+                "scopes, and some target languages, such as C#, refuse such "
+                "re-declarations altogether. Please use a different name."
             ),
         )
 
@@ -891,6 +891,297 @@ __xml_namespace__ = "https://dummy.com"
             expected_joined_message=(
                 "Expected the label to be a literal of the enumeration "
                 "'Kind', the type of the subject of the switch, but got: str"
+            ),
+        )
+
+
+class Test_for_statement(unittest.TestCase):
+    @staticmethod
+    def source_with_verification(verification: str) -> str:
+        return f"""\
+{verification}
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+    def test_early_return(self) -> None:
+        Test_with_smoke.execute(
+            Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int]) -> bool:
+    for number in numbers:
+        return number > 0
+
+    return True"""
+            )
+        )
+
+    def test_range_and_nested_loops(self) -> None:
+        Test_with_smoke.execute(
+            Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int]) -> bool:
+    for i in range(0, len(numbers)):
+        number = numbers[i]
+        for j in range(i, len(numbers)):
+            return number > numbers[j]
+
+    return True"""
+            )
+        )
+
+    def test_reusing_loop_variable_in_another_loop(self) -> None:
+        Test_with_smoke.execute(
+            Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int], other_numbers: List[int]) -> bool:
+    for x in numbers:
+        return x > 0
+
+    for x in other_numbers:
+        return x > 1
+
+    return True"""
+            )
+        )
+
+    def test_reusing_loop_variable_with_another_type_fails(self) -> None:
+        Test_with_smoke().expect_type_inference_to_fail(
+            source=Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int], texts: List[str]) -> bool:
+    for x in numbers:
+        return x > 0
+
+    for x in texts:
+        return len(x) > 0
+
+    return True"""
+            ),
+            expected_joined_message=(
+                "The variable 'x' has been already defined before with the type "
+                "int, but now we inferred its type to be str. Python has only "
+                "function-level scopes, and the static type checkers such as mypy "
+                "refuse such re-definitions. Please use a different name."
+            ),
+        )
+
+    def test_reusing_loop_variable_with_another_type_in_sibling_branches_fails(
+        self,
+    ) -> None:
+        Test_with_smoke().expect_type_inference_to_fail(
+            source=Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int], texts: List[str], text: str) -> bool:
+    if text == "numbers":
+        for x in numbers:
+            return x > 0
+    elif text == "texts":
+        for x in texts:
+            return len(x) > 0
+
+    return True"""
+            ),
+            expected_joined_message=(
+                "The variable 'x' has been already defined before with the type "
+                "int, but now we inferred its type to be str. Python has only "
+                "function-level scopes, and the static type checkers such as mypy "
+                "refuse such re-definitions. Please use a different name."
+            ),
+        )
+
+    def test_redefining_variable_of_loop_after_loop_fails(self) -> None:
+        Test_with_smoke().expect_type_inference_to_fail(
+            source=Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int]) -> bool:
+    for x in numbers:
+        y = x
+
+    y = "something"
+    return len(y) > 0"""
+            ),
+            expected_joined_message=(
+                "The variable 'y' has been already defined in a nested block "
+                "before, such as a for-loop or a branch of a switch. In Python, "
+                "both definitions denote the same variable, while they denote "
+                "two different variables in the target languages with block "
+                "scopes, and some target languages, such as C#, refuse such "
+                "re-declarations altogether. Please use a different name."
+            ),
+        )
+
+    def test_redefining_loop_variable_after_loop_fails(self) -> None:
+        Test_with_smoke().expect_type_inference_to_fail(
+            source=Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int]) -> bool:
+    for x in numbers:
+        return x > 0
+
+    x = 1
+    return x > 0"""
+            ),
+            expected_joined_message=(
+                "The variable 'x' has been already defined in a nested block "
+                "before, such as a for-loop or a branch of a switch. In Python, "
+                "both definitions denote the same variable, while they denote "
+                "two different variables in the target languages with block "
+                "scopes, and some target languages, such as C#, refuse such "
+                "re-declarations altogether. Please use a different name."
+            ),
+        )
+
+    def test_loop_in_switch_branch(self) -> None:
+        Test_with_smoke.execute(
+            Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int], text: str) -> bool:
+    if text == "positive":
+        for number in numbers:
+            return number > 0
+    elif text == "negative":
+        for number in numbers:
+            return number < 0
+
+    return True"""
+            )
+        )
+
+    def test_ending_with_exhaustive_switch_in_loop_fails(self) -> None:
+        Test_with_smoke().expect_type_inference_to_fail(
+            source=Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int], text: str) -> bool:
+    for number in numbers:
+        if text == "positive":
+            return number > 0
+        else:
+            return number < 0"""
+            ),
+            expected_joined_message=(
+                "Expected the verification function 'some_func' to end with "
+                "a return statement, since it returns a value"
+            ),
+        )
+
+    def test_using_loop_variable_after_loop_fails(self) -> None:
+        Test_with_smoke().expect_type_inference_to_fail(
+            source=Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int]) -> bool:
+    for x in numbers:
+        return x > 0
+
+    y = x
+
+    for x in numbers:
+        return x > 0
+
+    return True"""
+            ),
+            expected_joined_message=(
+                "The variable 'x' has been defined in a nested block before, "
+                "such as a for-loop or a branch of a switch, and is not visible "
+                "here. While Python keeps the variable after the block, the other "
+                "targets scope it to the block. Please define the variable before "
+                "the block."
+            ),
+        )
+
+    def test_using_variable_defined_in_loop_after_loop_fails(self) -> None:
+        Test_with_smoke().expect_type_inference_to_fail(
+            source=Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int]) -> bool:
+    for x in numbers:
+        y = x
+
+    return y > 0"""
+            ),
+            expected_joined_message=(
+                "The variable 'y' has been defined in a nested block before, "
+                "such as a for-loop or a branch of a switch, and is not visible "
+                "here. While Python keeps the variable after the block, the other "
+                "targets scope it to the block. Please define the variable before "
+                "the block."
+            ),
+        )
+
+    def test_shadowing_argument_fails(self) -> None:
+        Test_with_smoke().expect_type_inference_to_fail(
+            source=Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int], x: int) -> bool:
+    for x in numbers:
+        return x > 0
+
+    return True"""
+            ),
+            expected_joined_message="The variable x has been already defined before",
+        )
+
+    def test_shadowing_in_nested_loop_fails(self) -> None:
+        Test_with_smoke().expect_type_inference_to_fail(
+            source=Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int]) -> bool:
+    for x in numbers:
+        for x in numbers:
+            return x > 0
+
+    return True"""
+            ),
+            expected_joined_message="The variable x has been already defined before",
+        )
+
+    def test_assigning_to_loop_variable_fails(self) -> None:
+        Test_with_smoke().expect_type_inference_to_fail(
+            source=Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int]) -> bool:
+    for x in numbers:
+        x = 1
+
+    return True"""
+            ),
+            expected_joined_message=(
+                "The loop variable 'x' can not be assigned to in the body of "
+                "the for-loop. Python does not change the iteration on such "
+                "an assignment, while the targets would skip or repeat "
+                "the iterations over a range, or refuse to compile "
+                "the assignment to a read-only loop variable. Please use "
+                "a different variable."
+            ),
+        )
+
+    def test_missing_return_at_the_end_fails(self) -> None:
+        Test_with_smoke().expect_type_inference_to_fail(
+            source=Test_for_statement.source_with_verification(
+                """\
+@verification
+def some_func(numbers: List[int]) -> bool:
+    for x in numbers:
+        return x > 0"""
+            ),
+            expected_joined_message=(
+                "Expected the verification function 'some_func' to end with "
+                "a return statement, since it returns a value"
             ),
         )
 

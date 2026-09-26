@@ -1594,10 +1594,11 @@ return {indent_but_first_line(value, I)}"""
         self, statements: Sequence[parse_tree.StatementUnion]
     ) -> Tuple[Optional[Tuple[List[Stripped], bool]], Optional[Error]]:
         """
-        Transpile the ``statements`` of a switch branch in a new scope.
+        Transpile the ``statements`` of a block in a new scope.
 
-        Each clause of a Go switch is an implicit block, so the variables defined
-        in the ``statements`` are not visible after the branch.
+        The block is a switch branch or the body of a for-loop. Each clause of a Go
+        switch is an implicit block, and so is the body of a loop, so the variables
+        defined in the ``statements`` are not visible after the block.
 
         Return the transpiled statements, and whether they define any variables.
         We leave the layout of the statements to the caller.
@@ -1624,7 +1625,7 @@ return {indent_but_first_line(value, I)}"""
 
         if len(errors) > 0:
             return None, Error(
-                None, "Failed to transpile the statements of a switch branch", errors
+                None, "Failed to transpile the statements of a block", errors
             )
 
         return (stmts, len(scope_environment.mapping) > 0), None
@@ -1689,6 +1690,143 @@ return {indent_but_first_line(value, I)}"""
             return None, Error(
                 node.original_node, "Failed to transpile the switch", errors
             )
+
+        return Stripped(writer.getvalue()), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def _transform_range_bound(
+        self, node: parse_tree.Expression, loop_variable_go_type: Stripped
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        """
+        Transpile the bound of a range, and convert it to the loop variable type.
+
+        Go does not implicitly convert between ``int`` and ``int64``, so we
+        convert the bound explicitly if its type differs from the type of
+        the loop variable. The integer literals are untyped in Go, so we leave
+        them as-is.
+        """
+        code, error = self._transform_and_dereference_if_necessary(node)
+        if error is not None:
+            return None, error
+
+        assert code is not None
+
+        if isinstance(node, parse_tree.Constant):
+            return code, None
+
+        bound_type = intermediate_type_inference.beneath_optional(self.type_map[node])
+        assert isinstance(
+            bound_type, intermediate_type_inference.PrimitiveTypeAnnotation
+        ), f"{bound_type=}"
+
+        if PRIMITIVE_TYPE_MAP[bound_type.a_type] == loop_variable_go_type:
+            return code, None
+
+        return Stripped(f"{loop_variable_go_type}({code})"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_for(
+        self, node: parse_tree.For
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+
+        variable_name = node.generator.variable.identifier
+        variable_type_annotation = self.type_map[node.generator.variable]
+        variable = golang_naming.variable_name(variable_name)
+
+        header = None  # type: Optional[str]
+        if isinstance(node.generator, parse_tree.ForEach):
+            # NOTE (mristin):
+            # Lists are represented as slices in Go, which are never pointers.
+            iteration, error = self.transform(node.generator.iteration)
+            if error is not None:
+                errors.append(error)
+            else:
+                assert iteration is not None
+                header = (
+                    f"for _, {variable} := range "
+                    f"{indent_but_first_line(iteration, I)}"
+                )
+
+        elif isinstance(node.generator, parse_tree.ForRange):
+            assert isinstance(
+                variable_type_annotation,
+                intermediate_type_inference.PrimitiveTypeAnnotation,
+            ), f"{variable_type_annotation=}"
+
+            variable_go_type = PRIMITIVE_TYPE_MAP[variable_type_annotation.a_type]
+
+            start, error = self._transform_range_bound(
+                node.generator.start, variable_go_type
+            )
+            if error is not None:
+                errors.append(error)
+
+            end, error = self._transform_range_bound(
+                node.generator.end, variable_go_type
+            )
+            if error is not None:
+                errors.append(error)
+
+            if start is not None and end is not None:
+                # NOTE (mristin):
+                # The integer literals are untyped in Go, and would be inferred as
+                # ``int`` in the short variable declaration, so we explicitly
+                # convert the start if the loop variable is not an ``int``.
+                if (
+                    isinstance(node.generator.start, parse_tree.Constant)
+                    and variable_go_type != "int"
+                ):
+                    start = Stripped(f"{variable_go_type}({start})")
+
+                header = (
+                    f"for {variable} := {indent_but_first_line(start, I)}; "
+                    f"{variable} < {indent_but_first_line(end, I)}; "
+                    f"{variable}++"
+                )
+
+        else:
+            assert_never(node.generator)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the for-loop", errors
+            )
+
+        assert header is not None
+
+        # NOTE (mristin):
+        # The loop variable is scoped to the loop, so we define it in its own
+        # environment enclosing the body.
+        parent_environment = self._environment
+        loop_environment = intermediate_type_inference.MutableEnvironment(
+            parent=parent_environment
+        )
+        loop_environment.set(
+            identifier=variable_name, type_annotation=variable_type_annotation
+        )
+        self._variable_name_set.add(variable_name)
+
+        self._environment = loop_environment
+        try:
+            stmts_and_defines, error = self._transform_branch(node.body)
+        finally:
+            self._environment = parent_environment
+
+        if error is not None:
+            return None, Error(
+                node.original_node, "Failed to transpile the for-loop", [error]
+            )
+
+        assert stmts_and_defines is not None
+        stmts, _ = stmts_and_defines
+
+        writer = io.StringIO()
+        writer.write(f"{header} {{")
+        for stmt in stmts:
+            writer.write("\n")
+            writer.write(textwrap.indent(stmt, I))
+        writer.write("\n}")
 
         return Stripped(writer.getvalue()), None
 

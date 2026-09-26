@@ -1630,6 +1630,16 @@ class _CheckCodeUsesReVisitor(parse_tree.Visitor):
         if isinstance(node.target, parse_tree.Name):
             self._variable_name_set.add(node.target.identifier)
 
+    def visit_for(self, node: parse_tree.For) -> None:
+        if self.first_re_usage is not None:
+            return
+
+        self.visit(node.generator)
+
+        self._variable_name_set.add(node.generator.variable.identifier)
+        for stmt in node.body:
+            self.visit(stmt)
+
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _to_invariant(

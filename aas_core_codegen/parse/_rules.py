@@ -106,6 +106,85 @@ class _ParseIsIn(_Parse):
         return tree.IsIn(member=member, container=container, original_node=node), None
 
 
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _parse_generator(
+    target: ast.expr, iteration: ast.expr, original_node: ast.AST
+) -> Tuple[Optional[tree.ForUnion], Optional[Error]]:
+    """
+    Parse the generator of a comprehension or of a for-loop statement.
+
+    The iteration over ``range(start, end)`` is parsed specially as
+    :py:class:`tree.ForRange`, while all the other iterations are parsed as
+    :py:class:`tree.ForEach`.
+    """
+    if not isinstance(target, ast.Name):
+        return None, Error(
+            target,
+            f"Expected the target of the generator to be a name, "
+            f"but got: {ast.dump(target)}",
+        )
+
+    our_variable, error = ast_node_to_our_node(target)
+    if error is not None:
+        return None, error
+    assert isinstance(our_variable, tree.Name), f"{our_variable=}"
+
+    if (
+        isinstance(iteration, ast.Call)
+        and isinstance(iteration.func, ast.Name)
+        and iteration.func.id == "range"
+    ):
+        if len(iteration.args) != 2:
+            return None, Error(
+                iteration,
+                f"Expected exactly two arguments to a call of ``range``, "
+                f"but got: {len(iteration.args)}",
+            )
+
+        if len(iteration.keywords) != 0:
+            return None, Error(
+                iteration,
+                f"Expected no keyword arguments to a call of ``range``, "
+                f"but got: {len(iteration.keywords)}",
+            )
+
+        start, error = ast_node_to_our_node(iteration.args[0])
+        if error is not None:
+            return None, error
+
+        end, error = ast_node_to_our_node(iteration.args[1])
+        if error is not None:
+            return None, error
+
+        assert isinstance(start, tree.Expression), f"{start=}"
+        assert isinstance(end, tree.Expression), f"{end=}"
+
+        return (
+            tree.ForRange(
+                variable=our_variable,
+                start=start,
+                end=end,
+                original_node=original_node,
+            ),
+            None,
+        )
+
+    our_iteration, error = ast_node_to_our_node(iteration)
+    if error is not None:
+        return None, error
+
+    assert isinstance(our_iteration, tree.Expression), f"{our_iteration=}"
+
+    return (
+        tree.ForEach(
+            variable=our_variable,
+            iteration=our_iteration,
+            original_node=original_node,
+        ),
+        None,
+    )
+
+
 class _ParseAnyOrAll(_Parse):
     def matches(self, node: ast.AST) -> bool:
         return (
@@ -165,68 +244,15 @@ class _ParseAnyOrAll(_Parse):
                 generator, f"Expected a comprehension, but got: {ast.dump(generator)}"
             )
 
-        if not isinstance(generator.target, ast.Name):
-            return None, Error(
-                generator,
-                f"Expected the target of the generator to be a name, "
-                f"but got: {ast.dump(generator.target)}",
-            )
-
-        our_variable, error = ast_node_to_our_node(generator.target)
+        our_generator, error = _parse_generator(
+            target=generator.target,
+            iteration=generator.iter,
+            original_node=generator,
+        )
         if error is not None:
             return None, error
-        assert isinstance(our_variable, tree.Name), f"{our_variable=}"
 
-        # region Parse the generator
-
-        our_generator: tree.ForUnion
-
-        if (
-            isinstance(generator.iter, ast.Call)
-            and isinstance(generator.iter.func, ast.Name)
-            and generator.iter.func.id == "range"
-        ):
-            if len(generator.iter.args) != 2:
-                return None, Error(
-                    generator.iter,
-                    f"Expected exactly to arguments to a call of ``range``, "
-                    f"but got: {len(generator.iter.args)}",
-                )
-
-            if len(generator.iter.keywords) != 0:
-                return None, Error(
-                    generator.iter,
-                    f"Expected no keyword arguments to a call of ``range``, "
-                    f"but got: {len(generator.iter.keywords)}",
-                )
-
-            start, error = ast_node_to_our_node(generator.iter.args[0])
-            if error is not None:
-                return None, error
-
-            end, error = ast_node_to_our_node(generator.iter.args[1])
-            if error is not None:
-                return None, error
-
-            assert isinstance(start, tree.Expression), f"{start=}"
-            assert isinstance(end, tree.Expression), f"{end=}"
-
-            our_generator = tree.ForRange(
-                variable=our_variable, start=start, end=end, original_node=generator
-            )
-
-        else:
-            our_iteration, error = ast_node_to_our_node(generator.iter)
-            if error is not None:
-                return None, error
-
-            assert isinstance(our_iteration, tree.Expression), f"{our_iteration=}"
-
-            our_generator = tree.ForEach(
-                variable=our_variable, iteration=our_iteration, original_node=generator
-            )
-
-        # endregion
+        assert our_generator is not None
 
         # noinspection PyUnusedLocal
         factory_to_use: Union[Type[tree.Any], Type[tree.All]]
@@ -954,13 +980,14 @@ def _parse_switch_label(
 
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _parse_switch_body(
-    nodes: Sequence[ast.stmt],
+def _parse_block(
+    nodes: Sequence[ast.stmt], block_name: str
 ) -> Tuple[Optional[List[tree.StatementUnion]], Optional[Error]]:
     """
-    Parse the body of a switch branch.
+    Parse the statements of a block such as a switch branch or a for-loop body.
 
-    A sole ``pass`` is understood as an empty body.
+    A sole ``pass`` is understood as an empty body. The ``block_name`` is used
+    in the error messages.
     """
     if len(nodes) == 1 and isinstance(nodes[0], ast.Pass):
         return [], None
@@ -977,7 +1004,7 @@ def _parse_switch_body(
         if isinstance(node, ast.Pass):
             return None, Error(
                 node,
-                "We expect ``pass`` only as the sole statement of a switch branch",
+                f"We expect ``pass`` only as the sole statement of {block_name}",
             )
 
         stmt, error = ast_node_to_our_node(node)
@@ -986,10 +1013,10 @@ def _parse_switch_body(
 
         assert stmt is not None
 
-        if not isinstance(stmt, (tree.Assignment, tree.Return, tree.Switch)):
+        if not isinstance(stmt, (tree.Assignment, tree.Return, tree.Switch, tree.For)):
             return None, Error(
                 node,
-                f"Expected only statements in a switch branch, "
+                f"Expected only statements in {block_name}, "
                 f"but got an expression: {ast.unparse(node)}",
             )
 
@@ -1091,7 +1118,7 @@ class _ParseSwitch(_Parse):
                 observed_labels.add(label_key)
                 labels.append(label)
 
-            body, error = _parse_switch_body(if_node.body)
+            body, error = _parse_block(if_node.body, block_name="a switch branch")
             if error is not None:
                 return None, error
 
@@ -1103,7 +1130,7 @@ class _ParseSwitch(_Parse):
 
         default = None  # type: Optional[List[tree.StatementUnion]]
         if len(cursor.orelse) > 0:
-            default, error = _parse_switch_body(cursor.orelse)
+            default, error = _parse_block(cursor.orelse, block_name="a switch branch")
             if error is not None:
                 return None, error
 
@@ -1111,6 +1138,41 @@ class _ParseSwitch(_Parse):
             tree.Switch(
                 subject=subject, cases=cases, default=default, original_node=node
             ),
+            None,
+        )
+
+
+class _ParseFor(_Parse):
+    def matches(self, node: ast.AST) -> bool:
+        return isinstance(node, ast.For)
+
+    # noinspection PyTypeChecker
+    def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
+        assert isinstance(node, ast.For)
+
+        if len(node.orelse) > 0:
+            return None, Error(
+                node.orelse[0],
+                "We do not know how to transpile the ``else`` clause "
+                "of a for-loop statement",
+            )
+
+        generator, error = _parse_generator(
+            target=node.target, iteration=node.iter, original_node=node
+        )
+        if error is not None:
+            return None, error
+
+        assert generator is not None
+
+        body, error = _parse_block(node.body, block_name="a for-loop")
+        if error is not None:
+            return None, error
+
+        assert body is not None
+
+        return (
+            tree.For(generator=generator, body=body, original_node=node),
             None,
         )
 
@@ -1137,6 +1199,7 @@ _CHAIN_OF_RULES = [
     _ParseAssignment(),
     _ParseReturn(),
     _ParseSwitch(),
+    _ParseFor(),
 ]  # type: Sequence[_Parse]
 
 
