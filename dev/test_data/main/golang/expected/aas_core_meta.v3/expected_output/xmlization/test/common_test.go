@@ -66,8 +66,10 @@ func assertNoSerializationError(
 // The opening tag, tag name plus an optional attribute list (*e.g.*,
 // ``xmlns="..."`` on a root element), is captured in the first (and only)
 // submatch group so that we do not lose any attributes when we force
-// the tag to be self-closing below.
-var emptyTagRe = regexp.MustCompile(`<(\w+(?:\s[^>]*)?)></\w+>`)
+// the tag to be self-closing below. The attribute list must not end with
+// a slash, as we would otherwise match an already self-closing tag followed
+// by the closing tag of its parent, *e.g.*, ``<someBytes /></something>``.
+var emptyTagRe = regexp.MustCompile(`<(\w+(?:\s[^>]*[^/>])?)></\w+>`)
 
 func forceSelfClosingTags(text string) string {
 	b := []byte(text)
@@ -132,6 +134,8 @@ func assertSerializationEqualsDeserialization(
 	other string,
 	source string,
 ) (ok bool) {
+	ok = true
+
 	// Remove carriers to avoid problems between Windows, Posix and MacOS
 	canonicalThat := strings.ReplaceAll(that, "\r", "")
 	canonicalOther := strings.ReplaceAll(other, "\r", "")
