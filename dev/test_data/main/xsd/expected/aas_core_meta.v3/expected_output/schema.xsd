@@ -160,7 +160,7 @@
       <xs:element name="contentType">
         <xs:simpleType>
           <xs:restriction base="xs:string">
-            <xs:pattern value="([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+/([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+([ \t]*;[ \t]*([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+=(([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+|&quot;(([\t !#-\[\]-~]|[-ÿ])|\\([\t !-~]|[-ÿ]))*&quot;))*"/>
+            <xs:pattern value="([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+/([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+([ \t]*;[ \t]*([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+=(([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+|&quot;(([\t !\[#-Z\]\^_-~]|[-ÿ])|\\([\t !-~]|[-ÿ]))*&quot;))*"/>
             <xs:minLength value="1"/>
             <xs:maxLength value="100"/>
           </xs:restriction>
@@ -411,7 +411,7 @@
       <xs:element name="contentType">
         <xs:simpleType>
           <xs:restriction base="xs:string">
-            <xs:pattern value="([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+/([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+([ \t]*;[ \t]*([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+=(([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+|&quot;(([\t !#-\[\]-~]|[-ÿ])|\\([\t !-~]|[-ÿ]))*&quot;))*"/>
+            <xs:pattern value="([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+/([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+([ \t]*;[ \t]*([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+=(([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+|&quot;(([\t !\[#-Z\]\^_-~]|[-ÿ])|\\([\t !-~]|[-ÿ]))*&quot;))*"/>
             <xs:minLength value="1"/>
             <xs:maxLength value="100"/>
           </xs:restriction>
@@ -810,7 +810,7 @@
       <xs:element name="contentType" minOccurs="0" maxOccurs="1">
         <xs:simpleType>
           <xs:restriction base="xs:string">
-            <xs:pattern value="([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+/([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+([ \t]*;[ \t]*([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+=(([!#$%&amp;'*+\-.^_`|~0-9a-zA-Z])+|&quot;(([\t !#-\[\]-~]|[-ÿ])|\\([\t !-~]|[-ÿ]))*&quot;))*"/>
+            <xs:pattern value="([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+/([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+([ \t]*;[ \t]*([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+=(([!#$%&amp;'*+\-.\^_`|~0-9a-zA-Z])+|&quot;(([\t !\[#-Z\]\^_-~]|[-ÿ])|\\([\t !-~]|[-ÿ]))*&quot;))*"/>
             <xs:minLength value="1"/>
             <xs:maxLength value="100"/>
           </xs:restriction>

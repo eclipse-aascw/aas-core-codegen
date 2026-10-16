@@ -5,7 +5,17 @@ import re
 # noinspection PyUnresolvedReferences
 import xml.dom.minidom
 import xml.etree.ElementTree as ET
-from typing import TextIO, MutableMapping, Optional, Tuple, List, Any, Mapping, Final
+from typing import (
+    TextIO,
+    MutableMapping,
+    Optional,
+    Tuple,
+    List,
+    Any,
+    Mapping,
+    Final,
+    Union,
+)
 
 import greenery
 from icontract import ensure, require
@@ -20,7 +30,7 @@ from aas_core_codegen import (
 )
 from aas_core_codegen.common import Error, assert_never, Identifier
 from aas_core_codegen.intermediate import uses as intermediate_uses
-from aas_core_codegen.parse import retree as parse_retree
+from aas_core_codegen.parse import retree as parse_retree, tree as parse_tree
 from aas_core_codegen.xsd import naming as xsd_naming
 
 assert aas_core_codegen.xsd.__doc__ == __doc__
@@ -52,77 +62,86 @@ _PRIMITIVE_MAP = {
 }
 assert all(literal in _PRIMITIVE_MAP for literal in intermediate.PrimitiveType)
 
-# noinspection RegExpSimplifiable
-_ESCAPE_BACKSLASH_X_RE = re.compile(r"\\x([a-fA-f0-9]{2})")
+
+class _RegexRenderer(parse_retree.Renderer):
+    """Render literal characters in XSD regex syntax without numeric escapes."""
+
+    def char_to_str_and_escape_or_encode_if_necessary(
+        self, node: parse_retree.Char, escaping: Mapping[str, str]
+    ) -> List[Union[str, parse_tree.FormattedValue]]:
+        if node.character in "^|":
+            return [f"\\{node.character}"]
+        if node.character == "$":
+            return ["$"]
+
+        return [escaping.get(node.character, node.character)]
+
+    def transform_char_set(
+        self, node: parse_retree.CharSet
+    ) -> List[Union[str, parse_tree.FormattedValue]]:
+        """Keep escaped range endpoints separate for XSD processor compatibility."""
+        output = [
+            "[^" if node.complementing else "["
+        ]  # type: List[Union[str, parse_tree.FormattedValue]]
+        for a_range in node.ranges:
+            start = ord(a_range.start.character)
+            end = start if a_range.end is None else ord(a_range.end.character)
+            # NOTE (chris-koo):
+            # Some XSD processors do not recognize ranges with escaped endpoints.
+            # We emit those endpoints as individual characters instead.
+            while start <= end and chr(start) in "[]\\^-":
+                output.append(f"\\{chr(start)}")
+                start += 1
+            while start <= end and chr(end) in "[]\\^-":
+                output.append(f"\\{chr(end)}")
+                end -= 1
+            if start <= end:
+                output.append(self._ESCAPING_IN_RANGE.get(chr(start), chr(start)))
+                if start < end:
+                    output.append("-")
+                    output.append(self._ESCAPING_IN_RANGE.get(chr(end), chr(end)))
+        output.append("]")
+        return output
 
 
-def _undo_escaping_backslash_x_in_pattern(pattern: str) -> str:
-    """
-    Undo the escaping of `\\x??` in the ``pattern``.
+class _RegexRendererForGreenery(parse_retree.Renderer):
+    """Preserve literals using hexadecimal escapes supported by Greenery."""
 
-    This is necessary since XML Schema Validators do not know how to handle such escape
-    sequences in the patterns and need the verbatim characters.
-    """
-    parts = []  # type: List[str]
-    cursor = None  # type: Optional[int]
-    for mtch in re.finditer(_ESCAPE_BACKSLASH_X_RE, pattern):
-        if cursor is None:
-            parts.append(pattern[: mtch.start()])
-        else:
-            parts.append(pattern[cursor : mtch.start()])
+    def char_to_str_and_escape_or_encode_if_necessary(
+        self, node: parse_retree.Char, escaping: Mapping[str, str]
+    ) -> List[Union[str, parse_tree.FormattedValue]]:
+        if node.explicitly_encoded or node.character in "^$|":
+            code = ord(node.character)
+            return [f"\\x{code:02x}" if code <= 255 else node.character]
 
-        ascii_code = int(mtch.group(1), base=16)
-        character = chr(ascii_code)
-        parts.append(character)
-        cursor = mtch.end()
+        return super().char_to_str_and_escape_or_encode_if_necessary(node, escaping)
 
-    if cursor is None:
-        parts.append(pattern)
-    else:
-        if cursor < len(pattern):
-            parts.append(pattern[cursor:])
+    def transform_char_set(
+        self, node: parse_retree.CharSet
+    ) -> List[Union[str, parse_tree.FormattedValue]]:
+        """Render every range endpoint through the Greenery character renderer."""
+        output = [
+            "[^" if node.complementing else "["
+        ]  # type: List[Union[str, parse_tree.FormattedValue]]
+        for a_range in node.ranges:
+            output.extend(
+                self.char_to_str_and_escape_or_encode_if_necessary(
+                    a_range.start, self._ESCAPING_IN_RANGE
+                )
+            )
+            if a_range.end is not None:
+                output.append("-")
+                output.extend(
+                    self.char_to_str_and_escape_or_encode_if_necessary(
+                        a_range.end, self._ESCAPING_IN_RANGE
+                    )
+                )
+        output.append("]")
+        return output
 
-    return "".join(parts)
 
-
-# noinspection RegExpSimplifiable
-_ESCAPE_BACKSLASH_X_U_U_RE = re.compile(
-    r"(\\x([a-fA-f0-9]{2})|\\u([a-fA-f0-9]{4})|\\U([a-fA-f0-9]{8}))"
-)
-
-
-def _undo_escaping_backslash_x_u_and_U_in_pattern(pattern: str) -> str:
-    """
-    Undo the escaping of ``\\x??``, ``\\u????`` and ``\\U????????`` in the ``pattern``.
-
-    This is necessary since Greenery does not know how to handle such escape
-    sequences in the patterns and need the verbatim characters.
-    """
-    parts = []  # type: List[str]
-    cursor = None  # type: Optional[int]
-    for mtch in re.finditer(_ESCAPE_BACKSLASH_X_U_U_RE, pattern):
-        if cursor is None:
-            parts.append(pattern[: mtch.start()])
-        else:
-            parts.append(pattern[cursor : mtch.start()])
-
-        substring = mtch.group(0)
-        assert len(substring) > 2
-        assert substring[0] == "\\"
-
-        hex_code = substring[2:]
-        code_point = int(hex_code, base=16)
-        character = chr(code_point)
-        parts.append(character)
-        cursor = mtch.end()
-
-    if cursor is None:
-        parts.append(pattern)
-    else:
-        if cursor < len(pattern):
-            parts.append(pattern[cursor:])
-
-    return "".join(parts)
+_REGEX_RENDERER: Final[parse_retree.Renderer] = _RegexRenderer()
+_REGEX_RENDERER_FOR_GREENERY: Final[parse_retree.Renderer] = _RegexRendererForGreenery()
 
 
 class _AnchorRemover(parse_retree.PassThroughVisitor):
@@ -153,10 +172,11 @@ class _AnchorRemover(parse_retree.PassThroughVisitor):
 
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _translate_pattern(pattern: str) -> Tuple[Optional[str], Optional[str]]:
+def _translate_pattern(
+    pattern: str,
+    renderer: parse_retree.Renderer = _REGEX_RENDERER,
+) -> Tuple[Optional[str], Optional[str]]:
     """Translate the pattern to obtain the equivalent in XSD."""
-    pattern = _undo_escaping_backslash_x_in_pattern(pattern)
-
     parsed, error = parse_retree.parse(values=[pattern])
     if error is not None:
         regex_line, pointer_line = parse_retree.render_pointer(error.cursor)
@@ -166,7 +186,7 @@ def _translate_pattern(pattern: str) -> Tuple[Optional[str], Optional[str]]:
     remover = _AnchorRemover()
     remover.visit(parsed)
 
-    values = parse_retree.render(regex=parsed)
+    values = parse_retree.render(regex=parsed, renderer=renderer)
     parts = []  # type: List[str]
     for value in values:
         assert isinstance(value, str), (
@@ -269,13 +289,13 @@ def _translate_to_simple_type(
                     # The module ``greenery`` is not annotated with types at the moment.
                     merger = None  # type: Optional[Any]
                     for pattern_constraint in patterns_relevant_for_xsd:
-                        # NOTE (mristin):
-                        # Greenery expects the characters to be in Unicode and not escaped.
-                        translated_for_greenery = (
-                            _undo_escaping_backslash_x_u_and_U_in_pattern(
-                                pattern_constraint.pattern
-                            )
+                        translated_for_greenery, error = _translate_pattern(
+                            pattern_constraint.pattern,
+                            renderer=_REGEX_RENDERER_FOR_GREENERY,
                         )
+                        if error is not None:
+                            return None, error
+                        assert translated_for_greenery is not None
 
                         try:
                             parsed = greenery.parse(translated_for_greenery)
@@ -301,7 +321,20 @@ def _translate_to_simple_type(
 
                     assert merger is not None
 
-                    translated_pattern, error = _translate_pattern(str(merger))
+                    # NOTE (chris-koo):
+                    # Greenery treats carets and dollar signs as literals, and
+                    # escapes pipes and braces our regex parser does not accept.
+                    # We encode these literals before parsing the canonical result.
+                    canonical = re.sub(
+                        r"\\.|\[\^|[\^$]",
+                        lambda match: (
+                            f"\\x{ord(match.group()[-1]):02x}"
+                            if match.group() in ("^", "$", r"\|", r"\{", r"\}")
+                            else match.group()
+                        ),
+                        str(merger),
+                    )
+                    translated_pattern, error = _translate_pattern(canonical)
                     if error is not None:
                         return None, error
 

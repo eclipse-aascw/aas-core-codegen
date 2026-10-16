@@ -1,65 +1,24 @@
 # pylint: disable=missing-docstring
 import os
 import pathlib
+import re
 import unittest
 from typing import Optional
+from xml.sax import saxutils as xml_saxutils
 
 import xmlschema
 
+from aas_core_codegen import infer_for_schema, intermediate
 from aas_core_codegen.xsd import main as xsd_main
 
 
-class Test_undo_escaping_x(unittest.TestCase):
-    def test_empty(self) -> None:
-        self.assertEqual("", xsd_main._undo_escaping_backslash_x_in_pattern(""))
-
-    def test_no_escaped(self) -> None:
-        self.assertEqual(
-            "test me", xsd_main._undo_escaping_backslash_x_in_pattern("test me")
-        )
-
-    def test_only_escaped(self) -> None:
-        self.assertEqual(
-            "\xff", xsd_main._undo_escaping_backslash_x_in_pattern("\\xff")
-        )
-
-    def test_prefix(self) -> None:
-        self.assertEqual(
-            "A\xff", xsd_main._undo_escaping_backslash_x_in_pattern("A\\xff")
-        )
-
-    def test_suffix(self) -> None:
-        self.assertEqual(
-            "\xffB", xsd_main._undo_escaping_backslash_x_in_pattern("\\xffB")
-        )
-
-    def test_prefix_suffix(self) -> None:
-        self.assertEqual(
-            "A\xffB", xsd_main._undo_escaping_backslash_x_in_pattern("A\\xffB")
-        )
-
-    def test_multiple(self) -> None:
-        self.assertEqual(
-            "A\xf1B\xf2C",
-            xsd_main._undo_escaping_backslash_x_in_pattern("A\\xf1B\\xf2C"),
-        )
-
-    def test_complex(self) -> None:
-        pattern = (
-            "([!#$%&'*+\\-.^_`|~0-9a-zA-Z])+/([!#$%&'*+\\-.^_`|~0-9a-zA-Z])+([ \t]*;"
-            "[ \t]*([!#$%&'*+\\-.^_`|~0-9a-zA-Z])+=(([!#$%&'*+\\-.^_`|~0-9a-zA-Z])+|"
-            '"(([\t !#-\\[\\]-~]|[\\x80-\\xff])|\\\\([\t !-~]|[\\x80-\\xff]))*"))*'
-        )
-
-        expected = (
-            "([!#$%&'*+\\-.^_`|~0-9a-zA-Z])+/([!#$%&'*+\\-.^_`|~0-9a-zA-Z])+([ \t]*;"
-            "[ \t]*([!#$%&'*+\\-.^_`|~0-9a-zA-Z])+=(([!#$%&'*+\\-.^_`|~0-9a-zA-Z])+|"
-            '"(([\t !#-\\[\\]-~]|[\x80-\xff])|\\\\([\t !-~]|[\x80-\xff]))*"))*'
-        )
-
-        self.assertEqual(
-            expected, xsd_main._undo_escaping_backslash_x_in_pattern(pattern)
-        )
+def _schema_source(pattern: str) -> str:
+    """Build a schema for a string constrained by the given pattern."""
+    return f"""\
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+<xs:element name="value"><xs:simpleType><xs:restriction base="xs:string">
+<xs:pattern value={xml_saxutils.quoteattr(pattern)}/>
+</xs:restriction></xs:simpleType></xs:element></xs:schema>"""
 
 
 class Test_translate_pattern(unittest.TestCase):
@@ -96,6 +55,79 @@ class Test_translate_pattern(unittest.TestCase):
             assert fixed is not None, identifier
 
             self.assertEqual(expected, fixed, identifier)
+
+    def test_encoded_characters_match_original_pattern(self) -> None:
+        """Preserve encoded literals when validating with the generated XSD pattern."""
+        for pattern, samples in [
+            (r"^a\x2eb$", ["a.b", "axb", "a-b"]),
+            (r"^\x24aas$", ["$aas", "aas", ""]),
+            (r"^\x5bx\x5d$", ["[x]", "x"]),
+            (r"^[\x20-\x5B\x5D-\x7E]+$", ["hello world", "[x]", "a\\b", ""]),
+            (r"^[\x5e\x2d\x5d\x5c]+$", ["^-]\\", "a", ""]),
+            (r"^\x7c$", ["|", "x", ""]),
+            (r"^\u002e$", [".", "x"]),
+            (r"^\U0001F600$", ["\U0001F600", "x"]),
+            (r"^\\x2e$", [r"\x2e", "."]),
+        ]:
+            with self.subTest(pattern=pattern):
+                translated, error = xsd_main._translate_pattern(pattern)
+                self.assertIsNone(error)
+                assert translated is not None
+                schema = xmlschema.XMLSchema(_schema_source(translated))
+                for text in samples:
+                    with self.subTest(text=text):
+                        self.assertEqual(
+                            re.fullmatch(pattern, text) is not None,
+                            schema.is_valid(
+                                f"<value>{xml_saxutils.escape(text)}</value>"
+                            ),
+                        )
+
+    def test_combined_patterns_preserve_encoded_characters(self) -> None:
+        """Preserve encoded literals when intersecting multiple pattern constraints."""
+        for patterns, samples in [
+            ([r"^a\x2eb$", r"^...$"], ["a.b", "axb", "a-b"]),
+            (
+                [r"^[\x20-\x5B\x5D-\x7E]+$", r"^.{1,12}$"],
+                ["hello world", "[x]", "a\\b", ""],
+            ),
+            ([r"^\x24aas$", r"^.{4}$"], ["$aas", "aas", ""]),
+            ([r"^\x5ex$", r"^..$"], ["^x", "ax"]),
+            ([r"^\x7c$", r"^.$"], ["|", "x", ""]),
+            ([r"^[\x5e]+$", r"^.{1,2}$"], ["^", "^^", "^^^", "a"]),
+            ([r"^\\x2e$", r"^.{4}$"], [r"\x2e", "."]),
+            ([r"^\u002e$", r"^.$"], [".", "x"]),
+            ([r"^\U0001F600$", r"^.$"], ["\U0001F600", "x"]),
+            ([r"^[^\x20]+$", r"^.{1,2}$"], [" ", "x", "xx", "xxx"]),
+            ([r"^\x7bx\x7d$", r"^...$"], ["{x}", "xxx"]),
+            ([r"^[\^-z]+$", r"^[a-z]+$"], ["a", "az", "^", "A", ""]),
+            ([r"^[\x5e-z]+$", r"^[a-z]+$"], ["a", "az", "^", "A", ""]),
+        ]:
+            with self.subTest(patterns=patterns):
+                translated, error = xsd_main._translate_to_simple_type(
+                    primitive_type=intermediate.PrimitiveType.STR,
+                    constraints=infer_for_schema.Constraints(
+                        patterns=[
+                            infer_for_schema.PatternConstraint(pattern)
+                            for pattern in patterns
+                        ]
+                    ),
+                )
+                self.assertIsNone(error)
+                assert translated is not None
+                assert translated.restriction is not None
+                assert translated.restriction.pattern is not None
+                schema = xmlschema.XMLSchema(
+                    _schema_source(translated.restriction.pattern)
+                )
+                for text in samples:
+                    with self.subTest(text=text):
+                        self.assertEqual(
+                            all(re.fullmatch(pattern, text) for pattern in patterns),
+                            schema.is_valid(
+                                f"<value>{xml_saxutils.escape(text)}</value>"
+                            ),
+                        )
 
 
 class Test_examples(unittest.TestCase):
