@@ -185,7 +185,8 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             tests_rel_path / "common.py",
             lambda: (
                 python_tests.generate_common(
-                    qualified_module_name=qualified_module_name
+                    symbol_table=context.symbol_table,
+                    qualified_module_name=qualified_module_name,
                 ),
                 None,
             ),

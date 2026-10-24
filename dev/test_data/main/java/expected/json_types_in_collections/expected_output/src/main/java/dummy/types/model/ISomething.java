@@ -24,6 +24,24 @@ public interface ISomething extends IClass {
   Tuple4<String, JsonNode, ArrayNode, ObjectNode> getTupleWithJson();
 
   void setTupleWithJson(Tuple4<String, JsonNode, ArrayNode, ObjectNode> tupleWithJson);
+
+  Optional<List<ObjectNode>> getOptionalObjects();
+
+  void setOptionalObjects(List<ObjectNode> optionalObjects);
+
+  Optional<ObjectNode> getOptionalObject();
+
+  void setOptionalObject(ObjectNode optionalObject);
+
+  /**
+   * Return {@link #getOptionalObject()} if set, or the one from the tuple.
+   */
+  ObjectNode optionalObjectOrDefault();
+
+  /**
+   * Iterate over optionalObjects, if set, and otherwise return an empty enumerable.
+   */
+  Iterable<ObjectNode> overOptionalObjectsOrEmpty();
 }
 
 /*

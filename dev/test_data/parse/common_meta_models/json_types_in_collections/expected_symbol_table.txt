@@ -42,8 +42,112 @@ UnverifiedSymbolTable(
           description=None,
           json_name=None,
           xml_name=None,
+          node=...),
+        Property(
+          name='optional_objects',
+          type_annotation=SubscriptedTypeAnnotation(
+            identifier='Optional',
+            subscripts=[
+              SubscriptedTypeAnnotation(
+                identifier='List',
+                subscripts=[
+                  SubscriptedTypeAnnotation(
+                    identifier='JSONObject',
+                    subscripts=[
+                      AtomicTypeAnnotation(
+                        identifier='str',
+                        node=...)],
+                    node=...)],
+                node=...)],
+            node=...),
+          description=None,
+          json_name=None,
+          xml_name=None,
+          node=...),
+        Property(
+          name='optional_object',
+          type_annotation=SubscriptedTypeAnnotation(
+            identifier='Optional',
+            subscripts=[
+              SubscriptedTypeAnnotation(
+                identifier='JSONObject',
+                subscripts=[
+                  AtomicTypeAnnotation(
+                    identifier='str',
+                    node=...)],
+                node=...)],
+            node=...),
+          description=None,
+          json_name=None,
+          xml_name=None,
           node=...)],
       methods=[
+        UnderstoodMethod(
+          name='optional_object_or_default',
+          verification=False,
+          visibility='PUBLIC',
+          arguments=[
+            Argument(
+              name='self',
+              type_annotation=SelfTypeAnnotation(),
+              default=None,
+              node=...)],
+          returns=SubscriptedTypeAnnotation(
+            identifier='JSONObject',
+            subscripts=[
+              AtomicTypeAnnotation(
+                identifier='str',
+                node=...)],
+            node=...),
+          description=Description(
+            document=...,
+            node=...),
+          contracts=Contracts(
+            preconditions=[],
+            snapshots=[],
+            postconditions=[]),
+          non_mutating=True,
+          body=[
+            textwrap.dedent("""\
+              If(
+                branches=[
+                  IfBranch(
+                    condition=IsNotNone(
+                      value=Member(
+                        instance=Name(
+                          identifier='self',
+                          original_node=...),
+                        name='optional_object',
+                        original_node=...),
+                      original_node=...),
+                    body=[
+                      Return(
+                        value=Member(
+                          instance=Name(
+                            identifier='self',
+                            original_node=...),
+                          name='optional_object',
+                          original_node=...),
+                        original_node=...)],
+                    original_node=...)],
+                default=None,
+                original_node=...)"""),
+            textwrap.dedent("""\
+              Return(
+                value=Index(
+                  collection=Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='tuple_with_json',
+                    original_node=...),
+                  index=Constant(
+                    value=3,
+                    original_node=...),
+                  original_node=...),
+                original_node=...)""")],
+          node=...,
+          arguments_by_name=...),
         ConstructorToBeUnderstood(
           name='__init__',
           verification=False,
@@ -88,6 +192,42 @@ UnverifiedSymbolTable(
                     node=...)],
                 node=...),
               default=None,
+              node=...),
+            Argument(
+              name='optional_objects',
+              type_annotation=SubscriptedTypeAnnotation(
+                identifier='Optional',
+                subscripts=[
+                  SubscriptedTypeAnnotation(
+                    identifier='List',
+                    subscripts=[
+                      SubscriptedTypeAnnotation(
+                        identifier='JSONObject',
+                        subscripts=[
+                          AtomicTypeAnnotation(
+                            identifier='str',
+                            node=...)],
+                        node=...)],
+                    node=...)],
+                node=...),
+              default=Default(
+                node=...),
+              node=...),
+            Argument(
+              name='optional_object',
+              type_annotation=SubscriptedTypeAnnotation(
+                identifier='Optional',
+                subscripts=[
+                  SubscriptedTypeAnnotation(
+                    identifier='JSONObject',
+                    subscripts=[
+                      AtomicTypeAnnotation(
+                        identifier='str',
+                        node=...)],
+                    node=...)],
+                node=...),
+              default=Default(
+                node=...),
               node=...)],
           returns=None,
           description=None,

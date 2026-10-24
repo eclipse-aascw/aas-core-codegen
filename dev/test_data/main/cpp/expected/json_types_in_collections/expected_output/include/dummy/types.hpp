@@ -91,6 +91,31 @@ class ISomething
     > value
   ) = 0;
 
+  virtual const common::optional<
+    std::vector<nlohmann::json>
+  >& optional_objects() const = 0;
+
+  virtual common::optional<
+    std::vector<nlohmann::json>
+  >& mutable_optional_objects() = 0;
+
+  virtual void set_optional_objects(
+    common::optional<
+      std::vector<nlohmann::json>
+    > value
+  ) = 0;
+
+  virtual const common::optional<nlohmann::json>& optional_object() const = 0;
+
+  virtual common::optional<nlohmann::json>& mutable_optional_object() = 0;
+
+  virtual void set_optional_object(
+    common::optional<nlohmann::json> value
+  ) = 0;
+
+  /// \brief Return ISomething::optional_object if set, or the one from the tuple.
+  virtual nlohmann::json OptionalObjectOrDefault() const = 0;
+
   virtual ~ISomething() = default;
 };
 
@@ -108,7 +133,11 @@ class Something
       nlohmann::json,
       nlohmann::json,
       nlohmann::json
-    > tuple_with_json
+    > tuple_with_json,
+    common::optional<
+      std::vector<nlohmann::json>
+    > optional_objects = common::nullopt,
+    common::optional<nlohmann::json> optional_object = common::nullopt
   );
 
   ModelType model_type() const override;
@@ -152,6 +181,38 @@ class Something
 
   // endregion
 
+  // region Get and set optional_objects_
+
+  const common::optional<
+    std::vector<nlohmann::json>
+  >& optional_objects() const override;
+
+  common::optional<
+    std::vector<nlohmann::json>
+  >& mutable_optional_objects() override;
+
+  void set_optional_objects(
+    common::optional<
+      std::vector<nlohmann::json>
+    > value
+  ) override;
+
+  // endregion
+
+  // region Get and set optional_object_
+
+  const common::optional<nlohmann::json>& optional_object() const override;
+
+  common::optional<nlohmann::json>& mutable_optional_object() override;
+
+  void set_optional_object(
+    common::optional<nlohmann::json> value
+  ) override;
+
+  // endregion
+
+  nlohmann::json OptionalObjectOrDefault() const override;
+
   ~Something() override = default;
 
  private:
@@ -163,6 +224,12 @@ class Something
     nlohmann::json,
     nlohmann::json
   > tuple_with_json_;
+
+  common::optional<
+    std::vector<nlohmann::json>
+  > optional_objects_;
+
+  common::optional<nlohmann::json> optional_object_;
 };
 
 // endregion

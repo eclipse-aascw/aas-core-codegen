@@ -601,6 +601,11 @@ namespace dummy
                     AtElement(
                         Read_jsonObject, "v4")));
 
+            private static readonly ContentReader<List<Nodes.JsonObject>> Read_ListOf_jsonObject = (
+                AsList<Nodes.JsonObject>(
+                    AtElement(
+                        Read_jsonObject, "v")));
+
             /// <summary>
             /// Deserialize an instance of class Something from a sequence of XML elements.
             /// </summary>
@@ -618,6 +623,8 @@ namespace dummy
 
                 List<Nodes.JsonNode>? theValues = null;
                 (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject)? theTupleWithJson = null;
+                List<Nodes.JsonObject>? theOptionalObjects = null;
+                Nodes.JsonObject? theOptionalObject = null;
 
                 if (!isEmptySequence)
                 {
@@ -654,6 +661,24 @@ namespace dummy
                                     break;
                                 }
                                 theTupleWithJson = Read_TupleOf4_string_jsonValue_jsonArray_jsonObject(
+                                    reader, isEmptyProperty, out error);
+                                break;
+                            case "optionalObjects":
+                                if (theOptionalObjects != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
+                                theOptionalObjects = Read_ListOf_jsonObject(
+                                    reader, isEmptyProperty, out error);
+                                break;
+                            case "optionalObject":
+                                if (theOptionalObject != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
+                                theOptionalObject = Read_jsonObject(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -716,7 +741,9 @@ namespace dummy
                             "Unexpected null, had to be handled before"),
                     theTupleWithJson
                          ?? throw new System.InvalidOperationException(
-                            "Unexpected null, had to be handled before"));
+                            "Unexpected null, had to be handled before"),
+                    theOptionalObjects,
+                    theOptionalObject);
             }  // internal static Our.Something? SomethingFromSequence
         }  // internal static class DeserializeImplementation
 
@@ -1065,6 +1092,13 @@ namespace dummy
                     WrapInElement(
                         Write_jsonObject, "v4")));
 
+            private static readonly ContentWriter<
+                List<Nodes.JsonObject>
+            > Write_ListOf_jsonObject = (
+                WriteList<Nodes.JsonObject>(
+                    WrapInElement(
+                        Write_jsonObject, "v")));
+
             private static void SomethingToSequence(
                 Our.ISomething that,
                 Xml.XmlWriter writer)
@@ -1078,6 +1112,26 @@ namespace dummy
                     that.TupleWithJson,
                     writer,
                     Write_TupleOf4_string_jsonValue_jsonArray_jsonObject);
+
+                if (that.OptionalObjects != null)
+                {
+                    WriteProperty(
+                        "optionalObjects",
+                        "OptionalObjects",
+                        that.OptionalObjects,
+                        writer,
+                        Write_ListOf_jsonObject);
+                }
+
+                if (that.OptionalObject != null)
+                {
+                    WriteProperty(
+                        "optionalObject",
+                        "OptionalObject",
+                        that.OptionalObject,
+                        writer,
+                        Write_jsonObject);
+                }
             }  // private static void SomethingToSequence
 
             public override void VisitSomething(

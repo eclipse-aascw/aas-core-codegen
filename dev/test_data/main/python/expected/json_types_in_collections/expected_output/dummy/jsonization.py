@@ -543,6 +543,23 @@ def _tuple4_from_jsonable(
     )
 
 
+def _list_of__json_object_from_jsonable(
+    jsonable: Jsonable
+) -> List[our_types.JsonObject]:
+    """
+    Parse :paramref:`jsonable` as a list of
+    a JSON-able object.
+
+    :param jsonable: JSON-able structure to be parsed
+    :return: parsed list
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    return _list_from_jsonable(
+        jsonable,
+        _json_object_from_jsonable
+    )
+
+
 def _list_of__json_value_from_jsonable(
     jsonable: Jsonable
 ) -> List[our_types.JsonValue]:
@@ -601,6 +618,8 @@ def something_from_jsonable(
             our_types.JsonObject,
         ]
     ] = None
+    the_optional_objects: Optional[List[our_types.JsonObject]] = None
+    the_optional_object: Optional[our_types.JsonObject] = None
 
     unexpected_key: Optional[str] = None
 
@@ -612,6 +631,10 @@ def something_from_jsonable(
                 the_tuple_with_json = (
                     _tuple4_of__str__json_value__json_array__json_object_from_jsonable(jsonable_value)
                 )
+            elif key == 'optionalObjects':
+                the_optional_objects = _list_of__json_object_from_jsonable(jsonable_value)
+            elif key == 'optionalObject':
+                the_optional_object = _json_object_from_jsonable(jsonable_value)
             else:
                 unexpected_key = key
                 break
@@ -638,7 +661,9 @@ def something_from_jsonable(
 
     return our_types.Something(
         the_values,
-        the_tuple_with_json
+        the_tuple_with_json,
+        the_optional_objects,
+        the_optional_object
     )
 
 
@@ -786,6 +811,30 @@ def _json_value_to_jsonable(
     )
 
 
+def _list_of__json_object_to_jsonable(
+    that: List[our_types.JsonObject]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    a JSON-able object.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    jsonable = []  # type: List[MutableJsonable]
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                _json_value_to_jsonable(
+                    item
+                )
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
+
+
 def _list_of__json_value_to_jsonable(
     that: List[our_types.JsonValue]
 ) -> List[MutableJsonable]:
@@ -881,6 +930,22 @@ def _something_to_jsonable(
     except SerializationException as exception:
         exception._prepend_property('tuple_with_json')
         raise
+    if that.optional_objects is not None:
+        try:
+            jsonable['optionalObjects'] = _list_of__json_object_to_jsonable(
+                that.optional_objects
+            )
+        except SerializationException as exception:
+            exception._prepend_property('optional_objects')
+            raise
+    if that.optional_object is not None:
+        try:
+            jsonable['optionalObject'] = _json_value_to_jsonable(
+                that.optional_object
+            )
+        except SerializationException as exception:
+            exception._prepend_property('optional_object')
+            raise
     return jsonable
 
 

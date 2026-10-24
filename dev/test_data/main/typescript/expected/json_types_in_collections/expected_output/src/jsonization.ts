@@ -675,6 +675,8 @@ function parsePropertiesOfSomething(
 > {
   let theValues: Array<OurTypes.JsonValue> | null = null;
   let theTupleWithJson: [string, OurTypes.JsonValue, OurTypes.JsonArray, OurTypes.JsonObject] | null = null;
+  let theOptionalObjects: Array<OurTypes.JsonObject> | null = null;
+  let theOptionalObject: OurTypes.JsonObject | null = null;
 
   for (const key in jsonObject) {
     const jsonableValue = jsonObject[key];
@@ -701,6 +703,25 @@ function parsePropertiesOfSomething(
         );
         propertyError = parsed.error;
         theTupleWithJson = parsed.value;
+        break;
+      }
+
+      case "optionalObjects": {
+        const parsed = parseArray(
+          jsonableValue,
+          jsonObjectFromJsonable
+        );
+        propertyError = parsed.error;
+        theOptionalObjects = parsed.value;
+        break;
+      }
+
+      case "optionalObject": {
+        const parsed = jsonObjectFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theOptionalObject = parsed.value;
         break;
       }
 
@@ -749,7 +770,9 @@ function parsePropertiesOfSomething(
   >(
     new OurTypes.Something(
       theValues,
-      theTupleWithJson
+      theTupleWithJson,
+      theOptionalObjects,
+      theOptionalObject
     ),
     null
   );
@@ -996,6 +1019,12 @@ function jsonObjectFromJsonable(
  * @returns `that`, as a value of a JSON document
  * @throws {@link SerializationError} if `that` is not JSON-able
  */
+function jsonValueToJsonable(that: OurTypes.JsonArray): Array<JsonValue>;
+// NOTE (mristin):
+// The copy keeps the shape of `that`, so we tell the compiler with the overloads.
+// Otherwise, the result could not go into, *e.g.*, an `Array<JsonObject>`.
+function jsonValueToJsonable(that: OurTypes.JsonObject): JsonObject;
+function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue;
 function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {
   if (that === null || that === undefined) {
     throw new SerializationError(
@@ -1081,6 +1110,18 @@ function serializeSomething(
     prop = "tupleWithJson";
     jsonable["tupleWithJson"] =
       serialize_TupleOf4_str_jsonValue_jsonArray_jsonObject(that.tupleWithJson);
+
+    if (that.optionalObjects !== null) {
+      prop = "optionalObjects";
+      jsonable["optionalObjects"] =
+        serialize_ListOf_jsonObject(that.optionalObjects);
+    }
+
+    if (that.optionalObject !== null) {
+      prop = "optionalObject";
+      jsonable["optionalObject"] =
+        jsonValueToJsonable(that.optionalObject);
+    }
   } catch (error) {
     if (error instanceof SerializationError) {
       error.prependProperty(prop);
@@ -1154,6 +1195,30 @@ function serialize_TupleOf4_str_jsonValue_jsonArray_jsonObject(
   } catch (error) {
     if (error instanceof SerializationError) {
       error.prependIndex(3);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_jsonObject(
+  that: ReadonlyArray<OurTypes.JsonObject>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = jsonValueToJsonable(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
     }
     throw error;
   }

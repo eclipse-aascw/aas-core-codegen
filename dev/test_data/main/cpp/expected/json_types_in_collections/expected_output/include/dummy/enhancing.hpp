@@ -108,6 +108,44 @@ class EnhancedSomething
     instance_->set_tuple_with_json(value);
   }
 
+  const common::optional<
+    std::vector<nlohmann::json>
+  >& optional_objects() const override {
+    return instance_->optional_objects();
+  }
+
+  common::optional<
+    std::vector<nlohmann::json>
+  >& mutable_optional_objects() override {
+    return instance_->mutable_optional_objects();
+  }
+
+  void set_optional_objects(
+    common::optional<
+      std::vector<nlohmann::json>
+    > value
+  ) override {
+    instance_->set_optional_objects(value);
+  }
+
+  const common::optional<nlohmann::json>& optional_object() const override {
+    return instance_->optional_object();
+  }
+
+  common::optional<nlohmann::json>& mutable_optional_object() override {
+    return instance_->mutable_optional_object();
+  }
+
+  void set_optional_object(
+    common::optional<nlohmann::json> value
+  ) override {
+    instance_->set_optional_object(value);
+  }
+
+  nlohmann::json OptionalObjectOrDefault() const override {
+    return instance_->OptionalObjectOrDefault();
+  }
+
   const std::shared_ptr<E>& enhancement() const {
     return enhancement_;
   }

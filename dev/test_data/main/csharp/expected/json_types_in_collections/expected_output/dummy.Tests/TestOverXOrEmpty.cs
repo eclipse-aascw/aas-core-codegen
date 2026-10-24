@@ -11,7 +11,26 @@ namespace dummy.Tests
 {
     public class TestOverXOrEmpty
     {
-        
+        [Test]
+        public void Test_Something_OverOptionalObjectsOrEmpty()
+        {
+            foreach (Our.Something instance in new[]
+            {
+                Our.Tests.CommonJsonization.LoadMinimalSomething(),
+                Our.Tests.CommonJsonization.LoadMaximalSomething()
+            })
+            {
+                int count = 0;
+                foreach (var _ in instance.OverOptionalObjectsOrEmpty())
+                {
+                    count++;
+                }
+
+                Assert.AreEqual(
+                    instance.OptionalObjects?.Count ?? 0,
+                    count);
+            }
+        }  // public void Test_Something_OverOptionalObjectsOrEmpty
     }  // class TestOverXOrEmpty
 }  // namespace dummy.Tests
 

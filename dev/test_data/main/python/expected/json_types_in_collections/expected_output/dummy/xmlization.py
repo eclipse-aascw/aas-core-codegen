@@ -990,6 +990,22 @@ def _read_json_array__at_v3(
     )
 
 
+def _read_json_object__at_v(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> our_types.JsonObject:
+    """
+    Read the content of :paramref:`element`, which must be tagged
+    ``v``, as a JSON-able object.
+    """
+    return _read_named_element(
+        element,
+        iterator,
+        'v',
+        _read_json_object_body
+    )
+
+
 def _read_json_object__at_v4(
     element: Element,
     iterator: Iterator[Tuple[str, Element]]
@@ -1035,6 +1051,21 @@ def _read_json_value__at_v2(
         iterator,
         'v2',
         _read_json_value_content
+    )
+
+
+def _read_list_of__json_object(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> List[our_types.JsonObject]:
+    """
+    Read the items of :paramref:`element` as a list of
+    a JSON-able object.
+    """
+    return _read_list_of_items(
+        element,
+        iterator,
+        _read_json_object__at_v
     )
 
 
@@ -1122,6 +1153,10 @@ def _read_something_as_sequence(
     ] = values.get(
         'tupleWithJson'
     )
+    the_optional_objects: Optional[List[our_types.JsonObject]] = values.get(
+        'optionalObjects'
+    )
+    the_optional_object: Optional[our_types.JsonObject] = values.get('optionalObject')
 
     if the_values is None:
         raise DeserializationException(
@@ -1135,7 +1170,9 @@ def _read_something_as_sequence(
 
     return our_types.Something(
         the_values,
-        the_tuple_with_json
+        the_tuple_with_json,
+        the_optional_objects,
+        the_optional_object
     )
 
 
@@ -1210,6 +1247,8 @@ _READERS_FOR_SOMETHING: Mapping[
 ] = {
     'values': _read_list_of__json_value,
     'tupleWithJson': _read_tuple4_of__str__json_value__json_array__json_object,
+    'optionalObjects': _read_list_of__json_object,
+    'optionalObject': _read_json_object_body,
 }
 
 
@@ -1549,6 +1588,18 @@ def _write_something_as_element(
         _write_tuple4_of__str__json_value__json_array__json_object(
             'tupleWithJson', 'tuple_with_json', that.tuple_with_json, serializer
         )
+        if that.optional_objects is not None:
+            _write_list_of_items(
+                'optionalObjects',
+                'optional_objects',
+                that.optional_objects,
+                _write_json_object_as_element,
+                serializer
+            )
+        if that.optional_object is not None:
+            _write_json_object_as_element(
+                'optionalObject', 'optional_object', that.optional_object, serializer
+            )
         serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)

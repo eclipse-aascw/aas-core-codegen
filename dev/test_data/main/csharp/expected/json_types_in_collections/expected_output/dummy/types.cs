@@ -7,6 +7,7 @@ using Our = dummy;  // renamed
 using EnumMemberAttribute = System.Runtime.Serialization.EnumMemberAttribute;
 
 using System.Collections.Generic;  // can't alias
+using System.Linq;  // can't alias
 using Nodes = System.Text.Json.Nodes;
 
 namespace dummy
@@ -61,6 +62,20 @@ namespace dummy
         public List<Nodes.JsonNode> Values { get; set; }
 
         public (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) TupleWithJson { get; set; }
+
+        public List<Nodes.JsonObject>? OptionalObjects { get; set; }
+
+        public Nodes.JsonObject? OptionalObject { get; set; }
+
+        /// <summary>
+        /// Return <see cref="Our.Something.OptionalObject" /> if set, or the one from the tuple.
+        /// </summary>
+        public Nodes.JsonObject OptionalObjectOrDefault();
+
+        /// <summary>
+        /// Iterate over OptionalObjects, if set, and otherwise return an empty enumerable.
+        /// </summary>
+        public IEnumerable<Nodes.JsonObject> OverOptionalObjectsOrEmpty();
     }
 
     public class Something : ISomething
@@ -68,6 +83,31 @@ namespace dummy
         public List<Nodes.JsonNode> Values { get; set; }
 
         public (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) TupleWithJson { get; set; }
+
+        public List<Nodes.JsonObject>? OptionalObjects { get; set; }
+
+        public Nodes.JsonObject? OptionalObject { get; set; }
+
+        /// <summary>
+        /// Iterate over OptionalObjects, if set, and otherwise return an empty enumerable.
+        /// </summary>
+        public IEnumerable<Nodes.JsonObject> OverOptionalObjectsOrEmpty()
+        {
+            return OptionalObjects
+                ?? System.Linq.Enumerable.Empty<Nodes.JsonObject>();
+        }
+
+        /// <summary>
+        /// Return <see cref="Our.Something.OptionalObject" /> if set, or the one from the tuple.
+        /// </summary>
+        public Nodes.JsonObject OptionalObjectOrDefault()
+        {
+            if (this.OptionalObject != null)
+            {
+                return this.OptionalObject;
+            }
+            return this.TupleWithJson.Item4;
+        }
 
         /// <summary>
         /// Iterate over all the class instances referenced from this instance
@@ -130,10 +170,14 @@ namespace dummy
 
         public Something(
             List<Nodes.JsonNode> values,
-            (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) tupleWithJson)
+            (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject) tupleWithJson,
+            List<Nodes.JsonObject>? optionalObjects = null,
+            Nodes.JsonObject? optionalObject = null)
         {
             Values = values;
             TupleWithJson = tupleWithJson;
+            OptionalObjects = optionalObjects;
+            OptionalObject = optionalObject;
         }
     }
 }  // namespace dummy

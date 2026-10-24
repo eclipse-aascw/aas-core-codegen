@@ -10,6 +10,7 @@ import collections.abc
 import difflib
 import enum
 import io
+import json
 import os
 import pathlib
 import textwrap
@@ -75,20 +76,20 @@ The obtained content and the content of {path} do not match:
             raise AssertionError(writer.getvalue())
 
 
-def trace(
-    that: Union[
-        bool,
-        int,
-        float,
-        str,
-        bytes,
-        enum.Enum,
-        our_types.Class,
-        Sequence[
-            Union[bool, int, float, str, bytes, enum.Enum, our_types.Class]
-        ],
-    ],
-) -> str:
+#: Represent a value which can be traced, including the nested sequences
+Traceable = Union[
+    bool,
+    int,
+    float,
+    str,
+    bytes,
+    enum.Enum,
+    our_types.Class,
+    Sequence["Traceable"],
+]
+
+
+def trace(that: Traceable) -> str:
     """
     Generate a segment in a trace of an iteration.
 
@@ -118,6 +119,18 @@ def trace(
         return writer.getvalue()
     else:
         our_common.assert_never(that)
+
+
+def trace_json(that: our_types.JsonValue) -> str:
+    """
+    Trace the JSON-able value as its JSON text.
+
+    We sort the keys so that the trace does not depend on their order.
+
+    :param that: to be traced
+    :return: JSON text of :paramref:`that`
+    """
+    return json.dumps(that, sort_keys=True)
 
 
 def trace_log_as_text_file_content(log: Sequence[str]) -> str:

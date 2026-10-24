@@ -43,6 +43,38 @@ public class TestXOrDefault {
       assertEquals(objectMapper.readTree(expected.toString()), objectMapper.readTree(got.toString()));
     }
   }
+
+  @Test
+  public void testSomethingOptionalObjectOrDefaultNonDefault()
+     throws IOException {
+    Something instance = CommonJsonization.loadMaximalSomething();
+
+    final Object value = instance.optionalObjectOrDefault();
+
+    compareOrRerecordValue(
+      value,
+      Paths.get(
+        Common.TEST_DATA_DIR,
+        "XOrDefault",
+        "Something",
+        "optionalObjectOrDefault.non-default.json"));
+  } // public void testSomethingoptionalObjectOrDefaultNonDefault
+
+  @Test
+  public void testSomethingoptionalObjectOrDefaultDefault()
+     throws IOException {
+    Something instance = CommonJsonization.loadMinimalSomething();
+
+    final Object value = instance.optionalObjectOrDefault();
+
+    compareOrRerecordValue(
+      value,
+      Paths.get(
+        Common.TEST_DATA_DIR,
+        "XOrDefault",
+        "Something",
+        "optionalObjectOrDefault.default.json"));
+  } // public void testSomethingoptionalObjectOrDefaultDefault
 } // class TestXOrDefault
 
 // package dummy.tests

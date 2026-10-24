@@ -7,6 +7,7 @@ from icontract import ensure
 
 from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import Stripped, Identifier, indent_but_first_line
+from aas_core_codegen.intermediate import uses as intermediate_uses
 from aas_core_codegen.typescript import (
     common as typescript_common,
     naming as typescript_naming,
@@ -27,6 +28,24 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test the ``xOrDefault`` methods."""
+    uses_json_types = intermediate_uses.json_types(symbol_table)
+
+    # NOTE (mristin):
+    # The JSON-able types are defined in the types module only if the meta-model
+    # uses them, so we represent them only in that case.
+    maybe_json_types = (
+        " | OurTypes.JsonArray | OurTypes.JsonObject" if uses_json_types else ""
+    )
+
+    maybe_json_branch = (
+        f"""\
+ else if (typeof value === "object") {{
+{II}got = stringifyJsonWithSortedKeys(value);
+{I}}}"""
+        if uses_json_types
+        else ""
+    )
+
     blocks = [
         Stripped(
             """\
@@ -74,7 +93,7 @@ class EnumerationLiteral {{
  * @param expectedPath - to the golden file
  */
 function compareOrRecordValue(
-{I}value: boolean | number | string | null | EnumerationLiteral | OurTypes.Class,
+{I}value: boolean | number | string | null | EnumerationLiteral | OurTypes.Class{maybe_json_types},
 {I}expectedPath: string
 ): void {{
 {I}let got = "";
@@ -89,7 +108,7 @@ function compareOrRecordValue(
 {II}got = value.toString();
 {I}}} else if (value instanceof OurTypes.Class) {{
 {II}got = TestCommon.traceMark(value);
-{I}}} else {{
+{I}}}{maybe_json_branch} else {{
 {II}throw new Error(`We do not know how to represent the value ${{value}}`);
 {I}}}
 
@@ -121,6 +140,41 @@ function compareOrRecordValue(
 }}"""
         ),
     ]  # type: List[Stripped]
+
+    if uses_json_types:
+        blocks.insert(
+            len(blocks) - 1,
+            Stripped(
+                f"""\
+/**
+ * Stringify the JSON-able value with the keys of the objects sorted so that
+ * the result does not depend on their order.
+ *
+ * @param value - to be stringified
+ * @returns JSON text of `value`
+ */
+function stringifyJsonWithSortedKeys(
+{I}value: OurTypes.JsonArray | OurTypes.JsonObject
+): string {{
+{I}return JSON.stringify(value, (_key: string, nested: unknown): unknown => {{
+{II}if (
+{III}nested === null
+{III}|| typeof nested !== "object"
+{III}|| Array.isArray(nested)
+{II}) {{
+{III}return nested;
+{II}}}
+
+{II}const anObject = nested as {{ [key: string]: unknown }};
+{II}const sorted: {{ [key: string]: unknown }} = {{}};
+{II}for (const key of Object.keys(anObject).sort()) {{
+{III}sorted[key] = anObject[key];
+{II}}}
+{II}return sorted;
+{I}}});
+}}"""
+            ),
+        )
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_typescript = typescript_naming.class_name(concrete_cls.name)

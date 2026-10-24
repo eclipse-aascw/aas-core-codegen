@@ -416,6 +416,10 @@ namespace dummy
                     JsonArrayFrom,
                     JsonObjectFrom));
 
+            private static readonly Deserializer<List<Nodes.JsonObject>> Parse_ListOf_jsonObject = (
+                AsArrayOf<Nodes.JsonObject>(
+                    JsonObjectFrom));
+
             /// <summary>
             /// Check that <paramref name="node" /> is a JSON-able value.
             /// </summary>
@@ -610,6 +614,8 @@ namespace dummy
 
                 List<Nodes.JsonNode>? theValues = null;
                 (string, Nodes.JsonNode, Nodes.JsonArray, Nodes.JsonObject)? theTupleWithJson = null;
+                List<Nodes.JsonObject>? theOptionalObjects = null;
+                Nodes.JsonObject? theOptionalObject = null;
 
                 foreach (var keyValue in obj)
                 {
@@ -621,6 +627,14 @@ namespace dummy
                             break;
                         case "tupleWithJson":
                             theTupleWithJson = Parse_TupleOf4_string_jsonValue_jsonArray_jsonObject(
+                                keyValue.Value, out error);
+                            break;
+                        case "optionalObjects":
+                            theOptionalObjects = Parse_ListOf_jsonObject(
+                                keyValue.Value, out error);
+                            break;
+                        case "optionalObject":
+                            theOptionalObject = JsonObjectFrom(
                                 keyValue.Value, out error);
                             break;
                         default:
@@ -658,7 +672,9 @@ namespace dummy
                             "Unexpected null, had to be handled before"),
                     theTupleWithJson
                          ?? throw new System.InvalidOperationException(
-                            "Unexpected null, had to be handled before"));
+                            "Unexpected null, had to be handled before"),
+                    theOptionalObjects,
+                    theOptionalObject);
             }  // internal static SomethingFrom
         }  // public static class DeserializeImplementation
 
@@ -964,6 +980,12 @@ namespace dummy
                     Transformer.SerializeJsonArray,
                     Transformer.SerializeJsonObject));
 
+            private static readonly Serializer<
+                List<Nodes.JsonObject>
+            > Serialize_ListOf_jsonObject = (
+                SerializeList<Nodes.JsonObject>(
+                    Transformer.SerializeJsonObject));
+
             /// <summary>
             /// Check that <paramref name="that" /> is a JSON-able value, at any depth.
             /// </summary>
@@ -1114,6 +1136,9 @@ namespace dummy
                 return (Nodes.JsonObject)SerializeJsonValue(that);
             }
 
+            private static readonly Serializer<Nodes.JsonObject> Serialize_JsonObject =
+                Transformer.SerializeJsonObject;
+
             /// <summary>
             /// Set the property <paramref name="jsonName" /> of
             /// <paramref name="result" /> to <paramref name="that" />, serialized by
@@ -1159,6 +1184,26 @@ namespace dummy
                     "TupleWithJson",
                     that.TupleWithJson,
                     Serialize_TupleOf4_string_jsonValue_jsonArray_jsonObject);
+
+                if (that.OptionalObjects != null)
+                {
+                    SetProperty(
+                        result,
+                        "optionalObjects",
+                        "OptionalObjects",
+                        that.OptionalObjects,
+                        Serialize_ListOf_jsonObject);
+                }
+
+                if (that.OptionalObject != null)
+                {
+                    SetProperty(
+                        result,
+                        "optionalObject",
+                        "OptionalObject",
+                        that.OptionalObject,
+                        Serialize_JsonObject);
+                }
 
                 return result;
             }

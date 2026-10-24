@@ -1155,7 +1155,9 @@ namespace properties {
 
 enum class OfSomething : std::uint32_t {
   kValues,
-  kTupleWithJson
+  kTupleWithJson,
+  kOptionalObjects,
+  kOptionalObject
 };  // enum class OfSomething
 
 const std::unordered_map<
@@ -1169,6 +1171,14 @@ const std::unordered_map<
   {
     "tupleWithJson",
     OfSomething::kTupleWithJson
+  },
+  {
+    "optionalObjects",
+    OfSomething::kOptionalObjects
+  },
+  {
+    "optionalObject",
+    OfSomething::kOptionalObject
   }
 };
 
@@ -1404,6 +1414,12 @@ std::pair<
     >
   > the_tuple_with_json;
 
+  common::optional<
+    std::vector<nlohmann::json>
+  > the_optional_objects;
+
+  common::optional<nlohmann::json> the_optional_object;
+
   common::optional<DeserializationError> error(
     ParseProperties(
       json,
@@ -1439,6 +1455,21 @@ std::pair<
                 DeserializeJsonArray,
                 DeserializeJsonObject
               )
+            );
+          case properties::OfSomething::kOptionalObjects:
+            return ParseInto(
+              the_optional_objects,
+              DeserializeList<
+                nlohmann::json
+              >(
+                value,
+                DeserializeJsonObject
+              )
+            );
+          case properties::OfSomething::kOptionalObject:
+            return ParseInto(
+              the_optional_object,
+              DeserializeJsonObject(value)
             );
           default:
             throw UnexpectedPropertyLiteralError(
@@ -1483,7 +1514,9 @@ std::pair<
       // upcast.
       new types::Something(
         std::move(*the_values),
-        std::move(*the_tuple_with_json)
+        std::move(*the_tuple_with_json),
+        std::move(the_optional_objects),
+        std::move(the_optional_object)
       )
     ),
     common::nullopt
@@ -2334,6 +2367,47 @@ std::pair<
     return NoJsonAndSerializationError(
       std::move(*error)
     );
+  }
+
+  const common::optional<
+    std::vector<nlohmann::json>
+  >& maybe_optional_objects(
+    that.optional_objects()
+  );
+  if (maybe_optional_objects.has_value()) {
+    error = SerializeInto(
+      result,
+      "optionalObjects",
+      iteration::Property::kOptionalObjects,
+      SerializeListWithFallible(
+        *maybe_optional_objects,
+        SerializeJsonObject
+      )
+    );
+    if (error.has_value()) {
+      return NoJsonAndSerializationError(
+        std::move(*error)
+      );
+    }
+  }
+
+  const common::optional<nlohmann::json>& maybe_optional_object(
+    that.optional_object()
+  );
+  if (maybe_optional_object.has_value()) {
+    error = SerializeInto(
+      result,
+      "optionalObject",
+      iteration::Property::kOptionalObject,
+      SerializeJsonObject(
+        *maybe_optional_object
+      )
+    );
+    if (error.has_value()) {
+      return NoJsonAndSerializationError(
+        std::move(*error)
+      );
+    }
   }
 
   return std::make_pair<

@@ -86,6 +86,14 @@ public static Nodes.JsonNode ToJson(object something)
 {IIII});
 {II}case Our.IClass instance:
 {III}return Our.Jsonization.Serialize.ToJsonObject(instance);
+{II}case Nodes.JsonNode aNode:
+{III}// NOTE (mristin):
+{III}// A JSON node remembers its parent, so we copy it before handing it
+{III}// out. ``DeepClone`` arrived only in .NET 8, so we serialize instead.
+{III}return System.Text.Json.JsonSerializer.SerializeToNode(aNode)
+{IIII}?? throw new System.InvalidOperationException(
+{IIIII}$"Could not copy the JSON node {{aNode.ToJsonString()}}"
+{IIII});
 {II}default:
 {III}throw new System.ArgumentException(
 {IIII}$"The conversion of type {{something.GetType()}} "

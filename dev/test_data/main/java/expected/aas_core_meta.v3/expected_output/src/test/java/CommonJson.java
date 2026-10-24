@@ -62,6 +62,8 @@ public final class CommonJson {
       return BinaryNode.valueOf((byte[]) something);
     } else if (something instanceof IClass) {
       return Jsonization.Serialize.toJsonObject((IClass) something);
+    } else if (something instanceof JsonNode) {
+      return (JsonNode) something;
     } else {
       throw new IllegalArgumentException(
         "The conversion of type "

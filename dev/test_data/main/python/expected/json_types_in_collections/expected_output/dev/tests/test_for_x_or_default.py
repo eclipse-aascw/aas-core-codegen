@@ -19,6 +19,44 @@ import tests.common
 import tests.common_xmlization
 
 
+class TestSomething(unittest.TestCase):
+    def test_optional_object_or_default_against_recorded(self) -> None:
+        for minimal_or_maximal in ["minimal", "maximal"]:
+            instance = tests.common_xmlization.must_load(
+                pathlib.Path(
+                    tests.common.TEST_DATA_DIR
+                    / "Xml"
+                    / "Expected"
+                    / 'something'
+                    / f"{minimal_or_maximal}.xml"
+                )
+            )
+
+            assert isinstance(
+                instance,
+                our_types.Something
+            )
+
+            value = instance.optional_object_or_default()
+            log = [
+                tests.common.trace(
+                    tests.common.trace_json(value)
+                )
+            ]
+
+            got_text = tests.common.trace_log_as_text_file_content(log)
+
+            expected_path = pathlib.Path(
+                tests.common.TEST_DATA_DIR
+                / "test_X_or_default"
+                / 'something'
+                / f"on_{minimal_or_maximal}.xml"
+                / 'optional_object_or_default.trace'
+            )
+
+            tests.common.record_or_check(expected_path, got_text)
+
+
 if __name__ == "__main__":
     unittest.main()
 

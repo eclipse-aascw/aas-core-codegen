@@ -35,6 +35,38 @@ func deepEqualSomething(
 		return false
 	}
 
+	thatOptionalObjects := that.OptionalObjects()
+	otherOptionalObjects := other.OptionalObjects()
+	if
+		(thatOptionalObjects == nil && otherOptionalObjects != nil) ||
+		(thatOptionalObjects != nil && otherOptionalObjects == nil) {
+		return false
+	}
+	if thatOptionalObjects != nil {
+		if !deepEqualListOf_jsonObject(
+			thatOptionalObjects,
+			otherOptionalObjects,
+		) {
+			return false
+		}
+	}
+
+	thatOptionalObject := that.OptionalObject()
+	otherOptionalObject := other.OptionalObject()
+	if
+		(thatOptionalObject == nil && otherOptionalObject != nil) ||
+		(thatOptionalObject != nil && otherOptionalObject == nil) {
+		return false
+	}
+	if thatOptionalObject != nil {
+		if !reflect.DeepEqual(
+			thatOptionalObject,
+			otherOptionalObject,
+		) {
+			return false
+		}
+	}
+
 	return true
 }
 
@@ -89,6 +121,28 @@ func deepEqualTupleOf4_string_jsonValue_jsonArray_jsonObject(
 		other.Item4,
 	) {
 		return false
+	}
+
+	return true
+}
+
+// Perform a comparison for deep equality between `that` and `other` container,
+// recursing into its items.
+func deepEqualListOf_jsonObject(
+	that []ourtypes.JsonObject,
+	other []ourtypes.JsonObject,
+) bool {
+	if len(that) != len(other) {
+		return false
+	}
+
+	for i := range that {
+		if !reflect.DeepEqual(
+			that[i],
+			other[i],
+		) {
+			return false
+		}
 	}
 
 	return true

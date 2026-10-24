@@ -636,6 +636,8 @@ using tupleOf4_str_jsonValue_jsonArray_jsonObjectOf_str = std::tuple<
   nlohmann::json
 >;
 
+using listOf_jsonObjectOf_str = std::vector<nlohmann::json>;
+
 std::unique_ptr<IIterator> Over_jsonValue(
   const nlohmann::json& value,
   bool
@@ -661,6 +663,20 @@ std::unique_ptr<IIterator> Over_tupleOf4_str_jsonValue_jsonArray_jsonObjectOf_st
   );
 }
 
+std::unique_ptr<IIterator> Over_jsonObjectOf_str(
+  const nlohmann::json& value,
+  bool
+) {
+  return One(&value, Shape::kJSONObject);
+}
+
+std::unique_ptr<IIterator> Over_listOf_jsonObjectOf_str(
+  const listOf_jsonObjectOf_str& value,
+  bool recursive
+) {
+  return Each(value, &Over_jsonObjectOf_str, recursive);
+}
+
 std::unique_ptr<IIterator> Over_Something(
   const types::ISomething& that,
   bool recursive
@@ -676,6 +692,21 @@ std::unique_ptr<IIterator> Over_Something(
         that.tuple_with_json(),
         recursive
       )
+    ),
+    InProperty(
+      iteration::Property::kOptionalObjects,
+      that.optional_objects().has_value()
+        ? Over_listOf_jsonObjectOf_str(
+            (*that.optional_objects()),
+            recursive
+          )
+        : Empty()
+    ),
+    InProperty(
+      iteration::Property::kOptionalObject,
+      that.optional_object().has_value()
+        ? One(&(*that.optional_object()), Shape::kJSONObject)
+        : Empty()
     )
   );
 }

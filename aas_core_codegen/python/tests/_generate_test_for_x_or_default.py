@@ -8,6 +8,7 @@ from icontract import ensure
 from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import Stripped, Identifier, indent_but_first_line
 from aas_core_codegen.python import common as python_common, naming as python_naming
+from aas_core_codegen.python.tests import _generate_common as python_tests_common
 from aas_core_codegen.python.common import (
     INDENT as I,
     INDENT2 as II,
@@ -46,6 +47,28 @@ def _generate_test_case(cls: intermediate.ConcreteClass) -> Optional[Stripped]:
 
         file_name = f"{x_or_default_name}.trace"
 
+        log_assignment: Stripped
+        if not isinstance(
+            method.returns, intermediate.OptionalTypeAnnotation
+        ) and python_tests_common.contains_json(method.returns):
+            trace_argument = python_tests_common.generate_trace_argument(
+                type_annotation=method.returns, expression="value"
+            )
+
+            log_assignment = Stripped(
+                f"""\
+value = instance.{x_or_default_name}()
+log = [
+{I}tests.common.trace(
+{II}{indent_but_first_line(trace_argument, II)}
+{I})
+]"""
+            )
+        else:
+            log_assignment = Stripped(
+                f"log = [tests.common.trace(instance.{x_or_default_name}())]"
+            )
+
         test_methods.append(
             Stripped(
                 f"""\
@@ -66,7 +89,7 @@ def {test_case_method_name}(self) -> None:
 {III}our_types.{python_cls_name}
 {II})
 
-{II}log = [tests.common.trace(instance.{x_or_default_name}())]
+{II}{indent_but_first_line(log_assignment, II)}
 
 {II}got_text = tests.common.trace_log_as_text_file_content(log)
 

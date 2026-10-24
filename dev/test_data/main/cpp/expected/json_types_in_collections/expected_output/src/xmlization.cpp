@@ -1830,10 +1830,12 @@ namespace properties {
 
 enum class OfSomething : std::uint32_t {
   kValues = 0,
-  kTupleWithJson = 1
+  kTupleWithJson = 1,
+  kOptionalObjects = 2,
+  kOptionalObject = 3
 };  // enum class OfSomething
 
-const std::size_t kPropertyCountOfSomething = 2;
+const std::size_t kPropertyCountOfSomething = 4;
 
 const std::unordered_map<
   std::string,
@@ -1846,6 +1848,14 @@ const std::unordered_map<
   {
     "tupleWithJson",
     OfSomething::kTupleWithJson
+  },
+  {
+    "optionalObjects",
+    OfSomething::kOptionalObjects
+  },
+  {
+    "optionalObject",
+    OfSomething::kOptionalObject
   }
 };
 
@@ -1875,6 +1885,12 @@ std::pair<
       nlohmann::json
     >
   > the_tuple_with_json;
+
+  common::optional<
+    std::vector<nlohmann::json>
+  > the_optional_objects;
+
+  common::optional<nlohmann::json> the_optional_object;
 
   // endregion Initialization
 
@@ -1955,6 +1971,29 @@ std::pair<
                 }
               )
             );
+          case properties::OfSomething::kOptionalObjects:
+            return ReadInto(
+              the_optional_objects,
+              DeserializeList<
+                nlohmann::json
+              >(
+                reader,
+                [](xml_common::ReaderMergingText& a_reader) {
+                  return DeserializeValueFromVElement<
+                    nlohmann::json
+                  >(
+                    a_reader,
+                    DeserializeJsonObjectFromXmlRpc,
+                    "v"
+                  );
+                }
+              )
+            );
+          case properties::OfSomething::kOptionalObject:
+            return ReadInto(
+              the_optional_object,
+              DeserializeJsonObjectFromXmlRpc(reader)
+            );
           default:
             throw UnexpectedPropertyLiteralError(
               "properties::OfSomething",
@@ -2002,7 +2041,9 @@ std::pair<
       // upcast.
       new types::Something(
         std::move(*the_values),
-        std::move(*the_tuple_with_json)
+        std::move(*the_tuple_with_json),
+        std::move(the_optional_objects),
+        std::move(the_optional_object)
       )
     ),
     common::nullopt
@@ -2675,6 +2716,28 @@ common::optional<xml_common::SerializationError> SerializeSomethingAsSequence(
     ) {
       return WriteElement("v4", item, a_writer, WriteJsonObjectToXmlRpc);
     }
+  );
+  if (error.has_value()) {
+    return error;
+  }
+
+  error = WriteListOfValuesProperty(
+    "optionalObjects",
+    that.optional_objects(),
+    writer,
+    iteration::Property::kOptionalObjects,
+    WriteJsonObjectToXmlRpc
+  );
+  if (error.has_value()) {
+    return error;
+  }
+
+  error = WriteProperty(
+    "optionalObject",
+    that.optional_object(),
+    writer,
+    iteration::Property::kOptionalObject,
+    WriteJsonObjectToXmlRpc
   );
   if (error.has_value()) {
     return error;
