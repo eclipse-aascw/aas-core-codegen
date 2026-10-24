@@ -81,16 +81,14 @@ def _verify_intra_structure_collisions(
     our_type: intermediate.OurType,
 ) -> Optional[Error]:
     """Verify that no member names collide in the Python structure of our type."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     if isinstance(our_type, intermediate.Enumeration):
-        enum_literal_map = (
-            dict()
-        )  # type: Dict[Identifier, intermediate.EnumerationLiteral]
+        enum_literal_map: Dict[Identifier, intermediate.EnumerationLiteral] = dict()
 
         for literal in our_type.literals:
             literal_name = python_naming.enum_literal_name(literal.name)
-            colliding_literal = enum_literal_map.get(literal_name, None)
+            colliding_literal = enum_literal_map.get(literal_name)
             if colliding_literal is not None:
                 errors.append(
                     Error(
@@ -112,7 +110,7 @@ def _verify_intra_structure_collisions(
         pass
 
     elif isinstance(our_type, intermediate.Class):
-        observed_member_names = {}  # type: Dict[Identifier, str]
+        observed_member_names: Dict[Identifier, str] = {}
 
         for prop in our_type.properties:
             prop_name = python_naming.property_name(prop.name)
@@ -131,7 +129,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model property {prop.name!r}"
                 )
 
-        observed_constructor_arg_names = {}  # type: Dict[Identifier, str]
+        observed_constructor_arg_names: Dict[Identifier, str] = {}
         for constructor_arg in our_type.constructor.arguments:
             arg_name = python_naming.argument_name(constructor_arg.name)
 
@@ -168,7 +166,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model method {method.name!r}"
                 )
 
-            observed_method_arg_names = {}  # type: Dict[Identifier, str]
+            observed_method_arg_names: Dict[Identifier, str] = {}
             for arg in method.arguments:
                 arg_name = python_naming.argument_name(arg.name)
 
@@ -215,7 +213,7 @@ def _verify_structure_name_collisions(
         ],
     ] = dict()
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # region Inter-structure collisions
 
@@ -224,7 +222,7 @@ def _verify_structure_name_collisions(
     ):
         name = python_naming.name_of(enum_or_cls_or_union)
 
-        other = observed_structure_names.get(name, None)
+        other = observed_structure_names.get(name)
 
         if other is not None:
             errors.append(
@@ -269,7 +267,7 @@ def verify(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[VerifiedIntermediateSymbolTable], Optional[List[Error]]]:
     """Verify that Python code can be generated from the ``symbol_table``."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     structure_name_collisions = _verify_structure_name_collisions(
         symbol_table=symbol_table
@@ -355,9 +353,9 @@ def _generate_enum(
     """Generate code for the enum."""
     writer = io.StringIO()
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    docstring = None  # type: Optional[Stripped]
+    docstring: Optional[Stripped] = None
     if enum.description is not None:
         # fmt: off
         docstring, docstring_errors = (
@@ -424,7 +422,7 @@ def _generate_enum(
                     writer.write("\n")
 
             literal_name = python_naming.enum_literal_name(literal.name)
-            writer.write(textwrap.indent(f"{literal_name} = {repr(literal.value)}", I))
+            writer.write(textwrap.indent(f"{literal_name} = {literal.value!r}", I))
 
     if len(errors) > 0:
         return None, Error(
@@ -595,7 +593,7 @@ def _generate_descend_methods(cls: intermediate.ConcreteClass) -> List[Stripped]
     The public methods are thin wrappers around ``_descend``, which recurses
     only if instructed so at run-time.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for prop in cls.properties:
         descendability = intermediate.map_descendability(prop.type_annotation)
@@ -718,7 +716,7 @@ def _generate_constructor(
 
     # region Construct the body
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for stmt in cls.constructor.statements:
         if isinstance(stmt, intermediate_construction.CallSuperConstructor):
             super_class = symbol_table.must_find_class(stmt.super_name)
@@ -805,7 +803,7 @@ self.{python_naming.property_name(stmt.name)} = (
 
     # region Assemble the constructor with the definition and the body
 
-    arg_codes = []  # type: List[str]
+    arg_codes: List[str] = []
     for arg in cls.constructor.arguments:
         arg_type = python_common.generate_type(type_annotation=arg.type_annotation)
         arg_name = python_naming.argument_name(arg.name)
@@ -934,7 +932,7 @@ def _transpile_method(
         [] if method.non_mutating else [NOTE_ON_INVARIANTS_OF_MUTATING_METHODS]
     )
 
-    docstring = None  # type: Optional[Stripped]
+    docstring: Optional[Stripped] = None
     if method.description is not None:
         (
             docstring,
@@ -961,7 +959,7 @@ def _transpile_method(
         inference=type_inference.by_method[method], method=method
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in method.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -1038,7 +1036,7 @@ def _generate_class(
     # region Collect blocks of the class body
 
     # Code blocks of the class body separated by double newlines and indented once
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Property definitions
 
@@ -1046,7 +1044,7 @@ def _generate_class(
         if prop.specified_for is not cls:
             continue
 
-        prop_comment = None  # type: Optional[Stripped]
+        prop_comment: Optional[Stripped] = None
         if prop.description is not None:
             prop_comment, prop_comment_errors = _generate_comment_for_property(
                 cls=cls, prop=prop, qualified_module_name=qualified_module_name
@@ -1104,7 +1102,7 @@ def over_{prop_name}_or_empty(
 
     # region Methods
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for method in cls.methods:
         if method.specified_for is not cls:
@@ -1236,7 +1234,7 @@ def transform_with_context(
             errors,
         )
 
-    docstring = None  # type: Optional[Stripped]
+    docstring: Optional[Stripped] = None
     if cls.description is not None:
         docstring, docstring_errors = _generate_docstring_for_cls_or_enum(
             cls_or_enum=cls, qualified_module_name=qualified_module_name
@@ -1260,7 +1258,7 @@ def transform_with_context(
     # Every class in the meta-model inherits from the most general abstract class
     # ``Class`.
 
-    super_names = []  # type: List[str]
+    super_names: List[str] = []
 
     if len(cls.inheritances) == 0:
         # NOTE (mristin):
@@ -1304,7 +1302,7 @@ def transform_with_context(
         if docstring is None:
             writer.write(f"\n{I}pass")
     else:
-        for i, code in enumerate(blocks):
+        for code in blocks:
             writer.write("\n\n")
             writer.write(textwrap.indent(code, I))
 
@@ -1315,7 +1313,7 @@ def transform_with_context(
 
 def _generate_abstract_visitor(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate code for the abstract visitor."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 def visit(
@@ -1325,7 +1323,7 @@ def visit(
 {I}\"\"\"Double-dispatch on :paramref:`that`.\"\"\"
 {I}that.accept(self)"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         visit_name = python_naming.method_name(Identifier(f"visit_{cls.name}"))
@@ -1365,7 +1363,7 @@ def _generate_abstract_visitor_with_context(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate code for the abstract visitor with context."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 def visit_with_context(
@@ -1376,7 +1374,7 @@ def visit_with_context(
 {I}\"\"\"Double-dispatch on :paramref:`that`.\"\"\"
 {I}that.accept_with_context(self, context)"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         visit_with_context_name = python_naming.method_name(
@@ -1417,7 +1415,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
 
 def _generate_pass_through_visitor(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate code for the pass-through visitor."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 def visit(
@@ -1427,7 +1425,7 @@ def visit(
 {I}\"\"\"Double-dispatch on :paramref:`that`.\"\"\"
 {I}that.accept(self)"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         visit_name = python_naming.method_name(Identifier(f"visit_{cls.name}"))
@@ -1472,7 +1470,7 @@ def _generate_pass_through_visitor_with_context(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate code for the pass-through visitor with context."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 def visit_with_context(
@@ -1483,7 +1481,7 @@ def visit_with_context(
 {I}\"\"\"Double-dispatch on :paramref:`that`.\"\"\"
 {I}that.accept_with_context(self, context)"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         visit_with_context_name = python_naming.method_name(
@@ -1531,7 +1529,7 @@ class PassThroughVisitorWithContext(
 
 def _generate_abstract_transformer(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate code for the abstract transformer."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 def transform(
@@ -1541,7 +1539,7 @@ def transform(
 {I}\"\"\"Double-dispatch on :paramref:`that`.\"\"\"
 {I}return that.transform(self)"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         transform_name = python_naming.method_name(Identifier(f"transform_{cls.name}"))
@@ -1582,7 +1580,7 @@ def _generate_abstract_transformer_with_context(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate code for the abstract transformer with context."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 def transform_with_context(
@@ -1593,7 +1591,7 @@ def transform_with_context(
 {I}\"\"\"Double-dispatch on :paramref:`that`.\"\"\"
 {I}return that.transform_with_context(self, context)"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         transform_with_context_name = python_naming.method_name(
@@ -1639,7 +1637,7 @@ def _generate_transformer_with_default(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate code for the transformer with default transformation."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 #: Default value which is returned if no override of the transformation
@@ -1660,7 +1658,7 @@ def transform(
 {I}\"\"\"Double-dispatch on :paramref:`that`.\"\"\"
 {I}return that.transform(self)"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         transform_name = python_naming.method_name(Identifier(f"transform_{cls.name}"))
@@ -1705,7 +1703,7 @@ def _generate_transformer_with_default_and_context(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate code for the transformer with default transformation and context."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 #: Default value which is returned if no override of the transformation
@@ -1727,7 +1725,7 @@ def transform_with_context(
 {I}\"\"\"Double-dispatch on :paramref:`that`.\"\"\"
 {I}return that.transform_with_context(self, context)"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         transform_with_context_name = python_naming.method_name(
@@ -1896,9 +1894,9 @@ def generate(
 
     The ``qualified_module_name`` indicates the fully-qualified name of the base module.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     if symbol_table.meta_model.description is not None:
         # fmt: off
@@ -1916,14 +1914,14 @@ def generate(
             assert docstring is not None
             blocks.append(docstring)
 
-    typing_imports = [
+    typing_imports: List[Identifier] = [
         Identifier("Generic"),
         Identifier("Iterator"),
         Identifier("Optional"),
         Identifier("TypeVar"),
         Identifier("List"),
         Identifier("Tuple"),
-    ]  # type: List[Identifier]
+    ]
 
     if len(symbol_table.named_unions) > 0:
         typing_imports.append(Identifier("Union"))
@@ -1941,12 +1939,12 @@ def generate(
         if len(symbol_table.named_unions) == 0:
             typing_imports.append(Identifier("Union"))
 
-    specified_methods = [
+    specified_methods: List[intermediate.Method] = [
         method
         for cls in symbol_table.classes
         for method in cls.methods
         if method.specified_for is cls
-    ]  # type: List[intermediate.Method]
+    ]
 
     set_imports = python_common.typing_imports_for_sets(specified_methods)
 
@@ -1964,12 +1962,12 @@ def generate(
     # We spell out the final local lists as ``Final[Sequence[...]]``, and the lists
     # of the read-only arguments as ``Sequence[...]``, so we need to import ``Final``
     # and ``Sequence`` only if the methods declare them.
-    final_annotations = [
+    final_annotations: List[parse_tree.Expression] = [
         annotation
         for method in specified_methods
         for annotation in intermediate.local_declaration_annotations(method)
         if intermediate_type_inference.is_final_annotation(annotation)
-    ]  # type: List[parse_tree.Expression]
+    ]
 
     if Identifier("Sequence") not in typing_imports and (
         any(
@@ -2005,7 +2003,7 @@ def generate(
 
     maybe_import_sys = "\nimport sys" if len(final_annotations) > 0 else ""
 
-    import_blocks = [
+    import_blocks: List[Stripped] = [
         Stripped(
             f"""\
 import abc
@@ -2014,7 +2012,7 @@ from typing import (
 {typing_imports_joined}
 )"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if len(final_annotations) > 0:
         import_blocks.append(
@@ -2169,7 +2167,7 @@ class Class(abc.ABC):
     if len(errors) > 0:
         return None, errors
 
-    observed_container_names = set()  # type: Set[Identifier]
+    observed_container_names: Set[Identifier] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:

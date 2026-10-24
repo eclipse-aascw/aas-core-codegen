@@ -63,13 +63,13 @@ def _generate_model_type_from_string_implementation(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
     """Generate the implementation of translation of a model type from string."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Map
 
     enum_name = cpp_naming.enum_name(Identifier("Model_type"))
 
-    items = []  # type: List[str]
+    items: List[str] = []
     for cls in symbol_table.concrete_classes:
         literal_name = cpp_naming.enum_literal_name(cls.name)
 
@@ -190,7 +190,7 @@ def _generate_model_type_to_string_implementation(
     """Generate the implementation for translating a string to a model type."""
     enum_name = cpp_naming.enum_name(Identifier("Model_type"))
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         literal_name = cpp_naming.enum_literal_name(cls.name)
         literal_value = cpp_common.string_literal(
@@ -285,13 +285,13 @@ def _generate_enum_from_string_implementation(
     enum: intermediate.Enumeration,
 ) -> List[Stripped]:
     """Generate the implementation of translation of an  enum from string."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Map
 
     enum_name = cpp_naming.enum_name(enum.name)
 
-    items = []  # type: List[str]
+    items: List[str] = []
     for literal in enum.literals:
         literal_name = cpp_naming.enum_literal_name(literal.name)
         literal_value = cpp_common.string_literal(literal.value)
@@ -408,7 +408,7 @@ def _generate_enum_to_string_implementation(enum: intermediate.Enumeration) -> S
     """Generate the implementation for translating a string to an enum literal."""
     enum_name = cpp_naming.enum_name(enum.name)
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for literal in enum.literals:
         literal_name = cpp_naming.enum_literal_name(literal.name)
         literal_value = cpp_common.string_literal(literal.value)
@@ -1015,7 +1015,7 @@ def generate_implementation(
 
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f"""\
@@ -1028,7 +1028,7 @@ def generate_implementation(
         cpp_common.generate_namespace_opening(namespace),
         *_generate_model_type_from_string_implementation(symbol_table=symbol_table),
         _generate_model_type_to_string_implementation(symbol_table=symbol_table),
-    ]  # type: List[Stripped]
+    ]
 
     for enum in symbol_table.enumerations:
         blocks.extend(_generate_enum_from_string_implementation(enum=enum))

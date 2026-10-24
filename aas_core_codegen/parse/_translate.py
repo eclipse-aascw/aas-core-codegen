@@ -7,6 +7,7 @@ import itertools
 import sys
 import textwrap
 from typing import (
+    Final,
     List,
     Any,
     Optional,
@@ -105,7 +106,7 @@ def source_to_atok(
 
 
 class _ExpectedImportsVisitor(ast.NodeVisitor):
-    _EXPECTED_NAME_FROM_MODULE = collections.OrderedDict(
+    _EXPECTED_NAME_FROM_MODULE: Final[Mapping[str, str]] = collections.OrderedDict(
         [
             ("match", "re"),
             ("Enum", "enum"),
@@ -142,10 +143,8 @@ class _ExpectedImportsVisitor(ast.NodeVisitor):
         ]
     )
 
-    # pylint: disable=missing-docstring
-
     def __init__(self) -> None:
-        self.errors = []  # type: List[Error]
+        self.errors: List[Error] = []
 
     def visit_Import(self, node: ast.Import) -> Any:
         self.errors.append(
@@ -247,21 +246,7 @@ def _subscript_index_node(
             ),
         )
 
-    if sys.version_info < (3, 9):
-        # noinspection PyUnresolvedReferences
-        if isinstance(node.slice, ast.Index):
-            return node.slice.value, None
-        else:
-            return (
-                None,
-                Error(
-                    node.slice,
-                    f"Expected an index to define a subscripted type annotation, "
-                    f"but got: {atok.get_text(node.slice)}",
-                ),
-            )
-    else:
-        return node.slice, None
+    return node.slice, None
 
 
 def _type_annotation(
@@ -304,7 +289,7 @@ def _type_annotation(
 
         assert index_node is not None
 
-        subscripts = []  # type: List[TypeAnnotation]
+        subscripts: List[TypeAnnotation] = []
 
         if isinstance(index_node, ast.Tuple):
             for elt in index_node.elts:
@@ -470,8 +455,8 @@ def _parse_constant_primitive(
             ),
         )
 
-    value_arg_node = None  # type: Optional[ast.expr]
-    description_arg_node = None  # type: Optional[ast.expr]
+    value_arg_node: Optional[ast.expr] = None
+    description_arg_node: Optional[ast.expr] = None
 
     if len(node.value.args) > 0:
         value_arg_node = node.value.args[0]
@@ -532,7 +517,7 @@ def _parse_constant_primitive(
 
     # region Parse ``description``
 
-    description = None  # type: Optional[Description]
+    description: Optional[Description] = None
     if description_arg_node is not None:
         if not isinstance(description_arg_node, ast.Constant) or not isinstance(
             description_arg_node.value, str
@@ -594,9 +579,9 @@ def _parse_constant_set(
 
     # region Determine arguments
 
-    values_arg_node = None  # type: Optional[ast.expr]
-    description_arg_node = None  # type: Optional[ast.expr]
-    superset_of_arg_node = None  # type: Optional[ast.expr]
+    values_arg_node: Optional[ast.expr] = None
+    description_arg_node: Optional[ast.expr] = None
+    superset_of_arg_node: Optional[ast.expr] = None
 
     if len(node.value.args) > 0:
         values_arg_node = node.value.args[0]
@@ -643,7 +628,7 @@ def _parse_constant_set(
             f"in AST: {ast.dump(values_arg_node)}",
         )
 
-    set_literals = []  # type: List[SetLiteral]
+    set_literals: List[SetLiteral] = []
     for i, elt in enumerate(values_arg_node.elts):
         if not isinstance(elt, (ast.Attribute, ast.Constant)):
             return None, Error(
@@ -660,7 +645,7 @@ def _parse_constant_set(
 
     # region Parse ``description``
 
-    description = None  # type: Optional[Description]
+    description: Optional[Description] = None
 
     if description_arg_node is not None:
         if not isinstance(description_arg_node, ast.Constant) or not isinstance(
@@ -688,7 +673,7 @@ def _parse_constant_set(
 
     # region Parse ``superset_of``
 
-    subsets = []  # type: List[Identifier]
+    subsets: List[Identifier] = []
 
     if superset_of_arg_node is not None:
         if not isinstance(superset_of_arg_node, ast.List):
@@ -920,8 +905,8 @@ def _ann_assign_to_property(
             Error(node.target, "Expected property to be annotated with a type"),
         )
 
-    json_name = None  # type: Optional[NonEmptyString]
-    xml_name = None  # type: Optional[XMLTagName]
+    json_name: Optional[NonEmptyString] = None
+    xml_name: Optional[XMLTagName] = None
 
     if (
         isinstance(node.annotation, ast.Subscript)
@@ -1111,7 +1096,7 @@ def _args_to_arguments(
         "for keyword-only arguments either."
     )
 
-    arguments = []  # type: List[Argument]
+    arguments: List[Argument] = []
 
     # region ``self``
 
@@ -1186,7 +1171,7 @@ def _args_to_arguments(
         # endregion
 
         # region Default
-        default = None  # type: Optional[Default]
+        default: Optional[Default] = None
 
         # NOTE (mristin):
         # A simple hypothetical test calculation:
@@ -1224,8 +1209,8 @@ def _parse_contract_condition(
     node: ast.Call, atok: asttokens.ASTTokens
 ) -> Tuple[Optional[Contract], Optional[Error]]:
     """Parse the contract decorator."""
-    condition_node = None  # type: Optional[ast.AST]
-    description_node = None  # type: Optional[ast.AST]
+    condition_node: Optional[ast.AST] = None
+    description_node: Optional[ast.AST] = None
 
     if len(node.args) >= 1:
         condition_node = node.args[0]
@@ -1260,7 +1245,7 @@ def _parse_contract_condition(
             ),
         )
 
-    description = None  # type: Optional[str]
+    description: Optional[str] = None
     if description_node is not None:
         if not (
             isinstance(description_node, ast.Constant)
@@ -1307,8 +1292,8 @@ def _parse_snapshot(
     node: ast.Call, atok: asttokens.ASTTokens
 ) -> Tuple[Optional[Snapshot], Optional[Error]]:
     """Parse the snapshot decorator."""
-    capture_node = None  # type: Optional[ast.AST]
-    name_node = None  # type: Optional[ast.AST]
+    capture_node: Optional[ast.AST] = None
+    name_node: Optional[ast.AST] = None
 
     if len(node.args) >= 1:
         capture_node = node.args[0]
@@ -1513,9 +1498,9 @@ def _function_def_to_method(
 
     # endregion
 
-    preconditions = []  # type: List[Contract]
-    postconditions = []  # type: List[Contract]
-    snapshots = []  # type: List[Snapshot]
+    preconditions: List[Contract] = []
+    postconditions: List[Contract] = []
+    snapshots: List[Snapshot] = []
 
     is_implementation_specific = False
     verification = False  # Set if the function is decorated with ``@verification``
@@ -1613,15 +1598,15 @@ def _function_def_to_method(
 
     # We need to reverse the contracts since the decorators are evaluated from bottom
     # up, while we parsed them from top to bottom.
-    preconditions = list(reversed(preconditions))
-    snapshots = list(reversed(snapshots))
-    postconditions = list(reversed(postconditions))
+    preconditions.reverse()
+    snapshots.reverse()
+    postconditions.reverse()
 
     # endregion
 
     # region Parse arguments and body
 
-    description = None  # type: Optional[Description]
+    description: Optional[Description] = None
     body = node.body
 
     if len(node.body) >= 1 and is_string_expr(expr=node.body[0]):
@@ -1650,7 +1635,7 @@ def _function_def_to_method(
 
     assert arguments is not None
 
-    returns = None  # type: Optional[TypeAnnotation]
+    returns: Optional[TypeAnnotation] = None
     if node.returns is None:
         return (
             None,
@@ -1669,7 +1654,7 @@ def _function_def_to_method(
 
     # region All contract arguments are included in the function arguments
 
-    function_arg_set = set(arg.name for arg in arguments)
+    function_arg_set = {arg.name for arg in arguments}
 
     for contract in preconditions:
         for arg in contract.args:
@@ -1851,9 +1836,9 @@ def _function_def_to_method(
                 None,
             )
         else:
-            understanding_errors = []  # type: List[Error]
+            understanding_errors: List[Error] = []
 
-            understood_body = []  # type: List[tree.Node]
+            understood_body: List[tree.Node] = []
 
             for body_child in body:
                 # NOTE (mristin):
@@ -1965,7 +1950,7 @@ def _class_decorator_to_serialization(
     decorator: ast.Call,
 ) -> Tuple[Optional[Serialization], Optional[Error]]:
     """Translate a decorator to general serialization settings."""
-    with_model_type_node = None  # type: Optional[ast.AST]
+    with_model_type_node: Optional[ast.AST] = None
 
     if len(decorator.args) >= 1:
         with_model_type_node = decorator.args[0]
@@ -1984,7 +1969,7 @@ def _class_decorator_to_serialization(
                     ),
                 )
 
-    with_model_type = None  # type: Optional[bool]
+    with_model_type: Optional[bool] = None
     if with_model_type_node is not None:
         if not isinstance(with_model_type_node, ast.Constant):
             return (
@@ -2025,8 +2010,8 @@ def _class_decorator_to_invariant(
     decorator: ast.Call, atok: asttokens.ASTTokens
 ) -> Tuple[Optional[Invariant], Optional[Error]]:
     """Parse the decorator node as a class invariant."""
-    condition_node = None  # type: Optional[ast.AST]
-    description_node = None  # type: Optional[ast.AST]
+    condition_node: Optional[ast.AST] = None
+    description_node: Optional[ast.AST] = None
 
     if len(decorator.args) >= 1:
         condition_node = decorator.args[0]
@@ -2194,15 +2179,15 @@ def _classdef_to_enumeration(
             None,
         )
 
-    enumeration_literals = []  # type: List[EnumerationLiteral]
+    enumeration_literals: List[EnumerationLiteral] = []
 
-    description = None  # type: Optional[Description]
+    description: Optional[Description] = None
 
     cursor = 0
     while cursor < len(node.body):
         old_cursor = cursor
 
-        body_node = node.body[cursor]  # type: ast.AST
+        body_node: ast.AST = node.body[cursor]
 
         if cursor == 0 and is_string_expr(body_node):
             assert isinstance(body_node, ast.Expr)
@@ -2262,7 +2247,7 @@ def _classdef_to_enumeration(
             literal_name = Identifier(assign.targets[0].id)
             literal_value = assign.value.value
 
-            literal_description = None  # type: Optional[Description]
+            literal_description: Optional[Description] = None
             next_expr = node.body[cursor + 1] if cursor < len(node.body) - 1 else None
 
             if next_expr is not None and is_string_expr(next_expr):
@@ -2321,9 +2306,9 @@ def _classdef_to_our_type(
     node: ast.ClassDef, atok: asttokens.ASTTokens
 ) -> Tuple[Optional[OurType], Optional[Error]]:
     """Interpret the class definition as our type."""
-    underlying_errors = []  # type: List[Error]
+    underlying_errors: List[Error] = []
 
-    base_names = []  # type: List[str]
+    base_names: List[str] = []
     for base in node.bases:
         if not isinstance(base, ast.Name):
             underlying_errors.append(
@@ -2369,11 +2354,11 @@ def _classdef_to_our_type(
 
     # region Decorators
 
-    invariants = []  # type: List[Invariant]
+    invariants: List[Invariant] = []
 
     is_abstract = False
 
-    serialization = None  # type: Optional[Serialization]
+    serialization: Optional[Serialization] = None
 
     for decorator_node in node.decorator_list:
         decorator, error = _parse_class_decorator(decorator=decorator_node, atok=atok)
@@ -2440,14 +2425,14 @@ def _classdef_to_our_type(
     # NOTE (mristin):
     # We need to inverse the invariants as we collect them top-down, while
     # the decorators are applied bottom-up.
-    invariants = list(reversed(invariants))
+    invariants.reverse()
 
     # endregion
 
-    description = None  # type: Optional[Description]
+    description: Optional[Description] = None
 
-    properties = []  # type: List[Property]
-    methods = []  # type: List[MethodUnion]
+    properties: List[Property] = []
+    methods: List[MethodUnion] = []
 
     cursor = 0
     while cursor < len(node.body):
@@ -2472,7 +2457,7 @@ def _classdef_to_our_type(
             continue
 
         if isinstance(expr, ast.AnnAssign):
-            description_of_property = None  # type: Optional[Description]
+            description_of_property: Optional[Description] = None
 
             next_expr = node.body[cursor + 1] if cursor < len(node.body) - 1 else None
             if next_expr is not None and is_string_expr(next_expr):
@@ -2538,9 +2523,9 @@ def _classdef_to_our_type(
         assert old_cursor < cursor, f"Loop invariant: {old_cursor=}, {cursor=}"
 
     if is_abstract:
-        factory_for_class = (
-            AbstractClass
-        )  # type: Union[Type[AbstractClass], Type[ConcreteClass]]
+        factory_for_class: Union[
+            Type[AbstractClass], Type[ConcreteClass]
+        ] = AbstractClass
     else:
         factory_for_class = ConcreteClass
 
@@ -2609,7 +2594,7 @@ def _verify_arity_of_this_type_annotation_subscript(
         "Set": 1,
         "AbstractSet": 1,
     }
-    expected_arity = expected_arity_map.get(type_annotation.identifier, None)
+    expected_arity = expected_arity_map.get(type_annotation.identifier)
     if expected_arity is None:
         raise AssertionError(
             f"Unexpected subscripted type annotation: {type_annotation}"
@@ -2929,7 +2914,7 @@ def _verify_symbol_table(
     For example, check that there are no dangling references in type annotations or
     inheritances.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # region Check reserved names
 
@@ -3138,9 +3123,9 @@ def _verify_symbol_table(
 
     # region Check that there are no duplicate type names
 
-    observed_type_names = dict()  # type: MutableMapping[Identifier, OurType]
+    observed_type_names: MutableMapping[Identifier, OurType] = dict()
     for our_type in symbol_table.our_types:
-        another_our_type = observed_type_names.get(our_type.name, None)
+        another_our_type = observed_type_names.get(our_type.name)
         if another_our_type is None:
             observed_type_names[our_type.name] = our_type
         else:
@@ -3156,9 +3141,9 @@ def _verify_symbol_table(
 
     # region Check that there are no duplicate names of the constants
 
-    observed_constant_names = dict()  # type: MutableMapping[Identifier, Constant]
+    observed_constant_names: MutableMapping[Identifier, Constant] = dict()
     for constant in symbol_table.constants:
-        another_constant = observed_constant_names.get(constant.name, None)
+        another_constant = observed_constant_names.get(constant.name)
         if another_constant is None:
             observed_constant_names[constant.name] = constant
         else:
@@ -3174,12 +3159,10 @@ def _verify_symbol_table(
 
     # region Check that there are no duplicate names of the verification functions
 
-    observed_verification_func_names = (
-        dict()
-    )  # type: MutableMapping[Identifier, FunctionUnion]
+    observed_verification_func_names: MutableMapping[Identifier, FunctionUnion] = dict()
 
     for func in symbol_table.verification_functions:
-        another_func = observed_verification_func_names.get(func.name, None)
+        another_func = observed_verification_func_names.get(func.name)
         if another_func is None:
             observed_verification_func_names[func.name] = func
         else:
@@ -3651,8 +3634,8 @@ def _verify_duplicate_names(
     symbols: Iterable[Symbol],
 ) -> Optional[List[Error]]:
     """Determine the duplicate names in the given sequence of nameable instances."""
-    name_set = set()  # type: Set[Identifier]
-    errors = []  # type: List[Error]
+    name_set: Set[Identifier] = set()
+    errors: List[Error] = []
     for symbol in symbols:
         if symbol.name in name_set:
             errors.append(Error(symbol.node, f"Duplicate for {symbol.name!r}"))
@@ -3709,7 +3692,7 @@ def _ast_assign_to_named_union(
             ),
         )
 
-    members = []  # type: List[Identifier]
+    members: List[Identifier] = []
     for member_node in member_nodes:
         if not isinstance(member_node, ast.Name):
             return (
@@ -3761,15 +3744,15 @@ def _ast_assign_to_named_union(
 def _atok_to_symbol_table(
     atok: asttokens.ASTTokens,
 ) -> Tuple[Optional[SymbolTable], Optional[Error]]:
-    our_types = []  # type: List[OurType]
-    underlying_errors = []  # type: List[Error]
+    our_types: List[OurType] = []
+    underlying_errors: List[Error] = []
 
-    description = None  # type: Optional[Description]
-    version = None  # type: Optional[str]
-    xml_namespace = None  # type: Optional[Stripped]
+    description: Optional[Description] = None
+    version: Optional[str] = None
+    xml_namespace: Optional[Stripped] = None
 
-    verification_functions = []  # type: List[FunctionUnion]
-    constants = []  # type: List[ConstantUnion]
+    verification_functions: List[FunctionUnion] = []
+    constants: List[ConstantUnion] = []
 
     # region Parse
 

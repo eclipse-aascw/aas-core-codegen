@@ -50,7 +50,7 @@ def main() -> int:
         # NOTE (mristin):
         # All the cases share the same dependencies, so we resolve the classpath
         # only once, lazily with the first case.
-        classpath = None  # type: Optional[str]
+        classpath: Optional[str] = None
 
         for case_dir in live_tests_common.select_case_dirs(
             main_java_expected_dir, select

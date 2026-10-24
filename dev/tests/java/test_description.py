@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import unittest
 from typing import Optional, List
 
@@ -8,17 +6,17 @@ import aas_core_codegen.java.description as java_description
 
 class TestRemoveRedundantP(unittest.TestCase):
     def test_empty(self) -> None:
-        tokens = []  # type: List[java_description._Token]
+        tokens: List[java_description._Token] = []
 
         result = java_description._remove_redundant_p(tokens)
         self.assertListEqual([], result)
 
     def test_prefix_chain(self) -> None:
-        tokens = [
+        tokens: List[java_description._Token] = [
             java_description._TokenP(),
             java_description._TokenP(),
             java_description._TokenText("hello world"),
-        ]  # type: List[java_description._Token]
+        ]
 
         result = java_description._remove_redundant_p(tokens)
         self.assertListEqual(
@@ -30,12 +28,12 @@ class TestRemoveRedundantP(unittest.TestCase):
         )
 
     def test_suffix_chain(self) -> None:
-        tokens = [
+        tokens: List[java_description._Token] = [
             java_description._TokenP(),
             java_description._TokenText("hello world"),
             java_description._TokenP(),
             java_description._TokenP(),
-        ]  # type: List[java_description._Token]
+        ]
 
         result = java_description._remove_redundant_p(tokens)
         self.assertListEqual(
@@ -47,13 +45,13 @@ class TestRemoveRedundantP(unittest.TestCase):
         )
 
     def test_chain_in_the_middle(self) -> None:
-        tokens = [
+        tokens: List[java_description._Token] = [
             java_description._TokenP(),
             java_description._TokenText("hello"),
             java_description._TokenP(),
             java_description._TokenP(),
             java_description._TokenText("world"),
-        ]  # type: List[java_description._Token]
+        ]
 
         result = java_description._remove_redundant_p(tokens)
         self.assertListEqual(
@@ -113,7 +111,7 @@ hello
 
         machine.write("hello\n")
 
-        value_error = None  # type: Optional[ValueError]
+        value_error: Optional[ValueError] = None
 
         try:
             machine.dedent()

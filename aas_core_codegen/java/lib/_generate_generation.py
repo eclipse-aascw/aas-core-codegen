@@ -49,11 +49,11 @@ def _generate_builder(
 
     package_name = java_common.PackageIdentifier(f"{package}.generation")
 
-    builder_blocks = []  # type: List[Stripped]
+    builder_blocks: List[Stripped] = []
 
     # region Properties
 
-    properties_blocks = []  # type: List[Stripped]
+    properties_blocks: List[Stripped] = []
 
     for prop in cls.properties:
         type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -62,7 +62,7 @@ def _generate_builder(
 
         prop_name = java_naming.property_name(prop.name)
 
-        blocks = []  # type: List[Stripped]
+        blocks: List[Stripped] = []
 
         if prop.description is not None:
             (
@@ -107,7 +107,7 @@ private {prop_type} {prop_name};"""
 
     # region Constructor
 
-    arg_codes = []  # type: List[Stripped]
+    arg_codes: List[Stripped] = []
 
     for arg in cls.constructor.arguments:
         if isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation):
@@ -156,7 +156,7 @@ private {prop_type} {prop_name};"""
 
     # region Setters
 
-    setter_blocks = []  # type: List[Stripped]
+    setter_blocks: List[Stripped] = []
 
     for arg in cls.constructor.arguments:
         if not isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation):
@@ -266,8 +266,8 @@ def generate(
     Generate the code for builders for model classes.
     """
 
-    files = []  # type: List[java_common.JavaFile]
-    errors = []  # type: List[Error]
+    files: List[java_common.JavaFile] = []
+    errors: List[Error] = []
 
     for our_type in symbol_table.our_types:
         if not isinstance(

@@ -30,7 +30,7 @@ def generate(
 
     The ``namespace`` indicates the fully-qualified name of the base project.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 private static void CompareOrRerecordValue(
@@ -82,13 +82,13 @@ private static void CompareOrRerecordValue(
 {I}}}
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_csharp = csharp_naming.class_name(concrete_cls.name)
         cls_name_json = naming.json_model_type(concrete_cls.name)
 
-        x_or_default_methods = []  # type: List[intermediate.MethodUnion]
+        x_or_default_methods: List[intermediate.MethodUnion] = []
         for method in concrete_cls.methods:
             if (
                 method.name.endswith("_or_default")
@@ -99,7 +99,7 @@ private static void CompareOrRerecordValue(
         for method in x_or_default_methods:
             method_name_csharp = csharp_naming.method_name(method.name)
 
-            result_enum = None  # type: Optional[intermediate.Enumeration]
+            result_enum: Optional[intermediate.Enumeration] = None
             assert method.returns is not None, (
                 f"Expected all X_or_default to return something, "
                 f"but got None for {concrete_cls.name}.{method.name}"

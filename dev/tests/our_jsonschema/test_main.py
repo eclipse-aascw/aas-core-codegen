@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import json
 import os
 import pathlib
@@ -60,9 +58,7 @@ class Test_examples(unittest.TestCase):
                     with data_pth.open("rt", encoding="utf-8") as fid:
                         instance = json.load(fid)
 
-                    validation_error = (
-                        None
-                    )  # type: Optional[jsonschema.ValidationError]
+                    validation_error: Optional[jsonschema.ValidationError] = None
                     try:
                         jsonschema.validate(instance=instance, schema=schema)
                     except jsonschema.ValidationError as err:
@@ -130,7 +126,7 @@ class Test_pattern_transpilation(unittest.TestCase):
         pattern = aas_core_codegen.jsonschema.main.fix_pattern_for_utf16("[\\t\\n\\r]")
         self.assertEqual("[\\t\\n\\r]", pattern)
 
-    def test_on_XML_string_pattern(self) -> None:
+    def test_on_xml_string_pattern(self) -> None:
         pattern = aas_core_codegen.jsonschema.main.fix_pattern_for_utf16(
             r"^[\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD\U00010000-\U0010FFFF]*$"
         )

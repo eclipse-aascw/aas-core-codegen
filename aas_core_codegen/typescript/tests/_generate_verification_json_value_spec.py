@@ -22,7 +22,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate() -> str:
     """Generate code for the tests of the verification of a JSON-able value."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -210,7 +210,7 @@ test("the content is verified beneath the shape", () => {{
 }});"""
         ),
         typescript_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

@@ -15,6 +15,8 @@ IMPLEMENTATION_KEY_RE = re.compile("[a-zA-Z_][a-zA-Z_0-9.]*(/[a-zA-Z_][a-zA-Z_0-
 class ImplementationKey(str):
     """Represent a key in the map of specific implementations."""
 
+    __slots__ = ()
+
     @require(lambda key: IMPLEMENTATION_KEY_RE.fullmatch(key))
     def __new__(cls, key: str) -> "ImplementationKey":
         return cast(ImplementationKey, key)
@@ -32,9 +34,9 @@ def read_from_directory(
 
     :return: either the map of the implementations, or the errors
     """
-    mapping = dict()  # pylint: disable=use-dict-literal
+    mapping = dict()
 
-    errors = []  # type: List[str]
+    errors: List[str] = []
     for pth in snippets_dir.glob("**/*"):
         # NOTE (mristin):
         # Ignore hidden or special files. In particular, we do not want Git-related

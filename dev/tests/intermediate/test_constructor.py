@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import re
 import unittest
 from typing import Tuple, Optional, Sequence

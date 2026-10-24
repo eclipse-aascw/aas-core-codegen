@@ -644,7 +644,7 @@ def generate(package: java_common.PackageIdentifier) -> List[java_common.JavaFil
 
     The ``package`` defines the base Java package of the generated code.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     blocks.extend(_generate_readers())
     blocks.extend(_generate_writers())
@@ -677,7 +677,7 @@ public final class XmlRpc {{
 }}"""
     )
 
-    imports = [
+    imports: List[Stripped] = [
         Stripped("import javax.xml.stream.events.XMLEvent;"),
         Stripped("import javax.xml.stream.XMLEventReader;"),
         Stripped("import javax.xml.stream.XMLStreamConstants;"),
@@ -692,7 +692,7 @@ public final class XmlRpc {{
         Stripped("import com.fasterxml.jackson.databind.node.JsonNodeFactory;"),
         Stripped(f"import {package}.reporting.Reporting;"),
         Stripped(f"import {package}.xmlcommon.XmlCommon;"),
-    ]  # type: List[Stripped]
+    ]
 
     file_blocks = [
         java_common.WARNING,

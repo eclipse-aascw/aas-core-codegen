@@ -32,7 +32,7 @@ def generate_implementation(
     """Generate implementation to test the jsonization of classes with descendants."""
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f"""\
@@ -46,7 +46,7 @@ def generate_implementation(
 
 namespace our = {library_namespace};"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.classes:
         if len(cls.concrete_descendants) == 0:

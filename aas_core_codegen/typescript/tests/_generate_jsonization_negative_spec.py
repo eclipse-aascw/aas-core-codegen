@@ -149,7 +149,7 @@ import * as TestCommon from "./common";"""
 import * as OurJsonization from "../src/jsonization";"""
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -158,7 +158,7 @@ import * as OurJsonization from "../src/jsonization";"""
         ),
         typescript_common.WARNING,
         Stripped(imports),
-    ]  # type: List[Stripped]
+    ]
 
     if helpers_needed:
         blocks.append(

@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import unittest
 
 # noinspection PyProtectedMember

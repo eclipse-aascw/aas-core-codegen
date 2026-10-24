@@ -35,7 +35,7 @@ _IMPORT_PLACEHOLDER = Stripped("")
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to test ``*OrDefault`` functions."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("package types_xxx_or_default_test"),
         golang_common.WARNING,
         _IMPORT_PLACEHOLDER,
@@ -191,24 +191,24 @@ func compareOrRerecordValue(
 {I}return
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
-        x_or_default_methods = [
+        x_or_default_methods: List[intermediate.MethodUnion] = [
             method
             for method in concrete_cls.methods
             if (
                 method.name.endswith("_or_default")
                 and method.visibility is intermediate.Visibility.PUBLIC
             )
-        ]  # type: List[intermediate.MethodUnion]
+        ]
 
         model_type = naming.json_model_type(concrete_cls.name)
 
         for method in x_or_default_methods:
             method_name = golang_naming.method_name(method.name)
 
-            result_enum = None  # type: Optional[intermediate.Enumeration]
+            result_enum: Optional[intermediate.Enumeration] = None
             assert method.returns is not None, (
                 f"Expected all X_or_default to return something, "
                 f"but got None for {concrete_cls}.{method.name}"
@@ -314,7 +314,7 @@ func {test_function_name}(t *testing.T) {{
 
     import_index = blocks.index(_IMPORT_PLACEHOLDER)
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     for module, literal in (
         ("filepath", f'{I}"path/filepath"'),
         ("fmt", f'{I}"fmt"'),

@@ -77,7 +77,7 @@ def needed_combinators(
     on the very same answer: the XSD lexical helpers are only emitted for
     a model which has a float or a byte array somewhere in it.
     """
-    primitive_types = set()  # type: Set[intermediate.PrimitiveType]
+    primitive_types: Set[intermediate.PrimitiveType] = set()
     enumerations = False
     polymorphic = False
     lists = False
@@ -470,7 +470,7 @@ def _generate_element_name_and_framing_wrappers(
     and an element of the XML-RPC subset in no namespace at all, so each
     primitive comes in the one or the two flavors which are actually called.
     """
-    result = [
+    result: List[Stripped] = [
         Stripped(
             f"""\
 /// <summary>
@@ -518,7 +518,7 @@ internal static void ConsumeEndElement(
 {II}reader, NS, elementName, isEmptyElement, out error);
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if not uses_json_types:
         return result
@@ -794,7 +794,7 @@ def generate(
         intermediate.PrimitiveType.BYTEARRAY in needed.primitive_types
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_namespace_constant(symbol_table),
         _generate_skip_whitespace_and_comments(),
         _generate_extract_element_name(),
@@ -804,7 +804,7 @@ def generate(
             uses_json_types=intermediate_uses.json_types(symbol_table)
         ),
         _generate_peek_element_name(),
-    ]  # type: List[Stripped]
+    ]
 
     # NOTE (mristin):
     # The xs:double parser normalizes the whitespace itself, and the base-64
@@ -888,7 +888,7 @@ namespace {namespace}
 
     writer.write(f"\n}}  // namespace {namespace}")
 
-    using_directives = []  # type: List[Stripped]
+    using_directives: List[Stripped] = []
     using_directives.extend(
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )

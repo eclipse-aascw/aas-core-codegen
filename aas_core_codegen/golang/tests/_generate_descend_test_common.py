@@ -26,7 +26,7 @@ from aas_core_codegen.golang.common import (
 # fmt: on
 def generate(repo_url: Stripped) -> str:
     """Generate the functions used across descent tests."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 package types_descend_test"""
@@ -126,7 +126,7 @@ func compareOrRerecordTrace(
 }}"""
         ),
         golang_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

@@ -162,7 +162,6 @@ def _generate_cmake_lists(
 
     variant_link_line_in_tests = "            mpark_variant\n" if uses_variant else ""
 
-    # pylint: disable=line-too-long
     return Stripped(
         f"""\
 cmake_minimum_required(VERSION 3.19)

@@ -25,7 +25,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test the ``typesMatch`` function."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -38,7 +38,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
 import * as OurTypes from "../src/types";
 import * as TestCommonJsonization from "./commonJsonization";"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         load_minimal_name = typescript_naming.function_name(
@@ -57,7 +57,7 @@ const {instance_var} = TestCommonJsonization.{load_minimal_name}();"""
         )
 
     for concrete_cls in symbol_table.concrete_classes:
-        body_blocks = []  # type: List[Stripped]
+        body_blocks: List[Stripped] = []
 
         that_var = typescript_naming.constant_name(
             Identifier(f"the_{concrete_cls.name}")

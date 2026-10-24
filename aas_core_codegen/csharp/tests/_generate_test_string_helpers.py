@@ -43,7 +43,7 @@ def generate(
 
     The ``namespace`` indicates the fully-qualified name of the base project.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     if intermediate_uses.string_len_call(type_inference):
         for len_case in string_helper_cases.LEN_CASES:

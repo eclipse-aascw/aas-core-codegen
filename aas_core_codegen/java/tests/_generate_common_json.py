@@ -18,7 +18,7 @@ def generate(package: java_common.PackageIdentifier) -> List[java_common.JavaFil
     """
     Generate code for shared JSON functionality across unit tests.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public static JsonNode readFromFile(Path path) {{
@@ -97,7 +97,7 @@ private static String getNodeKind(JsonNode node)
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     blocks_joined = "\n\n".join(blocks)
 

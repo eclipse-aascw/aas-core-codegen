@@ -49,9 +49,9 @@ def verify(
     verification_functions: Sequence[intermediate.Verification],
 ) -> Optional[List[str]]:
     """Verify all the implementation snippets related to verification."""
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
-    expected_keys = []  # type: List[specific_implementations.ImplementationKey]
+    expected_keys: List[specific_implementations.ImplementationKey] = []
 
     for func in verification_functions:
         if isinstance(func, intermediate.ImplementationSpecificVerification):
@@ -97,7 +97,6 @@ class _RegexRendererForJavaScript(parse_retree.Renderer):
             return result
         else:
             code = ord(node.character)
-            # pylint: disable=line-too-long
             # NOTE (mristin):
             # See: https://dmitripavlutin.com/what-every-javascript-developer-should-know-about-unicode/#24-surrogate-pairs
             return [f"\\u{{{code:x}}}"]
@@ -131,7 +130,7 @@ class _PatternVerificationTranspiler(
                 None,
             )
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
 
         for value in values:
             if isinstance(value, str):
@@ -265,7 +264,7 @@ def _transpile_pattern_verification(
         Identifier(f"construct_{verification.name}")
     )
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Construct block
 
@@ -486,7 +485,7 @@ def _transpile_transpilable_verification(
         verification=verification,
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in verification.parsed.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -540,7 +539,7 @@ def _transpile_transpilable_verification(
             type_annotation=verification.returns, types_module=Identifier("OurTypes")
         )
 
-    arg_defs = []  # type: List[Stripped]
+    arg_defs: List[Stripped] = []
     for arg in verification.arguments:
         arg_type = typescript_common.generate_type(
             arg.type_annotation, types_module=Identifier("OurTypes")
@@ -863,7 +862,7 @@ def _generate_verify_into(
     the function of its items by name. This way the verification is composed of
     plain functions, to any depth.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     function: str
 
@@ -1117,8 +1116,8 @@ def _generate_transform_for_class(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transform method to errors for the given concrete class."""
-    errors = []  # type: List[Error]
-    blocks = []  # type: List[Stripped]
+    errors: List[Error] = []
+    blocks: List[Stripped] = []
 
     # region Generate the non-recursive part verifying the invariants
 
@@ -1152,7 +1151,7 @@ def _generate_transform_for_class(
     # NOTE (mristin):
     # The constrained primitives are not included in the recursion, so we verify
     # the properties of constrained primitives in the non-recursive part as well.
-    recurse_prop_blocks = []  # type: List[Stripped]
+    recurse_prop_blocks: List[Stripped] = []
 
     for prop in cls.properties:
         prop_block = _generate_verify_property(prop)
@@ -1379,9 +1378,9 @@ def _generate_transformer(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a transformer to double-dispatch an instance to errors."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # The abstract classes are directly dispatched by the transformer,
     # so we do not need to handle them separately.
@@ -1428,8 +1427,8 @@ def _generate_verify_constrained_primitive(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the verify function for the constrained primitives."""
-    errors = []  # type: List[Error]
-    blocks = []  # type: List[Stripped]
+    errors: List[Error] = []
+    blocks: List[Stripped] = []
 
     for invariant in constrained_primitive.invariants:
         invariant_code, error = _transpile_invariant(
@@ -1527,15 +1526,15 @@ def _generate_module_comment(
 
     assert package_identifier is not None
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("Verify that the instances of the meta-model satisfy the invariants.")
-    ]  # type: List[Stripped]
+    ]
 
-    first_cls = (
+    first_cls: Optional[intermediate.ConcreteClass] = (
         symbol_table.concrete_classes[0]
         if len(symbol_table.concrete_classes) > 0
         else None
-    )  # type: Optional[intermediate.ConcreteClass]
+    )
 
     if first_cls is not None:
         cls_name = typescript_naming.class_name(first_cls.name)
@@ -1584,7 +1583,7 @@ def generate(
     spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code of verification logic."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     module_docstring, module_docstring_error = _generate_module_comment(
         symbol_table=symbol_table, spec_impls=spec_impls
@@ -1597,7 +1596,7 @@ def generate(
 
     assert module_docstring is not None
 
-    blocks = [
+    blocks: List[Stripped] = [
         module_docstring,
         typescript_common.WARNING,
         Stripped(
@@ -1752,7 +1751,7 @@ export class VerificationError {{
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for verification in symbol_table.verification_functions:
         if isinstance(verification, intermediate.ImplementationSpecificVerification):
@@ -1802,7 +1801,7 @@ export class VerificationError {{
 
     blocks.extend(_generate_verify_json_value(symbol_table=symbol_table))
 
-    observed_container_names = set()  # type: Set[Identifier]
+    observed_container_names: Set[Identifier] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:

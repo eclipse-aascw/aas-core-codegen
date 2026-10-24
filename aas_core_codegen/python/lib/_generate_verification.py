@@ -47,9 +47,9 @@ def verify(
     verification_functions: Sequence[intermediate.Verification],
 ) -> Optional[List[str]]:
     """Verify all the implementation snippets related to verification."""
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
-    expected_keys = []  # type: List[specific_implementations.ImplementationKey]
+    expected_keys: List[specific_implementations.ImplementationKey] = []
 
     for func in verification_functions:
         if isinstance(func, intermediate.ImplementationSpecificVerification):
@@ -99,7 +99,7 @@ class _PatternVerificationTranspiler(
                 None,
             )
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
 
         # NOTE (mristin):
         # See which quotes occur more often in the non-interpolated parts, so that we
@@ -255,7 +255,7 @@ def _transpile_pattern_verification(
         Identifier(f"_construct_{verification.name.lstrip('_')}")
     )
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Construct block
 
@@ -456,7 +456,7 @@ def _transpile_transpilable_verification(
         verification=verification,
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in verification.parsed.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -480,7 +480,7 @@ def _transpile_transpilable_verification(
             type_annotation=verification.returns, types_module=Identifier("our_types")
         )
 
-    arg_defs = []  # type: List[Stripped]
+    arg_defs: List[Stripped] = []
     for arg in verification.arguments:
         arg_type = python_common.generate_argument_type(
             arg, types_module=Identifier("our_types")
@@ -511,7 +511,7 @@ def {function_name}(
 ) -> {return_type}:"""
         )
 
-    docstring = None  # type: Optional[Stripped]
+    docstring: Optional[Stripped] = None
     if verification.description is not None:
         (
             docstring,
@@ -808,7 +808,7 @@ def _generate_verify_into(
     the function of its items by name. This way the verification is composed of
     plain functions, to any depth.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     function: str
 
@@ -992,8 +992,8 @@ def _generate_transform_for_class(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transform method to errors for the given concrete class."""
-    errors = []  # type: List[Error]
-    blocks = []  # type: List[Stripped]
+    errors: List[Error] = []
+    blocks: List[Stripped] = []
 
     for invariant in cls.invariants:
         invariant_code, error = _transpile_invariant(
@@ -1088,9 +1088,9 @@ def _generate_transformer(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a transformer to double-dispatch an instance to errors."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # The abstract classes are directly dispatched by the transformer,
     # so we do not need to handle them separately.
@@ -1134,8 +1134,8 @@ def _generate_verify_constrained_primitive(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the verify function for the constrained primitives."""
-    errors = []  # type: List[Error]
-    blocks = []  # type: List[Stripped]
+    errors: List[Error] = []
+    blocks: List[Stripped] = []
 
     for invariant in constrained_primitive.invariants:
         invariant_code, error = _transpile_invariant(
@@ -1213,15 +1213,15 @@ def _generate_module_docstring(
     qualified_module_name: python_common.QualifiedModuleName,
 ) -> Stripped:
     """Generate the docstring for the module."""
-    docstring_blocks = [
+    docstring_blocks: List[Stripped] = [
         Stripped("Verify that the instances of the meta-model satisfy the invariants.")
-    ]  # type: List[Stripped]
+    ]
 
-    first_cls = (
+    first_cls: Optional[intermediate.ConcreteClass] = (
         symbol_table.concrete_classes[0]
         if len(symbol_table.concrete_classes) > 0
         else None
-    )  # type: Optional[intermediate.ConcreteClass]
+    )
 
     if first_cls is not None:
         cls_name = python_naming.class_name(first_cls.name)
@@ -1320,7 +1320,7 @@ def generate(
         Identifier("Union"),
     ]
 
-    container_blocks_by_name = dict()  # type: Dict[Identifier, Stripped]
+    container_blocks_by_name: Dict[Identifier, Stripped] = dict()
     uses_set_container = False
 
     for cls in symbol_table.concrete_classes:
@@ -1354,7 +1354,7 @@ def generate(
     typing_imports_joined = ",\n".join(f"{I}{name}" for name in typing_imports)
 
     # region Module docstring
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_module_docstring(
             symbol_table=symbol_table, qualified_module_name=qualified_module_name
         ),
@@ -1394,9 +1394,9 @@ Path = our_reporting.Path
 
 Error = our_reporting.Error"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for verification in symbol_table.verification_functions:
         if isinstance(verification, intermediate.ImplementationSpecificVerification):

@@ -24,7 +24,7 @@ def generate(package: java_common.PackageIdentifier) -> List[java_common.JavaFil
     Generate the code for reporting errors.
     """
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -366,7 +366,7 @@ public static class Result<T> {{
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     writer.write(

@@ -441,7 +441,6 @@ export class Either<ValueT, ErrorT> {{
 {I}}}
 }}"""
         ),
-        # pylint: disable=line-too-long
         Stripped(
             f"""\
 const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -513,7 +512,6 @@ export function base64Encode(bytes: Uint8Array): string {{
 {I}return encoded;
 }}"""
         ),
-        # pylint: enable=line-too-long
         Stripped(
             f"""\
 /**
@@ -727,7 +725,7 @@ export function base64UrlDecode(text: string): Either<Uint8Array, string> {{
     # ``sliceStr`` and ``findStr`` rely on ``lenStr`` and on the low-level helpers.
     uses_any = uses_len or uses_slicing or uses_find
 
-    string_helpers = []  # type: List[Stripped]
+    string_helpers: List[Stripped] = []
 
     if uses_any:
         string_helpers.append(

@@ -3,6 +3,7 @@ import abc
 import io
 import textwrap
 from typing import (
+    Final,
     Tuple,
     Optional,
     List,
@@ -118,7 +119,7 @@ def generate_type(
         return Stripped(f"{generic}[{nested}]"), None
 
     elif isinstance(type_annotation, intermediate_type_inference.TupleTypeAnnotation):
-        item_types = []  # type: List[Stripped]
+        item_types: List[Stripped] = []
         for item in type_annotation.items:
             item_type, error_message = generate_type(
                 type_annotation=item, types_module=types_module, read_only=read_only
@@ -139,7 +140,7 @@ class Transpiler(
 ):
     """Transpile a node of our AST to Python code, or return an error."""
 
-    _PYTHON_COMPARISON_MAP = {
+    _PYTHON_COMPARISON_MAP: Final[Mapping[parse_tree.Comparator, str]] = {
         parse_tree.Comparator.LT: "<",
         parse_tree.Comparator.LE: "<=",
         parse_tree.Comparator.GT: ">",
@@ -173,7 +174,7 @@ class Transpiler(
         # resolve it as a name in the Python code.
         #
         # While this class does not directly use it, the descendants of this class do!
-        self._variable_name_set = set()  # type: Set[Identifier]
+        self._variable_name_set: Set[Identifier] = set()
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_member(
@@ -268,19 +269,19 @@ class Transpiler(
     def transform_slice(
         self, node: parse_tree.Slice
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         collection, error = self.transform(node.collection)
         if error is not None:
             errors.append(error)
 
-        start = None  # type: Optional[Stripped]
+        start: Optional[Stripped] = None
         if node.start is not None:
             start, error = self.transform(node.start)
             if error is not None:
                 errors.append(error)
 
-        end = None  # type: Optional[Stripped]
+        end: Optional[Stripped] = None
         if node.end is not None:
             end, error = self.transform(node.end)
             if error is not None:
@@ -630,13 +631,13 @@ not (
     def transform_method_call(
         self, node: parse_tree.MethodCall
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         instance, error = self.transform(node.member.instance)
         if error is not None:
             errors.append(error)
 
-        args = []  # type: List[Stripped]
+        args: List[Stripped] = []
         for arg_node in node.args:
             arg, error = self.transform(arg_node)
             if error is not None:
@@ -703,9 +704,9 @@ not (
     def transform_function_call(
         self, node: parse_tree.FunctionCall
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
-        args = []  # type: List[Stripped]
+        args: List[Stripped] = []
         for arg_node in node.args:
             arg, error = self.transform(arg_node)
             if error is not None:
@@ -868,7 +869,7 @@ not (
     def transform_tuple(
         self, node: parse_tree.Tuple
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        value_reprs = []  # type: List[Stripped]
+        value_reprs: List[Stripped] = []
         for value_node in node.values:
             value_repr, error = self.transform(value_node)
             if error is not None:
@@ -889,7 +890,7 @@ not (
     def transform_list_literal(
         self, node: parse_tree.ListLiteral
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        items = []  # type: List[Stripped]
+        items: List[Stripped] = []
         for item_node in node.items:
             item, error = self.transform(item_node)
             if error is not None:
@@ -959,7 +960,7 @@ not (
     def transform_name(
         self, node: parse_tree.Name
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def transform_not(
         self, node: parse_tree.Not
@@ -985,8 +986,8 @@ not (
     def _transform_and_or_or(
         self, node: Union[parse_tree.And, parse_tree.Or]
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        values = []  # type: List[Stripped]
+        errors: List[Error] = []
+        values: List[Stripped] = []
 
         for value_node in node.values:
             value, error = self.transform(value_node)
@@ -1070,7 +1071,7 @@ not (
     def _transform_binary_arithmetic(
         self, node: Union[parse_tree.Add, parse_tree.Sub, parse_tree.Mod]
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         left, error = self.transform(node.left)
         if error is not None:
@@ -1182,7 +1183,7 @@ not (
                 None,
             )
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
 
         # NOTE (mristin):
         # See which quotes occur more often in the non-interpolated parts, so that we
@@ -1246,11 +1247,11 @@ not (
     def _transform_any_or_all(
         self, node: Union[parse_tree.Any, parse_tree.All]
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
-        iteration = None  # type: Optional[Stripped]
-        start = None  # type: Optional[Stripped]
-        end = None  # type: Optional[Stripped]
+        iteration: Optional[Stripped] = None
+        start: Optional[Stripped] = None
+        end: Optional[Stripped] = None
 
         if isinstance(node.generator, parse_tree.ForEach):
             iteration, error = self.transform(node.generator.iteration)
@@ -1374,7 +1375,7 @@ range(
     def transform_assignment(
         self, node: parse_tree.Assignment
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         value, error = self.transform(node.value)
         if error is not None:
@@ -1504,8 +1505,8 @@ return (
         )
         self._environment = scope_environment
 
-        errors = []  # type: List[Error]
-        stmts = []  # type: List[Stripped]
+        errors: List[Error] = []
+        stmts: List[Stripped] = []
         try:
             for stmt in statements:
                 code, error = self.transform(stmt)
@@ -1546,17 +1547,17 @@ return (
         if not isinstance(node.subject, no_parentheses_types):
             subject = Stripped(f"({subject})")
 
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # Python 3.9 has no ``match`` statement, so we transpile the switch as
         # a chain of ``if``, ``elif`` and ``else``. We collect the headers of
         # the branches together with their statements, and treat the default as
         # the last branch.
-        branches = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+        branches: List[Tuple[str, Sequence[parse_tree.StatementUnion]]] = []
 
         for i, case in enumerate(node.cases):
-            labels = []  # type: List[Stripped]
+            labels: List[Stripped] = []
             for label in case.labels:
                 label_code, error = self.transform(label)
                 if error is not None:
@@ -1610,9 +1611,9 @@ return (
     def transform_for(
         self, node: parse_tree.For
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
-        source = None  # type: Optional[Stripped]
+        source: Optional[Stripped] = None
         if isinstance(node.generator, parse_tree.ForEach):
             source, error = self.transform(node.generator.iteration)
             if error is not None:
@@ -1712,13 +1713,13 @@ range(
     def transform_assert(
         self, node: parse_tree.Assert
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         condition, error = self.transform(node.condition)
         if error is not None:
             errors.append(error)
 
-        message = None  # type: Optional[Stripped]
+        message: Optional[Stripped] = None
         if node.message is not None:
             message, error = self.transform(node.message)
             if error is not None:
@@ -1753,12 +1754,12 @@ range(
     def transform_if(
         self, node: parse_tree.If
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We collect the headers of the branches together with their statements, and
         # treat the default as the last branch.
-        branches = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+        branches: List[Tuple[str, Sequence[parse_tree.StatementUnion]]] = []
 
         for i, branch in enumerate(node.branches):
             condition, error = self.transform(branch.condition)

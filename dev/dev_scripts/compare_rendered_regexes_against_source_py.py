@@ -18,7 +18,7 @@ def main() -> int:
 
         source = pth.read_text(encoding="utf-8").strip()
 
-        source_stem = None  # type: Optional[str]
+        source_stem: Optional[str] = None
         if source.startswith('"') and source.endswith('"'):
             source_stem = source[1:-1]
         elif source.startswith('f"') and source.endswith('"'):

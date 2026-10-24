@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-# pylint: disable=missing-docstring
 
 import ast
 import inspect
@@ -417,7 +416,7 @@ class Some_class:
     some_property: Some_enum
 
     def __init__(
-            self, 
+            self,
             some_property: Some_enum = Some_enum.Literal1
     ) -> None:
         self.some_property = some_property
@@ -754,7 +753,7 @@ __xml_namespace__ = "https://dummy.com"
         source = """\
 @invariant(lambda self: self.some_property > 0, "Some property is positive")
 class Some_class:
-    some_property: int                                
+    some_property: int
 
     def __init__(self, some_property: int) -> None:
         self.some_property = some_property
@@ -1785,7 +1784,7 @@ def _to_lower_snake_case(cls_name: str) -> str:
 class TestAssertions(unittest.TestCase):
     def test_coverage(self) -> None:
         """Assert that all classes from intermediate._types are covered in test methods."""
-        all_classes = []  # type: List[str]
+        all_classes: List[str] = []
         for class_name, obj in inspect.getmembers(intermediate_types, inspect.isclass):
             if obj.__module__ == intermediate_types.__name__:
                 all_classes.append(class_name)
@@ -1794,14 +1793,14 @@ class TestAssertions(unittest.TestCase):
             f"test_{_to_lower_snake_case(cls_name)}" for cls_name in all_classes
         ]
 
-        test_methods = []  # type: List[str]
+        test_methods: List[str] = []
         for method_name in dir(TestPickle):
             if method_name.startswith("test_") and callable(
                 getattr(TestPickle, method_name)
             ):
                 test_methods.append(method_name)
 
-        missing_tests = []  # type: List[str]
+        missing_tests: List[str] = []
         for expected_prefix in expected_test_prefixes:
             found = any(
                 test_method.startswith(expected_prefix) for test_method in test_methods
@@ -1858,11 +1857,11 @@ class TestAssertions(unittest.TestCase):
 
         tree = ast.parse(source_code)
 
-        class_map = {}  # type: Dict[str, _PickableClass]
+        class_map: Dict[str, _PickableClass] = {}
 
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
-                id_set_properties = []  # type: List[str]
+                id_set_properties: List[str] = []
 
                 # NOTE (mristin):
                 # We go through all type-annotated properties and pick all properties
@@ -1879,8 +1878,8 @@ class TestAssertions(unittest.TestCase):
                             if property_name.endswith("_id_set"):
                                 id_set_properties.append(property_name)
 
-                getstate = None  # type: Optional[ast.FunctionDef]
-                setstate = None  # type: Optional[ast.FunctionDef]
+                getstate: Optional[ast.FunctionDef] = None
+                setstate: Optional[ast.FunctionDef] = None
 
                 for item in node.body:
                     if isinstance(item, ast.FunctionDef):
@@ -1920,7 +1919,7 @@ class TestAssertions(unittest.TestCase):
 
             # NOTE (mristin):
             # We extract popped attributes from ``__getstate__``.
-            popped_attrs = []  # type: List[str]
+            popped_attrs: List[str] = []
 
             for node in ast.walk(cls.getstate):
                 if (
@@ -1937,7 +1936,7 @@ class TestAssertions(unittest.TestCase):
                     ):
                         popped_attrs.append(node.args[0].value)
 
-            setattr_attrs = []  # type: List[str]
+            setattr_attrs: List[str] = []
 
             for node in ast.walk(cls.setstate):
                 if (

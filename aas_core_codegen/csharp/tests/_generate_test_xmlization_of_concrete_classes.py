@@ -19,7 +19,9 @@ from aas_core_codegen.intermediate import uses as intermediate_uses
 
 #: The lexical forms which no recorded example can hold, by the primitive
 #: they belong to. See the Java generator for why they can not be fixtures.
-_LEXICAL_CASES_BY_PRIMITIVE = {
+_LEXICAL_CASES_BY_PRIMITIVE: Mapping[
+    intermediate.PrimitiveType, List[Tuple[str, str]]
+] = {
     intermediate.PrimitiveType.FLOAT: [
         # NOTE (mristin):
         # A literal too large for a double is not an error: XSD rounds it to
@@ -54,7 +56,7 @@ _LEXICAL_CASES_BY_PRIMITIVE = {
         ("true", "true"),
         ("false", "false"),
     ],
-}  # type: Mapping[intermediate.PrimitiveType, List[Tuple[str, str]]]
+}
 
 
 def _lexical_test_name_chunk(text: str) -> str:
@@ -84,9 +86,7 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
     if cls is None:
         return []
 
-    prop_by_a_type = (
-        dict()
-    )  # type: Dict[intermediate.PrimitiveType, intermediate.Property]
+    prop_by_a_type: Dict[intermediate.PrimitiveType, intermediate.Property] = dict()
     for prop in cls.properties:
         assert isinstance(prop.type_annotation, intermediate.PrimitiveTypeAnnotation)
         prop_by_a_type.setdefault(prop.type_annotation.a_type, prop)
@@ -107,7 +107,7 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
     cls_name_csharp = csharp_naming.class_name(cls.name)
     cls_name_xml = naming.xml_class_name(cls.name)
 
-    result = [
+    result: List[Stripped] = [
         Stripped(
             f"""\
 /// <summary>
@@ -146,7 +146,7 @@ private static Our.{cls_name_csharp} ReadWith(string xmlName, string text)
 {I}return Our.Xmlization.Deserialize.{cls_name_csharp}From(xmlReader);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for a_type, prop in relevant:
         prop_xml_name = naming.xml_property(prop.name)
@@ -155,7 +155,7 @@ private static Our.{cls_name_csharp} ReadWith(string xmlName, string text)
         for a_text, expected in _LEXICAL_CASES_BY_PRIMITIVE[a_type]:
             test_name = csharp_naming.method_name(
                 Identifier(
-                    f"Test_{prop.name}_read_from_" f"{_lexical_test_name_chunk(a_text)}"
+                    f"Test_{prop.name}_read_from_{_lexical_test_name_chunk(a_text)}"
                 )
             )
 
@@ -214,7 +214,7 @@ child.GetDefaultNamespace().NamespaceName == {xml_namespace_literal}
         )
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 private static void CheckElementsEqual(
@@ -372,7 +372,7 @@ private static void AssertEqualsExpectedOrRerecordDeserializationException(
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_csharp = csharp_naming.class_name(concrete_cls.name)

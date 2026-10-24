@@ -277,7 +277,7 @@ def _infer_constraints_of_constrained_primitive_without_inheritance(
 
     If there are no constraints inferred from the constrained primitive, we return None.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     len_constraint: Optional[LenConstraint] = None
 
@@ -606,7 +606,7 @@ def infer_constraints_by_class(
     Optional[List[Error]],
 ]:
     """Infer the constraints from the invariants and constrained primitives."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     pattern_verifications_by_name = (
         infer_for_schema_pattern.map_pattern_verifications_by_name(
@@ -737,13 +737,13 @@ def tightening_steps_from_other_to_that_constraints(
             f"{other.patterns=}, {that.patterns=}"
         )
 
-        other_pattern_set = set(
+        other_pattern_set = {
             pattern_constraint.pattern for pattern_constraint in other.patterns
-        )
+        }
 
-        that_pattern_set = set(
+        that_pattern_set = {
             pattern_constraint.pattern for pattern_constraint in that.patterns
-        )
+        }
 
         assert other_pattern_set.intersection(that_pattern_set) == other_pattern_set, (
             "The ``other``, corresponding to a parent class, defines more patterns "
@@ -778,13 +778,13 @@ def tightening_steps_from_other_to_that_constraints(
             f"{other.set_of_primitives=}"
         )
 
-        other_set_of_primitives = set(
+        other_set_of_primitives = {
             literal.value for literal in other.set_of_primitives.literals
-        )
+        }
 
-        that_set_of_primitives = set(
+        that_set_of_primitives = {
             literal.value for literal in that.set_of_primitives.literals
-        )
+        }
 
         assert (
             that_set_of_primitives.intersection(other_set_of_primitives)
@@ -815,13 +815,13 @@ def tightening_steps_from_other_to_that_constraints(
             f"{other.set_of_enumeration_literals=}"
         )
 
-        other_set_of_enumeration_literals = set(
+        other_set_of_enumeration_literals = {
             literal.value for literal in other.set_of_enumeration_literals.literals
-        )
+        }
 
-        that_set_of_enumeration_literals = set(
+        that_set_of_enumeration_literals = {
             literal.value for literal in that.set_of_enumeration_literals.literals
-        )
+        }
 
         assert (
             that_set_of_enumeration_literals.intersection(

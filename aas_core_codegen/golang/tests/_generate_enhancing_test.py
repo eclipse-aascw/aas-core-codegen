@@ -87,7 +87,7 @@ func collectIDsAndAssertTheyAreConsecutiveAndTheirCountEqualsNextID(
         )
 
         test_name = golang_naming.function_name(
-            (Identifier(f"test_{concrete_cls.name}_wrapped"))
+            Identifier(f"test_{concrete_cls.name}_wrapped")
         )
 
         blocks.append(
@@ -124,7 +124,7 @@ func {test_name}(t *testing.T) {{
         )
 
         test_name = golang_naming.function_name(
-            (Identifier(f"test_{concrete_cls.name}_nothing_wrapped"))
+            Identifier(f"test_{concrete_cls.name}_nothing_wrapped")
         )
 
         blocks.append(

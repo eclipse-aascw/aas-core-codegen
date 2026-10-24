@@ -25,7 +25,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test the ``over{Enum}`` methods."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -34,7 +34,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
         ),
         typescript_common.WARNING,
         Stripped('import * as OurTypes from "../src/types";'),
-    ]  # type: List[Stripped]
+    ]
 
     for enumeration in symbol_table.enumerations:
         name = typescript_naming.enum_name(enumeration.name)

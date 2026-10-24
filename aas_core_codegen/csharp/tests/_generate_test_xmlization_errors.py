@@ -46,7 +46,7 @@ def generate(
     # NOTE (mristin):
     # Forgetting to call ``MoveToContent`` is a very common mistake of the users,
     # see https://github.com/aas-core-works/aas-core3.0-csharp/issues/24.
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 [Test]
@@ -107,7 +107,7 @@ public void Test_error_on_unexpected_declaration()
 {II}message);
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     duplicate_candidate = intermediate.first_class_with_a_required_property(
         symbol_table

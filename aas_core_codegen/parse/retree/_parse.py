@@ -7,7 +7,6 @@ from typing import Tuple, Optional, List, Sequence, Union, MutableMapping
 
 from icontract import invariant, require, ensure, snapshot
 
-from aas_core_codegen.common import pairwise
 from aas_core_codegen.parse.retree._types import (
     Char,
     Range,
@@ -23,6 +22,7 @@ from aas_core_codegen.parse.retree._types import (
     SymbolKind,
 )
 from aas_core_codegen.parse.tree import FormattedValue
+import itertools
 
 
 # fmt: off
@@ -50,14 +50,14 @@ from aas_core_codegen.parse.tree import FormattedValue
 )
 @invariant(
     lambda self:
-    not (not isinstance(self.pointed_value(), str))
+    bool(isinstance(self.pointed_value(), str))
     or (self.minor_cursor is None),
     "Minor cursor is invalidated if the pointed value is not a string"
 )
 @invariant(
     lambda self:
     (
-            not (self.major_cursor == len(self.values))
+            self.major_cursor != len(self.values)
             or self.pointed_value() is None
     ),
     "No pointed value if we reached the end of the values"
@@ -88,7 +88,7 @@ class Cursor:
                     isinstance(first, str)
                     and isinstance(second, str)
             )
-            for first, second in zip(values, values[1:])
+            for first, second in itertools.pairwise(values)
         ),
         "No consecutive strings expected in the parsed sequence of an AST expression "
         "representing a string interpolation"
@@ -155,7 +155,7 @@ class Cursor:
 
     @require(lambda jump_length: jump_length >= 0)
     @require(
-        lambda self: not (not self.done())
+        lambda self: bool(self.done())
         or (self._minor_cursor is not None and isinstance(self.pointed_value(), str)),
         "If we are not done, we should only move within a string value",
     )
@@ -223,7 +223,7 @@ class Cursor:
             return None
 
         assert isinstance(pointed_value, str)
-        accumulator = []  # type: List[str]
+        accumulator: List[str] = []
         for i in range(self.minor_cursor, len(pointed_value)):
             if pointed_value[i].isdigit():
                 accumulator.append(pointed_value[i])
@@ -616,13 +616,13 @@ def _parse_ranges_and_closing(
 ) -> Tuple[Optional[List[Range]], Optional[Error]]:
     # noinspection GrazieInspection
     """Parse one or more ranges in a character set and the closing ``]``."""
-    ranges = []  # type: List[Range]
+    ranges: List[Range] = []
 
     # Prefix dash is allowed and should be considered as a character.
     if cursor.try_literal("-"):
         ranges.append(Range(start=Char("-"), end=None))
 
-    cursor_by_range = dict()  # type: MutableMapping[Range, Cursor]
+    cursor_by_range: MutableMapping[Range, Cursor] = dict()
 
     while True:
         if cursor.done():
@@ -649,7 +649,7 @@ def _parse_ranges_and_closing(
                 return None, error
             assert start is not None
 
-            end = None  # type: Optional[Char]
+            end: Optional[Char] = None
             if not cursor.peek_literal("-]"):
                 if cursor.try_literal("-"):
                     if cursor.try_literal("-"):
@@ -671,7 +671,7 @@ def _parse_ranges_and_closing(
             cursor_by_range[the_range] = cursor_at_start
             ranges.append(the_range)
 
-    for this_range, next_range in pairwise(
+    for this_range, next_range in itertools.pairwise(
         sorted(ranges, key=lambda rng: ord(rng.start.character))
     ):
         this_end = this_range.end if this_range.end is not None else this_range.start
@@ -900,7 +900,7 @@ def _parse_concatenation(
             "Expected at least one term, but reached the end of input.", cursor
         )
 
-    concatenants = []  # type: List[Term]
+    concatenants: List[Term] = []
 
     while True:
         old_cursor_position = (
@@ -1006,7 +1006,7 @@ def _parse_concatenation(
             # ``)`` or a delimiting ``|``.
 
         if value is not None:
-            quantifier = None  # type: Optional[Quantifier]
+            quantifier: Optional[Quantifier] = None
             if cursor.try_literal("*?"):
                 quantifier = Quantifier(non_greedy=True, minimum=0, maximum=None)
             elif cursor.try_literal("+?"):

@@ -25,12 +25,12 @@ def _generate_for_cls(
 
     interface_name = golang_naming.interface_name(cls.name)
 
-    block = [
+    block: List[Stripped] = [
         Stripped(
             f"""\
 instance := ourtesting.{must_load_minimal_name}()"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         is_function_name = golang_naming.function_name(
@@ -86,7 +86,7 @@ func {test_name}(t *testing.T) {{
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to test ``Is*`` functions."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("package types_is_xxx_test"),
         golang_common.WARNING,
         Stripped(
@@ -97,7 +97,7 @@ import (
 {I}ourtypes "{repo_url}/types"
 )"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         blocks.append(_generate_for_cls(cls=concrete_cls, symbol_table=symbol_table))

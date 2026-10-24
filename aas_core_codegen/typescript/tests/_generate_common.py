@@ -49,7 +49,7 @@ def generate(
         package_identifier
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -461,7 +461,7 @@ export function checkJsonablesEqual(
 {I}return null;
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
     writer = io.StringIO()
     for i, block in enumerate(blocks):
         if i > 0:

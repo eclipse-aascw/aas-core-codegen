@@ -17,7 +17,7 @@ def _generate_enum_from_string(
     qualified_module_name: python_common.QualifiedModuleName,
 ) -> Stripped:
     """Generate the functions for de-serializing enumeration from strings."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     name = python_naming.enum_name(enumeration.name)
 

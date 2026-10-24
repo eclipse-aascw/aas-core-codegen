@@ -92,12 +92,12 @@ public abstract class Enhanced<EnhancementT> {{
 }}"""
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(f"package {package}.enhancing;"),
         enhanced,
         java_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     code = "\n\n".join(blocks)
 
@@ -110,10 +110,10 @@ public abstract class Enhanced<EnhancementT> {{
 def _generate_unwrapper_class(
     package: java_common.PackageIdentifier,
 ) -> java_common.JavaFile:
-    imports = [
+    imports: List[Stripped] = [
         Stripped("import java.util.Optional;"),
         Stripped(f"import {package}.types.model.*;"),
-    ]  # type: List[Stripped]
+    ]
 
     unwrapper = Stripped(
         f"""\
@@ -160,13 +160,13 @@ public class Unwrapper<EnhancementT> {{
 }}"""
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(f"package {package}.enhancing;"),
         Stripped("\n".join(imports)),
         unwrapper,
         java_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     code = "\n\n".join(blocks)
 
@@ -179,12 +179,12 @@ public class Unwrapper<EnhancementT> {{
 def _generate_enhancer_class(
     package: java_common.PackageIdentifier,
 ) -> java_common.JavaFile:
-    imports = [
+    imports: List[Stripped] = [
         Stripped("import java.util.function.Function;"),
         Stripped("import java.util.Optional;"),
         Stripped(f"import {package}.enhancing.Unwrapper;"),
         Stripped(f"import {package}.types.model.*;"),
-    ]  # type: List[Stripped]
+    ]
 
     enhancer = Stripped(
         f"""\
@@ -237,13 +237,13 @@ public class Enhancer<EnhancementT> extends Unwrapper<EnhancementT> {{
 }}"""
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(f"package {package}.enhancing;"),
         Stripped("\n".join(imports)),
         enhancer,
         java_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     code = "\n\n".join(blocks)
 
@@ -263,7 +263,7 @@ def _generate_enhanced_class(
     enhanced_name = java_naming.class_name(Identifier(f"enhanced_{cls.name}"))
     interface_name = java_naming.interface_name(cls.name)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(f"private final {interface_name} instance;"),
         Stripped(
             f"""\
@@ -275,7 +275,7 @@ public {enhanced_name}(
 {I}this.instance = instance;
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for prop in cls.properties:
         prop_type = java_common.generate_type(prop.type_annotation)
@@ -432,9 +432,9 @@ def _generate_enhanced(
     symbol_table: intermediate.SymbolTable,
     package: java_common.PackageIdentifier,
 ) -> Tuple[Optional[List[java_common.JavaFile]], Optional[List[Error]]]:
-    files = []  # type: List[java_common.JavaFile]
+    files: List[java_common.JavaFile] = []
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for cls in symbol_table.concrete_classes:
         cls_name = java_naming.class_name(cls.name)
@@ -446,7 +446,7 @@ def _generate_enhanced(
 
         assert code is not None
 
-        imports = [
+        imports: List[Stripped] = [
             Stripped("import java.lang.Iterable;"),
             Stripped("import java.util.Optional;"),
             Stripped("import java.util.List;"),
@@ -458,7 +458,7 @@ def _generate_enhanced(
             Stripped(f"import {package}.types.enums.*;"),
             Stripped(f"import {package}.types.impl.*;"),
             Stripped(f"import {package}.types.model.*;"),
-        ]  # type: List[Stripped]
+        ]
 
         imports.extend(
             Stripped(f"import {json_import};")
@@ -474,13 +474,13 @@ def _generate_enhanced(
             )
         )
 
-        blocks = [
+        blocks: List[Stripped] = [
             java_common.WARNING,
             Stripped(f"package {package}.enhancing;"),
             Stripped("\n".join(imports)),
             code,
             java_common.WARNING,
-        ]  # type: List[Stripped]
+        ]
 
         code = Stripped("\n\n".join(blocks))
 
@@ -512,7 +512,7 @@ def _generate_wrap_helpers(with_union: bool) -> List[Stripped]:
     unions, while ``T.withUnderlying(...)`` still lets the result come back as
     the caller's own concrete union type.
     """
-    helpers = [
+    helpers: List[Stripped] = [
         Stripped(
             f"""\
 @SuppressWarnings("unchecked")
@@ -520,7 +520,7 @@ private <T extends IClass> T wrap(T that) {{
 {I}return (T) transform(that);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if with_union:
         helpers.append(
@@ -652,7 +652,7 @@ private {value_type} {_wrap_container_name(type_anno)}(
 
 def _generate_transform(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the transform method to wrap the instance with an enhancement."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 if (that instanceof Enhanced)
@@ -662,7 +662,7 @@ if (that instanceof Enhanced)
 {I});
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for prop in cls.properties:
         descendability = intermediate.map_descendability(prop.type_annotation)
@@ -736,7 +736,7 @@ def _generate_wrapper(
     package: java_common.PackageIdentifier,
 ) -> Tuple[Optional[java_common.JavaFile], Optional[List[Error]]]:
     """Generate the transformer that wraps an instance with the enhancement."""
-    imports = [
+    imports: List[Stripped] = [
         Stripped("import java.util.ArrayList;"),
         Stripped("import java.util.List;"),
         Stripped("import java.util.Optional;"),
@@ -745,7 +745,7 @@ def _generate_wrapper(
         Stripped(f"import {package}.types.enums.*;"),
         Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.visitation.AbstractTransformer;"),
-    ]  # type: List[Stripped]
+    ]
 
     if intermediate_uses.json_types(symbol_table):
         imports.extend(
@@ -753,7 +753,7 @@ def _generate_wrapper(
             for json_import in java_common.JSON_IMPORTS
         )
 
-    body = [
+    body: List[Stripped] = [
         Stripped(
             "private final Function<IClass, Optional<EnhancementT>> "
             "enhancementFactory;"
@@ -766,7 +766,7 @@ _Wrapper(
 {I}this.enhancementFactory = enhancementFactory;
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         body.append(_generate_transform(cls=cls))
@@ -776,7 +776,7 @@ _Wrapper(
     # NOTE (mristin):
     # We wrap the instances held by the containers through methods of their own,
     # one per type moniker.
-    observed_monikers = set()  # type: Set[str]
+    observed_monikers: Set[str] = set()
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
             descendability = intermediate.map_descendability(prop.type_annotation)
@@ -828,13 +828,13 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
 
     writer.write("\n}")
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(java_common.WARNING),
         Stripped(Stripped(f"package {package}.enhancing;")),
         Stripped("\n".join(imports)),
         Stripped(writer.getvalue()),
         Stripped(java_common.WARNING),
-    ]  # type: List[Stripped]
+    ]
 
     code = Stripped("\n\n".join(blocks))
 
@@ -858,13 +858,13 @@ def generate(
     Generate code for enhancing model classes.
     """
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    java_files = [
+    java_files: List[java_common.JavaFile] = [
         _generate_enhanced_abstract_class(package),
         _generate_unwrapper_class(package),
         _generate_enhancer_class(package),
-    ]  # type: List[java_common.JavaFile]
+    ]
 
     enhanced_files, enhanced_errors = _generate_enhanced(symbol_table, package)
 

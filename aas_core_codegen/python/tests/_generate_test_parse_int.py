@@ -36,7 +36,7 @@ def generate(
     The ``qualified_module_name`` indicates the fully-qualified name of the base
     module.
     """
-    methods = []  # type: List[Stripped]
+    methods: List[Stripped] = []
 
     for i, (text, expected_int) in enumerate(tests_common.PARSE_INT_CASES):
         methods.append(

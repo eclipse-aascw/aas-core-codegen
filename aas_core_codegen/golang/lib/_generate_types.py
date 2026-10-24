@@ -93,7 +93,7 @@ def _verify_intra_structure_collisions(
     our_type: intermediate.OurType,
 ) -> Optional[Error]:
     """Verify that no member names collide in the Golang structure of our type."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     if isinstance(our_type, intermediate.Enumeration):
         # NOTE (mristin):
@@ -110,7 +110,7 @@ def _verify_intra_structure_collisions(
         pass
 
     elif isinstance(our_type, intermediate.Class):
-        observed_member_names = {}  # type: Dict[Identifier, str]
+        observed_member_names: Dict[Identifier, str] = {}
 
         for prop in our_type.properties:
             name = golang_naming.getter_name(prop.name)
@@ -162,7 +162,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model property {prop.name!r}"
                 )
 
-        observed_constructor_arg_names = {}  # type: Dict[Identifier, str]
+        observed_constructor_arg_names: Dict[Identifier, str] = {}
         for constructor_arg in our_type.constructor.arguments:
             arg_name = golang_naming.argument_name(constructor_arg.name)
 
@@ -199,7 +199,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model method {method.name!r}"
                 )
 
-            observed_method_arg_names = {}  # type: Dict[Identifier, str]
+            observed_method_arg_names: Dict[Identifier, str] = {}
             for arg in method.arguments:
                 arg_name = golang_naming.argument_name(arg.name)
 
@@ -248,7 +248,7 @@ def _verify_structure_name_collisions(
         ],
     ] = dict()
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # region Inter-structure collisions
 
@@ -274,7 +274,7 @@ def _verify_structure_name_collisions(
             assert_never(enum_or_cls)
 
         for name in names:
-            other = observed_structure_names.get(name, None)
+            other = observed_structure_names.get(name)
 
             if other is not None:
                 errors.append(
@@ -296,7 +296,7 @@ def _verify_structure_name_collisions(
         for literal in enum.literals:
             name = golang_naming.enum_literal_name(enum.name, literal.name)
 
-            other = observed_structure_names.get(name, None)
+            other = observed_structure_names.get(name)
 
             if other is not None:
                 errors.append(
@@ -341,7 +341,7 @@ def verify(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[VerifiedIntermediateSymbolTable], Optional[List[Error]]]:
     """Verify that Golang code can be generated from the ``symbol_table``."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     structure_name_collisions = _verify_structure_name_collisions(
         symbol_table=symbol_table
@@ -430,9 +430,9 @@ def _generate_enum(
     """Generate the Golang code for the enum."""
     writer = io.StringIO()
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    comment = None  # type: Optional[Stripped]
+    comment: Optional[Stripped] = None
     if enum.description is not None:
         comment, comment_errors = _generate_comment_for_cls_or_enum(cls_or_enum=enum)
 
@@ -537,7 +537,7 @@ def _generate_definition_for_model_type(
     """
     enum_name = golang_naming.enum_name(Identifier("Model_type"))
 
-    literal_specs = []  # type: List[Stripped]
+    literal_specs: List[Stripped] = []
     for i, cls in enumerate(symbol_table.concrete_classes):
         literal_name = golang_naming.enum_literal_name(
             Identifier("Model_type"), cls.name
@@ -738,7 +738,7 @@ def _generate_descend_methods(
     Both methods delegate to a single function, which takes the recursion as
     a run-time flag, so that we do not generate the same body twice.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for prop in cls.properties:
         descendability = intermediate.map_descendability(prop.type_annotation)
@@ -850,8 +850,8 @@ def _generate_constructor(
 
     # fmt: off
     assert (
-            set(prop.name for prop in cls.properties)
-            == set(arg.name for arg in cls.constructor.arguments)
+            {prop.name for prop in cls.properties}
+            == {arg.name for arg in cls.constructor.arguments}
     ), (
         f"Expected the properties to coincide with constructor arguments, "
         f"but they do not for {cls.name!r}:"
@@ -867,9 +867,9 @@ def _generate_constructor(
     # It is not clear at this moment whether the SDK clients would really appreciate
     # the added complexity of the code, so we wait till we get some feedback on it.
 
-    blocks = []  # type: List[str]
+    blocks: List[str] = []
 
-    struct_specs = []  # type: List[Stripped]
+    struct_specs: List[Stripped] = []
 
     for arg in cls.constructor.arguments:
         if isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation):
@@ -992,7 +992,7 @@ return &{struct_name}{{
 
     body = "\n\n".join(blocks)
 
-    arg_codes = []  # type: List[str]
+    arg_codes: List[str] = []
     for arg in cls.constructor.arguments:
         if isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation):
             continue
@@ -1120,7 +1120,7 @@ def _generate_interface(
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the Golang code of the interface corresponding to ``cls``."""
     # Code blocks separated by double newlines and indented once
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Inheritance
 
@@ -1141,7 +1141,7 @@ def _generate_interface(
 
         prop_type = golang_common.generate_type(type_annotation=prop.type_annotation)
 
-        prop_comment = None  # type: Optional[Stripped]
+        prop_comment: Optional[Stripped] = None
         if prop.description is not None:
             (
                 prop_comment,
@@ -1188,7 +1188,7 @@ def _generate_interface(
         if method.visibility is not intermediate.Visibility.PUBLIC:
             continue
 
-        method_blocks = []  # type: List[Stripped]
+        method_blocks: List[Stripped] = []
 
         method_comment, method_comment_error = _generate_comment_for_method(
             method=method, cls=cls
@@ -1207,7 +1207,7 @@ def _generate_interface(
         )
         # fmt: on
 
-        arg_codes = []  # type: List[Stripped]
+        arg_codes: List[Stripped] = []
         for arg in method.arguments:
             arg_type = golang_common.generate_type(type_annotation=arg.type_annotation)
             arg_name = golang_naming.argument_name(arg.name)
@@ -1230,7 +1230,7 @@ def _generate_interface(
 
         blocks.append(Stripped("\n".join(method_blocks)))
 
-    comment = None  # type: Optional[Stripped]
+    comment: Optional[Stripped] = None
     if cls.description is not None:
         # fmt: off
         comment, comment_errors = (
@@ -1295,7 +1295,7 @@ def _generate_is_interface(
         )
         body = Stripped(f"ok = that.ModelType() == {model_type_literal}")
     else:
-        case_statements = []  # type: List[Stripped]
+        case_statements: List[Stripped] = []
 
         for another_cls in symbol_table.concrete_classes:
             model_type_literal = golang_naming.enum_literal_name(
@@ -1342,7 +1342,7 @@ func {function_name}(
 
 
 def _generate_struct(cls: intermediate.ConcreteClass) -> Stripped:
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for prop in cls.properties:
         prop_type = golang_common.generate_type(type_annotation=prop.type_annotation)
@@ -1464,7 +1464,7 @@ def _transpile_method(
         receiver=receiver,
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in method.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -1537,7 +1537,7 @@ def _generate_struct_methods(
 
     ``type_inference`` holds the type inference of all the understood methods.
     """
-    methods = []  # type: List[Stripped]
+    methods: List[Stripped] = []
 
     receiver = golang_naming.receiver_name(cls)
 
@@ -1599,7 +1599,7 @@ func ({receiver} *{struct_name}) {model_type_getter}(
 
     # region Methods
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for method in cls.methods:
         if isinstance(method, intermediate.ImplementationSpecificMethod):
@@ -1728,11 +1728,11 @@ def _generate_named_union_struct(named_union: intermediate.NamedUnion) -> Stripp
     else:
         crefs_joined = ", ".join(crefs[:-1]) + " and " + crefs[-1]
 
-    discriminant_cases = []  # type: List[Stripped]
-    field_decls = []  # type: List[Stripped]
-    underlying_cases = []  # type: List[Stripped]
-    from_methods = []  # type: List[Stripped]
-    from_underlying_cases = []  # type: List[Stripped]
+    discriminant_cases: List[Stripped] = []
+    field_decls: List[Stripped] = []
+    underlying_cases: List[Stripped] = []
+    from_methods: List[Stripped] = []
+    from_underlying_cases: List[Stripped] = []
 
     field_names = [
         golang_naming.private_property_name(Identifier(f"as_{root.name}"))
@@ -1740,7 +1740,7 @@ def _generate_named_union_struct(named_union: intermediate.NamedUnion) -> Stripp
     ]
 
     for root, interface_name, field_name in zip(
-        named_union.roots, interface_names, field_names
+        named_union.roots, interface_names, field_names, strict=True
     ):
         discriminant_case = golang_naming.private_constant_name(
             Identifier(f"{named_union.name}_value_kind_{root.name}")
@@ -1931,11 +1931,11 @@ def generate(
     repo_url: Stripped,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code of the data structures representing the meta-model."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     common_url_literal = golang_common.string_literal(f"{repo_url}/common")
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     package_description_comment = golang_description.documentation_comment(
         Stripped(
@@ -2074,7 +2074,7 @@ type IClass interface {{
             # noinspection PyTypeChecker
             assert_never(our_type)
 
-    observed_monikers = set()  # type: Set[str]
+    observed_monikers: Set[str] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -2105,7 +2105,7 @@ type IClass interface {{
 
     import_index = blocks.index(_IMPORT_PLACEHOLDER)
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     if golang_common.names_package(blocks, "fmt"):
         import_lines.append(f'{I}"fmt"')
 

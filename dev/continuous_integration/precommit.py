@@ -10,8 +10,6 @@ import subprocess
 import sys
 from typing import Mapping, Optional, Sequence
 
-# pylint: disable=unnecessary-comprehension
-
 
 class Step(enum.Enum):
     """Enumerate different pre-commit steps."""
@@ -20,7 +18,7 @@ class Step(enum.Enum):
     ISORT = "isort"
     SSORT = "ssort"
     MYPY = "mypy"
-    PYLINT = "pylint"
+    RUFF = "ruff"
     TEST = "test"
     DOCTEST = "doctest"
     CHECK_INIT_AND_PYPROJECT_CONSISTENT = "check-init-and-pyproject-consistent"
@@ -97,7 +95,7 @@ def main() -> int:
     selects = (
         [Step(value) for value in args.select]
         if args.select is not None
-        else [value for value in Step]
+        else list(Step)
     )
     skips = [Step(value) for value in args.skip] if args.skip is not None else []
 
@@ -216,26 +214,28 @@ def main() -> int:
     else:
         print("Skipped mypy'ing.")
 
-    if Step.PYLINT in selects and Step.PYLINT not in skips:
-        print("Pylint'ing...")
-        pylint_targets = [
+    if Step.RUFF in selects and Step.RUFF not in skips:
+        print("Ruff'ing...")
+        ruff_targets = [
             "aas_core_codegen",
             "dev/tests",
             "dev/continuous_integration",
             "dev/dev_scripts",
             "dev/live_tests",
         ]
-        rcfile = pathlib.Path("dev/continuous_integration") / "pylint.rc"
+        config = pathlib.Path("dev/continuous_integration") / "ruff.toml"
 
         exit_code = call_and_report(
-            verb="pylint",
-            cmd=[sys.executable, "-m", "pylint", f"--rcfile={rcfile}"] + pylint_targets,
+            verb="ruff",
+            cmd=[sys.executable, "-m", "ruff", "check", f"--config={config}"]
+            + (["--fix"] if overwrite else [])
+            + ruff_targets,
             cwd=repo_root,
         )
         if exit_code != 0:
             return 1
     else:
-        print("Skipped pylint'ing.")
+        print("Skipped ruff'ing.")
 
     if Step.TEST in selects and Step.TEST not in skips:
         print("Testing...")

@@ -63,7 +63,7 @@ class TypeAnnotation(DBC):
     @abc.abstractmethod
     def __str__(self) -> str:
         # Signal that this is a purely abstract class
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class AtomicTypeAnnotation(TypeAnnotation):
@@ -78,7 +78,7 @@ class AtomicTypeAnnotation(TypeAnnotation):
     @abc.abstractmethod
     def __str__(self) -> str:
         # Signal that this is a purely abstract class
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class PrimitiveTypeAnnotation(AtomicTypeAnnotation):
@@ -177,7 +177,7 @@ class FunctionTypeAnnotation(AtomicTypeAnnotation):
     @abc.abstractmethod
     def __str__(self) -> str:
         # Signal that this is a purely abstract class
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class VerificationTypeAnnotation(FunctionTypeAnnotation):
@@ -568,7 +568,7 @@ class SubscriptedTypeAnnotation(TypeAnnotation):
     @abc.abstractmethod
     def __str__(self) -> str:
         # Signal that this is a purely abstract class
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class ListTypeAnnotation(SubscriptedTypeAnnotation):
@@ -741,7 +741,7 @@ def _type_annotations_equal(
         else:
             return len(that.items) == len(other.items) and all(
                 _type_annotations_equal(that_item, other_item)
-                for that_item, other_item in zip(that.items, other.items)
+                for that_item, other_item in zip(that.items, other.items, strict=True)
             )
 
     elif isinstance(that, OptionalTypeAnnotation):
@@ -951,7 +951,9 @@ def _assignable(
             # above.
             return len(target_type.items) == len(value_type.items) and all(
                 _type_annotations_equal(target_item, value_item)
-                for target_item, value_item in zip(target_type.items, value_type.items)
+                for target_item, value_item in zip(
+                    target_type.items, value_type.items, strict=True
+                )
             )
 
     elif isinstance(target_type, OptionalTypeAnnotation):
@@ -1242,7 +1244,7 @@ class Environment(DBC):
     @abc.abstractmethod
     def mapping(self) -> Mapping[Identifier, "TypeAnnotationUnion"]:
         """Retrieve the underlying mapping."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def find(self, identifier: Identifier) -> Optional["TypeAnnotationUnion"]:
         """
@@ -1308,15 +1310,34 @@ class ImmutableEnvironment(Environment):
         return Environment.find_our_type(self, identifier)
 
 
+# endregion Facts for the narrowing
+
+
+TypeAnnotationUnion = Union[
+    PrimitiveTypeAnnotation,
+    OurTypeAnnotation,
+    VerificationTypeAnnotation,
+    BuiltinFunctionTypeAnnotation,
+    BuiltinMethodTypeAnnotation,
+    MethodTypeAnnotation,
+    ListTypeAnnotation,
+    SetTypeAnnotation,
+    TupleTypeAnnotation,
+    OptionalTypeAnnotation,
+    EnumerationAsTypeTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
+]
+
+
 class MutableEnvironment(Environment):
     """
     Map names to type annotations for a given scope and allow mutations.
     """
 
     def __init__(self, parent: Optional["Environment"] = None) -> None:
-        self._mapping = (
-            dict()
-        )  # type: MutableMapping[Identifier, "TypeAnnotationUnion"]
+        self._mapping: MutableMapping[Identifier, TypeAnnotationUnion] = dict()
 
         Environment.__init__(self, parent)
 
@@ -1561,7 +1582,7 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
         return result
 
     def transform_and(self, node: parse_tree.And) -> str:
-        values = []  # type: List[str]
+        values: List[str] = []
 
         for value_node in node.values:
             value = self.transform(value_node)
@@ -1575,7 +1596,7 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
         return result
 
     def transform_or(self, node: parse_tree.Or) -> str:
-        values = []  # type: List[str]
+        values: List[str] = []
         for value_node in node.values:
             value = self.transform(value_node)
             if not _Canonicalizer._needs_no_brackets(value_node):
@@ -1643,7 +1664,7 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
         return result
 
     def transform_joined_str(self, node: parse_tree.JoinedStr) -> str:
-        parts = []  # type: List[str]
+        parts: List[str] = []
         for value in node.values:
             if isinstance(value, str):
                 parts.append(repr(value))
@@ -1738,7 +1759,7 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
         return result
 
     def transform_switch(self, node: parse_tree.Switch) -> str:
-        parts = [f"switch {self.transform(node.subject)}:"]  # type: List[str]
+        parts: List[str] = [f"switch {self.transform(node.subject)}:"]
 
         for case in node.cases:
             labels = ", ".join(self.transform(label) for label in case.labels)
@@ -1776,7 +1797,7 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
         return result
 
     def transform_if(self, node: parse_tree.If) -> str:
-        parts = []  # type: List[str]
+        parts: List[str] = []
 
         for i, branch in enumerate(node.branches):
             keyword = "if" if i == 0 else "elif"
@@ -1814,14 +1835,14 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
 
 
 #: Map a comparator to the comparator which says the same about the flipped operands
-_FLIPPED_COMPARATOR = {
+_FLIPPED_COMPARATOR: Mapping[parse_tree.Comparator, parse_tree.Comparator] = {
     parse_tree.Comparator.LT: parse_tree.Comparator.GT,
     parse_tree.Comparator.LE: parse_tree.Comparator.GE,
     parse_tree.Comparator.GT: parse_tree.Comparator.LT,
     parse_tree.Comparator.GE: parse_tree.Comparator.LE,
     parse_tree.Comparator.EQ: parse_tree.Comparator.EQ,
     parse_tree.Comparator.NE: parse_tree.Comparator.NE,
-}  # type: Mapping[parse_tree.Comparator, parse_tree.Comparator]
+}
 
 
 def _is_int_literal(node: parse_tree.Node) -> bool:
@@ -2178,8 +2199,8 @@ def _dependencies(
     For example, ``self.f(i).x`` gives ``None`` and the variables ``self`` and
     ``i``, see :py:func:`_invalidates` for how we handle such facts.
     """
-    reversed_path = []  # type: List[_PathSegment]
-    names = set()  # type: Set[Identifier]
+    reversed_path: List[_PathSegment] = []
+    names: Set[Identifier] = set()
 
     cursor = node
     while True:
@@ -2268,7 +2289,7 @@ def _invalidates(target_path: Optional[Sequence[_PathSegment]], fact: _Fact) -> 
     if fact.path is not None and len(target_path) <= len(fact.path):
         if all(
             _segments_may_alias(that, other)
-            for that, other in zip(target_path, fact.path)
+            for that, other in zip(target_path, fact.path, strict=False)
         ):
             return True
 
@@ -2320,27 +2341,6 @@ def _same_facts(that: _Fact, other: _Fact) -> bool:
     assert_never(that.what)
 
 
-# endregion Facts for the narrowing
-
-
-TypeAnnotationUnion = Union[
-    PrimitiveTypeAnnotation,
-    OurTypeAnnotation,
-    VerificationTypeAnnotation,
-    BuiltinFunctionTypeAnnotation,
-    BuiltinMethodTypeAnnotation,
-    MethodTypeAnnotation,
-    ListTypeAnnotation,
-    SetTypeAnnotation,
-    TupleTypeAnnotation,
-    OptionalTypeAnnotation,
-    EnumerationAsTypeTypeAnnotation,
-    JsonValueTypeAnnotation,
-    JsonArrayTypeAnnotation,
-    JsonObjectTypeAnnotation,
-]
-
-
 def is_final_annotation(annotation: parse_tree.Expression) -> bool:
     """Check that ``annotation`` declares a variable as ``Final[...]``."""
     return (
@@ -2374,11 +2374,11 @@ def _can_be_mutated(type_annotation: "TypeAnnotationUnion") -> bool:
 
 #: Type annotations of the collections which we do not compare, see
 #: :py:meth:`_Inferrer.transform_comparison` and :py:meth:`_Inferrer.transform_is_in`
-_COLLECTION_TYPE_ANNOTATIONS = (
+_COLLECTION_TYPE_ANNOTATIONS: Final = (
     ListTypeAnnotation,
     TupleTypeAnnotation,
     SetTypeAnnotation,
-)  # type: Final
+)
 
 _ORDERED_PRIMITIVE_TYPES: Final[AbstractSet[Optional[PrimitiveType]]] = frozenset(
     [
@@ -2510,11 +2510,11 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
 
         self._appended_name_set = appended_name_set
 
-        self._returns = (
+        self._returns: Final[TypeAnnotationUnion] = (
             convert_type_annotation(returns)
             if returns is not None
             else PrimitiveTypeAnnotation(PrimitiveType.NONE)
-        )  # type: Final[TypeAnnotationUnion]
+        )
 
         # NOTE (mristin):
         # We keep track of the variables whose values can be mutated in place,
@@ -2526,9 +2526,9 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # not shadow each other, so a set suffices, as long as we remove
         # the variables of a scope when we leave it,
         # see :py:meth:`_transform_in_new_scope`.
-        self._mutable_name_set = {
+        self._mutable_name_set: Set[Identifier] = {
             arg.name for arg in argument_by_name.values() if arg.mutable
-        }  # type: Set[Identifier]
+        }
 
         # NOTE (mristin):
         # The instance is mutable only in the methods which are not marked as
@@ -2541,13 +2541,13 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # We keep track of why the read-only variables are read-only so that we can
         # explain the errors. We remove them as we leave their scope, see
         # :py:meth:`_transform_in_new_scope`.
-        self._read_only_reason_by_name = dict()  # type: MutableMapping[Identifier, str]
+        self._read_only_reason_by_name: MutableMapping[Identifier, str] = dict()
 
         # NOTE (mristin):
         # We keep track of the variables declared as ``Final[...]``, so that we
         # refuse to re-assign or to mutate them. We remove them as we leave their
         # scope, see :py:meth:`_transform_in_new_scope`.
-        self._final_name_set = set()  # type: Set[Identifier]
+        self._final_name_set: Set[Identifier] = set()
 
         # NOTE (mristin):
         # We need to keep track of what we know about the values of the expressions
@@ -2570,7 +2570,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         #   a new list. Hence, :py:meth:`transform_if` and the other statements can
         #   keep the list before a branch, or at the end of a branch, as a snapshot
         #   without copying it.
-        self._facts = []  # type: List[_Fact]
+        self._facts: List[_Fact] = []
 
         # NOTE (mristin):
         # We keep track of the variables defined in the nested scopes, *i.e.*,
@@ -2585,9 +2585,9 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         #
         # Each entry of the stack belongs to a scope, and the top of the stack
         # belongs to the current scope.
-        self._types_of_variables_in_closed_scopes = [
-            dict()
-        ]  # type: List[MutableMapping[Identifier, TypeAnnotationUnion]]
+        self._types_of_variables_in_closed_scopes: List[
+            MutableMapping[Identifier, TypeAnnotationUnion]
+        ] = [dict()]
 
         # NOTE (mristin):
         # We keep track of the loop variables of the for-loops enclosing the current
@@ -2614,7 +2614,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # The set is empty if and only if we are outside of all for-loops, so we
         # also use it to refuse the ``continue`` and ``break`` statements outside
         # of a loop.
-        self._loop_variable_set = set()  # type: Set[Identifier]
+        self._loop_variable_set: Set[Identifier] = set()
 
         # NOTE (mristin):
         # We keep track of the variables assigned in the bodies of the enclosing
@@ -2623,7 +2623,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # observe the value of the previous iteration, while the targets declare
         # the variable anew in each iteration. We use this set only to explain
         # the error to the user.
-        self._assigned_in_loop_body_set = set()  # type: Set[Identifier]
+        self._assigned_in_loop_body_set: Set[Identifier] = set()
 
         self.type_map = dict()
         self.downcast_map = dict()
@@ -2709,7 +2709,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             # NOTE (mristin):
             # The constant sets are the only sets defined in the global scope,
             # which is immutable.
-            environment = self._environment  # type: Optional[Environment]
+            environment: Optional[Environment] = self._environment
             while environment is not None and identifier not in environment.mapping:
                 environment = environment.parent
 
@@ -2906,8 +2906,8 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         if not isinstance(node, parse_tree.Comparison):
             return None
 
-        length_call = None  # type: Optional[parse_tree.FunctionCall]
-        literal = None  # type: Optional[int]
+        length_call: Optional[parse_tree.FunctionCall] = None
+        literal: Optional[int] = None
         op = node.op
 
         if self._is_length_call(node.left) and _is_int_literal(node.right):
@@ -3178,7 +3178,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             )
         ]
 
-    @ensure(lambda self, result: not (result is None) or len(self.errors) > 0)
+    @ensure(lambda self, result: result is not None or len(self.errors) > 0)
     def transform(self, node: parse_tree.Node) -> Optional["TypeAnnotationUnion"]:
         # NOTE (mristin):
         # We can not write the following as the pre-condition as it would break
@@ -3432,7 +3432,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             self.errors.append(
                 Error(
                     node.index.original_node,
-                    f"Expected the index to be a non-None, " f"but got: {index_type}",
+                    f"Expected the index to be a non-None, but got: {index_type}",
                 )
             )
             success = False
@@ -3461,9 +3461,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
 
             items = collection_type.items
             index_value = node.index.value
-            if not (
-                -len(items) <= index_value < len(items)
-            ):  # pylint: disable=superfluous-parens
+            if not (-len(items) <= index_value < len(items)):
                 self.errors.append(
                     Error(
                         node.index.original_node,
@@ -3601,13 +3599,13 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         if collection_type is None:
             success = False
 
-        start_type = None  # type: Optional[TypeAnnotationUnion]
+        start_type: Optional[TypeAnnotationUnion] = None
         if node.start is not None:
             start_type = self.transform(node.start)
             if start_type is None:
                 success = False
 
-        end_type = None  # type: Optional[TypeAnnotationUnion]
+        end_type: Optional[TypeAnnotationUnion] = None
         if node.end is not None:
             end_type = self.transform(node.end)
             if end_type is None:
@@ -3673,7 +3671,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
     def transform_tuple(
         self, node: parse_tree.Tuple
     ) -> Optional["TypeAnnotationUnion"]:
-        items = []  # type: List[TypeAnnotationUnion]
+        items: List[TypeAnnotationUnion] = []
         failed = False
         for value in node.values:
             value_type = self.transform(value)
@@ -3719,7 +3717,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         the empty list from the declaration, *e.g.*, ``x: List[str] = []``, and
         so do we.
         """
-        item_types = []  # type: List[TypeAnnotationUnion]
+        item_types: List[TypeAnnotationUnion] = []
         failed = False
         for item in node.items:
             item_type = self.transform(item)
@@ -3798,7 +3796,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                 )
             )
 
-        for item, item_type in zip(node.items, item_types):
+        for item, item_type in zip(node.items, item_types, strict=True):
             if not _assignable(target_type=result.items, value_type=item_type):
                 self.errors.append(
                     Error(
@@ -4339,7 +4337,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             # the appended variable sees the new slice, so we support ``append``
             # only on the local variables, which nobody else sees,
             # see :py:func:`_check_appended_lists`.
-            what = None  # type: Optional[str]
+            what: Optional[str] = None
             if not isinstance(receiver, parse_tree.Name):
                 what = "not a variable"
             elif receiver.identifier in self._argument_by_name:
@@ -4491,7 +4489,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         )
 
         ok = True
-        for arg_node, argument in zip(args, callee.arguments):
+        for arg_node, argument in zip(args, callee.arguments, strict=False):
             # NOTE (mristin):
             # We do not check the types of the arguments in general. However, we
             # have to check the lists and the sets, see the docstring.
@@ -4594,7 +4592,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # the signatures of our methods. However, we check the mutability of
         # the arguments passed to our methods.
         failed = False
-        arg_types = []  # type: List[TypeAnnotationUnion]
+        arg_types: List[TypeAnnotationUnion] = []
         for arg in node.args:
             arg_type = self.transform(arg)
             if arg_type is None:
@@ -4611,7 +4609,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             self.errors.append(
                 Error(
                     node.member.original_node,
-                    f"Expected the member to be a non-None, " f"but got: {member_type}",
+                    f"Expected the member to be a non-None, but got: {member_type}",
                 )
             )
             failed = True
@@ -4708,7 +4706,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
     def transform_function_call(
         self, node: parse_tree.FunctionCall
     ) -> Optional["TypeAnnotationUnion"]:
-        result = None  # type: Optional[TypeAnnotationUnion]
+        result: Optional[TypeAnnotationUnion] = None
         failed = False
 
         func_type = self.transform(node.name)
@@ -4782,7 +4780,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # errors in the meta-model at this point. However, we prioritize other features
         # and leave this check unimplemented for now.
 
-        arg_types = []  # type: List[Optional[TypeAnnotationUnion]]
+        arg_types: List[Optional[TypeAnnotationUnion]] = []
         for arg in node.args:
             arg_type = self.transform(arg)
             if arg_type is None:
@@ -5458,7 +5456,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             self.errors.append(
                 Error(
                     node.value.original_node,
-                    f"Expected the value to be a non-None, " f"but got: {value_type}",
+                    f"Expected the value to be a non-None, but got: {value_type}",
                 )
             )
             return None
@@ -5567,7 +5565,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             self.errors.append(
                 Error(
                     node.start.original_node,
-                    f"Expected the start to be a non-None, " f"but got: {start_type}",
+                    f"Expected the start to be a non-None, but got: {start_type}",
                 )
             )
             success = False
@@ -5576,7 +5574,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             self.errors.append(
                 Error(
                     node.end.original_node,
-                    f"Expected the end to be a non-None, " f"but got: {end_type}",
+                    f"Expected the end to be a non-None, but got: {end_type}",
                 )
             )
             success = False
@@ -5704,7 +5702,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
 
         Record the error, if any, and return ``True`` if the check passed.
         """
-        previous_type = None  # type: Optional[TypeAnnotationUnion]
+        previous_type: Optional[TypeAnnotationUnion] = None
         for types in reversed(self._types_of_variables_in_closed_scopes):
             previous_type = types.get(variable.identifier, None)
             if previous_type is not None:
@@ -5909,7 +5907,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                     else [node.index]
                 )
 
-                tuple_items = []  # type: List[TypeAnnotationUnion]
+                tuple_items: List[TypeAnnotationUnion] = []
                 for item_node in item_nodes:
                     item = self._resolve_annotation(item_node, read_only)
                     if item is None:
@@ -6125,7 +6123,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
 
             instance_type = self.type_map[node.target.instance]
 
-            message = None  # type: Optional[str]
+            message: Optional[str] = None
             if isinstance(instance_type, EnumerationAsTypeTypeAnnotation):
                 message = (
                     f"The enumeration literal "
@@ -6560,7 +6558,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             # holds for the new value, the type of the value tells it as well. For
             # example, ``x = y`` keeps ``x`` non-null only if ``y`` is known to be
             # non-null.
-            facts_about_value = []  # type: List[_Fact]
+            facts_about_value: List[_Fact] = []
 
             # NOTE (mristin):
             # The ``None`` is not an optional value, but it is certainly not
@@ -6804,8 +6802,8 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             )
             return None
 
-        enumeration = None  # type: Optional[_types.Enumeration]
-        primitive_type = None  # type: Optional[PrimitiveType]
+        enumeration: Optional[_types.Enumeration] = None
+        primitive_type: Optional[PrimitiveType] = None
 
         if isinstance(subject_type, OurTypeAnnotation) and isinstance(
             subject_type.our_type, _types.Enumeration
@@ -6836,7 +6834,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         # :py:meth:`transform_if`. Each case starts from the facts before
         # the switch, since only one case executes.
         facts_before = self._facts
-        facts_at_ends = []  # type: List[List[_Fact]]
+        facts_at_ends: List[List[_Fact]] = []
 
         for case in node.cases:
             for label in case.labels:
@@ -7120,8 +7118,8 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         success = True
 
         facts_before = self._facts
-        facts_of_negations = []  # type: List[_Fact]
-        facts_at_ends = []  # type: List[List[_Fact]]
+        facts_of_negations: List[_Fact] = []
+        facts_at_ends: List[List[_Fact]] = []
 
         for branch in node.branches:
             # NOTE (mristin):
@@ -7242,7 +7240,7 @@ def populate_base_environment(symbol_table: _types.SymbolTable) -> Environment:
     """
     # Build up the environment;
     # see https://craftinginterpreters.com/resolving-and-binding.html
-    mapping: MutableMapping[Identifier, "TypeAnnotationUnion"] = {
+    mapping: MutableMapping[Identifier, TypeAnnotationUnion] = {
         Identifier("len"): BuiltinFunctionTypeAnnotation(
             func=BuiltinFunction(
                 kind=BuiltinFunctionKind.LEN,
@@ -7363,9 +7361,9 @@ def _check_nones(
     the inference. Here, we check that the returned ``None`` fits the ``returns``
     of the function, which is ``None`` for the invariants and the procedures.
     """
-    allowed_set = set()  # type: Set[parse_tree.Node]
-    nones = []  # type: List[parse_tree.Constant]
-    returns_of_none = []  # type: List[parse_tree.Return]
+    allowed_set: Set[parse_tree.Node] = set()
+    nones: List[parse_tree.Constant] = []
+    returns_of_none: List[parse_tree.Return] = []
 
     for node_in_body in body:
         for node in parse_tree.over_nodes(node_in_body):
@@ -7387,7 +7385,7 @@ def _check_nones(
             elif isinstance(node, parse_tree.Constant) and node.value is None:
                 nones.append(node)
 
-    errors = [
+    errors: List[Error] = [
         Error(
             none.original_node,
             "We can transpile ``None`` only as the value of an assignment, "
@@ -7398,7 +7396,7 @@ def _check_nones(
         )
         for none in nones
         if none not in allowed_set
-    ]  # type: List[Error]
+    ]
 
     if not isinstance(returns, _types.OptionalTypeAnnotation):
         for return_of_none in returns_of_none:
@@ -7442,16 +7440,16 @@ def _check_sets(
     A set can not be mutated in a for-loop over it, as the targets disagree on
     that: Python and Java throw, C++ is undefined, while Go and TypeScript carry on.
     """
-    allowed_set = set()  # type: Set[parse_tree.Node]
-    statement_calls = set()  # type: Set[parse_tree.Node]
-    set_nodes = []  # type: List[parse_tree.Node]
-    adds = []  # type: List[parse_tree.MethodCall]
+    allowed_set: Set[parse_tree.Node] = set()
+    statement_calls: Set[parse_tree.Node] = set()
+    set_nodes: List[parse_tree.Node] = []
+    adds: List[parse_tree.MethodCall] = []
 
     # NOTE (mristin):
     # We collect the sets passed to the mutable arguments together with the calls.
-    mutated_set_nodes = []  # type: List[parse_tree.Expression]
+    mutated_set_nodes: List[parse_tree.Expression] = []
 
-    loops_over_sets = []  # type: List[parse_tree.For]
+    loops_over_sets: List[parse_tree.For] = []
 
     for node_in_body in body:
         for node in parse_tree.over_nodes(node_in_body):
@@ -7464,8 +7462,8 @@ def _check_sets(
             ):
                 loops_over_sets.append(node)
 
-            arguments = None  # type: Optional[Sequence[_types.Argument]]
-            call_args = ()  # type: Sequence[parse_tree.Expression]
+            arguments: Optional[Sequence[_types.Argument]] = None
+            call_args: Sequence[parse_tree.Expression] = ()
             if isinstance(node, parse_tree.FunctionCall):
                 func_type = type_map.get(node.name, None)
                 if isinstance(func_type, VerificationTypeAnnotation):
@@ -7480,7 +7478,7 @@ def _check_sets(
                 pass
 
             if arguments is not None:
-                for arg_node, argument in zip(call_args, arguments):
+                for arg_node, argument in zip(call_args, arguments, strict=False):
                     arg_type = type_map.get(arg_node, None)
                     if (
                         argument.mutable
@@ -7550,7 +7548,7 @@ def _check_sets(
                 ):
                     set_nodes.append(node)
 
-    errors = [
+    errors: List[Error] = [
         Error(
             node.original_node,
             "We support a set only as the container of ``in``, the collection "
@@ -7563,7 +7561,7 @@ def _check_sets(
         )
         for node in set_nodes
         if node not in allowed_set
-    ]  # type: List[Error]
+    ]
 
     errors.extend(
         Error(
@@ -7651,8 +7649,8 @@ def _check_appended_lists(
     that: Python and TypeScript iterate over the appended items as well, Go does
     not, C# and Java throw an exception, and the behavior is undefined in C++.
     """
-    appends = []  # type: List[parse_tree.MethodCall]
-    appended_name_set = set()  # type: Set[Identifier]
+    appends: List[parse_tree.MethodCall] = []
+    appended_name_set: Set[Identifier] = set()
 
     for node_in_body in body:
         for node in parse_tree.over_nodes(node_in_body):
@@ -7684,11 +7682,11 @@ def _check_appended_lists(
             and isinstance(beneath_optional(type_anno), ListTypeAnnotation)
         )
 
-    allowed_set = set()  # type: Set[parse_tree.Node]
-    statement_calls = set()  # type: Set[parse_tree.Node]
-    appended_nodes = []  # type: List[parse_tree.Name]
-    assignments = []  # type: List[parse_tree.Assignment]
-    loops = []  # type: List[parse_tree.For]
+    allowed_set: Set[parse_tree.Node] = set()
+    statement_calls: Set[parse_tree.Node] = set()
+    appended_nodes: List[parse_tree.Name] = []
+    assignments: List[parse_tree.Assignment] = []
+    loops: List[parse_tree.For] = []
 
     for node_in_body in body:
         for node in parse_tree.over_nodes(node_in_body):
@@ -7731,7 +7729,7 @@ def _check_appended_lists(
                 assert isinstance(node, parse_tree.Name)
                 appended_nodes.append(node)
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for node in appended_nodes:
         if node in allowed_set:
@@ -7862,8 +7860,8 @@ def _check_usages_of_generic_sequences(
     if len(generic_name_set) == 0:
         return []
 
-    allowed_set = set()  # type: Set[parse_tree.Node]
-    generic_names = []  # type: List[parse_tree.Name]
+    allowed_set: Set[parse_tree.Node] = set()
+    generic_names: List[parse_tree.Name] = []
 
     for node_in_body in body:
         for node in parse_tree.over_nodes(node_in_body):
@@ -8207,15 +8205,13 @@ def infer(
     """
     base_environment = populate_base_environment(symbol_table=symbol_table)
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # NOTE (mristin):
     # We infer the types of an invariant only once, in the type which specified it.
     # The generators re-use the inference in all the types which inherit
     # the invariant.
-    by_invariant = (
-        dict()
-    )  # type: MutableMapping[_types.Invariant, InferenceOfInvariant]
+    by_invariant: MutableMapping[_types.Invariant, InferenceOfInvariant] = dict()
 
     for our_type in symbol_table.our_types:
         if not isinstance(
@@ -8251,9 +8247,9 @@ def infer(
             assert inference_of_invariant is not None
             by_invariant[invariant] = inference_of_invariant
 
-    by_verification = (
-        dict()
-    )  # type: MutableMapping[_types.TranspilableVerification, InferenceOfFunction]
+    by_verification: MutableMapping[
+        _types.TranspilableVerification, InferenceOfFunction
+    ] = dict()
 
     for verification in symbol_table.verification_functions:
         if not isinstance(verification, _types.TranspilableVerification):
@@ -8273,9 +8269,7 @@ def infer(
     # We infer the types of a method only once, in the class which specified it.
     # The generators re-use the inference in all the concrete classes which
     # repeat the method.
-    by_method = (
-        dict()
-    )  # type: MutableMapping[_types.UnderstoodMethod, InferenceOfFunction]
+    by_method: MutableMapping[_types.UnderstoodMethod, InferenceOfFunction] = dict()
 
     for cls in symbol_table.classes:
         for method in cls.methods:

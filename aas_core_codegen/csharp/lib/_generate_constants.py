@@ -276,7 +276,7 @@ def generate(
 
     The ``namespace`` defines the base C# namespace of the generated code.
     """
-    constants_blocks = []  # type: List[Stripped]
+    constants_blocks: List[Stripped] = []
 
     needs_byte_array_comparer = False
     for constant in symbol_table.constants:
@@ -324,7 +324,7 @@ private class ByteArrayComparer
             )
         )
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for constant in symbol_table.constants:
         constants_block: Optional[Stripped]
@@ -374,7 +374,7 @@ public static class Constants
 
     constants_writer.write("\n}  // public static class Constants")
 
-    blocks = [
+    blocks: List[Stripped] = [
         csharp_common.WARNING,
         Stripped("using System.Collections.Generic;  // can't alias"),
         Stripped(
@@ -385,7 +385,7 @@ namespace {namespace}
 }}  // namespace {namespace}"""
         ),
         csharp_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     out = io.StringIO()
     for i, constants_block in enumerate(blocks):

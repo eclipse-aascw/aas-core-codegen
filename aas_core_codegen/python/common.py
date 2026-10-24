@@ -51,28 +51,24 @@ _BASE_ESCAPING_IN_PYTHON = {
 
 _ESCAPING_IN_PYTHON_INCLUDING_DOUBLE_QUOTES = {
     **_BASE_ESCAPING_IN_PYTHON,
-    **{'"': '\\"'},
+    '"': '\\"',
 }
 
 _ESCAPING_IN_PYTHON_INCLUDING_DOUBLE_QUOTES_AND_DUPLICATE_CURLY_BRACKETS = {
     **_ESCAPING_IN_PYTHON_INCLUDING_DOUBLE_QUOTES,
-    **{
-        "{": "{{",
-        "}": "}}",
-    },
+    "{": "{{",
+    "}": "}}",
 }
 
 _ESCAPING_IN_PYTHON_INCLUDING_SINGLE_QUOTES = {
     **_BASE_ESCAPING_IN_PYTHON,
-    **{"'": "\\'"},
+    "'": "\\'",
 }
 
 _ESCAPING_IN_PYTHON_INCLUDING_SINGLE_QUOTES_AND_DUPLICATE_CURLY_BRACKETS = {
     **_ESCAPING_IN_PYTHON_INCLUDING_SINGLE_QUOTES,
-    **{
-        "{": "{{",
-        "}": "}}",
-    },
+    "{": "{{",
+    "}": "}}",
 }
 
 # endregion
@@ -170,7 +166,7 @@ def string_literal(
 )
 @ensure(
     lambda result:
-    not (not result[1])
+    bool(result[1])
     or (
         '\n' not in result[0]
         and result[0].startswith('b"') and result[0].endswith('"')
@@ -272,16 +268,16 @@ PRIMITIVE_TYPE_MAP = {
 
 def _assert_all_primitive_types_are_mapped() -> None:
     """Assert that all the primitive types are mapped to Python ones."""
-    all_primitive_literals = set(literal.value for literal in PRIMITIVE_TYPE_MAP)
+    all_primitive_literals = {literal.value for literal in PRIMITIVE_TYPE_MAP}
 
-    mapped_primitive_literals = set(
+    mapped_primitive_literals = {
         literal.value for literal in intermediate.PrimitiveType
-    )
+    }
 
     all_diff = all_primitive_literals.difference(mapped_primitive_literals)
     mapped_diff = mapped_primitive_literals.difference(all_primitive_literals)
 
-    messages = []  # type: List[str]
+    messages: List[str] = []
     if len(mapped_diff) > 0:
         messages.append(
             f"More primitive maps are mapped than there were defined "
@@ -403,7 +399,7 @@ def errors_in_monikers(symbol_table: intermediate.SymbolTable) -> List[Error]:
     Otherwise, the de/serializers of the two would be given the same name, and one
     would silently redefine the other in the generated code.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     reserved_monikers = set(MONIKER_BY_PRIMITIVE_TYPE.values()) | set(
         MONIKER_BY_JSON_TYPE_ANNOTATION.values()
@@ -467,7 +463,7 @@ def describe_atomic_type(type_annotation: intermediate.TypeAnnotationUnion) -> S
     our_type = type_annotation.our_type
 
     if isinstance(our_type, intermediate.NamedUnion):
-        type_name = python_naming.union_name(our_type.name)  # type: Identifier
+        type_name: Identifier = python_naming.union_name(our_type.name)
     elif isinstance(our_type, intermediate.Enumeration):
         type_name = python_naming.enum_name(our_type.name)
     else:
@@ -757,7 +753,7 @@ def typing_imports_for_sets(
                     elif node.identifier == "AbstractSet":
                         uses_abstract_set = True
 
-    result = []  # type: List[Identifier]
+    result: List[Identifier] = []
     if uses_abstract_set:
         result.append(Identifier("AbstractSet"))
 
@@ -839,6 +835,8 @@ def generate_note_on_the_three_error_paths(qualified_module_name: str) -> Stripp
 
 class QualifiedModuleName(str):
     """Capture a qualified name of a module."""
+
+    __slots__ = ()
 
     @require(lambda identifier: QUALIFIED_MODULE_NAME_RE.fullmatch(identifier))
     def __new__(cls, identifier: str) -> "QualifiedModuleName":

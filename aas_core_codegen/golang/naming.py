@@ -92,7 +92,7 @@ def _lower_camel_case(identifier: Identifier) -> Identifier:
     """
     parts = [part for part in identifier.split("_") if len(part) > 0]
 
-    cased = []  # type: List[str]
+    cased: List[str] = []
     parts_it = iter(parts)
     part = next(parts_it, None)
     assert part is not None, "Expected a non-empty identifier"
@@ -543,9 +543,9 @@ def receiver_name(
 
     If ``prefix`` is specified, append it to the receiver name.
     """
-    total_arg_name_set = set(
+    total_arg_name_set = {
         argument_name(arg.name) for method in cls.methods for arg in method.arguments
-    )
+    }
 
     # NOTE (mristin):
     # The argument ``value`` is used in setters.
@@ -579,7 +579,7 @@ def receiver_name(
                     if isinstance(node, parse_tree.Name):
                         total_arg_name_set.add(variable_name(node.identifier))
 
-    receiver = None  # type: Optional[Identifier]
+    receiver: Optional[Identifier] = None
 
     cls_name = cls.name if prefix is None else Identifier(prefix + cls.name)
 

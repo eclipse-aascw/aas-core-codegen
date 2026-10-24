@@ -53,7 +53,7 @@ class Default(DBC):
     @abc.abstractmethod
     def __repr__(self) -> str:
         # Signal that the class is purely abstract
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class EmptyList(Default):
@@ -185,7 +185,7 @@ def _call_as_call_to_super_init(
             ),
         )
 
-    underlying_errors = []  # type: List[Error]
+    underlying_errors: List[Error] = []
 
     for arg_node in itertools.chain(
         call.args, (keyword.value for keyword in call.keywords)
@@ -210,7 +210,7 @@ def _call_as_call_to_super_init(
         )
 
     super_init = parsed_super_class.methods_by_name[Identifier("__init__")]
-    resolved_kwargs = dict()  # type: MutableMapping[str, str]
+    resolved_kwargs: MutableMapping[str, str] = dict()
 
     if len(call.args) > len(super_init.arguments):
         return (
@@ -224,7 +224,7 @@ def _call_as_call_to_super_init(
             ),
         )
 
-    for arg_node, argument in zip(call.args, super_init.arguments):
+    for arg_node, argument in zip(call.args, super_init.arguments, strict=False):
         assert isinstance(arg_node, ast.Name)
         resolved_kwargs[argument.name] = arg_node.id
 
@@ -310,6 +310,9 @@ def _call_as_call_to_super_init(
     return CallSuperConstructor(super_name=parsed_super_class.name), None
 
 
+DefaultUnion = Union[EmptyList, DefaultEnumLiteral]
+
+
 # noinspection PyTypeChecker
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _understand_assignment(
@@ -387,7 +390,7 @@ def _understand_assignment(
             None,
         )
     elif isinstance(assign.value, ast.IfExp):
-        default_node = None  # type: Optional[ast.AST]
+        default_node: Optional[ast.AST] = None
 
         if_exp = assign.value
         # noinspection PyUnresolvedReferences
@@ -426,7 +429,7 @@ def _understand_assignment(
             pass
 
         if default_node is not None:
-            default = None  # type: Optional[DefaultUnion]
+            default: Optional[DefaultUnion] = None
 
             if isinstance(default_node, ast.List) and default_node.elts == []:
                 default = EmptyList(node=default_node)
@@ -486,7 +489,7 @@ def _understand_body(
     atok: asttokens.ASTTokens,
 ) -> Tuple[Optional[List[Statement]], Optional[Error]]:
     """Try to understand the body of the constructor for the given ``parsed_class``."""
-    init = None  # type: Optional[parse.Method]
+    init: Optional[parse.Method] = None
     for method in parsed_class.methods:
         if method.name == "__init__":
             init = method
@@ -495,8 +498,8 @@ def _understand_body(
     if init is None:
         return [], None
 
-    errors = []  # type: List[Error]
-    result = []  # type: List[Statement]
+    errors: List[Error] = []
+    result: List[Statement] = []
 
     assert isinstance(init.node, ast.FunctionDef)
 
@@ -603,10 +606,8 @@ def understand_all(
     parsed_symbol_table: parse.SymbolTable, atok: asttokens.ASTTokens
 ) -> Tuple[Optional[ConstructorTable], Optional[Error]]:
     """Understand the constructors of all the classes in the symbol table."""
-    errors = []  # type: List[Error]
-    mapping = (
-        collections.OrderedDict()
-    )  # type: MutableMapping[parse.Class, List[Statement]]
+    errors: List[Error] = []
+    mapping: MutableMapping[parse.Class, List[Statement]] = collections.OrderedDict()
 
     for our_type in parsed_symbol_table.our_types:
         if not isinstance(our_type, parse.Class):
@@ -724,7 +725,7 @@ def _stringify(that: Optional[Dumpable]) -> Optional[stringify.Entity]:
     if that is None:
         return None
 
-    stringify_func = _DISPATCH.get(that.__class__, None)
+    stringify_func = _DISPATCH.get(that.__class__)
     if stringify_func is None:
         raise AssertionError(
             f"No stringify function could be found for the class {that.__class__}"
@@ -746,5 +747,4 @@ def dump(that: Optional[Dumpable]) -> str:
     return stringify.dump(stringified)
 
 
-DefaultUnion = Union[EmptyList, DefaultEnumLiteral]
 assert_union_of_descendants_exhaustive(union=DefaultUnion, base_class=Default)

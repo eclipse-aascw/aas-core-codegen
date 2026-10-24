@@ -142,7 +142,7 @@ def _stringify(that: Optional[Dumpable]) -> Optional[stringify.Entity]:
     if that is None:
         return None
 
-    stringify_func = _DISPATCH.get(that.__class__, None)
+    stringify_func = _DISPATCH.get(that.__class__)
     if stringify_func is None:
         raise AssertionError(
             f"No stringify function could be found for the class {that.__class__}"

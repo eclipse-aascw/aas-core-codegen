@@ -58,9 +58,9 @@ def verify(
     verification_functions: Sequence[intermediate.Verification],
 ) -> Optional[List[str]]:
     """Verify all the implementation snippets related to verification."""
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
-    expected_keys = []  # type: List[specific_implementations.ImplementationKey]
+    expected_keys: List[specific_implementations.ImplementationKey] = []
 
     for func in verification_functions:
         if isinstance(func, intermediate.ImplementationSpecificVerification):
@@ -137,7 +137,7 @@ class _PatternVerificationTranspiler(
                 None,
             )
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
 
         for value in values:
             if isinstance(value, str):
@@ -273,7 +273,7 @@ def _transpile_pattern_verification(
         Identifier(f"construct_{verification.name}")
     )
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Construct block
 
@@ -444,7 +444,7 @@ class _TranspilableVerificationTranspiler(golang_transpilation.Transpiler):
         # an argument to the loop variables, the generator variables and
         # the indexed items, so we can tell by the identity of the type annotation
         # that a value is of the type parameter of a generic sequence.
-        type_parameter_by_items_id = dict()  # type: Dict[int, Identifier]
+        type_parameter_by_items_id: Dict[int, Identifier] = dict()
         for arg in verification.arguments:
             if intermediate.generic_sequence_item_class(arg) is None:
                 continue
@@ -542,7 +542,7 @@ def _transpile_transpilable_verification(
         verification=verification,
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in verification.parsed.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -561,9 +561,9 @@ def _transpile_transpilable_verification(
     # This way, the slices of the descendants can be passed without a copy.
     # The methods can not have type parameters in Go, so only the verification
     # functions have generic sequences.
-    arg_defs = []  # type: List[Stripped]
-    type_parameter_defs = []  # type: List[Stripped]
-    remarks_on_generic_sequences = []  # type: List[str]
+    arg_defs: List[Stripped] = []
+    type_parameter_defs: List[Stripped] = []
+    remarks_on_generic_sequences: List[str] = []
     for arg in verification.arguments:
         arg_name = golang_naming.argument_name(arg.name)
 
@@ -1328,8 +1328,8 @@ def _generate_verify_class(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the verification function for the given concrete class."""
-    errors = []  # type: List[Error]
-    blocks = []  # type: List[Stripped]
+    errors: List[Error] = []
+    blocks: List[Stripped] = []
 
     # region Generate the non-recursive part verifying the invariants
 
@@ -1363,7 +1363,7 @@ def _generate_verify_class(
         getter_name = golang_naming.getter_name(prop.name)
         prop_name = golang_naming.property_name(prop.name)
 
-        block = None  # type: Optional[Stripped]
+        block: Optional[Stripped] = None
         if _needs_verification(type_anno):
             pointer_prefix = (
                 "*" if golang_pointering.is_pointer_type(prop.type_annotation) else ""
@@ -1487,7 +1487,7 @@ func {function_name}(
 
 def _generate_verify(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the main entry point for verification."""
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         literal = golang_naming.enum_literal_name(
@@ -1639,8 +1639,8 @@ def _generate_verify_constrained_primitive(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the verify function for the constrained primitives."""
-    errors = []  # type: List[Error]
-    blocks = []  # type: List[Stripped]
+    errors: List[Error] = []
+    blocks: List[Stripped] = []
 
     for invariant in constrained_primitive.invariants:
         invariant_code, error = _transpile_invariant(
@@ -1722,7 +1722,7 @@ def generate(
     repo_url: Stripped,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code of verification logic."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     constants_url_literal = golang_common.string_literal(f"{repo_url}/constants")
 
@@ -1736,7 +1736,7 @@ def generate(
 
     types_url_literal = golang_common.string_literal(f"{repo_url}/types")
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 // Package verification allows you to verify model instances.
@@ -1786,12 +1786,12 @@ func (ve *VerificationError) PathString() string {{
 {I}return ourreporting.ToGolangPath(ve.Path)
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     # NOTE (mristin):
     # The internal verification functions are unexported, so their names might
     # collide with the unexported names that we generate in the same package.
-    origin_by_unexported_name = {
+    origin_by_unexported_name: MutableMapping[str, str] = {
         "newVerificationError": "our helper function to create verification errors",
         "verifyJsonValue": "our helper function to verify JSON-able values",
         "verifyJsonArray": "our helper function to verify JSON-able arrays",
@@ -1799,7 +1799,7 @@ func (ve *VerificationError) PathString() string {{
         "sortedKeysOfJsonObject": (
             "our helper function to sort the keys of JSON-able objects"
         ),
-    }  # type: MutableMapping[str, str]
+    }
 
     for verification in symbol_table.verification_functions:
         if isinstance(verification, intermediate.PatternVerification):
@@ -1825,7 +1825,7 @@ func (ve *VerificationError) PathString() string {{
             continue
 
         verification_name = golang_naming.function_name(verification.name)
-        colliding_origin = origin_by_unexported_name.get(verification_name, None)
+        colliding_origin = origin_by_unexported_name.get(verification_name)
         if colliding_origin is not None:
             errors.append(
                 Error(
@@ -1899,7 +1899,7 @@ func (ve *VerificationError) PathString() string {{
             assert block is not None
             blocks.append(block)
 
-    observed_monikers = set()  # type: Set[str]
+    observed_monikers: Set[str] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -1949,7 +1949,7 @@ func (ve *VerificationError) PathString() string {{
 
     import_index = blocks.index(_IMPORT_PLACEHOLDER)
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     for module, literal in (
         ("big", f'{I}"math/big"'),
         ("fmt", f'{I}"fmt"'),

@@ -31,7 +31,7 @@ def generate_implementation(
     """Generate implementation to test the ``XxxOrDefault`` methods."""
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f"""\
@@ -56,7 +56,7 @@ const std::filesystem::path& DetermineLogDir() {{
 {I}return *result;
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         cls_name = cpp_naming.class_name(cls.name)

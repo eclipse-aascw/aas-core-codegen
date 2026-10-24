@@ -69,7 +69,7 @@ def _parse_method_for_atomic_value(
     type_annotation: intermediate.AtomicTypeAnnotation,
 ) -> Identifier:
     """Determine the parse method for deserializing an atomic non-optional value."""
-    parse_method = None  # type: Optional[str]
+    parse_method: Optional[str] = None
 
     if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
         parse_method = _PARSE_METHOD_BY_PRIMITIVE_TYPE[type_annotation.a_type]
@@ -545,8 +545,8 @@ def _composed_type_annotations(
     function is given as a snippet: the snippet still parses the properties of
     that very class, and hence may well call the parsers of their types.
     """
-    result = []  # type: List[intermediate.TypeAnnotationUnion]
-    observed = set()  # type: Set[str]
+    result: List[intermediate.TypeAnnotationUnion] = []
+    observed: Set[str] = set()
 
     for cls in symbol_table.concrete_classes:
         for arg in cls.constructor.arguments:
@@ -807,11 +807,11 @@ def _generate_from_object_body(
     cls: intermediate.ConcreteClass,
 ) -> Tuple[Optional[List[Stripped]], Optional[List[Error]]]:
     """Generate the blocks reading the properties of ``cls`` from a JSON object."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     name = java_naming.class_name(cls.name)
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Initialize argument variables to null
 
@@ -832,10 +832,10 @@ def _generate_from_object_body(
 
     # region Switch on property name
 
-    cases = [
+    cases: List[Stripped] = [
         _generate_case_for_argument(arg=arg, cls=cls)
         for arg in cls.constructor.arguments
-    ]  # type: List[Stripped]
+    ]
 
     if cls.serialization.with_model_type:
         cases.append(
@@ -907,8 +907,8 @@ if ({arg_var} == null) {{
 
     # fmt: off
     assert (
-            set(prop.name for prop in cls.properties)
-            == set(arg.name for arg in cls.constructor.arguments)
+            {prop.name for prop in cls.properties}
+            == {arg.name for arg in cls.constructor.arguments}
     ), (
         f"Expected the properties to coincide with constructor arguments, "
         f"but they do not for {cls.name!r}:"
@@ -1102,9 +1102,9 @@ def _generate_from_method_for_named_union(
         if not implementer.serialization.with_model_type
     ]
 
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_json_object_guard(),
-    ]  # type: List[Stripped]
+    ]
 
     if len(with_model_type) > 0:
         switch_writer = io.StringIO()
@@ -1568,7 +1568,7 @@ def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the implementation of the deserialization."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # region Decide which of the shared helpers are needed
 
@@ -1641,7 +1641,7 @@ def _generate_deserialize_impl(
 
     # endregion
 
-    blocks = _generate_primitive_parsers()  # type: List[Stripped]
+    blocks: List[Stripped] = _generate_primitive_parsers()
 
     if needs_prepend_name:
         blocks.append(_generate_prepend_name())
@@ -1789,7 +1789,7 @@ def _generate_deserialize(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the deserializer with a deserialization method for each class."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
             blocks.append(
@@ -1834,12 +1834,12 @@ def _generate_deserialize(
 """
     )
 
-    first_cls = (
+    first_cls: Optional[intermediate.ClassUnion] = (
         symbol_table.classes[0] if len(symbol_table.classes) > 0 else None
-    )  # type: Optional[intermediate.ClassUnion]
+    )
 
     if first_cls is not None:
-        cls_name = None  # type: Optional[str]
+        cls_name: Optional[str] = None
         if isinstance(first_cls, intermediate.AbstractClass):
             cls_name = java_naming.interface_name(first_cls.name)
         elif isinstance(first_cls, intermediate.ConcreteClass):
@@ -2126,7 +2126,7 @@ def _container_type(type_anno: intermediate.ContainerTypeAnnotation) -> Stripped
         # must keep its items as precise as the sorting needs them.
         return Stripped(f"Set<{java_common.generate_type(type_anno.items)}>")
 
-    argument_types = []  # type: List[Stripped]
+    argument_types: List[Stripped] = []
     for item_type_anno in _item_type_annotations(type_anno):
         value_type = _serialized_value_type(item_type_anno)
 
@@ -2206,9 +2206,9 @@ def _generate_composed_serializer(
 
     body_indentation = _FUNCTION_BODY_INDENTATION
 
-    stmts = [
+    stmts: List[Stripped] = [
         Stripped("final ArrayNode result = JsonNodeFactory.instance.arrayNode();")
-    ]  # type: List[Stripped]
+    ]
 
     if isinstance(
         type_anno, (intermediate.ListTypeAnnotation, intermediate.SetTypeAnnotation)
@@ -2447,9 +2447,9 @@ def _generate_transform_for_class(
     cls: intermediate.ConcreteClass,
 ) -> Stripped:
     """Generate the transform method to a JSON object for the given concrete class."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("final ObjectNode result = JsonNodeFactory.instance.objectNode();"),
-    ]  # type: List[Stripped]
+    ]
 
     for prop in cls.properties:
         blocks.append(
@@ -2511,8 +2511,8 @@ def _composed_serializer_type_annotations(
     of that very class, and hence may well call the serializers of their
     types.
     """
-    result = []  # type: List[intermediate.ContainerTypeAnnotation]
-    observed = set()  # type: Set[str]
+    result: List[intermediate.ContainerTypeAnnotation] = []
+    observed: Set[str] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -2546,16 +2546,16 @@ def _called_serialize_functions(
     A property is collected as well as an item, since a conversion is the same
     call in either position.
     """
-    result = set()  # type: Set[Stripped]
+    result: Set[Stripped] = set()
 
     # NOTE (mristin):
     # We descend only into the items of the lists, the sets and the tuples. The key
     # of a ``JSONObject`` is not serialized by a conversion function of its own.
-    stack = [
+    stack: List[intermediate.TypeAnnotationExceptOptional] = [
         intermediate.beneath_optional(prop.type_annotation)
         for cls in symbol_table.concrete_classes
         for prop in cls.properties
-    ]  # type: List[intermediate.TypeAnnotationExceptOptional]
+    ]
 
     while len(stack) > 0:
         type_anno = stack.pop()
@@ -2749,7 +2749,7 @@ def _generate_transformer(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a transformer which transforms instances of the meta-model to JSON."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # NOTE (mristin):
     # The gating follows the call graph, exactly as it does on the reading
@@ -2757,7 +2757,7 @@ def _generate_transformer(
     # the base64 conversion nor the import it needs.
     called = _called_serialize_functions(symbol_table)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -2770,7 +2770,7 @@ private static final _Transformer INSTANCE = new _Transformer();"""
         ),
         _generate_transform_class_helper(),
         _generate_set_property_helpers(),
-    ]  # type: List[Stripped]
+    ]
 
     if Stripped("transformUnion") in called:
         blocks.append(_generate_transform_union_helper())
@@ -2846,7 +2846,7 @@ def _generate_serialize(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the static serializer."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -2866,7 +2866,7 @@ public static JsonNode toJsonObject(IClass that) {{
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if len(symbol_table.enumerations) > 0:
         # NOTE (mristin):
@@ -2925,12 +2925,12 @@ public static JsonNode {method_name}({name} that) {{
 """
     )
 
-    first_cls = (
+    first_cls: Optional[intermediate.ClassUnion] = (
         symbol_table.classes[0] if len(symbol_table.classes) > 0 else None
-    )  # type: Optional[intermediate.ClassUnion]
+    )
 
     if first_cls is not None:
-        cls_name = None  # type: Optional[str]
+        cls_name: Optional[str] = None
         if isinstance(first_cls, intermediate.AbstractClass):
             cls_name = java_naming.interface_name(first_cls.name)
         elif isinstance(first_cls, intermediate.ConcreteClass):
@@ -2983,7 +2983,7 @@ def generate(
     """
     Generate code for JSON de/serialization.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # NOTE (mristin):
     # An ``ArrayNode`` is only ever built by a composed serializer, and
@@ -2999,7 +2999,7 @@ def generate(
         or len(_composed_type_annotations(symbol_table)) > 0
     )
 
-    imports = [
+    imports: List[Stripped] = [
         Stripped(f"import {package}.common.*;"),
         Stripped(f"import {package}.reporting.Reporting;"),
         Stripped(f"import {package}.types.enums.*;"),
@@ -3008,7 +3008,7 @@ def generate(
         Stripped(f"import {package}.stringification.Stringification;"),
         Stripped(f"import {package}.visitation.AbstractTransformer;"),
         Stripped("import com.fasterxml.jackson.databind.JsonNode;"),
-    ]  # type: List[Stripped]
+    ]
 
     if composes_a_container or intermediate_uses.json_types(symbol_table):
         imports.append(
@@ -3135,13 +3135,13 @@ def generate(
 {I}}}"""
     )
 
-    jsonization_blocks = [
+    jsonization_blocks: List[Stripped] = [
         deserialize_impl_block,
         exception_block,
         deserialize_block,
         transformer_block,
         serialize_block,
-    ]  # type: List[Stripped]
+    ]
 
     jsonization_writer = io.StringIO()
     jsonization_writer.write(
@@ -3168,13 +3168,13 @@ public class Jsonization {
     if len(errors) > 0:
         return None, errors
 
-    blocks = [
+    blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(f"package {package}.jsonization;"),
         Stripped("\n".join(imports)),
         Stripped(jsonization_writer.getvalue()),
         java_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

@@ -1135,8 +1135,8 @@ class _ReaderRegistry:
 
     def __init__(self) -> None:
         """Initialize with nothing registered."""
-        self._blocks_by_name = dict()  # type: MutableMapping[Identifier, Stripped]
-        self._needed_helpers = set()  # type: Set[str]
+        self._blocks_by_name: MutableMapping[Identifier, Stripped] = dict()
+        self._needed_helpers: Set[str] = set()
 
     @property
     def blocks(self) -> List[Stripped]:
@@ -1289,8 +1289,8 @@ def {name}(
 
         self.note_needed_helper("_read_tuple_item")
 
-        read_items = []  # type: List[Identifier]
-        item_types = []  # type: List[Stripped]
+        read_items: List[Identifier] = []
+        item_types: List[Stripped] = []
 
         for i, item_type_anno in enumerate(type_annotation.items):
             expected_tag = f"v{i + 1}"
@@ -1516,7 +1516,7 @@ def _generate_read_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
         Identifier(f"readers_for_{cls.name}")
     )
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     if len(cls.properties) == 0:
         blocks.append(
@@ -1545,9 +1545,9 @@ values = _read_properties(
 
         # region Pick the values out, so that the constructor call is type-checked
 
-        variable_by_prop_name = dict()  # type: MutableMapping[Identifier, Identifier]
+        variable_by_prop_name: MutableMapping[Identifier, Identifier] = dict()
 
-        extractions = []  # type: List[Stripped]
+        extractions: List[Stripped] = []
         for prop in cls.properties:
             variable = python_naming.variable_name(Identifier(f"the_{prop.name}"))
             variable_by_prop_name[prop.name] = variable
@@ -2077,8 +2077,8 @@ class _WriterRegistry:
 
     def __init__(self) -> None:
         """Initialize with nothing registered."""
-        self._blocks_by_name = dict()  # type: MutableMapping[Identifier, Stripped]
-        self._needed_helpers = set()  # type: Set[str]
+        self._blocks_by_name: MutableMapping[Identifier, Stripped] = dict()
+        self._needed_helpers: Set[str] = set()
 
     @property
     def blocks(self) -> List[Stripped]:
@@ -2110,7 +2110,7 @@ class _WriterRegistry:
             type_annotation, types_module=Identifier("our_types")
         )
 
-        statements = []  # type: List[Stripped]
+        statements: List[Stripped] = []
 
         for i, item_type_anno in enumerate(type_annotation.items):
             item_value = f"value[{i}]"
@@ -2443,7 +2443,7 @@ def _generate_write_cls_as_element(cls: intermediate.ConcreteClass) -> Stripped:
     cls_name = python_naming.class_name(cls.name)
     function_name = _cls_element_writer_name(cls)
 
-    body_blocks = []  # type: List[Stripped]
+    body_blocks: List[Stripped] = []
     docstring_blocks = [
         Stripped(
             """\
@@ -2591,7 +2591,7 @@ def _generate_serializer(symbol_table: intermediate.SymbolTable) -> Stripped:
     else is a module-level function which is given the serializer, so that
     the writers can be composed without allocating a closure or a bound method.
     """
-    body_blocks = [
+    body_blocks: List[Stripped] = [
         Stripped(
             """\
 #: Frame the XML elements of the document which we are writing
@@ -2613,7 +2613,7 @@ def __init__(
 {I}\"\"\"
 {I}self.writer = our_xmlcommon.Writer(stream)"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         body_blocks.append(_generate_visit_cls(cls=cls))
@@ -2750,7 +2750,7 @@ _READING_PATTERN_NOTE = Stripped(
 #: Shared helpers which a helper needs, by the name of the helper. Both
 #: the de-serialization and the serialization are covered, as they are gated
 #: the same way, see :py:func:`_collect_needed_helpers`.
-_HELPER_DEPENDENCIES = {
+_HELPER_DEPENDENCIES: Mapping[str, Sequence[str]] = {
     "_read_named_element": [],
     "_read_nested_element": [],
     "_read_dispatched": [],
@@ -2784,7 +2784,7 @@ _HELPER_DEPENDENCIES = {
     "_write_json_value_as_element": [],
     "_write_json_array_as_element": [],
     "_write_json_object_as_element": [],
-}  # type: Mapping[str, Sequence[str]]
+}
 
 
 def _generate_reading_helpers() -> Mapping[str, Stripped]:
@@ -4110,7 +4110,7 @@ def _collect_needed_helpers(seeds: AbstractSet[str]) -> Set[str]:
     :param seeds: names of the helpers, and of other readers, which are needed
     :return: names of the shared helpers to be generated
     """
-    result = set()  # type: Set[str]
+    result: Set[str] = set()
 
     stack = [seed for seed in seeds if seed in _HELPER_DEPENDENCIES]
     while len(stack) > 0:
@@ -4156,12 +4156,11 @@ def generate(
     uses_set_properties = intermediate_uses.set_properties(symbol_table)
     set_import = f"{I}Set,\n" if uses_set_properties else ""
 
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_module_docstring(
             symbol_table=symbol_table, qualified_module_name=qualified_module_name
         ),
         python_common.WARNING,
-        # pylint: disable=line-too-long
         Stripped(
             f"""\
 import base64
@@ -4255,9 +4254,9 @@ def _with_elements_cleared_after_yield(
 {II}yield event, element
 {II}element.clear()"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # NOTE (mristin):
     # We generate first the public methods so that the reader can jump straight
@@ -4310,8 +4309,8 @@ def _with_elements_cleared_after_yield(
 
     registry = _ReaderRegistry()
 
-    reader_blocks = []  # type: List[Stripped]
-    readers_map_blocks = []  # type: List[Stripped]
+    reader_blocks: List[Stripped] = []
+    readers_map_blocks: List[Stripped] = []
 
     for concrete_cls in symbol_table.concrete_classes:
         for prop in concrete_cls.properties:

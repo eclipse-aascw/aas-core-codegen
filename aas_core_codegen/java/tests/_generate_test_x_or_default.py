@@ -20,7 +20,7 @@ def generate(
     """
     Generate code to test the ``XOrDefault`` methods.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 private static void compareOrRerecordValue(Object value, Path expectedPath) throws IOException {{
@@ -45,13 +45,13 @@ private static void compareOrRerecordValue(Object value, Path expectedPath) thro
 {I}}}
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_java = java_naming.class_name(concrete_cls.name)
         cls_name_json = naming.json_model_type(concrete_cls.name)
 
-        x_or_default_methods = []  # type: List[intermediate.MethodUnion]
+        x_or_default_methods: List[intermediate.MethodUnion] = []
         for method in concrete_cls.methods:
             if (
                 method.name.endswith("_or_default")
@@ -65,7 +65,7 @@ private static void compareOrRerecordValue(Object value, Path expectedPath) thro
                 method_name_java[0].upper() + method_name_java[1:]
             )
 
-            result_enum = None  # type: Optional[intermediate.Enumeration]
+            result_enum: Optional[intermediate.Enumeration] = None
             assert method.returns is not None, (
                 f"Expected all X_or_default to return something, "
                 f"but got None for {concrete_cls.name}.{method.name}"

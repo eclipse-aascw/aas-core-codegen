@@ -19,7 +19,7 @@ While programming, run fast-fail tests first: mypy and black on code generators.
 Once the code is ready, re-record the goldens over the unit tests. 
 Summarize the changes with the function signatures, class interfaces and state, and concrete code snippets -- then ask for approval before you run live tests.
 
-* Fast checks: ``python dev/continuous_integration/precommit.py --select reformat ssort mypy``
+* Fast checks: ``python dev/continuous_integration/precommit.py --select reformat ssort mypy ruff``
   (``--overwrite`` reformats and re-sorts in place).
 * One test module: ``python -m unittest dev/tests/cpp/test_main.py``
 * Re-record golden data: set ``AAS_CORE_CODEGEN_TESTS_RERECORD=1``,
@@ -49,7 +49,9 @@ These aren't written down anywhere, and Claude tends to break them:
 Style rules that go against normal Python habits
 ================================================
 
-- Type comments for short types: ``lst = []  # type: List[str]``
+- Annotate the variables (``lst: List[str] = []``), never with type comments
+  (``# type: List[str]``): ruff does not see them and reports the imports as unused.
+  This applies to the code generators, not to the generated code.
 - Import with a module alias prefix (``cpp_common``, ``golang_naming``). 
   The only allowed symbol aliases are ``I``, ``II``, …
 - In ``Stripped`` blocks, use one placeholder per indentation level: ``{IIIII}``, never ``{IIII}{I}``.

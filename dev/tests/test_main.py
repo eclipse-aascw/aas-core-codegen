@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import ast
 import contextlib
 import difflib
@@ -28,7 +26,7 @@ def _meta_model_path(
     """Resolve the meta-model of the case, falling back to the common one."""
     meta_model_path = case_dir / "meta_model.py"
     if not meta_model_path.exists():
-        real_meta_model_path = _COMMON_META_MODEL_STEM_TO_PATH.get(case_name, None)
+        real_meta_model_path = _COMMON_META_MODEL_STEM_TO_PATH.get(case_name)
 
         if real_meta_model_path is None:
             raise RuntimeError(
@@ -88,7 +86,6 @@ class _TestCase(unittest.TestCase):
                     f"is not a directory: {expected_output_dir}"
                 )
 
-                # pylint: disable=consider-using-with
                 tmp_dir = tempfile.TemporaryDirectory()
                 exit_stack.push(tmp_dir)
                 output_dir = pathlib.Path(tmp_dir.name)
@@ -156,7 +153,6 @@ class _TestCase(unittest.TestCase):
             # code will not be zero, so the output should be disregarded by
             # the end user.
 
-            # pylint: disable=consider-using-with
             tmp_dir = tempfile.TemporaryDirectory()
             exit_stack.push(tmp_dir)
             output_dir = pathlib.Path(tmp_dir.name)
@@ -2169,7 +2165,7 @@ _TARGET_FROM_VALUE = {target.value: target for target in aas_core_codegen.main.T
 
 
 def _assert_all_targets_covered() -> None:
-    cases = []  # type: List[_CaseSpec]
+    cases: List[_CaseSpec] = []
 
     main_dir = _REPO_DIR / "dev" / "test_data" / "main"
 
@@ -2207,7 +2203,7 @@ def _assert_all_targets_covered() -> None:
     # NOTE (mristin):
     # We parse this module using AST to validate test structure and enforce order.
     current_module_path = pathlib.Path(__file__)
-    with open(current_module_path, "r", encoding="utf-8") as f:
+    with current_module_path.open(encoding="utf-8") as f:
         source = f.read()
 
     tree = ast.parse(source)
@@ -2219,17 +2215,17 @@ def _assert_all_targets_covered() -> None:
 
         cases_by_target[case.target].append(case)
 
-    targets_with_tests = []  # type: List[aas_core_codegen.main.Target]
-    set_of_targets_with_tests = set()  # type: Set[aas_core_codegen.main.Target]
+    targets_with_tests: List[aas_core_codegen.main.Target] = []
+    set_of_targets_with_tests: Set[aas_core_codegen.main.Target] = set()
 
     for case in cases:
         if case.target not in set_of_targets_with_tests:
             targets_with_tests.append(case.target)
             set_of_targets_with_tests.add(case.target)
 
-    class_nodes = [
+    class_nodes: List[ast.ClassDef] = [
         node for node in tree.body if isinstance(node, ast.ClassDef)
-    ]  # type: List[ast.ClassDef]
+    ]
 
     # region Check that test cases follow the expected order
     expected_test_case_names = [
@@ -2259,7 +2255,7 @@ def _assert_all_targets_covered() -> None:
 
         class_def = test_case_node_by_name[f"Test_{target.value.lower()}"]
 
-        expected_test_method_names = []  # type: List[str]
+        expected_test_method_names: List[str] = []
         for case in target_cases:
             expected_or_unexpected = "expected" if case.expected else "unexpected"
 
@@ -2285,7 +2281,7 @@ def _assert_all_targets_covered() -> None:
 
         assert len(target_cases) == len(test_method_nodes)
 
-        for case, test_method_node in zip(target_cases, test_method_nodes):
+        for case, test_method_node in zip(target_cases, test_method_nodes, strict=True):
             if len(test_method_node.body) != 1:
                 raise AssertionError(
                     f"Expected a single statement (calling the _run_*_test) "

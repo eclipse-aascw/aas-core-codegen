@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import os
 import pathlib
 import unittest
@@ -21,9 +19,9 @@ class Test_against_recorded(unittest.TestCase):
 
         # The expected cases should have no errors.
         expected_pths = sorted((test_cases_dir / "expected").glob("**/pattern.regex"))
-        regex_pths_expected_exception = [
+        regex_pths_expected_exception: List[Tuple[pathlib.Path, bool]] = [
             (pth, False) for pth in expected_pths
-        ]  # type: List[Tuple[pathlib.Path, bool]]
+        ]
 
         unexpected_pths = sorted(
             (test_cases_dir / "unexpected").glob("**/pattern.regex")
@@ -63,8 +61,8 @@ class Test_against_recorded(unittest.TestCase):
 
             assert regex is not None
 
-            program = None  # type: Optional[intermediate_revm.NodeOrLeaf]
-            caught = None  # type: Optional[Exception]
+            program: Optional[intermediate_revm.NodeOrLeaf] = None
+            caught: Optional[Exception] = None
 
             try:
                 program = intermediate_revm.translate(regex=regex)

@@ -43,24 +43,22 @@ def parse_readme(lines: List[str]) -> Tuple[List[Block], List[str]]:
     :param lines: lines of the readme file
     :return: (help blocks, errors if any)
     """
-    blocks = []  # type: List[Block]
-    errors = []  # type: List[str]
+    blocks: List[Block] = []
+    errors: List[str] = []
 
     i = 0
     while i < len(lines):
         mtch = HELP_STARTS_RE.match(lines[i])
         if mtch:
             command = mtch.group("command")
-            help_ends = ".. Help ends: {}".format(command)
+            help_ends = f".. Help ends: {command}"
             try:
                 end_index = lines.index(help_ends, i)
             except ValueError:
                 end_index = -1
 
             if end_index == -1:
-                return [], [
-                    "Could not find_our_type the end marker {!r}".format(help_ends)
-                ]
+                return [], [f"Could not find_our_type the end marker {help_ends!r}"]
 
             blocks.append(
                 Block(command=command, start_line_idx=i + 1, end_line_idx=end_index)
@@ -82,7 +80,7 @@ def capture_output_lines(command: str) -> List[str]:
         # the environment is not properly inherited.
         command_parts[0] = sys.executable
 
-    proc = None  # type: Optional[subprocess.Popen[str]]
+    proc: Optional[subprocess.Popen[str]] = None
     try:
         proc = subprocess.Popen(
             command_parts,
@@ -155,7 +153,7 @@ def main() -> int:
 
     blocks, errors = parse_readme(lines=lines)
     if errors:
-        print("One or more errors in {}:".format(pth), file=sys.stderr)
+        print(f"One or more errors in {pth}:", file=sys.stderr)
         for error in errors:
             print(error, file=sys.stderr)
 
@@ -165,9 +163,9 @@ def main() -> int:
         return 0
 
     if overwrite:
-        result = []  # type: List[str]
+        result: List[str] = []
 
-        previous_block = None  # type: Optional[Block]
+        previous_block: Optional[Block] = None
         for block in blocks:
             output_lines = capture_output_lines(command=block.command)
             code_block_lines = output_lines_to_code_block(output_lines=output_lines)

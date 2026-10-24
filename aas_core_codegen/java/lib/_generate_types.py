@@ -81,7 +81,7 @@ def _verify_intra_structure_collisions(
     our_type: intermediate.OurType,
 ) -> Optional[Error]:
     """Verify that no member names collide in the Java structure of our type."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     if isinstance(our_type, intermediate.Enumeration):
         pass
@@ -90,7 +90,7 @@ def _verify_intra_structure_collisions(
         pass
 
     elif isinstance(our_type, intermediate.Class):
-        observed_member_names = {}  # type: Dict[Identifier, str]
+        observed_member_names: Dict[Identifier, str] = {}
 
         for prop in our_type.properties:
             prop_name = java_naming.property_name(prop.name)
@@ -109,7 +109,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model property {prop.name!r}"
                 )
 
-        observed_constructor_arg_names = {}  # type: Dict[Identifier, str]
+        observed_constructor_arg_names: Dict[Identifier, str] = {}
         for constructor_arg in our_type.constructor.arguments:
             arg_name = java_naming.argument_name(constructor_arg.name)
 
@@ -146,7 +146,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model method {method.name!r}"
                 )
 
-            observed_method_arg_names = {}  # type: Dict[Identifier, str]
+            observed_method_arg_names: Dict[Identifier, str] = {}
             for arg in method.arguments:
                 arg_name = java_naming.argument_name(arg.name)
 
@@ -196,7 +196,7 @@ def _verify_structure_name_collisions(
         ],
     ] = dict()
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # region Inter-structure collisions
 
@@ -214,7 +214,7 @@ def _verify_structure_name_collisions(
 
         if isinstance(our_type, intermediate.Enumeration):
             name = java_naming.enum_name(our_type.name)
-            other = observed_structure_names.get(name, None)
+            other = observed_structure_names.get(name)
 
             if other is not None:
                 errors.append(
@@ -233,7 +233,7 @@ def _verify_structure_name_collisions(
         ):
             interface_name = java_naming.interface_name(our_type.name)
 
-            other = observed_structure_names.get(interface_name, None)
+            other = observed_structure_names.get(interface_name)
 
             if other is not None:
                 errors.append(
@@ -251,7 +251,7 @@ def _verify_structure_name_collisions(
             if isinstance(our_type, intermediate.ConcreteClass):
                 class_name = java_naming.class_name(our_type.name)
 
-                other = observed_structure_names.get(class_name, None)
+                other = observed_structure_names.get(class_name)
 
                 if other is not None:
                     errors.append(
@@ -269,7 +269,7 @@ def _verify_structure_name_collisions(
         elif isinstance(our_type, intermediate.NamedUnion):
             union_name = java_naming.union_name(our_type.name)
 
-            other = observed_structure_names.get(union_name, None)
+            other = observed_structure_names.get(union_name)
 
             if other is not None:
                 errors.append(
@@ -290,7 +290,7 @@ def _verify_structure_name_collisions(
     # NOTE (mristin):
     # The descent into the containers lives in a class in the package of
     # the classes as well, and the classes refer to it unqualified.
-    other = observed_structure_names.get(Identifier("Descent"), None)
+    other = observed_structure_names.get(Identifier("Descent"))
     if other is not None:
         errors.append(
             Error(
@@ -332,7 +332,7 @@ def verify(
 ) -> Tuple[Optional[VerifiedIntermediateSymbolTable], Optional[List[Error]]]:
     """Verify that Java code can be generated from the ``symbol_table``."""
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     structure_name_collisions = _verify_structure_name_collisions(
         symbol_table=symbol_table
@@ -452,7 +452,7 @@ def _generate_descend_into_container(
     The ``descendability`` maps ``type_anno`` and its nested type annotations,
     see :py:func:`aas_core_codegen.intermediate.map_descendability`.
     """
-    stream_by_recurse = dict()  # type: Dict[bool, Stripped]
+    stream_by_recurse: Dict[bool, Stripped] = dict()
 
     for recurse in (False, True):
         stream: Stripped
@@ -559,9 +559,7 @@ def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> St
     """
     class_name = java_naming.class_name(cls.name)
 
-    blocks = [
-        Stripped("Stream<IClass> memberStream = Stream.empty();")
-    ]  # type: List[Stripped]
+    blocks: List[Stripped] = [Stripped("Stream<IClass> memberStream = Stream.empty();")]
 
     for prop in cls.properties:
         descendability = intermediate.map_descendability(
@@ -707,13 +705,13 @@ def _generate_imports_for_interface(
 
     The ``package`` defines the root Java package.
     """
-    imports = [
+    imports: List[Stripped] = [
         Stripped(f"{package}.common.*"),
         Stripped(f"{package}.types.enums.*"),
         Stripped(f"{package}.types.impl.*"),
         Stripped(f"{package}.types.model.*"),
         Stripped("java.util.List"),
-    ]  # type: List[Stripped]
+    ]
 
     imports.extend(
         java_common.json_imports_if_necessary(
@@ -742,7 +740,7 @@ def _generate_imports_for_interface(
     ):
         imports.append(Stripped("java.util.Optional"))
 
-    return Stripped("\n".join(map(lambda imp: f"import {imp};", imports)))
+    return Stripped("\n".join(f"import {imp};" for imp in imports))
 
 
 def _generate_imports_for_class(
@@ -754,7 +752,7 @@ def _generate_imports_for_class(
 
     The ``package`` defines the root Java package.
     """
-    imports = [
+    imports: List[Stripped] = [
         Stripped(f"{package}.common.*"),
         Stripped(f"{package}.visitation.IVisitor"),
         Stripped(f"{package}.visitation.IVisitorWithContext"),
@@ -767,7 +765,7 @@ def _generate_imports_for_class(
         Stripped("java.util.List"),
         Stripped("java.util.Optional"),
         Stripped("java.util.Objects"),
-    ]  # type: List[Stripped]
+    ]
 
     imports.extend(
         java_common.json_imports_if_necessary(
@@ -805,7 +803,7 @@ def _generate_imports_for_class(
             ]
         )
 
-    return Stripped("\n".join(map(lambda imp: f"import {imp};", imports)))
+    return Stripped("\n".join(f"import {imp};" for imp in imports))
 
 
 @ensure(lambda result: not (result[1] is not None) or (result[0] is None))
@@ -912,7 +910,7 @@ public interface {name} extends\n"""
         writer.write(" {\n")
 
     # Code blocks separated by double newlines and indented once
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Getters and setters
 
@@ -964,7 +962,7 @@ public interface {name} extends\n"""
         ):
             continue
 
-        signature_blocks = []  # type: List[Stripped]
+        signature_blocks: List[Stripped] = []
 
         signature_comment, signature_comment_error = _generate_comment_for_method(
             method=method, cls=cls, package=package
@@ -982,7 +980,7 @@ public interface {name} extends\n"""
         )
         # fmt: on
 
-        arg_codes = []  # type: List[Stripped]
+        arg_codes: List[Stripped] = []
         for arg in method.arguments:
             arg_type = java_common.generate_type(type_annotation=arg.type_annotation)
             arg_name = java_naming.argument_name(arg.name)
@@ -1068,9 +1066,9 @@ def _generate_mandatory_constructor(
 
     cls_name = java_naming.class_name(cls.name)
 
-    blocks = []  # type: List[str]
+    blocks: List[str] = []
 
-    arg_codes = []  # type: List[Stripped]
+    arg_codes: List[Stripped] = []
     for arg in cls.constructor.arguments:
         type_anno = arg.type_annotation
 
@@ -1092,7 +1090,7 @@ def _generate_mandatory_constructor(
         arg_block_indented = textwrap.indent(arg_block, I)
         blocks.append(f"public {cls_name}(\n{arg_block_indented}) {{")
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
 
     for stmt in cls.constructor.inlined_statements:
         if isinstance(stmt, intermediate_construction.AssignArgument):
@@ -1198,9 +1196,9 @@ def _generate_full_constructor(
 
     cls_name = java_naming.class_name(cls.name)
 
-    blocks = []  # type: List[str]
+    blocks: List[str] = []
 
-    arg_codes = []  # type: List[Stripped]
+    arg_codes: List[Stripped] = []
     for arg in cls.constructor.arguments:
         type_anno = intermediate.beneath_optional(arg.type_annotation)
 
@@ -1219,7 +1217,7 @@ def _generate_full_constructor(
         arg_block_indented = textwrap.indent(arg_block, I)
         blocks.append(f"public {cls_name}(\n{arg_block_indented}) {{")
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
 
     for stmt in cls.constructor.inlined_statements:
         if isinstance(stmt, intermediate_construction.AssignArgument):
@@ -1406,7 +1404,7 @@ def _transpile_method(
         method=method,
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in method.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -1498,9 +1496,9 @@ def _generate_class(
     """
     # Code blocks to be later joined by double newlines and indented once
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     descendable = _has_descendable_properties(cls)
 
@@ -1513,7 +1511,7 @@ def _generate_class(
 
         prop_name = java_naming.property_name(prop.name)
 
-        prop_blocks = []  # type: List[Stripped]
+        prop_blocks: List[Stripped] = []
 
         if prop.description is not None:
             (
@@ -1583,7 +1581,7 @@ private {prop_type} {prop_name};"""
         getter_name = java_naming.getter_name(prop.name)
         setter_name = java_naming.setter_name(prop.name)
 
-        get_set_blocks = []  # type: List[Stripped]
+        get_set_blocks: List[Stripped] = []
 
         if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
             get_set_blocks.append(
@@ -2187,13 +2185,13 @@ private enum ValueKind {{
 
     field_decls = [Stripped("private final ValueKind valueKind;")] + [
         Stripped(f"private final {interface_name} {field_name};")
-        for interface_name, field_name in zip(interface_names, field_names)
+        for interface_name, field_name in zip(interface_names, field_names, strict=True)
     ]
     fields_block = Stripped("\n".join(field_decls))
 
     ctor_params = ["ValueKind valueKind"] + [
         f"{interface_name} {field_name}"
-        for interface_name, field_name in zip(interface_names, field_names)
+        for interface_name, field_name in zip(interface_names, field_names, strict=True)
     ]
     ctor_params_joined = ",\n".join(ctor_params)
 
@@ -2214,9 +2212,9 @@ private {name}(
 
     # region Factory methods, one per root
 
-    factory_methods = []  # type: List[Stripped]
+    factory_methods: List[Stripped] = []
     for i, (interface_name, root_class_name, value_kind) in enumerate(
-        zip(interface_names, root_class_names, value_kinds)
+        zip(interface_names, root_class_names, value_kinds, strict=True)
     ):
         args = [f"ValueKind.{value_kind}"] + [
             "that" if j == i else "null" for j in range(len(field_names))
@@ -2240,8 +2238,8 @@ public static {name} from{root_class_name}({interface_name} that) {{
 
     # region Underlying
 
-    switch_case_lines = []  # type: List[str]
-    for value_kind, field_name in zip(value_kinds, field_names):
+    switch_case_lines: List[str] = []
+    for value_kind, field_name in zip(value_kinds, field_names, strict=True):
         switch_case_lines.append(f"case {value_kind}:")
         switch_case_lines.append(f"{I}return {field_name};")
 
@@ -2269,7 +2267,7 @@ public IClass getUnderlying() {{
 
     # NOTE (mristin):
     # The roots may overlap, so we test the most specific root first.
-    from_underlying_lines = []  # type: List[str]
+    from_underlying_lines: List[str] = []
     for i, root in enumerate(named_union.roots_most_specific_first()):
         interface_name = java_naming.interface_name(root.name)
         root_class_name = java_naming.class_name(root.name)
@@ -2502,8 +2500,8 @@ def generate(
     """
     Generate code of the data structures representing the meta-model.
     """
-    files = []  # type: List[java_common.JavaFile]
-    errors = []  # type: List[Error]
+    files: List[java_common.JavaFile] = []
+    errors: List[Error] = []
 
     files.append(_generate_iclass(package))
     files.append(_generate_ienum(package))
@@ -2538,15 +2536,15 @@ def generate(
     if len(errors) > 0:
         return None, errors
 
-    descent_methods = []  # type: List[Stripped]
-    observed_monikers = set()  # type: Set[str]
-    descent_imports = {
+    descent_methods: List[Stripped] = []
+    observed_monikers: Set[str] = set()
+    descent_imports: Set[Stripped] = {
         Stripped(f"{package}.common.*"),
         Stripped(f"{package}.types.enums.*"),
         Stripped(f"{package}.types.model.*"),
         Stripped("java.util.stream.Stream"),
         Stripped("java.util.stream.StreamSupport"),
-    }  # type: Set[Stripped]
+    }
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:

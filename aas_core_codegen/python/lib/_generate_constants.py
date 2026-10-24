@@ -324,9 +324,9 @@ def generate(
 
     The ``qualified_module_name`` indicates the fully-qualified name of the base module.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped('"""Provide constant values of the meta-model."""'),
         python_common.WARNING,
         Stripped(
@@ -341,7 +341,7 @@ else:
 
 import {qualified_module_name}.types as our_types"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for constant in symbol_table.constants:
         block: Optional[Stripped]

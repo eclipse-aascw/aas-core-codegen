@@ -45,7 +45,7 @@ def lower_camel_case(identifier: Identifier) -> Identifier:
     if len(parts) == 1:
         return Identifier(parts[0].lower())
 
-    cased_parts = []  # type: List[str]
+    cased_parts: List[str] = []
 
     iterator = iter(parts)
     first_part = next(iterator)

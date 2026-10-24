@@ -13,8 +13,6 @@ from typing import (
     Union,
     Sequence,
     TypeVar,
-    Iterator,
-    Iterable,
 )
 
 import docutils.nodes
@@ -46,7 +44,7 @@ class _Node(DBC):
     @abc.abstractmethod
     def accept(self, visitor: "_NodeVisitor") -> None:
         """Accept the ``visitor`` and dispatch."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class _Text(_Node):
@@ -204,8 +202,10 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
             # We leave this check here, just in case the bug resurfaces.
             if isinstance(element.our_type, intermediate_translate._PlaceholderOurType):
                 return None, [
-                    f"Unexpected placeholder for our type: {element.our_type}; "
-                    f"this is a bug"
+                    (
+                        f"Unexpected placeholder for our type: {element.our_type}; "
+                        f"this is a bug"
+                    )
                 ]
 
             assert_never(element.our_type)
@@ -269,9 +269,11 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
                 intermediate_translate._PlaceholderReferenceToAttribute,
             ):
                 return None, [
-                    f"Unexpected placeholder "
-                    f"for the attribute reference: {element.reference}; "
-                    f"this is a bug"
+                    (
+                        f"Unexpected placeholder "
+                        f"for the attribute reference: {element.reference}; "
+                        f"this is a bug"
+                    )
                 ]
 
             assert_never(element.reference)
@@ -370,9 +372,9 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
         element: docutils.nodes.Element,
     ) -> Tuple[Optional[_List], Optional[List[str]]]:
         """Transform the children to a Python list."""
-        children = []  # type: List[_NodeUnion]
+        children: List[_NodeUnion] = []
 
-        errors = []  # type: List[str]
+        errors: List[str] = []
         for child in element.children:
             rendered_child, child_errors = self.transform(child)
             if child_errors is not None:
@@ -463,7 +465,7 @@ class _FlattenListVisitor(_NodeVisitor):
 
     def visit_list(self, node: _List) -> None:
         """Visit the node list and its items recursively."""
-        new_items = []  # type: List[_NodeUnion]
+        new_items: List[_NodeUnion] = []
 
         for item in node.items:
             self.visit(item)
@@ -481,9 +483,9 @@ class _ConcatenateTextVisitor(_NodeVisitor):
 
     def visit_list(self, node: _List) -> None:
         """Visit the node list and its items recursively."""
-        new_items = []  # type: List[_NodeUnion]
+        new_items: List[_NodeUnion] = []
 
-        accumulator = []  # type: List[_Text]
+        accumulator: List[_Text] = []
         for item in node.items:
             if isinstance(item, _Text):
                 accumulator.append(item)
@@ -547,8 +549,8 @@ def _render_summary_remarks(
     description: intermediate.SummaryRemarksDescription,
 ) -> Tuple[Optional[_List], Optional[List[Error]]]:
     """Render a description to our description node."""
-    result_items = []  # type: List[_NodeUnion]
-    errors = []  # type: List[Error]
+    result_items: List[_NodeUnion] = []
+    errors: List[Error] = []
 
     element_renderer = _ElementRenderer()
 
@@ -564,7 +566,7 @@ def _render_summary_remarks(
             _Element(name="summary", children=_List(items=[summary_node]))
         )
 
-    remark_nodes = []  # type: List[_NodeUnion]
+    remark_nodes: List[_NodeUnion] = []
     for remark in description.remarks:
         remark_node, remark_errors = element_renderer.transform(remark)
         if remark_errors:
@@ -590,8 +592,8 @@ def _render_summary_remarks_constraints(
     description: intermediate.SummaryRemarksConstraintsDescription,
 ) -> Tuple[Optional[_List], Optional[List[Error]]]:
     """Render a description where constraints are put in remarks."""
-    result_items = []  # type: List[_NodeUnion]
-    errors = []  # type: List[Error]
+    result_items: List[_NodeUnion] = []
+    errors: List[Error] = []
 
     element_renderer = _ElementRenderer()
 
@@ -606,7 +608,7 @@ def _render_summary_remarks_constraints(
             _Element(name="summary", children=_List(items=[summary_node]))
         )
 
-    remark_nodes = []  # type: List[_NodeUnion]
+    remark_nodes: List[_NodeUnion] = []
     for remark in description.remarks:
         remark_node, remark_errors = element_renderer.transform(remark)
         if remark_errors:
@@ -617,7 +619,7 @@ def _render_summary_remarks_constraints(
             assert remark_node is not None
             remark_nodes.append(remark_node)
 
-    constraint_nodes = []  # type: List[_NodeUnion]
+    constraint_nodes: List[_NodeUnion] = []
     for identifier, docutils_element in description.constraints_by_identifier.items():
         body, body_errors = element_renderer.transform(docutils_element)
         if body_errors is not None:
@@ -854,13 +856,6 @@ assert_union_without_excluded(
 T = TypeVar("T")
 
 
-def pairwise(iterable: Iterable[T]) -> Iterator[Tuple[T, T]]:
-    """Iterate pair-wise over the iterator."""
-    a, b = itertools.tee(iterable)
-    next(b, None)
-    return zip(a, b)
-
-
 # fmt: off
 @ensure(
     lambda result:
@@ -878,7 +873,7 @@ def pairwise(iterable: Iterable[T]) -> Iterator[Tuple[T, T]]:
             isinstance(prev, _TextBlock)
             and isinstance(current, _TextBlock)
         )
-        for prev, current in pairwise(result)
+        for prev, current in itertools.pairwise(result)
     ),
     "All text blocks are merged and there are no consecutive text blocks"
 )
@@ -899,11 +894,9 @@ def _compress_text_directives(
 
     # region Fulfill new-line enforcement
 
-    directives_wo_enforce_new_line = (
-        []
-    )  # type: List[_TextDirectiveExceptEnforceNewLine]
+    directives_wo_enforce_new_line: List[_TextDirectiveExceptEnforceNewLine] = []
 
-    previous_text_block = None  # type: Optional[_TextBlock]
+    previous_text_block: Optional[_TextBlock] = None
 
     for directive in directives_wo_empty_blocks:
         if isinstance(directive, _EnforceNewLine):
@@ -927,7 +920,7 @@ def _compress_text_directives(
 
     # region Merge consecutive text blocks
 
-    directives_w_merged_blocks = []  # type: List[_TextDirectiveExceptEnforceNewLine]
+    directives_w_merged_blocks: List[_TextDirectiveExceptEnforceNewLine] = []
 
     for directive in directives_wo_enforce_new_line:
         if isinstance(directive, _TextBlock):
@@ -1055,8 +1048,8 @@ def _render_description_of_signature(
 
     The ``extra_remarks`` are appended as plain-text paragraphs to the remarks.
     """
-    result_items = []  # type: List[_NodeUnion]
-    errors = []  # type: List[Error]
+    result_items: List[_NodeUnion] = []
+    errors: List[Error] = []
 
     renderer = _ElementRenderer()
 
@@ -1071,7 +1064,7 @@ def _render_description_of_signature(
             _Element(name="summary", children=_List(items=[summary_node]))
         )
 
-    remark_nodes = []  # type: List[_NodeUnion]
+    remark_nodes: List[_NodeUnion] = []
     for remark in description.remarks:
         remark_node, remark_errors = renderer.transform(remark)
         if remark_errors:
@@ -1087,7 +1080,7 @@ def _render_description_of_signature(
             _Element(name="para", children=_List(items=[_Text(extra_remark)]))
         )
 
-    param_nodes = []  # type: List[_NodeUnion]
+    param_nodes: List[_NodeUnion] = []
 
     for name, docutils_element in description.arguments_by_name.items():
         returns, body_errors = renderer.transform(docutils_element)
@@ -1106,7 +1099,7 @@ def _render_description_of_signature(
                 )
             )
 
-    returns_node = None  # type: Optional[_NodeUnion]
+    returns_node: Optional[_NodeUnion] = None
 
     if description.returns is not None:
         # NOTE (mristin):
@@ -1168,7 +1161,7 @@ def generate_comment_for_signature(
 
 def generate_comment_for_remarks(remarks: Sequence[str]) -> Stripped:
     """Generate the documentation comment with only the plain-text ``remarks``."""
-    node = _Element(
+    node: _NodeUnion = _Element(
         name="remarks",
         children=_List(
             items=[
@@ -1176,7 +1169,7 @@ def generate_comment_for_remarks(remarks: Sequence[str]) -> Stripped:
                 for remark in remarks
             ]
         ),
-    )  # type: _NodeUnion
+    )
 
     _compress_node_in_place(node=node)
     text = _to_text(node)

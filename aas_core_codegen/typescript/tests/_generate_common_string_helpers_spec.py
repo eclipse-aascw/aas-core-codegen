@@ -67,7 +67,7 @@ def _generate_find_test(case: string_helper_cases.FindCase) -> Stripped:
 
     # NOTE (mristin):
     # We call the helper just as the transpiled code does.
-    args = [text, sub]  # type: List[str]
+    args: List[str] = [text, sub]
     if case.start is not None:
         args.append(str(case.start))
 
@@ -183,7 +183,7 @@ test({name}, () => {{
 # fmt: on
 def generate(type_inference: intermediate_type_inference.TypeInference) -> str:
     """Generate the unit tests for the helpers of the operations on strings."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -197,9 +197,9 @@ def generate(type_inference: intermediate_type_inference.TypeInference) -> str:
  */"""
         ),
         typescript_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
-    test_blocks = []  # type: List[Stripped]
+    test_blocks: List[Stripped] = []
 
     if intermediate_uses.string_len_call(type_inference):
         for len_case in string_helper_cases.LEN_CASES:

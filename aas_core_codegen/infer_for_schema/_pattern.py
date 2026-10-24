@@ -38,15 +38,15 @@ class PatternVerificationsByName(Mapping[Identifier, intermediate.PatternVerific
 
     def __getitem__(self, k: Identifier) -> intermediate.PatternVerification:
         # Only for type annotation
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __iter__(self) -> Iterator[Identifier]:
         # Only for type annotation
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __len__(self) -> int:
         # Only for type annotation
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 def map_pattern_verifications_by_name(
@@ -57,9 +57,7 @@ def map_pattern_verifications_by_name(
 
     The verifications which do not perform pattern matching are ignored.
     """
-    result = (
-        dict()
-    )  # type: MutableMapping[Identifier, intermediate.PatternVerification]
+    result: MutableMapping[Identifier, intermediate.PatternVerification] = dict()
 
     for verification in verifications:
         if isinstance(verification, intermediate.PatternVerification):
@@ -127,7 +125,7 @@ def patterns_from_invariants(
     # We iterate only once through the invariants instead of inferring the constraints
     # for each property individually to be able to keep linear time complexity.
 
-    constraints_on_props = []  # type: List[_ConstraintOnProperty]
+    constraints_on_props: List[_ConstraintOnProperty] = []
 
     for invariant in cls.invariants:
         # NOTE (mristin):
@@ -203,16 +201,14 @@ def patterns_from_invariants(
 
     # region Group the constraints by property
 
-    result = (
-        dict()
-    )  # type: MutableMapping[intermediate.Property, List[PatternConstraint]]
+    result: MutableMapping[intermediate.Property, List[PatternConstraint]] = dict()
 
     for constraint_on_prop in constraints_on_props:
         prop = cls.properties_by_name.get(constraint_on_prop.prop_name, None)
         if prop is None:
             continue
 
-        constraints_for_prop = result.get(prop, None)
+        constraints_for_prop = result.get(prop)
         if constraints_for_prop is None:
             constraints_for_prop = []
             result[prop] = constraints_for_prop
@@ -273,7 +269,7 @@ def infer_patterns_on_self(
     The list of patterns means that *all* the patterns need to be satisfied, *i.e.*
     there is a conjunction of patterns.
     """
-    result = []  # type: List[PatternConstraint]
+    result: List[PatternConstraint] = []
 
     for invariant in constrained_primitive.invariants:
         # NOTE (mristin):

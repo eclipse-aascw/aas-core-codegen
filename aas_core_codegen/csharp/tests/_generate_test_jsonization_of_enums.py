@@ -30,7 +30,7 @@ def generate(
 
     The ``namespace`` indicates the fully-qualified name of the base project.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for enumeration in symbol_table.enumerations:
         enum_name = csharp_naming.enum_name(enumeration.name)

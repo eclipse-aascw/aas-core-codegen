@@ -23,7 +23,9 @@ from aas_core_codegen.typescript.common import (
 #: belong to. A recorded example has to serialize back to itself, character for
 #: character, so it can hold neither a value written in another form than it
 #: was read nor one whose written form the targets spell differently.
-_LEXICAL_CASES_BY_PRIMITIVE = {
+_LEXICAL_CASES_BY_PRIMITIVE: Mapping[
+    intermediate.PrimitiveType, List[Tuple[str, str]]
+] = {
     intermediate.PrimitiveType.FLOAT: [
         # NOTE (mristin):
         # A literal too large for a double is not an error: XSD rounds it to
@@ -58,7 +60,7 @@ _LEXICAL_CASES_BY_PRIMITIVE = {
         ("true", "true"),
         ("false", "false"),
     ],
-}  # type: Mapping[intermediate.PrimitiveType, List[Tuple[str, str]]]
+}
 
 
 def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stripped]:
@@ -67,9 +69,7 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
     if cls is None:
         return []
 
-    prop_by_a_type = (
-        dict()
-    )  # type: Dict[intermediate.PrimitiveType, intermediate.Property]
+    prop_by_a_type: Dict[intermediate.PrimitiveType, intermediate.Property] = dict()
     for prop in cls.properties:
         assert isinstance(prop.type_annotation, intermediate.PrimitiveTypeAnnotation)
         prop_by_a_type.setdefault(prop.type_annotation.a_type, prop)
@@ -91,7 +91,7 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
     cls_name_xml = naming.xml_class_name(cls.name)
     as_function = typescript_naming.function_name(Identifier(f"as_{cls.name}"))
 
-    result = [
+    result: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -132,7 +132,7 @@ function readWith(xmlName: string, text: string): OurTypes.{cls_name_typescript}
 {I}return casted;
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for a_type, prop in relevant:
         prop_xml_name = naming.xml_property(prop.name)
@@ -170,7 +170,7 @@ test({typescript_common.string_literal(f"{prop_xml_name} read from {a_text!r}")}
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test the XML de/serialization of concrete classes."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -189,7 +189,7 @@ import * as OurVerification from "../src/verification";
 
 import * as TestCommon from "./common";"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_typescript = typescript_naming.class_name(concrete_cls.name)

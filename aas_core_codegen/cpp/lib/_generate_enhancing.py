@@ -53,7 +53,7 @@ def _generate_wrap_forward_declarations(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
     """Generate the forward declarations of the overloaded ``Wrap`` functions."""
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
     for cls in symbol_table.classes:
         interface_name = cpp_naming.interface_name(cls.name)
 
@@ -98,7 +98,7 @@ def _generate_wrap_for_named_union(named_union: intermediate.NamedUnion) -> Stri
     """
     union_name = cpp_naming.union_name(named_union.name)
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for i, _ in enumerate(named_union.roots):
         # NOTE (mristin):
         # The roots may overlap, so we must spell out the alternative explicitly
@@ -151,7 +151,7 @@ def _generate_enhanced_interface_definition() -> Stripped:
     """Generate the definition of the generic ``Enhanced`` interface."""
     enhanced_interface = cpp_naming.interface_name(Identifier("Enhanced"))
 
-    members = []  # type: List[Stripped]
+    members: List[Stripped] = []
 
     enhancement_getter = cpp_naming.getter_name(Identifier("enhancement"))
     members.append(
@@ -255,7 +255,7 @@ def _generate_enhanced_class(
     cls: intermediate.ConcreteClass,
 ) -> Stripped:
     """Generate the implementation of an enhanced class which wraps an instance."""
-    public_members = []  # type: List[Stripped]
+    public_members: List[Stripped] = []
 
     model_type_enum = cpp_naming.enum_name(Identifier("Model_type"))
     model_type_getter = cpp_naming.getter_name(Identifier("model_type"))
@@ -572,7 +572,7 @@ template<typename E>
 
 def _generate_concrete_wrap(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the concrete wrapping function for the concrete class."""
-    recurse_blocks = []  # type: List[Stripped]
+    recurse_blocks: List[Stripped] = []
     for prop in cls.properties:
         descendability = intermediate.map_descendability(prop.type_annotation)
 
@@ -696,7 +696,7 @@ def _generate_wrap_for(
     """
     model_type_name = cpp_naming.enum_name(Identifier("Model_type"))
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for cls in concrete_classes:
         literal = cpp_naming.enum_literal_name(literal_name=cls.name)
 
@@ -790,17 +790,17 @@ std::shared_ptr<
 
 def _generate_wrap(symbol_table: intermediate.SymbolTable) -> List[Stripped]:
     """Generate all the overloads of the main wrapping function."""
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_wrap_for(
             interface_name=Identifier("IClass"),
             concrete_classes=symbol_table.concrete_classes,
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.classes:
         interface_name = cpp_naming.interface_name(cls.name)
 
-        concrete_classes = []  # type: List[intermediate.ConcreteClass]
+        concrete_classes: List[intermediate.ConcreteClass] = []
         if isinstance(cls, intermediate.ConcreteClass):
             concrete_classes.append(cls)
 
@@ -941,8 +941,8 @@ def generate_header(
 
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    wrap_container_functions = []  # type: List[Stripped]
-    observed_monikers = set()  # type: Set[str]
+    wrap_container_functions: List[Stripped] = []
+    observed_monikers: Set[str] = set()
 
     # NOTE (mristin):
     # The descendability maps the nested type annotations before the type

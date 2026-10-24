@@ -24,7 +24,7 @@ from aas_core_codegen.golang import (
 @ensure(lambda result: result.endswith('"'))
 def string_literal(text: str) -> Stripped:
     """Generate a Go string literal from the ``text``."""
-    escaped = []  # type: List[str]
+    escaped: List[str] = []
 
     for character in text:
         code_point = ord(character)
@@ -171,16 +171,16 @@ PRIMITIVE_TYPE_MAP = {
 
 def _assert_all_primitive_types_are_mapped() -> None:
     """Assert that we have explicitly mapped all the primitive types to Go."""
-    all_primitive_literals = set(literal.value for literal in PRIMITIVE_TYPE_MAP)
+    all_primitive_literals = {literal.value for literal in PRIMITIVE_TYPE_MAP}
 
-    mapped_primitive_literals = set(
+    mapped_primitive_literals = {
         literal.value for literal in intermediate.PrimitiveType
-    )
+    }
 
     all_diff = all_primitive_literals.difference(mapped_primitive_literals)
     mapped_diff = mapped_primitive_literals.difference(all_primitive_literals)
 
-    messages = []  # type: List[str]
+    messages: List[str] = []
     if len(mapped_diff) > 0:
         messages.append(
             f"More primitive maps are mapped than there were defined "

@@ -47,7 +47,7 @@ def _check_translation_unit(entry: Mapping[str, Any]) -> Optional[str]:
         else shlex.split(entry["command"])
     )
 
-    cmd = []  # type: List[str]
+    cmd: List[str] = []
     skip_next = False
     for part in command:
         if skip_next:

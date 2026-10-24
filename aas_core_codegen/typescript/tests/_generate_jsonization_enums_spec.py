@@ -25,7 +25,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test the JSON de/serialization of enumerations."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -38,7 +38,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
 import * as OurJsonization from "../src/jsonization";
 import * as OurTypes from "../src/types";"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for enumeration in symbol_table.enumerations:
         enum_name_typescript = typescript_naming.enum_name(enumeration.name)
@@ -74,7 +74,7 @@ test("{enum_name_typescript} deserializes {literal_name_typescript} OK", () => {
                 )
             )
 
-        literal_value_set = set(literal.value for literal in enumeration.literals)
+        literal_value_set = {literal.value for literal in enumeration.literals}
         invalid_literal_value = "invalid-literal"
         while invalid_literal_value in literal_value_set:
             invalid_literal_value = f"very-{invalid_literal_value}"

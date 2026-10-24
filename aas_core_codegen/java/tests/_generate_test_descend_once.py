@@ -21,7 +21,7 @@ def generate(
     """
     Generate code to test the ``DescendOnce`` methods.
     """
-    blocks = [
+    blocks: List[str] = [
         Stripped(
             f"""\
 private static void compareOrRerecordTrace(IClass instance, Path expectedPath)
@@ -50,7 +50,7 @@ private static void compareOrRerecordTrace(IClass instance, Path expectedPath)
 {I}}}
 }}"""
         )
-    ]  # type: List[str]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_java = java_naming.class_name(concrete_cls.name)

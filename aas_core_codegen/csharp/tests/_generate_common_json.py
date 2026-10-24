@@ -29,7 +29,7 @@ def generate(namespace: csharp_common.NamespaceIdentifier) -> str:
 
     The ``namespace`` indicates the fully-qualified name of the base project.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public static Nodes.JsonNode ReadFromFile(string path)
@@ -243,13 +243,13 @@ public static void CheckJsonNodesEqual(
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     blocks_joined = "\n\n".join(blocks)
 
     return f"""\
 {csharp_common.WARNING}
-    
+
 using Our = {namespace}; // renamed
 
 using FileMode = System.IO.FileMode;

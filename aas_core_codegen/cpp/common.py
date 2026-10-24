@@ -39,7 +39,7 @@ WARNING = Stripped(
 @ensure(lambda result: result.endswith('"'))
 def wstring_literal(text: str) -> Stripped:
     """Generate a C++ string literal from the ``text``."""
-    escaped = []  # type: List[str]
+    escaped: List[str] = []
 
     # NOTE (mristin):
     # We escape with the universal character names (``\\u`` and ``\\U``) as they
@@ -185,12 +185,12 @@ def string_literal(text: str) -> Stripped:
     on the encoding of the source file nor on the execution character set of
     the compiler.
     """
-    escaped = []  # type: List[str]
+    escaped: List[str] = []
 
     for character in text:
         code_point = ord(character)
 
-        simple_escape = _SIMPLE_ESCAPES.get(character, None)
+        simple_escape = _SIMPLE_ESCAPES.get(character)
         if simple_escape is not None:
             escaped.append(simple_escape)
         elif code_point < 32 or code_point == 127:
@@ -290,7 +290,7 @@ def bytes_literal(value: bytes) -> Tuple[Stripped, bool]:
     writer = io.StringIO()
 
     # noinspection PyUnusedLocal
-    multi_line = None  # type: Optional[bool]
+    multi_line: Optional[bool] = None
 
     if len(value) <= 8:
         items_joined = ", ".join(f"0x{byte:02x}" for byte in value)
@@ -334,16 +334,16 @@ PRIMITIVE_TYPE_MAP = {
 
 def _assert_all_primitive_types_are_mapped() -> None:
     """Assert that we have explicitly mapped all the primitive types to C++."""
-    all_primitive_literals = set(literal.value for literal in PRIMITIVE_TYPE_MAP)
+    all_primitive_literals = {literal.value for literal in PRIMITIVE_TYPE_MAP}
 
-    mapped_primitive_literals = set(
+    mapped_primitive_literals = {
         literal.value for literal in intermediate.PrimitiveType
-    )
+    }
 
     all_diff = all_primitive_literals.difference(mapped_primitive_literals)
     mapped_diff = mapped_primitive_literals.difference(all_primitive_literals)
 
-    messages = []  # type: List[str]
+    messages: List[str] = []
     if len(mapped_diff) > 0:
         messages.append(
             f"More primitive maps are mapped than there were defined "
@@ -432,7 +432,7 @@ def generate_named_union_variant_definition(
     the variant must be always constructed with an explicit index, see
     :py:func:`generate_named_union_alternative_index`.
     """
-    item_types = []  # type: List[Stripped]
+    item_types: List[Stripped] = []
     for root in named_union.roots:
         interface_name = cpp_naming.interface_name(root.name)
 
@@ -839,7 +839,7 @@ def break_type_in_lines(text: str) -> str:
     buffer = io.StringIO()
 
     level = 0
-    last_match = None  # type: Optional[re.Match[str]]
+    last_match: Optional[re.Match[str]] = None
     for match in _ANGLE_BRACKETS_IN_TYPE_RE.finditer(text):
         if last_match is None:
             buffer.write(text[: match.start()])
@@ -955,7 +955,7 @@ def non_documentation_comment(text: str) -> str:
     >>> non_documentation_comment('test\nme')
     '// test\n// me'
     """
-    lines = []  # type: List[str]
+    lines: List[str] = []
     for line in text.splitlines():
         stripped = line.strip()
         if len(stripped) > 0:

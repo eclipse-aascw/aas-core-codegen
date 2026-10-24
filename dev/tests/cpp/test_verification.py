@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import unittest
 from typing import List
 
@@ -22,7 +20,7 @@ class Test_against_recorded(unittest.TestCase):
         source = """\
 class Item:
     value: str
-    
+
     def __init__(self, value: str) -> None:
         self.value = value
 
@@ -38,10 +36,10 @@ def check_something(value: Optional[Sequence[Item]]) -> bool:
 )
 class Something:
     value: Optional[List[Item]]
-    
+
     def __init__(self, value: Optional[List[Item]] = None) -> None:
         self.value = value
-        
+
 __version__ = "dummy"
 __xml_namespace__ = "https://dummy.com"
 """
@@ -60,7 +58,7 @@ __xml_namespace__ = "https://dummy.com"
             name=Identifier("Something")
         )
 
-        blocks = []  # type: List[Stripped]
+        blocks: List[Stripped] = []
         for invariant in something_cls.invariants:
             (
                 condition_expr,
@@ -144,7 +142,7 @@ __xml_namespace__ = "https://dummy.com"
             name=Identifier("Something")
         )
 
-        blocks = []  # type: List[Stripped]
+        blocks: List[Stripped] = []
         for invariant in something_cls.invariants:
             (
                 condition_expr,

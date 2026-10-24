@@ -12,7 +12,6 @@ import abc
 import ast
 import os
 import pathlib
-import sys
 from typing import Tuple, Optional, List, Mapping, Type, Sequence, Set, Union, cast
 
 from icontract import ensure
@@ -21,14 +20,14 @@ from aas_core_codegen.common import Identifier, Error, assert_never
 from aas_core_codegen.parse import tree
 
 # noinspection PyTypeChecker
-_AST_COMPARATOR_TO_OURS = {
+_AST_COMPARATOR_TO_OURS: Mapping[Type[ast.cmpop], tree.Comparator] = {
     ast.Lt: tree.Comparator.LT,
     ast.LtE: tree.Comparator.LE,
     ast.Gt: tree.Comparator.GT,
     ast.GtE: tree.Comparator.GE,
     ast.Eq: tree.Comparator.EQ,
     ast.NotEq: tree.Comparator.NE,
-}  # type: Mapping[Type[ast.cmpop], tree.Comparator]
+}
 
 _AST_COMPARATORS = tuple(_AST_COMPARATOR_TO_OURS.keys())
 
@@ -39,13 +38,13 @@ class _Parse(abc.ABC):
     @abc.abstractmethod
     def matches(self, node: ast.AST) -> bool:
         """Return True if the node can be matched by the rule."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
         """Transform the Python node to our custom node."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class _ParseComparison(_Parse):
@@ -334,7 +333,7 @@ class _ParseIsInstance(_Parse):
                 f"but got: {ast.dump(node.args[1])}",
             )
 
-        classes = []  # type: List[tree.Name]
+        classes: List[tree.Name] = []
         for class_node in class_nodes:
             if not isinstance(class_node, ast.Name):
                 return None, Error(
@@ -364,7 +363,7 @@ class _ParseCall(_Parse):
     def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
         assert isinstance(node, ast.Call)
 
-        args = []  # type: List[tree.Expression]
+        args: List[tree.Expression] = []
         for arg_node in node.args:
             arg, error = ast_node_to_our_node(arg_node)
             if error is not None:
@@ -471,7 +470,7 @@ class _ParseTuple(_Parse):
     def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
         assert isinstance(node, ast.Tuple)
 
-        values = []  # type: List[tree.Expression]
+        values: List[tree.Expression] = []
         for elt_node in node.elts:
             value, error = ast_node_to_our_node(elt_node)
             if error is not None:
@@ -499,7 +498,7 @@ class _ParseListLiteral(_Parse):
     def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
         assert isinstance(node, ast.List)
 
-        items = []  # type: List[tree.Expression]
+        items: List[tree.Expression] = []
         for elt_node in node.elts:
             item, error = ast_node_to_our_node(elt_node)
             if error is not None:
@@ -603,7 +602,7 @@ class _ParseSlice(_Parse):
 
         assert isinstance(collection, tree.Expression), f"{collection=}"
 
-        start = None  # type: Optional[tree.Expression]
+        start: Optional[tree.Expression] = None
         if node.slice.lower is not None:
             start_node, error = ast_node_to_our_node(node.slice.lower)
             if error is not None:
@@ -612,7 +611,7 @@ class _ParseSlice(_Parse):
             assert isinstance(start_node, tree.Expression), f"{start_node=}"
             start = start_node
 
-        end = None  # type: Optional[tree.Expression]
+        end: Optional[tree.Expression] = None
         if node.slice.upper is not None:
             end_node, error = ast_node_to_our_node(node.slice.upper)
             if error is not None:
@@ -650,21 +649,9 @@ class _ParseIndex(_Parse):
         # See deprecation notes just at the end of:
         # https://docs.python.org/3/library/ast.html#ast.AST
 
-        if sys.version_info < (3, 9):
-            if not isinstance(node.slice, ast.Index):
-                return None, Error(
-                    node.slice,
-                    f"We expect only indices in index access, "
-                    f"but got: {ast.dump(node.slice)}",
-                )
-
-            index, error = ast_node_to_our_node(node.slice.value)
-            if error is not None:
-                return None, error
-        else:
-            index, error = ast_node_to_our_node(node.slice)
-            if error is not None:
-                return None, error
+        index, error = ast_node_to_our_node(node.slice)
+        if error is not None:
+            return None, error
 
         assert isinstance(collection, tree.Expression), f"{collection=}"
         assert isinstance(index, tree.Expression), f"{index=}"
@@ -748,7 +735,7 @@ class _ParseAndOrOr(_Parse):
     def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
         assert isinstance(node, ast.BoolOp) and isinstance(node.op, (ast.And, ast.Or))
 
-        values = []  # type: List[tree.Expression]
+        values: List[tree.Expression] = []
         for value_node in node.values:
             value, error = ast_node_to_our_node(value_node)
             if error is not None:
@@ -876,7 +863,7 @@ class _ParseJoinedStr(_Parse):
     def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
         assert isinstance(node, ast.JoinedStr)
 
-        values = []  # type: List[Union[str, tree.FormattedValue]]
+        values: List[Union[str, tree.FormattedValue]] = []
 
         assert isinstance(node, ast.JoinedStr)
         for value_node in node.values:
@@ -1061,8 +1048,8 @@ def _match_switch_test(
         return None
 
     if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.Or):
-        subject = None  # type: Optional[ast.expr]
-        labels = []  # type: List[ast.expr]
+        subject: Optional[ast.expr] = None
+        labels: List[ast.expr] = []
 
         for value in test.values:
             if not (
@@ -1143,7 +1130,7 @@ def _parse_block(
     if len(nodes) == 1 and isinstance(nodes[0], ast.Pass):
         return [], None
 
-    body = []  # type: List[tree.StatementUnion]
+    body: List[tree.StatementUnion] = []
     for node in nodes:
         if len(body) > 0 and not tree.can_complete_normally(body):
             return None, Error(
@@ -1269,8 +1256,8 @@ class _ParseSwitch(_Parse):
 
         subject_node, _ = match
 
-        if_nodes = [node]  # type: List[ast.If]
-        label_nodes_per_case = [match[1]]  # type: List[List[ast.expr]]
+        if_nodes: List[ast.If] = [node]
+        label_nodes_per_case: List[List[ast.expr]] = [match[1]]
 
         cursor = node
         while len(cursor.orelse) == 1 and isinstance(cursor.orelse[0], ast.If):
@@ -1299,16 +1286,16 @@ class _ParseSwitch(_Parse):
         # We check for the duplicate labels syntactically. For example, we can not
         # detect that two different enumeration literals share the same value,
         # but that would not be a valid enumeration in the meta-model anyhow.
-        observed_labels = set()  # type: Set[str]
+        observed_labels: Set[str] = set()
 
-        cases = []  # type: List[tree.SwitchCase]
-        for if_node, label_nodes in zip(if_nodes, label_nodes_per_case):
+        cases: List[tree.SwitchCase] = []
+        for if_node, label_nodes in zip(if_nodes, label_nodes_per_case, strict=True):
             if len(label_nodes) == 0:
                 return None, Error(
                     if_node.test, "Expected at least one label in the switch case"
                 )
 
-            labels = []  # type: List[Union[tree.Constant, tree.Member]]
+            labels: List[Union[tree.Constant, tree.Member]] = []
             for label_node in label_nodes:
                 label, error = _parse_switch_label(label_node)
                 if error is not None:
@@ -1341,7 +1328,7 @@ class _ParseSwitch(_Parse):
                 tree.SwitchCase(labels=labels, body=body, original_node=if_node)
             )
 
-        default = None  # type: Optional[List[tree.StatementUnion]]
+        default: Optional[List[tree.StatementUnion]] = None
         if len(cursor.orelse) > 0:
             default, error = _parse_block(cursor.orelse, block_name="a switch branch")
             if error is not None:
@@ -1358,9 +1345,9 @@ class _ParseSwitch(_Parse):
                 None,
             )
 
-        branches = []  # type: List[tree.IfBranch]
-        for if_node, case in zip(if_nodes, cases):
-            comparisons = []  # type: List[tree.Expression]
+        branches: List[tree.IfBranch] = []
+        for if_node, case in zip(if_nodes, cases, strict=True):
+            comparisons: List[tree.Expression] = []
             for label in case.labels:
                 # NOTE (mristin):
                 # We parse the subject anew for each comparison as the nodes must
@@ -1380,11 +1367,11 @@ class _ParseSwitch(_Parse):
                     )
                 )
 
-            condition = (
+            condition: tree.Expression = (
                 comparisons[0]
                 if len(comparisons) == 1
                 else tree.Or(values=comparisons, original_node=if_node.test)
-            )  # type: tree.Expression
+            )
 
             branches.append(
                 tree.IfBranch(
@@ -1461,7 +1448,7 @@ class _ParseIf(_Parse):
     def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
         assert isinstance(node, ast.If)
 
-        branches = []  # type: List[tree.IfBranch]
+        branches: List[tree.IfBranch] = []
 
         cursor = node
         while True:
@@ -1494,7 +1481,7 @@ class _ParseIf(_Parse):
             else:
                 break
 
-        default = None  # type: Optional[List[tree.StatementUnion]]
+        default: Optional[List[tree.StatementUnion]] = None
         if len(cursor.orelse) > 0:
             default, error = _parse_block(
                 cursor.orelse, block_name="a branch of an if-statement"
@@ -1535,7 +1522,7 @@ class _ParseAssert(_Parse):
                 f"but got: {ast.unparse(node.test)}",
             )
 
-        message = None  # type: Optional[Union[tree.Constant, tree.JoinedStr]]
+        message: Optional[Union[tree.Constant, tree.JoinedStr]] = None
         if node.msg is not None:
             message_node, error = ast_node_to_our_node(node.msg)
             if error is not None:
@@ -1563,7 +1550,7 @@ class _ParseAssert(_Parse):
         )
 
 
-_CHAIN_OF_RULES = [
+_CHAIN_OF_RULES: Sequence[_Parse] = [
     _ParseComparison(),
     _ParseIsIn(),
     _ParseAnyOrAll(),
@@ -1594,7 +1581,7 @@ _CHAIN_OF_RULES = [
     _ParseBreak(),
     _ParseIf(),
     _ParseAssert(),
-]  # type: Sequence[_Parse]
+]
 
 
 def _assert_chains_follow_file_structure() -> None:
@@ -1617,7 +1604,7 @@ def _assert_chains_follow_file_structure() -> None:
     )
     assert isinstance(root, ast.Module)
 
-    expected_parse_names = [
+    expected_parse_names: List[str] = [
         stmt.name
         for stmt in root.body
         if (
@@ -1625,7 +1612,7 @@ def _assert_chains_follow_file_structure() -> None:
             and stmt.name.startswith("_Parse")
             and stmt.name != "_Parse"
         )
-    ]  # type: List[str]
+    ]
 
     parse_names_in_chain = [parse.__class__.__name__ for parse in _CHAIN_OF_RULES]
 

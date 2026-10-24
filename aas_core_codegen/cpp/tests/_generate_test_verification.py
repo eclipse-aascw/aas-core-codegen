@@ -33,7 +33,7 @@ def generate_implementation(
     """Generate implementation to test the verification of pos. and neg. cases."""
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f"""\
@@ -172,7 +172,7 @@ void AssertVerificationFailure(
 {I});
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         xml_class_name = naming.xml_class_name(concrete_cls.name)

@@ -613,7 +613,7 @@ function writeStruct(
 # fmt: on
 def generate() -> str:
     """Generate the code of the XML-RPC subset."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -657,7 +657,7 @@ import {
 
 import { OpenTagToken } from "xmlsax-typescript";"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     blocks.extend(_generate_parsers())
     blocks.extend(_generate_writers())

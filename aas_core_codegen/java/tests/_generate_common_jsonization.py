@@ -14,7 +14,7 @@ def generate(
     """
     Generate the Java code for shared JSON functionality across unit tests.
     """
-    blocks = []  # type: List[str]
+    blocks: List[str] = []
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_java = java_naming.class_name(concrete_cls.name)

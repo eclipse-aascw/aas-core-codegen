@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import textwrap
 import unittest
 from typing import Dict, Final, Optional

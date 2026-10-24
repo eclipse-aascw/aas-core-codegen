@@ -341,7 +341,7 @@ parseItem{i}: (
         for i in range(arity)
     )
 
-    item_blocks = []  # type: List[Stripped]
+    item_blocks: List[Stripped] = []
     for i in range(arity):
         item_blocks.append(
             Stripped(
@@ -799,7 +799,7 @@ def _generate_named_union_from_jsonable(
         if not implementer.serialization.with_model_type
     ]
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 const objectError = checkIsJsonObject(jsonable);
@@ -814,7 +814,7 @@ if (objectError !== null) {{
 }}
 const jsonObject = <JsonObject>jsonable;"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if len(with_model_type) > 0:
         # NOTE (mristin):
@@ -1175,8 +1175,8 @@ def _collect_nested_containers(
     They are listed in post-order, so that a container comes after the ones
     nested in it.
     """
-    result = []  # type: List[intermediate.ContainerTypeAnnotation]
-    observed = set()  # type: Set[str]
+    result: List[intermediate.ContainerTypeAnnotation] = []
+    observed: Set[str] = set()
 
     def visit(
         type_anno: intermediate.TypeAnnotationExceptOptional, nested: bool
@@ -1267,11 +1267,11 @@ def _generate_parse_properties_of_class(cls: intermediate.ConcreteClass) -> Stri
 
     cls_name = typescript_naming.class_name(cls.name)
 
-    var_declarations = []  # type: List[Stripped]
-    required_checks = []  # type: List[Stripped]
-    parse_cases = []  # type: List[Stripped]
+    var_declarations: List[Stripped] = []
+    required_checks: List[Stripped] = []
+    parse_cases: List[Stripped] = []
 
-    var_name_by_property = {}  # type: Dict[Identifier, Identifier]
+    var_name_by_property: Dict[Identifier, Identifier] = {}
 
     for prop in cls.properties:
         var_name = typescript_naming.variable_name(Identifier(f"the_{prop.name}"))
@@ -1328,7 +1328,7 @@ case {model_type_literal}: {{
             )
         )
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # NOTE (mristin):
     # A class without properties has nothing to parse. We skip the loop even if
@@ -1430,13 +1430,13 @@ return new OurCommon.Either<
 
     function_name = _parse_properties_function_name(cls)
 
-    description_blocks = [
+    description_blocks: List[Stripped] = [
         Stripped(
             f"""\
 Parse the properties of an instance
 of {{@link {typescript_common.TYPES_MODULE}!{cls_name}}} from `jsonObject`."""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if cls.serialization.with_model_type:
         description_blocks.append(
@@ -1500,7 +1500,7 @@ def _generate_concrete_class_from_jsonable(
         Identifier(f"{cls.name}_from_jsonable")
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 const objectError = checkIsJsonObject(jsonable);
@@ -1515,7 +1515,7 @@ if (objectError !== null) {{
 }}
 const jsonObject = <JsonObject>jsonable;"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if cls.serialization.with_model_type:
         # NOTE (mristin):
@@ -2008,9 +2008,9 @@ def _generate_serialize_call(
         if typescript_common.is_dispatched(type_anno):
             return Stripped(f"serializeClass({access_expression})")
 
-        assert isinstance(our_type, intermediate.ConcreteClass), (
-            f"A class which is not dispatched must be concrete, " f"but got: {our_type}"
-        )
+        assert isinstance(
+            our_type, intermediate.ConcreteClass
+        ), f"A class which is not dispatched must be concrete, but got: {our_type}"
 
         function_name = _serialize_function_name(our_type)
         return Stripped(f"{function_name}({access_expression})")
@@ -2241,7 +2241,7 @@ def _generate_serialize_tuple(type_anno: intermediate.TupleTypeAnnotation) -> St
         for item_type_anno in item_type_annos
     )
 
-    statements = []  # type: List[Stripped]
+    statements: List[Stripped] = []
     for i, item_type_anno in enumerate(item_type_annos):
         statement = Stripped(
             f"result[{i}] = "
@@ -2345,7 +2345,7 @@ def _generate_serialize_class(cls: intermediate.ConcreteClass) -> Stripped:
     fails, and every statement of the ``try`` writes it. A class without
     a single property is written without a ``try`` at all.
     """
-    blocks = [Stripped("const jsonable: JsonObject = {};")]  # type: List[Stripped]
+    blocks: List[Stripped] = [Stripped("const jsonable: JsonObject = {};")]
 
     if len(cls.properties) > 0:
         property_blocks_joined = "\n\n".join(
@@ -2412,7 +2412,7 @@ def _generate_transformer(symbol_table: intermediate.SymbolTable) -> Stripped:
     a statically known concrete value, a list item and a tuple item all name their
     serializer directly and pay no dispatch at all.
     """
-    methods = []  # type: List[Stripped]
+    methods: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         method_name = typescript_naming.method_name(Identifier(f"transform_{cls.name}"))
@@ -2509,8 +2509,8 @@ def _collect_composed_type_annotations(
     is given as a snippet, but that snippet still serializes the properties of that
     very class and may well call the serializers of their types.
     """
-    result = []  # type: List[intermediate.ContainerTypeAnnotation]
-    observed = set()  # type: Set[str]
+    result: List[intermediate.ContainerTypeAnnotation] = []
+    observed: Set[str] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -2545,8 +2545,8 @@ def _collect_enumerations_to_serialize(
     code -- ``jsonization.ts``, unlike ``xmlization.ts``, carries no override of
     ``no-unused-vars``.
     """
-    result = []  # type: List[intermediate.Enumeration]
-    observed = set()  # type: Set[intermediate.IdOfOurType]
+    result: List[intermediate.Enumeration] = []
+    observed: Set[intermediate.IdOfOurType] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -2630,7 +2630,7 @@ def _collect_number_types(
     symbol_table: intermediate.SymbolTable,
 ) -> Set[intermediate.PrimitiveType]:
     """Collect the number types which occur anywhere in the meta-model."""
-    result = set()  # type: Set[intermediate.PrimitiveType]
+    result: Set[intermediate.PrimitiveType] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -2710,7 +2710,9 @@ function numberToJsonable(that: number): number {{
     return [
         block
         for a_type, block in zip(
-            (intermediate.PrimitiveType.INT, intermediate.PrimitiveType.FLOAT), blocks
+            (intermediate.PrimitiveType.INT, intermediate.PrimitiveType.FLOAT),
+            blocks,
+            strict=True,
         )
         if a_type in number_types
     ]
@@ -2732,7 +2734,7 @@ def generate(
     """Generate code for JSON de/serialization."""
     number_types = _collect_number_types(symbol_table)
 
-    blocks = [
+    blocks: List[Stripped] = [
         typescript_description.documentation_comment(
             Stripped(
                 """\
@@ -2972,7 +2974,7 @@ function newDeserializationError<T>(
         _generate_float_from_jsonable(),
         _generate_str_from_jsonable(),
         _generate_bytes_from_jsonable(),
-    ]  # type: List[Stripped]
+    ]
 
     for arity in intermediate.tuple_arities(symbol_table=symbol_table):
         blocks.append(_generate_parse_tuple_helper(arity))
@@ -2980,7 +2982,7 @@ function newDeserializationError<T>(
     for nested_type_anno in _collect_nested_containers(symbol_table):
         blocks.append(_generate_composed_parser(nested_type_anno))
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -3045,7 +3047,6 @@ function newDeserializationError<T>(
 
     blocks.append(_generate_serialize_instance())
 
-    # pylint: disable=line-too-long
     blocks.append(
         Stripped(
             f"""\
@@ -3062,7 +3063,6 @@ export function toJsonable(that: OurTypes.Class): JsonObject {{
 }}"""
         )
     )
-    # pylint: enable=line-too-long
 
     blocks.append(Stripped("// endregion"))
 

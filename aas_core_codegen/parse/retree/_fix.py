@@ -86,7 +86,7 @@ class _FixForUTF16Regex(retree_visitor.PassThroughVisitor):
             character=chr(low_surrogate), explicitly_encoded=True
         )
 
-        output = []  # type: List[retree_types.Term]
+        output: List[retree_types.Term] = []
 
         if term.quantifier is not None:
             # NOTE (mristin):
@@ -246,8 +246,8 @@ class _FixForUTF16Regex(retree_visitor.PassThroughVisitor):
         term: retree_types.Term,
     ) -> List[retree_types.Term]:
         """Extend the set with surrogates or expand it to a union, if necessary."""
-        ranges_wo_utf32 = []  # type: List[retree_types.Range]
-        ranges_w_utf32 = []  # type: List[retree_types.Range]
+        ranges_wo_utf32: List[retree_types.Range] = []
+        ranges_w_utf32: List[retree_types.Range] = []
 
         # Needed for mypy
         assert isinstance(term.value, retree_types.CharSet)
@@ -276,7 +276,7 @@ class _FixForUTF16Regex(retree_visitor.PassThroughVisitor):
             "since we can not represent them relying "
             "on an UTF-16-only regex engine.\n"
             "\n"
-            "This should have been detected before and returned as an error.",
+            "This should have been detected before and returned as an error."
         )
 
         # NOTE (mristin):
@@ -286,7 +286,7 @@ class _FixForUTF16Regex(retree_visitor.PassThroughVisitor):
         #    UTF-32 characters.
 
         # noinspection PyListCreation
-        uniates = []  # type: List[retree_types.Concatenation]
+        uniates: List[retree_types.Concatenation] = []
 
         if len(ranges_wo_utf32) > 0:
             uniates.append(
@@ -379,7 +379,7 @@ class _FixForUTF16Regex(retree_visitor.PassThroughVisitor):
 
     def visit_concatenation(self, node: retree_types.Concatenation) -> None:
         """Convert character literals to UTF-16, where appropriate."""
-        new_concatenants = []  # type: List[retree_types.Term]
+        new_concatenants: List[retree_types.Term] = []
 
         for concatenant in node.concatenants:
             if isinstance(concatenant.value, retree_types.Char):

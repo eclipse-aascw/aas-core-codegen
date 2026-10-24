@@ -57,7 +57,7 @@ def generate(
 
     The ``namespace`` indicates the fully-qualified name of the base project.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     if intermediate_uses.modulo(symbol_table):
         for i, case in enumerate(tests_common.FLOOR_MOD_CASES):

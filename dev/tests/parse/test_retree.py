@@ -1,7 +1,3 @@
-# pylint: disable=missing-module-docstring
-# pylint: disable=missing-class-docstring
-# pylint: disable=missing-function-docstring
-
 import ast
 import os
 import pathlib
@@ -46,7 +42,7 @@ def parse_values_from_source(
     )
     del value_node  # Delete so that we do not use it anymore by mistake
 
-    values = []  # type: Sequence[Union[str, parse_tree.FormattedValue]]
+    values: Sequence[Union[str, parse_tree.FormattedValue]] = []
 
     if isinstance(our_node, parse_tree.Constant):
         assert isinstance(our_node.value, str), (
@@ -97,7 +93,7 @@ class Test_cursor(unittest.TestCase):
 
             cursor = parse_retree.Cursor(values=values)
 
-            tokens = []  # type: List[str]
+            tokens: List[str] = []
             while not cursor.done():
                 formatted_value = cursor.try_formatted_value()
                 if formatted_value:
@@ -149,9 +145,9 @@ class Test_against_recorded(unittest.TestCase):
 
         # The expected cases should have no errors.
         expected_pths = sorted((test_cases_dir / "expected").glob("**/source.py"))
-        pths_expected_errors = [
+        pths_expected_errors: List[Tuple[pathlib.Path, bool]] = [
             (pth, False) for pth in expected_pths
-        ]  # type: List[Tuple[pathlib.Path, bool]]
+        ]
 
         unexpected_pths = sorted((test_cases_dir / "unexpected").glob("**/source.py"))
 
@@ -232,7 +228,7 @@ class Test_against_recorded(unittest.TestCase):
 
                 parsed_regex_str = parse_retree.dump(parsed_regex)
 
-                rendered_parts = []  # type: List[str]
+                rendered_parts: List[str] = []
                 for value in parse_retree.render(parsed_regex):
                     if isinstance(value, str):
                         rendered_parts.append(value)

@@ -18,7 +18,7 @@ from aas_core_codegen.typescript.common import INDENT as I, INDENT2 as II
 # fmt: on
 def generate() -> str:
     """Generate code for basic XMLization helper and malformed-input tests."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -97,7 +97,7 @@ test("xmlization fails on non-XML text", () => {{
 {I}expect(instanceOrError.error).not.toBeNull();
 }});"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     blocks.append(typescript_common.WARNING)
 

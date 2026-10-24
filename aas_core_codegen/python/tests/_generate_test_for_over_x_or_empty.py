@@ -32,7 +32,7 @@ def _generate_test_case(cls: intermediate.ConcreteClass) -> Optional[Stripped]:
 
     python_cls_name = python_naming.class_name(cls.name)
 
-    test_methods = []  # type: List[Stripped]
+    test_methods: List[Stripped] = []
 
     for prop in cls.properties:
         if not (

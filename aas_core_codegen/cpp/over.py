@@ -321,24 +321,24 @@ def collect_function_types(
     The types are deduplicated by their function names, and ordered so that
     every function comes after the functions it calls, as C++ requires.
     """
-    function_types = []  # type: List[intermediate.TypeAnnotationUnion]
+    function_types: List[intermediate.TypeAnnotationUnion] = []
 
     # NOTE (mristin):
     # We also reserve the names of the functions over the classes so that we detect
     # a clash with them. The monikers should make such a clash impossible (see
     # :py:func:`moniker`), but we double-check as a clash would not compile.
-    descriptions_by_name = {
+    descriptions_by_name: MutableMapping[Identifier, str] = {
         over_class_function_name(cls): f"the class {cls.name}" for cls in classes
-    }  # type: MutableMapping[Identifier, str]
+    }
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     def collect(type_annotation: intermediate.TypeAnnotationUnion) -> None:
         """Collect the functions called by ``type_annotation``, and then its own."""
         name = over_function_name(type_annotation)
         description = f"the type {type_annotation}"
 
-        other_description = descriptions_by_name.get(name, None)
+        other_description = descriptions_by_name.get(name)
         if other_description is not None:
             if other_description != description:
                 errors.append(
@@ -380,8 +380,8 @@ def collect_nested_containers(
     their monikers, and ordered so that the inner ones come before the outer ones,
     as C++ requires a function to be declared before it is called.
     """
-    result = []  # type: List[intermediate.ContainerTypeAnnotation]
-    observed_monikers = set()  # type: Set[str]
+    result: List[intermediate.ContainerTypeAnnotation] = []
+    observed_monikers: Set[str] = set()
 
     def collect(
         type_annotation: intermediate.TypeAnnotationExceptOptional, nested: bool

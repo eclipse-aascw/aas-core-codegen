@@ -29,7 +29,9 @@ from aas_core_codegen.java.common import (
 #: one whose written form the targets spell differently, which is the case for
 #: every interesting double. Both are asserted here on the *value*, and no
 #: text is ever compared.
-_LEXICAL_CASES_BY_PRIMITIVE = {
+_LEXICAL_CASES_BY_PRIMITIVE: Mapping[
+    intermediate.PrimitiveType, List[Tuple[str, str]]
+] = {
     intermediate.PrimitiveType.FLOAT: [
         # NOTE (mristin):
         # A literal too large for a double is not an error: XSD rounds it to
@@ -64,7 +66,7 @@ _LEXICAL_CASES_BY_PRIMITIVE = {
         ("true", "true"),
         ("false", "false"),
     ],
-}  # type: Mapping[intermediate.PrimitiveType, List[Tuple[str, str]]]
+}
 
 
 def _lexical_test_name_chunk(text: str) -> str:
@@ -94,9 +96,7 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
     if cls is None:
         return []
 
-    prop_by_a_type = (
-        dict()
-    )  # type: Dict[intermediate.PrimitiveType, intermediate.Property]
+    prop_by_a_type: Dict[intermediate.PrimitiveType, intermediate.Property] = dict()
     for prop in cls.properties:
         assert isinstance(prop.type_annotation, intermediate.PrimitiveTypeAnnotation)
         prop_by_a_type.setdefault(prop.type_annotation.a_type, prop)
@@ -117,7 +117,7 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
     cls_name_java = java_naming.class_name(cls.name)
     cls_name_xml = naming.xml_class_name(cls.name)
 
-    result = [
+    result: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -151,7 +151,7 @@ private static {cls_name_java} readWith(String xmlName, String text)
 {I}return Xmlization.Deserialize.deserialize{cls_name_java}(xmlReader);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for a_type, prop in relevant:
         prop_xml_name = naming.xml_property(prop.name)
@@ -169,7 +169,7 @@ private static {cls_name_java} readWith(String xmlName, String text)
 
             test_name = java_naming.method_name(
                 Identifier(
-                    f"test_{prop.name}_read_from_" f"{_lexical_test_name_chunk(text)}"
+                    f"test_{prop.name}_read_from_{_lexical_test_name_chunk(text)}"
                 )
             )
 
@@ -211,7 +211,7 @@ Xmlization.NAMESPACE.equals(EVENT.getName().getNamespaceURI())
         else Stripped("Xmlization.NAMESPACE.equals(EVENT.getName().getNamespaceURI())")
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public static Optional<Reporting.Error> checkElementsEqual(
@@ -396,7 +396,7 @@ private static void assertEqualsExpectedOrRerecordDeserializationException(
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_java = java_naming.class_name(concrete_cls.name)

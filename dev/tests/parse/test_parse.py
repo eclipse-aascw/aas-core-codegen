@@ -1,7 +1,3 @@
-# pylint: disable=missing-module-docstring
-# pylint: disable=missing-class-docstring
-# pylint: disable=missing-function-docstring
-
 import ast
 import os
 import pathlib
@@ -63,9 +59,11 @@ import typing
         errors = parse.check_expected_imports(atok=atok)
         self.assertListEqual(
             [
-                "At line 1 and column X: "
-                "Unexpected ``import ...``. "
-                "Only ``from ... import...`` statements are expected."
+                (
+                    "At line 1 and column X: "
+                    "Unexpected ``import ...``. "
+                    "Only ``from ... import...`` statements are expected."
+                )
             ],
             Test_checking_imports.replace_column_number_with_x(errors),
         )
@@ -86,8 +84,10 @@ from typing import List as Lst
         errors = parse.check_expected_imports(atok=atok)
         self.assertListEqual(
             [
-                "At line 1 and column X: Unexpected ``from ... import ... as ...``. "
-                "Only ``from ... import...`` statements are expected."
+                (
+                    "At line 1 and column X: Unexpected ``from ... import ... as ...``. "
+                    "Only ``from ... import...`` statements are expected."
+                )
             ],
             Test_checking_imports.replace_column_number_with_x(errors),
         )
@@ -104,9 +104,11 @@ from enum import List
         errors = parse.check_expected_imports(atok=atok)
         self.assertListEqual(
             [
-                "At line 1 and column X: "
-                "Expected to import 'List' from the module typing, "
-                "but it is imported from enum."
+                (
+                    "At line 1 and column X: "
+                    "Expected to import 'List' from the module typing, "
+                    "but it is imported from enum."
+                )
             ],
             Test_checking_imports.replace_column_number_with_x(errors),
         )
@@ -348,9 +350,9 @@ class Test_against_recorded(unittest.TestCase):
 
         # The expected cases should have no errors.
         expected_pths = sorted((test_cases_dir / "expected").glob("**/meta_model.py"))
-        meta_model_pths_expected_errors = [
+        meta_model_pths_expected_errors: List[Tuple[pathlib.Path, bool]] = [
             (pth, False) for pth in expected_pths
-        ]  # type: List[Tuple[pathlib.Path, bool]]
+        ]
 
         unexpected_pths = sorted(
             (test_cases_dir / "unexpected").glob("**/meta_model.py")

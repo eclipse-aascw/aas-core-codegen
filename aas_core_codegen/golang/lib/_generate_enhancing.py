@@ -512,7 +512,7 @@ func wrapUnion[E any, T selfUnion[T]](
 def _generate_wrap(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the `Wrap` function."""
     model_type_getter = golang_naming.getter_name(Identifier("model_type"))
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 _, ok := that.(enhanced[E])
@@ -525,9 +525,9 @@ if ok {{
 {I})
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         literal = golang_naming.enum_literal_name(
             enumeration_name=Identifier("Model_type"), literal_name=cls.name
@@ -618,7 +618,7 @@ def generate(
 
     ourtypes_url_literal = golang_common.string_literal(f"{repo_url}/types")
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 // Package enhancing allows for enhancement of model instances with your custom data.
@@ -636,16 +636,16 @@ type enhanced[E any] interface {{
 {I}setEnhancement(E)
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         blocks.extend(_generate_enhanced_struct_and_its_methods(cls=cls))
         blocks.append(_generate_wrap_for_cls(cls=cls))
 
-    container_blocks = []  # type: List[Stripped]
+    container_blocks: List[Stripped] = []
     wraps_classes = False
 
-    observed_monikers = set()  # type: Set[str]
+    observed_monikers: Set[str] = set()
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
             descendability = intermediate.map_descendability(prop.type_annotation)
@@ -745,7 +745,7 @@ func MustUnwrap[E any](that ourtypes.IClass) (enhancement E) {{
 
     import_index = blocks.index(_IMPORT_PLACEHOLDER)
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     if golang_common.names_package(blocks, "fmt"):
         import_lines.append(f'{I}"fmt"')
 

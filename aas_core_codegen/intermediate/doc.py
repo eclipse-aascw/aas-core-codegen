@@ -1,6 +1,5 @@
 """Provide types for the references in the docstrings."""
 
-# pylint: disable=keyword-arg-before-vararg
 import abc
 from typing import Union, Tuple, Optional, TypeVar, Generic, List
 
@@ -210,7 +209,7 @@ class ReferenceToVerificationFunction(
 T = TypeVar("T")
 
 
-class DocutilsElementTransformer(Generic[T], DBC):
+class DocutilsElementTransformer(DBC, Generic[T]):
     """
     Transform a pre-defined subset of the docutils elements.
 
@@ -297,7 +296,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: docutils.nodes.Text
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a text element into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -305,7 +304,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: ReferenceToOurType
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a reference to our type into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -313,7 +312,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: ReferenceToAttribute
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a reference to an attribute into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -321,7 +320,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: ReferenceToMethod
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a reference to a method into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -329,7 +328,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: ReferenceToArgument
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a reference to an argument into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -337,7 +336,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: ReferenceToConstraint
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a reference to a constraint into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -345,7 +344,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: ReferenceToConstant
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a reference to a constant into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -353,7 +352,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: ReferenceToVerificationFunction
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a reference to a verification function into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -361,7 +360,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: docutils.nodes.literal
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a code literal into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -369,7 +368,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: docutils.nodes.paragraph
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a paragraph element into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -377,7 +376,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: docutils.nodes.emphasis
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform an emphasis element into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -385,7 +384,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: docutils.nodes.list_item
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a list item element into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -393,7 +392,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: docutils.nodes.bullet_list
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a bullet list element into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -401,7 +400,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: docutils.nodes.note
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a note element into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -409,7 +408,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: docutils.nodes.reference
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a general reference element into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -417,7 +416,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: docutils.nodes.field_body
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a field body into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -425,4 +424,4 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: docutils.nodes.document
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Transform a document into something."""
-        raise NotImplementedError()
+        raise NotImplementedError

@@ -36,7 +36,7 @@ def generate_implementation(
     """Generate the unit tests for the helpers of the operations on strings."""
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             """\
@@ -55,7 +55,7 @@ def generate_implementation(
 #include <catch2/catch.hpp>"""
         ),
         Stripped(f"namespace our = {library_namespace};"),
-    ]  # type: List[Stripped]
+    ]
 
     if intermediate_uses.string_len_call(type_inference):
         for len_case in string_helper_cases.LEN_CASES:

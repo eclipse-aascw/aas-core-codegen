@@ -26,7 +26,7 @@ def _generate_enum_to_and_from_string(
     enumeration: intermediate.Enumeration,
 ) -> Stripped:
     """Generate the methods for de/serializing enumeration from/to a string."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     name = java_naming.enum_name(enumeration.name)
 
@@ -88,7 +88,7 @@ public static String {must_to_str_name}({name} that)
 
     # region From-string-map
 
-    string_to_enum_blocks = []  # type: List[Stripped]
+    string_to_enum_blocks: List[Stripped] = []
 
     for literal in enumeration.literals:
         literal_name = java_naming.enum_literal_name(literal.name)
@@ -168,7 +168,7 @@ def generate(
     """
     Generate the code for de/serialization of enumerations.
     """
-    stringification_blocks = []  # type: List[Stripped]
+    stringification_blocks: List[Stripped] = []
 
     for enum in symbol_table.enumerations:
         stringification_blocks.append(

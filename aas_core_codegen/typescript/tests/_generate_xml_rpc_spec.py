@@ -28,7 +28,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
         symbol_table.meta_model.xml_namespace
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -302,7 +302,7 @@ test("the path of a failed write points into the value", () => {{
 }});"""
         ),
         typescript_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

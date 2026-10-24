@@ -18,7 +18,7 @@ def generate(
     """
     Generate code to test the verification of enums.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for enumeration in symbol_table.enumerations:
         enum_name = java_naming.enum_name(enumeration.name)

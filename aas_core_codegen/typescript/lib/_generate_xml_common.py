@@ -36,7 +36,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
     # reads its elements in no namespace at all, as the XML-RPC specification
     # prescribes. The primitives which deal with such elements are therefore
     # only generated for a meta-model which actually has a JSON-able type.
-    in_no_namespace_blocks = (
+    in_no_namespace_blocks: List[Stripped] = (
         [
             Stripped(
                 f"""\
@@ -99,11 +99,11 @@ export function parseNamedElementInNoNamespace<T>(
         ]
         if intermediate_uses.json_types(symbol_table)
         else []
-    )  # type: List[Stripped]
+    )
 
     # NOTE (mristin):
     # We parse the sets only for a meta-model which has a set in a property.
-    set_blocks = (
+    set_blocks: List[Stripped] = (
         [
             Stripped(
                 f"""\
@@ -184,9 +184,9 @@ export function parseSet<T>(
         ]
         if intermediate_uses.set_properties(symbol_table)
         else []
-    )  # type: List[Stripped]
+    )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -1227,7 +1227,7 @@ export function escapeXmlText(text: string): string {{
         *set_blocks,
         *in_no_namespace_blocks,
         typescript_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

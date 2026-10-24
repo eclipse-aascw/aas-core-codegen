@@ -190,9 +190,9 @@ assert sorted(literal.value for literal in PrimitiveType) == sorted(
     parse.PRIMITIVE_TYPES
 ), "All primitive types specified in the intermediate layer"
 
-STR_TO_PRIMITIVE_TYPE = {
+STR_TO_PRIMITIVE_TYPE: Mapping[str, PrimitiveType] = {
     literal.value: literal for literal in PrimitiveType
-}  # type: Mapping[str, PrimitiveType]
+}
 
 # fmt: off
 PRIMITIVE_TYPE_TO_PYTHON_TYPE: Final[
@@ -255,7 +255,7 @@ class TypeAnnotation(DBC):
     @abc.abstractmethod
     def __str__(self) -> str:
         # Signal that this class is a purely abstract one
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class PrimitiveTypeAnnotation(TypeAnnotation):
@@ -587,7 +587,7 @@ def type_annotations_equal(
         assert isinstance(other, TupleTypeAnnotation)
         return len(that.items) == len(other.items) and all(
             type_annotations_equal(that_item, other_item)
-            for that_item, other_item in zip(that.items, other.items)
+            for that_item, other_item in zip(that.items, other.items, strict=True)
         )
 
     elif isinstance(that, OptionalTypeAnnotation):
@@ -680,7 +680,7 @@ class SummaryRemarksDescription(DBC):
     @abc.abstractmethod
     def __repr__(self) -> str:
         """Represent the instance as a string for easier debugging."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 # noinspection PyAbstractClass
@@ -1179,7 +1179,7 @@ class SignatureLike(DBC):
     @abc.abstractmethod
     def __repr__(self) -> str:
         # Signal that this is a pure abstract class
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class Method(SignatureLike):
@@ -1218,7 +1218,7 @@ class Method(SignatureLike):
         (
                 arg_set := {arg.name for arg in arguments},
                 all(
-                    arg in arg_set  # pylint: disable=used-before-assignment
+                    arg in arg_set
                     for precondition in contracts.preconditions
                     for arg in precondition.args
                     if arg != 'self'
@@ -1272,7 +1272,7 @@ class Method(SignatureLike):
     @abc.abstractmethod
     def __repr__(self) -> str:
         # Signal that this is a pure abstract class.
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class ImplementationSpecificMethod(Method):
@@ -1614,7 +1614,7 @@ class ConstrainedPrimitive:
     # fmt: off
     @require(
         lambda inheritances:
-        len(inheritances) == len(set(inheritance.name for inheritance in inheritances)),
+        len(inheritances) == len({inheritance.name for inheritance in inheritances}),
         "No duplicate inheritances"
     )
     # fmt: on
@@ -1657,9 +1657,9 @@ class ConstrainedPrimitive:
     @require(
         lambda ancestors, inheritances:
         (
-            ancestor_id_set := set(runtime_id(ancestor) for ancestor in ancestors),
+            ancestor_id_set := {runtime_id(ancestor) for ancestor in ancestors},
             all(
-                runtime_id(inheritance) in ancestor_id_set  # pylint: disable=used-before-assignment
+                runtime_id(inheritance) in ancestor_id_set
                 for inheritance in inheritances
             )
         )[1],
@@ -1926,7 +1926,7 @@ class Class(DBC):
     # fmt: off
     @require(
         lambda inheritances:
-        len(inheritances) == len(set(inheritance.name for inheritance in inheritances)),
+        len(inheritances) == len({inheritance.name for inheritance in inheritances}),
         "No duplicate inheritances"
     )
     # fmt: on
@@ -1977,7 +1977,7 @@ class Class(DBC):
     # fmt: off
     @require(
         lambda properties:
-        len(properties) == len(set(prop.name for prop in properties)),
+        len(properties) == len({prop.name for prop in properties}),
         "No duplicate properties"
     )
     # fmt: on
@@ -1994,7 +1994,7 @@ class Class(DBC):
     # fmt: off
     @require(
         lambda methods:
-        len(methods) == len(set(method.name for method in methods)),
+        len(methods) == len({method.name for method in methods}),
         "No duplicate methods"
     )
     # fmt: on
@@ -2021,9 +2021,9 @@ class Class(DBC):
     @require(
         lambda ancestors, inheritances:
         (
-            ancestor_id_set := set(runtime_id(ancestor) for ancestor in ancestors),
+            ancestor_id_set := {runtime_id(ancestor) for ancestor in ancestors},
             all(
-                runtime_id(inheritance) in ancestor_id_set  # pylint: disable=used-before-assignment
+                runtime_id(inheritance) in ancestor_id_set
                 for inheritance in inheritances
             )
         )[1],
@@ -2032,7 +2032,7 @@ class Class(DBC):
     @require(
         lambda ancestors, descendants:
         len(
-            set(runtime_id(ancestor) for ancestor in ancestors).difference(
+            {runtime_id(ancestor) for ancestor in ancestors}.difference(
                 runtime_id(descendant) for descendant in descendants
             )
         ) == 0,
@@ -2331,7 +2331,7 @@ class Class(DBC):
     @abc.abstractmethod
     def __repr__(self) -> str:
         # Signal that this is a purely abstract class.
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class ConcreteClass(Class):
@@ -2418,7 +2418,7 @@ class Constant(DBC):
     @abc.abstractmethod
     def __repr__(self) -> str:
         """Represent the instance as a string for easier debugging."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class ConstantPrimitive(Constant):
@@ -2538,7 +2538,7 @@ class ConstantSetOfPrimitives(Constant):
         or (
             python_type := PRIMITIVE_TYPE_TO_PYTHON_TYPE[self.a_type],
             all(
-                isinstance(value, python_type)  # pylint: disable=used-before-assignment
+                isinstance(value, python_type)
                 for value in self.literal_value_set
             )
         )[1],
@@ -2684,7 +2684,7 @@ class Verification(SignatureLike):
         (
                 arg_set := {arg.name for arg in arguments},
                 all(
-                    arg in arg_set  # pylint: disable=used-before-assignment
+                    arg in arg_set
                     for precondition in contracts.preconditions
                     for arg in precondition.args
                 )
@@ -2731,7 +2731,7 @@ class Verification(SignatureLike):
     @abc.abstractmethod
     def __repr__(self) -> str:
         # Signal that this is a pure abstract class.
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class ImplementationSpecificVerification(Verification):
@@ -3178,7 +3178,7 @@ class NamedUnion:
     )
     @require(
         lambda members:
-        len(members) == len(set(runtime_id(member) for member in members)),
+        len(members) == len({runtime_id(member) for member in members}),
         "Unique members in the named union"
     )
     # fmt: on
@@ -3261,7 +3261,7 @@ class NamedUnion:
     )
     @require(
         lambda roots:
-        len(roots) == len(set(runtime_id(root) for root in roots)),
+        len(roots) == len({runtime_id(root) for root in roots}),
         "Unique roots in the named union"
     )
     # fmt: on
@@ -3368,14 +3368,14 @@ class SymbolTable:
     )
     @require(
         lambda our_types, our_types_topologically_sorted:
-        set(
+        {
             runtime_id(our_type)
             for our_type in our_types
             if not isinstance(our_type, Enumeration)
-        )
-        == set(
+        }
+        == {
             runtime_id(our_type) for our_type in our_types_topologically_sorted
-        ),
+        },
         "Only maybe the order differs between our_types and "
         "our_types_topologically_sorted"
     )
@@ -3915,7 +3915,7 @@ def map_descendability(
     The mapping is a form of caching. Otherwise, the time complexity would be quadratic
     if we queried at each type annotation subscript.
     """
-    mapping = dict()  # type: MutableMapping[TypeAnnotationUnion, bool]
+    mapping: MutableMapping[TypeAnnotationUnion, bool] = dict()
 
     def recurse(a_type_annotation: TypeAnnotationUnion) -> bool:
         """Recursively iterate over subscripted type annotations."""
@@ -4141,7 +4141,7 @@ def numeric_places(symbol_table: SymbolTable) -> List[NumericPlace]:
     At most one place is reported per (class, property), as the second one
     would exercise the very same code.
     """
-    result = []  # type: List[NumericPlace]
+    result: List[NumericPlace] = []
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -4212,7 +4212,7 @@ def tuple_arities(symbol_table: SymbolTable) -> List[int]:
     an ``Optional[...]``), not just when the property itself is directly
     annotated as a tuple.
     """
-    arities = set()  # type: Set[int]
+    arities: Set[int] = set()
     for cls in symbol_table.classes:
         for prop in cls.properties:
             for type_anno in over_type_annotation_and_nested_type_annotations(
@@ -4234,7 +4234,7 @@ def local_declaration_annotations(
     ``x: Set[str] = set()``. The implementation-specific functions have no body
     that we know of, so they declare no locals.
     """
-    body = None  # type: Optional[Sequence[parse_tree.Node]]
+    body: Optional[Sequence[parse_tree.Node]] = None
     if isinstance(function, TranspilableVerification):
         body = function.parsed.body
     elif isinstance(function, UnderstoodMethod):
@@ -4276,10 +4276,10 @@ def collect_ids_of_our_types_in_properties(
 
     The IDs refer to IDs of the Python objects in this context.
     """
-    result = set()  # type: Set[IdOfOurType]
+    result: Set[IdOfOurType] = set()
     for cls in symbol_table.classes:
         for prop in cls.properties:
-            stack = [prop.type_annotation]  # type: List[TypeAnnotationUnion]
+            stack: List[TypeAnnotationUnion] = [prop.type_annotation]
             while len(stack) > 0:
                 type_anno = stack.pop()
 

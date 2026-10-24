@@ -63,8 +63,8 @@ def _undo_escaping_backslash_x_in_pattern(pattern: str) -> str:
     This is necessary since XML Schema Validators do not know how to handle such escape
     sequences in the patterns and need the verbatim characters.
     """
-    parts = []  # type: List[str]
-    cursor = None  # type: Optional[int]
+    parts: List[str] = []
+    cursor: Optional[int] = None
     for mtch in re.finditer(_ESCAPE_BACKSLASH_X_RE, pattern):
         if cursor is None:
             parts.append(pattern[: mtch.start()])
@@ -91,15 +91,15 @@ _ESCAPE_BACKSLASH_X_U_U_RE = re.compile(
 )
 
 
-def _undo_escaping_backslash_x_u_and_U_in_pattern(pattern: str) -> str:
+def _undo_escaping_backslash_x_u_and_U_in_pattern(pattern: str) -> str:  # noqa: N802
     """
     Undo the escaping of ``\\x??``, ``\\u????`` and ``\\U????????`` in the ``pattern``.
 
     This is necessary since Greenery does not know how to handle such escape
     sequences in the patterns and need the verbatim characters.
     """
-    parts = []  # type: List[str]
-    cursor = None  # type: Optional[int]
+    parts: List[str] = []
+    cursor: Optional[int] = None
     for mtch in re.finditer(_ESCAPE_BACKSLASH_X_U_U_RE, pattern):
         if cursor is None:
             parts.append(pattern[: mtch.start()])
@@ -138,7 +138,7 @@ class _AnchorRemover(parse_retree.PassThroughVisitor):
 
     def visit_concatenation(self, node: parse_retree.Concatenation) -> None:
         """Visit the ``concatenation``."""
-        new_concatenants = []  # type: List[parse_retree.Term]
+        new_concatenants: List[parse_retree.Term] = []
         for concatenant in node.concatenants:
             if not (
                 isinstance(concatenant.value, parse_retree.Symbol)
@@ -167,7 +167,7 @@ def _translate_pattern(pattern: str) -> Tuple[Optional[str], Optional[str]]:
     remover.visit(parsed)
 
     values = parse_retree.render(regex=parsed)
-    parts = []  # type: List[str]
+    parts: List[str] = []
     for value in values:
         assert isinstance(value, str), (
             "Only strings expected when rendering a pattern "
@@ -267,7 +267,7 @@ def _translate_to_simple_type(
                 else:
                     # NOTE (mristin):
                     # The module ``greenery`` is not annotated with types at the moment.
-                    merger = None  # type: Optional[Any]
+                    merger: Optional[Any] = None
                     for pattern_constraint in patterns_relevant_for_xsd:
                         # NOTE (mristin):
                         # Greenery expects the characters to be in Unicode and not escaped.
@@ -1006,8 +1006,8 @@ def _define_properties(
     ],
 ) -> Tuple[Optional[List[ET.Element]], Optional[List[Error]]]:
     """Define the properties of the ``cls`` as a sequence of tags."""
-    sequence = []  # type: List[ET.Element]
-    errors = []  # type: List[Error]
+    sequence: List[ET.Element] = []
+    errors: List[Error] = []
 
     constraints_by_value = constraints_by_class[cls]
 
@@ -1239,7 +1239,7 @@ def _retrieve_implementation_specific_elements(
             )
         ]
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for descendant in implementation_root.iter():
         if descendant.text is not None and not _WHITESPACE_RE.fullmatch(
             descendant.text
@@ -1271,7 +1271,7 @@ def _retrieve_implementation_specific_elements(
         return None, errors
 
     # Ignore the implementation root since it defines a partial schema
-    elements = []  # type: List[ET.Element]
+    elements: List[ET.Element] = []
     for child in implementation_root:
         elements.append(child)
 
@@ -1284,11 +1284,11 @@ def _sort_by_tags_and_names_in_place(root: ET.Element) -> None:
 
     This makes diffing and searching in the schema a bit easier.
     """
-    groups = []  # type: List[ET.Element]
-    simple_types = []  # type: List[ET.Element]
-    complex_types = []  # type: List[ET.Element]
-    miscellaneous = []  # type: List[ET.Element]
-    elements = []  # type: List[ET.Element]
+    groups: List[ET.Element] = []
+    simple_types: List[ET.Element] = []
+    complex_types: List[ET.Element] = []
+    miscellaneous: List[ET.Element] = []
+    elements: List[ET.Element] = []
 
     for child in root:
         if child.tag == "xs:group":
@@ -1397,7 +1397,7 @@ def generate(
 
     assert root is not None
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # NOTE (mristin):
     # We remove any whitespace tail and text in all the tags, and make sure there is no
@@ -1577,21 +1577,21 @@ def generate(
         root.extend(_generate_json_type_definitions())
 
     # Tag name 🠒 (name 🠒 element)
-    observed_definitions = dict(
+    observed_definitions: MutableMapping[str, MutableMapping[str, ET.Element]] = dict(
         dict()
-    )  # type: MutableMapping[str, MutableMapping[str, ET.Element]]
+    )
 
     for element in root:
         name = element.attrib.get("name", None)
         if name is None:
             continue
 
-        observed_for_tag = observed_definitions.get(element.tag, None)
+        observed_for_tag = observed_definitions.get(element.tag)
         if observed_for_tag is None:
             observed_for_tag = dict()
             observed_definitions[element.tag] = observed_for_tag
 
-        observed_element = observed_for_tag.get(name, None)
+        observed_element = observed_for_tag.get(name)
         if observed_element is not None:
             ours = ET.tostring(element, encoding="unicode", method="xml")
             theirs = ET.tostring(observed_element, encoding="unicode", method="xml")

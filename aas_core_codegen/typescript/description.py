@@ -118,8 +118,10 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
                     return f"{{@link {cls_name}.{prop_name}}}", None
             else:
                 return (
-                    f"{{@link {typescript_common.TYPES_MODULE}!"
-                    f"{cls_name}.{prop_name}}}",
+                    (
+                        f"{{@link {typescript_common.TYPES_MODULE}!"
+                        f"{cls_name}.{prop_name}}}"
+                    ),
                     None,
                 )
 
@@ -138,8 +140,10 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
                     return f"{{@link {enum_name}.{literal_name}}}", None
             else:
                 return (
-                    f"{{@link {typescript_common.TYPES_MODULE}!"
-                    f"{enum_name}.{literal_name}}}",
+                    (
+                        f"{{@link {typescript_common.TYPES_MODULE}!"
+                        f"{enum_name}.{literal_name}}}"
+                    ),
                     None,
                 )
         else:
@@ -165,8 +169,10 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
                 return f"{{@link {cls_name}.{method_name}}}", None
         else:
             return (
-                f"{{@link {typescript_common.TYPES_MODULE}!"
-                f"{cls_name}.{method_name}}}",
+                (
+                    f"{{@link {typescript_common.TYPES_MODULE}!"
+                    f"{cls_name}.{method_name}}}"
+                ),
                 None,
             )
 
@@ -240,9 +246,9 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
     ) -> Tuple[Optional[str], Optional[List[str]]]:
         """Render the children and join them by empty lines, where appropriate."""
         writer = io.StringIO()
-        previous_child = None  # type: Optional[docutils.nodes.Element]
+        previous_child: Optional[docutils.nodes.Element] = None
 
-        errors = []  # type: List[str]
+        errors: List[str] = []
 
         for child in children:
             text, child_errors = self.transform(child)
@@ -280,8 +286,8 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
     def transform_emphasis(
         self, element: docutils.nodes.emphasis
     ) -> Tuple[Optional[str], Optional[List[str]]]:
-        children = []  # type: List[str]
-        errors = []  # type: List[str]
+        children: List[str] = []
+        errors: List[str] = []
         for child in element.children:
             rendered_child, child_errors = self.transform(child)
             if child_errors is not None:
@@ -306,7 +312,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
     def transform_bullet_list(
         self, element: docutils.nodes.bullet_list
     ) -> Tuple[Optional[str], Optional[List[str]]]:
-        errors = []  # type: List[str]
+        errors: List[str] = []
         writer = io.StringIO()
 
         for i, child in enumerate(element.children):
@@ -400,7 +406,7 @@ def generate_documentation_comment_for_summary_remarks(
     description: intermediate.SummaryRemarksDescription, context: Context
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the documentation comment for a summary-remarks."""
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
     renderer = _ElementRenderer(context=context)
 
@@ -410,7 +416,7 @@ def generate_documentation_comment_for_summary_remarks(
     else:
         assert rendered_summary is not None
 
-    remark_blocks = []  # type: List[str]
+    remark_blocks: List[str] = []
     for remark in description.remarks:
         rendered_remark, remark_errors = renderer.transform(remark)
         if remark_errors:
@@ -438,7 +444,7 @@ def generate_documentation_comment_for_summary_remarks_constraints(
     description: intermediate.SummaryRemarksConstraintsDescription, context: Context
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the documentation comment for a summary-remarks-constraints."""
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
     renderer = _ElementRenderer(context=context)
 
@@ -448,7 +454,7 @@ def generate_documentation_comment_for_summary_remarks_constraints(
     else:
         assert rendered_summary is not None
 
-    remark_blocks = []  # type: List[str]
+    remark_blocks: List[str] = []
     for remark in description.remarks:
         rendered_remark, remark_errors = renderer.transform(remark)
         if remark_errors:
@@ -457,7 +463,7 @@ def generate_documentation_comment_for_summary_remarks_constraints(
             assert rendered_remark is not None
             remark_blocks.append(rendered_remark)
 
-    constraint_blocks = []  # type: List[str]
+    constraint_blocks: List[str] = []
     for constraint_id, constraint in description.constraints_by_identifier.items():
         constraint_body, constraint_errors = renderer.transform(constraint)
         if constraint_errors is not None:
@@ -499,7 +505,7 @@ def generate_documentation_comment_for_signature(
 
     The ``extra_remarks`` are appended as plain text to the rendered remarks.
     """
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
     renderer = _ElementRenderer(context=context)
 
@@ -509,7 +515,7 @@ def generate_documentation_comment_for_signature(
     else:
         assert rendered_summary is not None
 
-    remark_blocks = []  # type: List[str]
+    remark_blocks: List[str] = []
     for remark in description.remarks:
         rendered_remark, remark_errors = renderer.transform(remark)
         if remark_errors:
@@ -520,7 +526,7 @@ def generate_documentation_comment_for_signature(
 
     remark_blocks.extend(extra_remarks)
 
-    param_and_return_blocks = []  # type: List[Stripped]
+    param_and_return_blocks: List[Stripped] = []
     for arg_name, arg_description in description.arguments_by_name.items():
         rendered_arg_description, arg_errors = renderer.transform(arg_description)
         if arg_errors is not None:

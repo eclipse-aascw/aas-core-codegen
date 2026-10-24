@@ -132,7 +132,7 @@ def _generate_constant_set_of_primitives(
     constant: intermediate.ConstantSetOfPrimitives,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the definition of a constant set of primitives."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     writer = io.StringIO()
 
@@ -156,7 +156,7 @@ def _generate_constant_set_of_primitives(
             writer.write(comment)
             writer.write("\n")
 
-    literal_codes = []  # type: List[str]
+    literal_codes: List[str] = []
     set_type: str
 
     if constant.a_type is intermediate.PrimitiveType.BOOL:
@@ -254,7 +254,7 @@ def _generate_constant_set_of_enumeration_literals(
 
     enum_name = typescript_naming.enum_name(constant.enumeration.name)
 
-    literal_codes = []  # type: List[str]
+    literal_codes: List[str] = []
 
     for literal in constant.literals:
         literal_name = typescript_naming.enum_literal_name(literal.name)
@@ -287,9 +287,9 @@ def generate(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code to define the constants of the meta-model."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -299,7 +299,7 @@ def generate(
         typescript_common.WARNING,
         Stripped("/* eslint-disable @typescript-eslint/no-unused-vars */"),
         Stripped('import * as OurTypes from "./types";'),
-    ]  # type: List[Stripped]
+    ]
 
     for constant in symbol_table.constants:
         block: Optional[Stripped]

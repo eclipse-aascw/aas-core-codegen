@@ -16,12 +16,12 @@ class Node(DBC):
     @abc.abstractmethod
     def accept(self, visitor: "Visitor") -> None:
         """Accept the visitor."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform(self, transformer: "Transformer[T]") -> T:
         """Accept the transformer."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class Regex(Node):
@@ -256,55 +256,55 @@ class Visitor(DBC):
     @abc.abstractmethod
     def visit_regex(self, node: Regex) -> None:
         """Visit the ``regex``."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_union_expr(self, node: UnionExpr) -> None:
         """Visit the ``union_expr``."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_concatenation(self, node: Concatenation) -> None:
         """Visit the ``concatenation``."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_symbol(self, node: Symbol) -> None:
         """Visit the ``symbol``."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_term(self, node: Term) -> None:
         """Visit the ``term``."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_group(self, node: Group) -> None:
         """Visit the ``group``."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_char(self, node: Char) -> None:
         """Visit the ``char``."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_quantifier(self, node: Quantifier) -> None:
         """Visit the ``quantifier``."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_char_set(self, node: CharSet) -> None:
         """Visit the ``char_set``."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_range(self, node: Range) -> None:
         """Visit the ``range``."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
-class Transformer(Generic[T], DBC):
+class Transformer(DBC, Generic[T]):
     """Transform the regular expression into something else."""
 
     def transform(self, node: Node) -> T:
@@ -314,49 +314,49 @@ class Transformer(Generic[T], DBC):
     @abc.abstractmethod
     def transform_regex(self, node: Regex) -> T:
         """Transform the ``regex`` into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_union_expr(self, node: UnionExpr) -> T:
         """Transform the ``union_expr`` into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_concatenation(self, node: Concatenation) -> T:
         """Transform the ``concatenation`` into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_symbol(self, node: Symbol) -> T:
         """Transform the ``symbol`` into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_term(self, node: Term) -> T:
         """Transform the ``term`` into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_group(self, node: Group) -> T:
         """Transform the ``group`` into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_char(self, node: Char) -> T:
         """Transform the ``char`` into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_quantifier(self, node: Quantifier) -> T:
         """Transform the ``quantifier`` into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_char_set(self, node: CharSet) -> T:
         """Transform the ``char_set`` into something."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_range(self, node: Range) -> T:
         """Transform the ``range`` into something."""
-        raise NotImplementedError()
+        raise NotImplementedError

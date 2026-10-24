@@ -22,7 +22,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate() -> str:
     """Generate the unit tests for Base64 functions."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -117,7 +117,6 @@ test("unexpected padding in the middle", () => {{
 {I}}}
 }});"""
         ),
-        # pylint: disable=line-too-long
         Stripped(
             f"""\
 test("Bytes representing an invalid UTF-8 sequence encode OK", () => {{
@@ -271,8 +270,7 @@ test("table from rickkas7/Base64RK", () => {{
 {I}}}
 }});"""
         ),
-        # pylint: enable=line-too-long
-    ]  # type: List[Stripped]
+    ]
     writer = io.StringIO()
     for i, block in enumerate(blocks):
         if i > 0:

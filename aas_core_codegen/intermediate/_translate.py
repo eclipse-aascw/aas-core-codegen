@@ -127,7 +127,6 @@ from aas_core_codegen.parse import (
     tree as parse_tree,
 )
 
-# pylint: disable=unused-argument
 
 _STRIP_SPHINX_FORMATTING_DIRECTIVES_FROM_REFERENCE_RE = re.compile(r"^([!~]+)")
 
@@ -452,8 +451,6 @@ def _role_reference_to_verification_function(  # type: ignore
     return [node], []
 
 
-# pylint: enable=unused-argument
-
 # The global registration is unfortunate since it is unpredictable and might affect
 # other modules, but it is the only way to register the roles.
 #
@@ -530,7 +527,7 @@ def _extract_structured_description(
     cursor = iter(parsed.document.children)
     lookahead = next(cursor, None)
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     if not isinstance(lookahead, docutils.nodes.paragraph):
         errors.append(
@@ -544,8 +541,8 @@ def _extract_structured_description(
     # region Match
 
     summary = lookahead
-    remarks = []  # type: List[docutils.nodes.Element]
-    field_list = None  # type: Optional[docutils.nodes.field_list]
+    remarks: List[docutils.nodes.Element] = []
+    field_list: Optional[docutils.nodes.field_list] = None
 
     lookahead = next(cursor, None)
     while lookahead is not None:
@@ -597,9 +594,9 @@ def _extract_structured_description(
 
     # region Transform the field list to an ordered dictionary
 
-    fields_by_name = (
-        collections.OrderedDict()
-    )  # type: OrderedDict[str, docutils.nodes.field_body]
+    fields_by_name: OrderedDict[
+        str, docutils.nodes.field_body
+    ] = collections.OrderedDict()
 
     if field_list is not None:
         for field in field_list.children:
@@ -705,11 +702,11 @@ def _to_summary_remarks_constraints_description(
 
     assert structured_desc is not None
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    constraints_by_identifier = (
-        collections.OrderedDict()
-    )  # type: OrderedDict[str, docutils.nodes.field_body]
+    constraints_by_identifier: OrderedDict[
+        str, docutils.nodes.field_body
+    ] = collections.OrderedDict()
 
     for name, body in structured_desc.fields_by_name.items():
         parts = name.split()
@@ -865,13 +862,13 @@ def _to_description_of_signature(
         return None, structured_desc_errors
     assert structured_desc is not None
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    argument_descriptions_by_name = (
-        collections.OrderedDict()
-    )  # type: OrderedDict[Identifier, docutils.nodes.field_body]
+    argument_descriptions_by_name: OrderedDict[
+        Identifier, docutils.nodes.field_body
+    ] = collections.OrderedDict()
 
-    returns_description = None  # type: Optional[docutils.nodes.field_body]
+    returns_description: Optional[docutils.nodes.field_body] = None
 
     for name, body in structured_desc.fields_by_name.items():
         parts = name.split()
@@ -1022,7 +1019,7 @@ def _to_enumeration_literal(
     parsed: parse.EnumerationLiteral,
 ) -> Tuple[Optional[EnumerationLiteral], Optional[List[Error]]]:
     """Translate the enumeration literal from the meta-model."""
-    description = None  # type: Optional[DescriptionOfEnumerationLiteral]
+    description: Optional[DescriptionOfEnumerationLiteral] = None
 
     if parsed.description is not None:
         description, description_errors = _to_description_of_enumeration_literal(
@@ -1047,9 +1044,9 @@ def _to_enumeration(
     parsed: parse.Enumeration,
 ) -> Tuple[Optional[Enumeration], Optional[List[Error]]]:
     """Translate an enumeration from the meta-model to an intermediate enumeration."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    description = None  # type: Optional[DescriptionOfOurType]
+    description: Optional[DescriptionOfOurType] = None
     if parsed.description is not None:
         description, description_errors = _to_description_of_our_type(
             parsed.description
@@ -1057,7 +1054,7 @@ def _to_enumeration(
         if description_errors is not None:
             errors.extend(description_errors)
 
-    literals = []  # type: List[EnumerationLiteral]
+    literals: List[EnumerationLiteral] = []
     for parsed_literal in parsed.literals:
         literal, literal_errors = _to_enumeration_literal(parsed_literal)
         if literal_errors is not None:
@@ -1297,7 +1294,7 @@ def _mutability_type_beneath_optional(
 
 def _to_arguments(parsed: Sequence[parse.Argument]) -> List[Argument]:
     """Translate the arguments of a method in meta-model to the intermediate ones."""
-    result = []  # type: List[Argument]
+    result: List[Argument] = []
     for parsed_arg in parsed:
         if isinstance(parsed_arg.type_annotation, parse.SelfTypeAnnotation):
             continue
@@ -1329,7 +1326,7 @@ def _to_property(
     parsed: parse.Property, parsed_cls: parse.Class
 ) -> Tuple[Optional[Property], Optional[List[Error]]]:
     """Translate a parsed property of a class to an intermediate one."""
-    description = None  # type: Optional[DescriptionOfProperty]
+    description: Optional[DescriptionOfProperty] = None
 
     if parsed.description is not None:
         description, description_errors = _to_description_of_property(
@@ -1435,7 +1432,7 @@ def _to_method(
     )
 
     # fmt: on
-    description = None  # type: Optional[DescriptionOfSignature]
+    description: Optional[DescriptionOfSignature] = None
     if parsed.description:
         description, description_errors = _to_description_of_signature(
             parsed=parsed.description,
@@ -1526,11 +1523,9 @@ def _determine_constrained_primitives_by_name(
     # Then, in the second pass, we propagate the "is-constrained-primitive-type"
     # through the class hierarchy.
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    initial_map = (
-        collections.OrderedDict()
-    )  # type: MutableMapping[Identifier, PrimitiveType]
+    initial_map: MutableMapping[Identifier, PrimitiveType] = collections.OrderedDict()
 
     # region First pass to determine the initial set
 
@@ -1570,7 +1565,7 @@ def _determine_constrained_primitives_by_name(
     # See https://en.wikipedia.org/wiki/Component_(graph_theory)
 
     # Put all the descendants of the initial set on the stack
-    stack = []  # type: List[Tuple[Identifier, PrimitiveType, Identifier]]
+    stack: List[Tuple[Identifier, PrimitiveType, Identifier]] = []
 
     for identifier_of_the_initial, constrainee_of_the_initial in initial_map.items():
         parsed_cls = parsed_symbol_table.must_find_class(name=identifier_of_the_initial)
@@ -1583,9 +1578,9 @@ def _determine_constrained_primitives_by_name(
     # Propagate the constrainees through the ontology
 
     # Map: identifier 🠒 determined primitive type, the ancestor which determined it
-    extended_map = (
-        collections.OrderedDict()
-    )  # type: MutableMapping[Identifier, Tuple[PrimitiveType, Identifier]]
+    extended_map: MutableMapping[
+        Identifier, Tuple[PrimitiveType, Identifier]
+    ] = collections.OrderedDict()
 
     while len(stack) > 0 and len(errors) == 0:
         # NOTE (mristin):
@@ -1634,9 +1629,7 @@ def _determine_constrained_primitives_by_name(
 
     # region Convert the initial and extended map into one
 
-    result = (
-        collections.OrderedDict()
-    )  # type: MutableMapping[Identifier, PrimitiveType]
+    result: MutableMapping[Identifier, PrimitiveType] = collections.OrderedDict()
 
     for identifier, constrainee in initial_map.items():
         result[identifier] = constrainee
@@ -1648,7 +1641,7 @@ def _determine_constrained_primitives_by_name(
 
     # region Check the inheritances of all the constrained primitive types
 
-    for identifier in extended_map.keys():
+    for identifier in extended_map:
         # We know for sure that the initial set is valid, so we can skip it in
         # the check.
         if identifier in initial_map:
@@ -1659,8 +1652,8 @@ def _determine_constrained_primitives_by_name(
         # Make sure that the constrained primitive types only inherit from other
         # constrained primitive types
 
-        constrained_inheritances = []  # type: List[Identifier]
-        unexpected_inheritances = []  # type: List[Identifier]
+        constrained_inheritances: List[Identifier] = []
+        unexpected_inheritances: List[Identifier] = []
 
         for inheritance in parsed_cls.inheritances:
             if inheritance not in result:
@@ -1736,8 +1729,8 @@ class _CheckCodeUsesReVisitor(parse_tree.Visitor):
     """Check whether the code uses ``re`` module."""
 
     def __init__(self) -> None:
-        self.first_re_usage = None  # type: Optional[parse_tree.Node]
-        self._variable_name_set = set()  # type: Set[str]
+        self.first_re_usage: Optional[parse_tree.Node] = None
+        self._variable_name_set: Set[str] = set()
 
     def visit(self, node: parse_tree.Node) -> None:
         if self.first_re_usage is not None:
@@ -1827,7 +1820,7 @@ def _to_constrained_primitive(
     The ``constrainee`` is determined by propagation in
     :py:func:`_determine_constrained_primitives_by_name`.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     invariants = []
     for parsed_invariant in parsed.invariants:
@@ -1841,7 +1834,7 @@ def _to_constrained_primitive(
             assert invariant is not None
             invariants.append(invariant)
 
-    description = None  # type: Optional[DescriptionOfOurType]
+    description: Optional[DescriptionOfOurType] = None
 
     if parsed.description is not None:
         description, description_errors = _to_description_of_our_type(
@@ -1893,10 +1886,10 @@ def _extract_constructor(
     to super-constructors are not expected to be in-lined yet.
     """
     contracts = Contracts(preconditions=[], snapshots=[], postconditions=[])
-    arguments = []  # type: List[Argument]
-    description = None  # type: Optional[DescriptionOfSignature]
+    arguments: List[Argument] = []
+    description: Optional[DescriptionOfSignature] = None
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     parsed_class_init = parsed_class.methods_by_name.get(Identifier("__init__"), None)
     if parsed_class_init is not None:
@@ -1944,7 +1937,7 @@ def _to_class(
     The ``constructor_statements`` are determined by the constructor table. The calls
     to super-constructors are not expected to be in-lined yet.
     """
-    serialization = None  # type: Optional[Serialization]
+    serialization: Optional[Serialization] = None
     if parsed.serialization is not None:
         # NOTE (mristin):
         # The ``parsed.serialization.with_model_type`` might be None, but we have to
@@ -1954,7 +1947,7 @@ def _to_class(
             with_model_type=parsed.serialization.with_model_type  # type: ignore
         )
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     invariants = []
     for parsed_invariant in parsed.invariants:
@@ -1968,7 +1961,7 @@ def _to_class(
             assert invariant is not None
             invariants.append(invariant)
 
-    properties = []  # type: List[Property]
+    properties: List[Property] = []
     for parsed_prop in parsed.properties:
         prop, prop_errors = _to_property(parsed=parsed_prop, parsed_cls=parsed)
         if prop_errors is not None:
@@ -1996,7 +1989,7 @@ def _to_class(
             )
         )
 
-    methods = []  # type: List[MethodUnion]
+    methods: List[MethodUnion] = []
     for parsed_method in parsed.methods:
         if isinstance(parsed_method, parse.ConstructorToBeUnderstood):
             # Constructors are handled in a different way through
@@ -2017,7 +2010,7 @@ def _to_class(
         assert method is not None
         methods.append(method)
 
-    description = None  # type: Optional[DescriptionOfOurType]
+    description: Optional[DescriptionOfOurType] = None
     if parsed.description is not None:
         description, description_errors = _to_description_of_our_type(
             parsed=parsed.description
@@ -2030,7 +2023,7 @@ def _to_class(
 
     assert constructor is not None
 
-    factory_to_use = None  # type: Optional[Type[Class]]
+    factory_to_use: Optional[Type[Class]] = None
 
     if isinstance(parsed, parse.ConcreteClass):
         factory_to_use = ConcreteClass
@@ -2087,14 +2080,14 @@ def _to_verification_function(
     arguments = _to_arguments(parsed=parsed.arguments)
     returns = None if parsed.returns is None else _to_type_annotation(parsed.returns)
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     assert not parsed.non_mutating, (
         "Functions must not be non-mutating as there is no instance. "
         "This is expected to be verified at the parse stage."
     )
 
-    description = None  # type: Optional[DescriptionOfSignature]
+    description: Optional[DescriptionOfSignature] = None
     if parsed.description is not None:
         description, description_errors = _to_description_of_signature(
             parsed=parsed.description, arguments=arguments, returns=returns
@@ -2201,7 +2194,7 @@ def _to_meta_model(
     parsed: parse.MetaModel,
 ) -> Tuple[Optional[MetaModel], Optional[List[Error]]]:
     """Translate the meta-model meta-data."""
-    description = None  # type: Optional[DescriptionOfMetaModel]
+    description: Optional[DescriptionOfMetaModel] = None
     if parsed.description is not None:
         description, description_errors = _to_description_of_meta_model(
             parsed.description
@@ -2238,7 +2231,7 @@ def _to_constant_primitive(
             )
         ]
 
-    description = None  # type: Optional[DescriptionOfConstant]
+    description: Optional[DescriptionOfConstant] = None
     if parsed.description is not None:
         description, description_errors = _to_description_of_constant(
             parsed=parsed.description
@@ -2287,9 +2280,9 @@ def _to_constant_set_of_primitives(
 
     a_type_in_python = PRIMITIVE_TYPE_TO_PYTHON_TYPE[a_type]
 
-    literals = []  # type: List[PrimitiveSetLiteral]
+    literals: List[PrimitiveSetLiteral] = []
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for i, literal in enumerate(parsed.set_literals):
         if not isinstance(literal.node, ast.Constant):
             errors.append(
@@ -2319,7 +2312,7 @@ def _to_constant_set_of_primitives(
             PrimitiveSetLiteral(value=literal.node.value, a_type=a_type, parsed=literal)
         )
 
-    description = None  # type: Optional[DescriptionOfConstant]
+    description: Optional[DescriptionOfConstant] = None
     if parsed.description is not None:
         description, description_errors = _to_description_of_constant(
             parsed=parsed.description
@@ -2333,7 +2326,7 @@ def _to_constant_set_of_primitives(
         else:
             assert description is not None
 
-    subsets = []  # type: List[_PlaceholderConstant]
+    subsets: List[_PlaceholderConstant] = []
     for subset_name in parsed.subsets:
         if not IDENTIFIER_RE.fullmatch(subset_name):
             errors.append(
@@ -2369,9 +2362,9 @@ def _to_constant_set_of_enumeration_literals(
     atok: asttokens.ASTTokens,
 ) -> Tuple[Optional[ConstantSetOfEnumerationLiterals], Optional[List[Error]]]:
     """Translate a parsed constant set into a constant set of enumeration literals."""
-    literals = []  # type: List[EnumerationLiteral]
+    literals: List[EnumerationLiteral] = []
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for i, parsed_literal in enumerate(parsed.set_literals):
         if not (
             isinstance(parsed_literal.node, ast.Attribute)
@@ -2416,7 +2409,7 @@ def _to_constant_set_of_enumeration_literals(
 
         literals.append(literal)
 
-    description = None  # type: Optional[DescriptionOfConstant]
+    description: Optional[DescriptionOfConstant] = None
     if parsed.description is not None:
         description, description_errors = _to_description_of_constant(
             parsed=parsed.description
@@ -2430,7 +2423,7 @@ def _to_constant_set_of_enumeration_literals(
         else:
             assert description is not None
 
-    subsets = []  # type: List[_PlaceholderConstant]
+    subsets: List[_PlaceholderConstant] = []
     for subset_name in parsed.subsets:
         if not IDENTIFIER_RE.fullmatch(subset_name):
             errors.append(
@@ -2585,7 +2578,7 @@ def _second_pass_to_resolve_our_types_in_atomic_type_annotations_in_place(
     symbol_table: SymbolTable,
 ) -> List[Error]:
     """Resolve the references to our types in the atomic type annotations in-place."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for our_type_annotation in _over_our_type_annotations(symbol_table):
         assert isinstance(our_type_annotation.our_type, _PlaceholderOurType), (
@@ -2794,7 +2787,7 @@ def _second_pass_to_resolve_references_to_our_types_in_the_descriptions_in_place
     symbol_table: SymbolTable,
 ) -> List[Error]:
     """Resolve the references to our types in the descriptions in-place."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for ref_to_our_type_in_doc, description, _ in _find_all_in_descriptions(
         element_type=doc.ReferenceToOurType, symbol_table=symbol_table
@@ -2851,7 +2844,7 @@ def _second_pass_to_resolve_references_to_constants_in_the_descriptions_in_place
     symbol_table: SymbolTable,
 ) -> List[Error]:
     """Resolve the references to constants in the descriptions in-place."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for ref_to_constant_in_doc, description, _ in _find_all_in_descriptions(
         element_type=doc.ReferenceToConstant, symbol_table=symbol_table
@@ -2916,7 +2909,7 @@ def _second_pass_to_resolve_references_to_verification_functions_in_place(
     symbol_table: SymbolTable,
 ) -> List[Error]:
     """Resolve the references to verification functions in the descriptions in-place."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for ref_to_verification_in_doc, description, _ in _find_all_in_descriptions(
         element_type=doc.ReferenceToVerificationFunction, symbol_table=symbol_table
@@ -3042,7 +3035,7 @@ def _second_pass_to_resolve_default_argument_values_in_place(
     symbol_table: SymbolTable,
 ) -> List[Error]:
     """Resolve the default values of the method and function arguments in-place."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for arg in _over_arguments(symbol_table):
         if arg.default is None:
@@ -3136,7 +3129,7 @@ def _second_pass_to_resolve_specified_for_in_invariants(
             # we haven't resolved ``specified_for`` here.
 
             if isinstance(invariant.specified_for, _PlaceholderOurType):
-                our_type = symbol_table.must_find_class_or_constrained_primitive(
+                specified_for = symbol_table.must_find_class_or_constrained_primitive(
                     Identifier(invariant.specified_for.name)
                 )
 
@@ -3147,7 +3140,7 @@ def _second_pass_to_resolve_specified_for_in_invariants(
                 # the translation phase itself.
 
                 # noinspection PyFinal
-                invariant.specified_for = our_type
+                invariant.specified_for = specified_for
 
 
 # fmt: off
@@ -3173,9 +3166,7 @@ def _second_pass_to_resolve_inheritances_in_place(symbol_table: SymbolTable) -> 
             continue
 
         elif isinstance(our_type, ConstrainedPrimitive):
-            resolved_constrained_primitive_inheritances = (
-                []
-            )  # type: List[ConstrainedPrimitive]
+            resolved_constrained_primitive_inheritances: List[ConstrainedPrimitive] = []
 
             for inheritance_name in our_type.parsed.inheritances:
                 # NOTE (mristin):
@@ -3198,7 +3189,7 @@ def _second_pass_to_resolve_inheritances_in_place(symbol_table: SymbolTable) -> 
             our_type._set_inheritances(resolved_constrained_primitive_inheritances)
 
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
-            resolved_class_inheritances = []  # type: List[ClassUnion]
+            resolved_class_inheritances: List[ClassUnion] = []
 
             for inheritance_name in our_type.parsed.inheritances:
                 parent_cls = symbol_table.must_find_class(Identifier(inheritance_name))
@@ -3241,9 +3232,9 @@ def _topologically_sort_named_unions_or_find_cycle(
     """
     # NOTE (mristin):
     # 0 = not visited, 1 = on the current recursion stack, 2 = done.
-    state = dict()  # type: Dict[Identifier, int]
-    stack = []  # type: List[Identifier]
-    order = []  # type: List[NamedUnion]
+    state: Dict[Identifier, int] = dict()
+    stack: List[Identifier] = []
+    order: List[NamedUnion] = []
 
     def visit(named_union: NamedUnion) -> Optional[Error]:
         """Visit the named union and its named-union members, depth-first."""
@@ -3308,7 +3299,7 @@ def _second_pass_to_resolve_named_union_members_in_place(
     does not depend on that other named union's own members being resolved yet.
     """
     for named_union in symbol_table.named_unions:
-        resolved_members = []  # type: List[Union[ClassUnion, NamedUnion]]
+        resolved_members: List[Union[ClassUnion, NamedUnion]] = []
 
         for member_name in named_union.parsed.members:
             member = symbol_table.must_find_class_or_named_union(member_name)
@@ -3341,13 +3332,13 @@ def _second_pass_to_resolve_ancestors_and_descendants_in_place(
     Mind that the concept of the interface is not used in the meta-model, and we
     introduce it only as a convenience for the code generation.
     """
-    ancestor_map_constr_primi = collections.defaultdict(
-        lambda: []
-    )  # type: MutableMapping[ConstrainedPrimitive, List[ConstrainedPrimitive]]
+    ancestor_map_constr_primi: MutableMapping[
+        ConstrainedPrimitive, List[ConstrainedPrimitive]
+    ] = collections.defaultdict(list)
 
-    ancestor_map_cls = collections.defaultdict(
-        lambda: []
-    )  # type: MutableMapping[ClassUnion, List[ClassUnion]]
+    ancestor_map_cls: MutableMapping[
+        ClassUnion, List[ClassUnion]
+    ] = collections.defaultdict(list)
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, Enumeration):
@@ -3360,7 +3351,7 @@ def _second_pass_to_resolve_ancestors_and_descendants_in_place(
             pass
 
         elif isinstance(our_type, ConstrainedPrimitive):
-            constr_primi_descendants = []  # type: List[ConstrainedPrimitive]
+            constr_primi_descendants: List[ConstrainedPrimitive] = []
             for parsed_descendant in ontology.list_descendants(our_type.parsed):
                 descendant_constr_primi = symbol_table.must_find_constrained_primitive(
                     parsed_descendant.name
@@ -3374,7 +3365,7 @@ def _second_pass_to_resolve_ancestors_and_descendants_in_place(
                 ancestor_map_constr_primi[constr_primi_descendant].append(our_type)
 
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
-            class_descendants = []  # type: List[ClassUnion]
+            class_descendants: List[ClassUnion] = []
             for parsed_descendant in ontology.list_descendants(our_type.parsed):
                 descendant_cls = symbol_table.must_find_class(parsed_descendant.name)
 
@@ -3415,7 +3406,7 @@ def _second_pass_to_resolve_ancestors_and_descendants_in_place(
         len(result[0]) == len(OLD.subsets)
         and all(
             subset.name == placeholder.name
-            for subset, placeholder in zip(result[0], OLD.subsets)
+            for subset, placeholder in zip(result[0], OLD.subsets, strict=True)
         )
     ),
     "All the subsets resolved"
@@ -3425,8 +3416,8 @@ def _resolve_subsets_in_constant_set_of_primitives(
     constant_set: ConstantSetOfPrimitives, symbol_table: SymbolTable
 ) -> Tuple[Optional[List[ConstantSetOfPrimitives]], Optional[List[Error]]]:
     """De-reference the subsets from the placeholders."""
-    subsets = []  # type: List[ConstantSetOfPrimitives]
-    errors = []  # type: List[Error]
+    subsets: List[ConstantSetOfPrimitives] = []
+    errors: List[Error] = []
 
     for placeholder in constant_set.subsets:
         assert isinstance(placeholder, _PlaceholderConstant), (
@@ -3509,7 +3500,7 @@ def _resolve_subsets_in_constant_set_of_primitives(
         len(result[0]) == len(OLD.subsets)
         and all(
             subset.name == placeholder.name
-            for subset, placeholder in zip(result[0], OLD.subsets)
+            for subset, placeholder in zip(result[0], OLD.subsets, strict=True)
         )
     ),
     "All the subsets resolved"
@@ -3519,8 +3510,8 @@ def _resolve_subsets_in_constant_set_of_enumeration_literals(
     constant_set: ConstantSetOfEnumerationLiterals, symbol_table: SymbolTable
 ) -> Tuple[Optional[List[ConstantSetOfEnumerationLiterals]], Optional[List[Error]]]:
     """De-reference the subsets from the placeholders."""
-    subsets = []  # type: List[ConstantSetOfEnumerationLiterals]
-    errors = []  # type: List[Error]
+    subsets: List[ConstantSetOfEnumerationLiterals] = []
+    errors: List[Error] = []
 
     for placeholder in constant_set.subsets:
         assert isinstance(placeholder, _PlaceholderConstant), (
@@ -3586,7 +3577,7 @@ def _second_pass_to_resolve_constant_subsets_in_place(
     symbol_table: SymbolTable,
 ) -> List[Error]:
     """Resolve the subsets of constant sets in-place."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for constant in symbol_table.constants:
         if isinstance(constant, ConstantPrimitive):
@@ -3660,7 +3651,7 @@ def _second_pass_to_stack_serializations_in_place(
     symbol_table: SymbolTable,
 ) -> List[Error]:
     """Pass on the serializations among the classes along the ontology."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for our_type in symbol_table.our_types_topologically_sorted:
         # NOTE (mristin):
@@ -3677,7 +3668,7 @@ def _second_pass_to_stack_serializations_in_place(
             # ones (one function for a setting each), or maybe we can even think of a
             # more general approach to inheritance of serialization settings.
 
-            with_model_types = []  # type: List[_SettingWithSource[bool]]
+            with_model_types: List[_SettingWithSource[bool]] = []
 
             for inheritance in our_type.inheritances:
                 if (
@@ -3776,11 +3767,11 @@ def _second_pass_to_stack_invariants_in_place(symbol_table: SymbolTable) -> None
         if isinstance(our_type, (Enumeration, NamedUnion)):
             continue
         elif isinstance(our_type, (ConstrainedPrimitive, AbstractClass, ConcreteClass)):
-            inherited_invariants = []  # type: List[Invariant]
+            inherited_invariants: List[Invariant] = []
 
             # NOTE (mristin):
             # Skip duplicates which might arise from the diamond inheritance
-            observed_invariants = set()  # type: Set[IdOfInvariant]
+            observed_invariants: Set[IdOfInvariant] = set()
 
             for inheritance in our_type.inheritances:
                 for invariant in inheritance.invariants:
@@ -3807,7 +3798,7 @@ def _second_pass_to_stack_properties_in_place(symbol_table: SymbolTable) -> List
         if isinstance(our_type, (Enumeration, NamedUnion, ConstrainedPrimitive)):
             continue
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
-            inherited_properties = []  # type: List[Property]
+            inherited_properties: List[Property] = []
 
             # NOTE (mristin):
             # Skip duplicates which might arise from the diamond inheritance.
@@ -3815,7 +3806,7 @@ def _second_pass_to_stack_properties_in_place(symbol_table: SymbolTable) -> List
             # Mind that we track instances using the Python ``id(.)`` function,
             # which means that the properties are literally equal, including their
             # type annotations.
-            observed_properties = set()  # type: Set[IdOfProperty]
+            observed_properties: Set[IdOfProperty] = set()
 
             for inheritance in our_type.inheritances:
                 for prop in inheritance.properties:
@@ -3835,7 +3826,7 @@ def _second_pass_to_stack_properties_in_place(symbol_table: SymbolTable) -> List
 
 def _second_pass_to_stack_methods_in_place(symbol_table: SymbolTable) -> List[Error]:
     """Pass on the methods among the classes along the ontology."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for our_type in symbol_table.our_types_topologically_sorted:
         # NOTE (mristin):
         # Assume that the parents have all the invariants stacked already due to
@@ -3845,16 +3836,16 @@ def _second_pass_to_stack_methods_in_place(symbol_table: SymbolTable) -> List[Er
         if isinstance(our_type, (Enumeration, NamedUnion, ConstrainedPrimitive)):
             continue
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
-            inherited_methods = []  # type: List[MethodUnion]
+            inherited_methods: List[MethodUnion] = []
 
             # NOTE (mristin):
             # We have to disallow diamond inheritance of the methods, so we keep track
             # of the inherited methods and report an error in case of conflicts.
 
-            method_specified_for = dict()  # type: Dict[Identifier, Identifier]
+            method_specified_for: Dict[Identifier, Identifier] = dict()
             for inheritance in our_type.inheritances:
                 for method in inheritance.methods:
-                    conflicting_parent = method_specified_for.get(method.name, None)
+                    conflicting_parent = method_specified_for.get(method.name)
                     if conflicting_parent is not None:
                         errors.append(
                             Error(
@@ -3878,7 +3869,7 @@ def _second_pass_to_stack_methods_in_place(symbol_table: SymbolTable) -> List[Er
 
             has_override = False
             for method in our_type.methods:
-                conflicting_parent = method_specified_for.get(method.name, None)
+                conflicting_parent = method_specified_for.get(method.name)
                 if conflicting_parent is not None:
                     errors.append(
                         Error(
@@ -3909,7 +3900,7 @@ def _second_pass_to_stack_constructors_in_place(
     symbol_table: SymbolTable,
 ) -> List[Error]:
     """In-line the super constructors and inherit the constructor contracts."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for cls in symbol_table.classes:
         # NOTE (mristin):
@@ -3918,7 +3909,7 @@ def _second_pass_to_stack_constructors_in_place(
 
         # region In-line super constructors
 
-        in_lined = []  # type: List[construction.AssignArgument]
+        in_lined: List[construction.AssignArgument] = []
 
         for statement in cls.constructor.statements:
             if isinstance(statement, construction.CallSuperConstructor):
@@ -3996,13 +3987,13 @@ def _second_pass_to_stack_constructors_in_place(
         # the list of pre-conditions and copy/paste them from the ancestors
         # manually.
 
-        inherited_snapshots = []  # type: List[Snapshot]
-        inherited_postconditions = []  # type: List[Contract]
+        inherited_snapshots: List[Snapshot] = []
+        inherited_postconditions: List[Contract] = []
 
         # NOTE (mristin):
         # We skip the duplicates since we have to deal with the diamond inheritance.
-        observed_snapshots = set()  # type: Set[IdOfSnapshot]
-        observed_postconditions = set()  # type: Set[IdOfContract]
+        observed_snapshots: Set[IdOfSnapshot] = set()
+        observed_postconditions: Set[IdOfContract] = set()
 
         for inheritance in cls.inheritances:
             for snap in inheritance.constructor.contracts.snapshots:
@@ -4043,7 +4034,7 @@ def _second_pass_to_resolve_references_to_attributes_in_the_descriptions_in_plac
     symbol_table: SymbolTable,
 ) -> List[Error]:
     """Resolve the references to attributes in the descriptions in-place."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # The ``our_type`` is None if the description is in the context outside our type.
     for attr_ref_in_doc, description, our_type in _find_all_in_descriptions(
@@ -4088,10 +4079,10 @@ def _second_pass_to_resolve_references_to_attributes_in_the_descriptions_in_plac
                 continue
 
             # noinspection PyUnusedLocal
-            target_our_type = None  # type: Optional[OurType]
+            target_our_type: Optional[OurType] = None
 
             # noinspection PyUnusedLocal
-            attr_identifier = None  # type: Optional[Identifier]
+            attr_identifier: Optional[Identifier] = None
 
             if len(part_identifiers) == 1:
                 if our_type is None:
@@ -4201,7 +4192,7 @@ def _second_pass_to_resolve_references_to_methods_in_the_descriptions_in_place(
     symbol_table: SymbolTable,
 ) -> List[Error]:
     """Resolve the references to methods in the descriptions in-place."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # The ``our_type`` is None if the description is in the context outside our type.
     for meth_ref_in_doc, description, our_type in _find_all_in_descriptions(
@@ -4238,7 +4229,7 @@ def _second_pass_to_resolve_references_to_methods_in_the_descriptions_in_place(
             )
             continue
 
-        target_our_type = None  # type: Optional[OurType]
+        target_our_type: Optional[OurType] = None
         method_identifier: Identifier
 
         if len(parts) == 1:
@@ -4369,7 +4360,7 @@ def _second_pass_to_resolve_interfaces_in_place(
             isinstance(cls, AbstractClass)
             or len(ontology.list_descendants(parsed_cls)) > 0
         ):
-            parent_interfaces = []  # type: List[Interface]
+            parent_interfaces: List[Interface] = []
 
             for inheritance_name in parsed_cls.inheritances:
                 parent_cls = symbol_table.must_find_class(inheritance_name)
@@ -4415,8 +4406,8 @@ def _second_pass_to_resolve_named_union_implementers_in_place(
 
         named_union = our_type
 
-        implementers = []  # type: List[ConcreteClass]
-        observed_ids = set()  # type: Set[IdOfClass]
+        implementers: List[ConcreteClass] = []
+        observed_ids: Set[IdOfClass] = set()
 
         for member in named_union.members:
             if isinstance(member, NamedUnion):
@@ -4464,13 +4455,13 @@ def _second_pass_to_resolve_named_union_roots_in_place(
 
         named_union = our_type
 
-        roots = []  # type: List[ClassUnion]
-        observed_ids = set()  # type: Set[IdOfClass]
+        roots: List[ClassUnion] = []
+        observed_ids: Set[IdOfClass] = set()
 
         for member in named_union.members:
-            member_roots = (
+            member_roots: Sequence[ClassUnion] = (
                 member.roots if isinstance(member, NamedUnion) else [member]
-            )  # type: Sequence[ClassUnion]
+            )
 
             for root in member_roots:
                 if runtime_id(root) not in observed_ids:
@@ -4595,11 +4586,11 @@ def _over_signature_likes(symbol_table: SymbolTable) -> Iterator[SignatureLike]:
 def _verify_there_are_no_duplicate_names_of_our_types(
     symbol_table: SymbolTable,
 ) -> List[Error]:
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    observed_names = dict()  # type: MutableMapping[Identifier, OurType]
+    observed_names: MutableMapping[Identifier, OurType] = dict()
     for our_type in symbol_table.our_types:
-        another_our_type = observed_names.get(our_type.name, None)
+        another_our_type = observed_names.get(our_type.name)
         if another_our_type is None:
             observed_names[our_type.name] = our_type
         else:
@@ -4617,7 +4608,7 @@ def _verify_there_are_no_duplicate_names_of_our_types(
 def _verify_with_model_type_for_classes_with_at_least_one_concrete_descendant(
     symbol_table: SymbolTable,
 ) -> List[Error]:
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     our_types_in_properties = collect_ids_of_our_types_in_properties(
         symbol_table=symbol_table
@@ -4686,7 +4677,7 @@ def _verify_named_unions_are_dispatchable_in_json(
     implementers dispatched structurally, as the two are mutually exclusive on
     the wire (an object either carries a ``modelType`` field or it does not).
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for named_union in symbol_table.named_unions:
         implementers_without_model_type = [
@@ -4738,9 +4729,9 @@ def _verify_named_unions_are_dispatchable_in_json(
             )
             continue
 
-        implementers_by_required_json_name = collections.defaultdict(
-            list
-        )  # type: MutableMapping[NonEmptyString, List[ConcreteClass]]
+        implementers_by_required_json_name: MutableMapping[
+            NonEmptyString, List[ConcreteClass]
+        ] = collections.defaultdict(list)
 
         for implementer, required in required_json_names_by_implementer.items():
             for json_name in required:
@@ -4804,7 +4795,7 @@ def _verify_all_properties_are_initialized_in_the_constructor(
     For example, check that there is a default value assigned if the constructor
     argument is optional.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for cls in symbol_table.classes:
         prop_initialized = {prop.name: False for prop in cls.properties}
@@ -4885,7 +4876,7 @@ def _verify_optional_constructor_arguments_default_to_none(
     While other values are possible, we enforce ``None`` for consistency to avoid
     confusion of the users of the generated code.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for cls in symbol_table.classes:
         for arg in cls.constructor.arguments:
@@ -4927,7 +4918,7 @@ def _verify_constructor_arguments_and_properties_match(
 
     We check both the order and the types.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for cls in symbol_table.classes:
         if (
@@ -4943,8 +4934,8 @@ def _verify_constructor_arguments_and_properties_match(
             )
             continue
 
-        arg_name_set = set(arg.name for arg in cls.constructor.arguments)
-        prop_name_set = set(prop.name for prop in cls.properties)
+        arg_name_set = {arg.name for arg in cls.constructor.arguments}
+        prop_name_set = {prop.name for prop in cls.properties}
         if arg_name_set != prop_name_set:
             errors.append(
                 Error(
@@ -4956,11 +4947,11 @@ def _verify_constructor_arguments_and_properties_match(
             )
             continue
 
-        args_without_default = []  # type: List[Identifier]
-        args_without_default_set = set()  # type: Set[Identifier]
+        args_without_default: List[Identifier] = []
+        args_without_default_set: Set[Identifier] = set()
 
-        args_with_default = []  # type: List[Identifier]
-        args_with_default_set = set()  # type: Set[Identifier]
+        args_with_default: List[Identifier] = []
+        args_with_default_set: Set[Identifier] = set()
 
         # NOTE (mristin):
         # This verification is only a heuristic since we do not really analyze
@@ -5053,7 +5044,7 @@ def _verify_all_references_to_arguments_occur_in_valid_context(
 ) -> List[Error]:
     # noinspection GrazieInspection
     """Verify that all the argument references occur where they should."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for arg_ref_in_doc, description, _ in _find_all_in_descriptions(
         element_type=doc.ReferenceToArgument, symbol_table=symbol_table
     ):
@@ -5072,8 +5063,8 @@ def _verify_all_references_to_arguments_occur_in_valid_context(
 
 def _verify_constraints_and_constraintrefs(symbol_table: SymbolTable) -> List[Error]:
     """Check that each constraint has a unique identifier."""
-    errors = []  # type: List[Error]
-    observed_constraint_id_set = set()  # type: Set[str]
+    errors: List[Error] = []
+    observed_constraint_id_set: Set[str] = set()
 
     def check_and_report_duplicate(
         an_identifier: str, a_description: DescriptionUnion
@@ -5229,9 +5220,9 @@ def _verify_description_rendering_with_smoke(symbol_table: SymbolTable) -> List[
 
     renderer = DummyRenderer()
 
-    errors_by_description = (
-        collections.OrderedDict()
-    )  # type: OrderedDict[DescriptionUnion, List[Error]]
+    errors_by_description: OrderedDict[
+        DescriptionUnion, List[Error]
+    ] = collections.OrderedDict()
 
     for an_element, description, _ in _find_all_in_descriptions(
         element_type=docutils.nodes.Element, symbol_table=symbol_table
@@ -5249,7 +5240,7 @@ def _verify_description_rendering_with_smoke(symbol_table: SymbolTable) -> List[
                 for error_message in transformation_errors
             )
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for description, description_errors in errors_by_description.items():
         assert len(description_errors) > 0
         errors.append(
@@ -5282,8 +5273,10 @@ def _over_declared_type_annotations(
             yield (
                 arg.type_annotation,
                 arg.parsed.node,
-                f"the argument {arg.name!r} of the verification function "
-                f"{func.name!r}",
+                (
+                    f"the argument {arg.name!r} of the verification function "
+                    f"{func.name!r}"
+                ),
             )
 
         if func.returns is not None:
@@ -5312,16 +5305,20 @@ def _over_declared_type_annotations(
                 yield (
                     arg.type_annotation,
                     arg.parsed.node,
-                    f"the argument {arg.name!r} of the method {method.name!r} "
-                    f"of the class {cls.name!r}",
+                    (
+                        f"the argument {arg.name!r} of the method {method.name!r} "
+                        f"of the class {cls.name!r}"
+                    ),
                 )
 
             if method.returns is not None:
                 yield (
                     method.returns,
                     method.parsed.node,
-                    f"the return value of the method {method.name!r} "
-                    f"of the class {cls.name!r}",
+                    (
+                        f"the return value of the method {method.name!r} "
+                        f"of the class {cls.name!r}"
+                    ),
                 )
 
 
@@ -5334,7 +5331,7 @@ def _verify_keys_of_json_objects_are_strings(
     The key can also be a class (transitively) constraining ``str``. The open-keyed
     shape of a ``JSONObject`` only makes sense over string-like keys.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for type_anno, node, what in _over_declared_type_annotations(symbol_table):
         for nested in over_type_annotation_and_nested_type_annotations(type_anno):
             if (
@@ -5358,14 +5355,14 @@ def _verify_keys_of_json_objects_are_strings(
 
 def _verify_invariant_descriptions_unique(symbol_table: SymbolTable) -> List[Error]:
     """Check that no two invariants share the same description."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for something_with_invariants in itertools.chain(
         symbol_table.classes, symbol_table.constrained_primitives
     ):
-        description_map = dict()  # type: MutableMapping[str, Invariant]
+        description_map: MutableMapping[str, Invariant] = dict()
 
         for invariant in something_with_invariants.invariants:
-            conflicting_invariant = description_map.get(invariant.description, None)
+            conflicting_invariant = description_map.get(invariant.description)
             if conflicting_invariant is not None:
                 what: str
                 if isinstance(something_with_invariants, Class):
@@ -5413,18 +5410,14 @@ def _verify_names_unique_regardless_of_visibility(
     in the generated names (*e.g.*, C# renders both ``_do_something`` and
     ``do_something`` as ``DoSomething``), so the names would conflict.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    verification_by_stripped_name = (
-        dict()
-    )  # type: MutableMapping[str, VerificationUnion]
+    verification_by_stripped_name: MutableMapping[str, VerificationUnion] = dict()
 
     for verification in symbol_table.verification_functions:
         stripped_name = verification.name.lstrip("_")
 
-        conflicting_verification = verification_by_stripped_name.get(
-            stripped_name, None
-        )
+        conflicting_verification = verification_by_stripped_name.get(stripped_name)
         if conflicting_verification is not None:
             errors.append(
                 Error(
@@ -5440,12 +5433,12 @@ def _verify_names_unique_regardless_of_visibility(
             verification_by_stripped_name[stripped_name] = verification
 
     for cls in symbol_table.classes:
-        name_by_stripped_name = dict()  # type: MutableMapping[str, Identifier]
+        name_by_stripped_name: MutableMapping[str, Identifier] = dict()
 
         for member in itertools.chain(cls.properties, cls.methods):
             stripped_name = member.name.lstrip("_")
 
-            conflicting_name = name_by_stripped_name.get(stripped_name, None)
+            conflicting_name = name_by_stripped_name.get(stripped_name)
             if conflicting_name is not None:
                 errors.append(
                     Error(
@@ -5472,7 +5465,7 @@ def _verify_no_references_to_non_public_members_in_public_descriptions(
     the references to them in the public documentation would dangle, or would be
     reported as broken by the documentation tools.
     """
-    non_public_description_id_set = set(
+    non_public_description_id_set = {
         id(something.description)
         for something in itertools.chain(
             symbol_table.verification_functions,
@@ -5480,14 +5473,14 @@ def _verify_no_references_to_non_public_members_in_public_descriptions(
         )
         if something.description is not None
         and something.visibility is not Visibility.PUBLIC
-    )
+    }
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # NOTE (mristin):
     # The descriptions of the inherited methods are shared among the classes, so we
     # report each reference only once.
-    reported_element_id_set = set()  # type: Set[int]
+    reported_element_id_set: Set[int] = set()
 
     # NOTE (mristin):
     # We skip the references which could not be resolved. They have been already
@@ -5557,7 +5550,7 @@ def _verify_patterns_anchored_at_start_and_end(
     we decide to fail-fast here to prevent that non-anchored patterns propagate
     downstream, which we might probably detect only much later.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for verification in symbol_table.verification_functions:
         if isinstance(verification, PatternVerification):
             regex, error = parse_retree.parse([verification.pattern])
@@ -5601,9 +5594,9 @@ def _verify_patterns_anchored_at_start_and_end(
             if (
                 len(regex.union.uniates) != 1
                 or not isinstance(first_term.value, parse_retree.Symbol)
-                or not (first_term.value.kind is parse_retree.SymbolKind.START)
+                or first_term.value.kind is not parse_retree.SymbolKind.START
                 or not isinstance(last_term.value, parse_retree.Symbol)
-                or not (last_term.value.kind is parse_retree.SymbolKind.END)
+                or last_term.value.kind is not parse_retree.SymbolKind.END
             ):
                 errors.append(
                     Error(
@@ -5753,7 +5746,7 @@ def _assert_all_type_annotations_are_unique_instances(
 
 def _verify_items_of_sets(symbol_table: SymbolTable) -> List[Error]:
     """Check that the sets, at any depth of the type annotations, hold supported items."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for type_anno, node, what in _over_declared_type_annotations(symbol_table):
         for nested in over_type_annotation_and_nested_type_annotations(type_anno):
@@ -5772,7 +5765,7 @@ def _verify_items_of_sets(symbol_table: SymbolTable) -> List[Error]:
 
 def _verify_mutable_only_around_classes(symbol_table: SymbolTable) -> List[Error]:
     """Check that ``Mutable[...]`` wraps only the classes."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     arguments_with_whats = [
         (arg, f"The argument {arg.name!r} of the verification function {func.name!r}")
@@ -5781,8 +5774,10 @@ def _verify_mutable_only_around_classes(symbol_table: SymbolTable) -> List[Error
     ] + [
         (
             arg,
-            f"The argument {arg.name!r} of the method {method.name!r} "
-            f"of the class {cls.name!r}",
+            (
+                f"The argument {arg.name!r} of the method {method.name!r} "
+                f"of the class {cls.name!r}"
+            ),
         )
         for cls in symbol_table.classes
         for method in cls.methods
@@ -5857,7 +5852,7 @@ def _verify_methods_refer_neither_to_constants_nor_verification_functions(
     some targets, such as Go, refuse to compile, and which breaks the loading of
     the modules in others, such as Python or TypeScript.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for cls in symbol_table.classes:
         for method in cls.methods:
             if method.specified_for is not cls or not isinstance(
@@ -5906,7 +5901,7 @@ def _verify_self_only_accessed_in_methods(symbol_table: SymbolTable) -> List[Err
     ``self`` as an argument, to assign it to a variable, to return it, to put it
     in a tuple, to compare it or to check it with ``isinstance``.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for cls in symbol_table.classes:
         for method in cls.methods:
             if method.specified_for is not cls or not isinstance(
@@ -6051,7 +6046,7 @@ def translate(
     atok: asttokens.ASTTokens,
 ) -> Tuple[Optional[SymbolTable], Optional[Error]]:
     """Translate the parsed our types into intermediate our types."""
-    underlying_errors = []  # type: List[Error]
+    underlying_errors: List[Error] = []
 
     def bundle_underlying_errors() -> Error:
         """Bundle underlying errors to the main error."""
@@ -6121,9 +6116,9 @@ def translate(
 
     # Type annotations reference placeholders for our types at this point.
 
-    our_types = []  # type: List[OurType]
+    our_types: List[OurType] = []
     for parsed_our_type in parsed_symbol_table.our_types:
-        our_type = None  # type: Optional[OurType]
+        our_type: Optional[OurType] = None
 
         constrainee = constrained_primitives_by_name.get(parsed_our_type.name, None)
 
@@ -6205,7 +6200,7 @@ def translate(
             )
         )
 
-    verification_functions = []  # type: List[VerificationUnion]
+    verification_functions: List[VerificationUnion] = []
     for func in parsed_symbol_table.verification_functions:
         verification, verification_errors = _to_verification_function(func)
 
@@ -6285,7 +6280,7 @@ def translate(
 
     # endregion
 
-    constants = []  # type: List[ConstantUnion]
+    constants: List[ConstantUnion] = []
     for parsed_constant in parsed_symbol_table.constants:
         constant, errors = _to_constant(
             parsed=parsed_constant, our_types_by_name=our_types_by_name, atok=atok
@@ -6300,7 +6295,7 @@ def translate(
     if len(underlying_errors) > 0:
         return None, bundle_underlying_errors()
 
-    our_types_topologically_sorted = []  # type: List[OurTypeExceptEnumeration]
+    our_types_topologically_sorted: List[OurTypeExceptEnumeration] = []
     for parsed_cls in ontology.classes:
         our_type = our_types_by_name[parsed_cls.name]
         assert not isinstance(our_type, (Enumeration, NamedUnion)), (
@@ -6487,7 +6482,7 @@ def errors_if_contracts_for_functions_or_methods_defined(
 
     At the given moment, however, we deliberately focus only on the invariants.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for signature_like in _over_signature_likes(symbol_table):
         if (
             len(signature_like.contracts.preconditions) > 0
@@ -6503,7 +6498,7 @@ def errors_if_contracts_for_functions_or_methods_defined(
             ):
                 continue
 
-            original_node = None  # type: Optional[ast.AST]
+            original_node: Optional[ast.AST] = None
 
             if signature_like.parsed is not None:
                 original_node = signature_like.parsed.node

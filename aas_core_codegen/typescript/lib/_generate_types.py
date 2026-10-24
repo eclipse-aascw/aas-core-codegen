@@ -87,16 +87,14 @@ def _verify_intra_structure_collisions(
     our_type: intermediate.OurType,
 ) -> Optional[Error]:
     """Verify that no member names collide in the TypeScript structure of our type."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     if isinstance(our_type, intermediate.Enumeration):
-        enum_literal_map = (
-            dict()
-        )  # type: Dict[Identifier, intermediate.EnumerationLiteral]
+        enum_literal_map: Dict[Identifier, intermediate.EnumerationLiteral] = dict()
 
         for literal in our_type.literals:
             literal_name = typescript_naming.enum_literal_name(literal.name)
-            colliding_literal = enum_literal_map.get(literal_name, None)
+            colliding_literal = enum_literal_map.get(literal_name)
             if colliding_literal is not None:
                 errors.append(
                     Error(
@@ -114,7 +112,7 @@ def _verify_intra_structure_collisions(
         pass
 
     elif isinstance(our_type, intermediate.Class):
-        observed_member_names = {}  # type: Dict[Identifier, str]
+        observed_member_names: Dict[Identifier, str] = {}
 
         for prop in our_type.properties:
             prop_name = typescript_naming.property_name(prop.name)
@@ -133,7 +131,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model property {prop.name!r}"
                 )
 
-        observed_constructor_arg_names = {}  # type: Dict[Identifier, str]
+        observed_constructor_arg_names: Dict[Identifier, str] = {}
         for constructor_arg in our_type.constructor.arguments:
             arg_name = typescript_naming.argument_name(constructor_arg.name)
 
@@ -170,7 +168,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model method {method.name!r}"
                 )
 
-            observed_method_arg_names = {}  # type: Dict[Identifier, str]
+            observed_method_arg_names: Dict[Identifier, str] = {}
             for arg in method.arguments:
                 arg_name = typescript_naming.argument_name(arg.name)
 
@@ -224,7 +222,7 @@ def _verify_structure_name_collisions(
         ],
     ] = dict()
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # region Inter-structure collisions
 
@@ -241,7 +239,7 @@ def _verify_structure_name_collisions(
 
         name = typescript_naming.name_of(our_type)
 
-        other = observed_structure_names.get(name, None)
+        other = observed_structure_names.get(name)
 
         if other is not None:
             errors.append(
@@ -266,7 +264,7 @@ def _verify_structure_name_collisions(
     for named_union in symbol_table.named_unions:
         name = typescript_naming.name_of(named_union)
 
-        other = observed_structure_names.get(name, None)
+        other = observed_structure_names.get(name)
 
         if other is not None:
             errors.append(
@@ -313,7 +311,7 @@ def verify(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[VerifiedIntermediateSymbolTable], Optional[List[Error]]]:
     """Verify that code can be generated from the ``symbol_table``."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     structure_name_collisions = _verify_structure_name_collisions(
         symbol_table=symbol_table
@@ -467,9 +465,9 @@ def _generate_enum(
     """Generate code for the enum."""
     writer = io.StringIO()
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    comment = None  # type: Optional[Stripped]
+    comment: Optional[Stripped] = None
     if enum.description is not None:
         comment, comment_errors = _generate_comment_for_cls_or_enum(cls_or_enum=enum)
 
@@ -750,7 +748,7 @@ def _generate_descend_function(cls: intermediate.ConcreteClass) -> Optional[Stri
 
     Return ``None`` if ``cls`` has no descendable properties.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for prop in cls.properties:
         descendability = intermediate.map_descendability(prop.type_annotation)
@@ -904,9 +902,9 @@ def _generate_constructor(
     ):
         return Stripped(""), None
 
-    blocks = []  # type: List[str]
+    blocks: List[str] = []
 
-    arg_codes = []  # type: List[str]
+    arg_codes: List[str] = []
     for arg in cls.constructor.arguments:
         arg_type = typescript_common.generate_type(type_annotation=arg.type_annotation)
         arg_name = typescript_naming.argument_name(arg.name)
@@ -942,7 +940,7 @@ constructor(
             )
         )
 
-    body = ["super();"]  # type: List[str]
+    body: List[str] = ["super();"]
 
     for stmt in cls.constructor.inlined_statements:
         if isinstance(stmt, intermediate_construction.AssignArgument):
@@ -1096,7 +1094,7 @@ def _generate_interface(
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate code for the given ``interface``."""
     # Code blocks separated by double newlines and indented once
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Properties
 
@@ -1120,7 +1118,7 @@ def _generate_interface(
                     prop_comment_errors,
                 )
 
-            blocks.append(Stripped(f"{prop_comment}\n" f"{prop_name}: {prop_type};"))
+            blocks.append(Stripped(f"{prop_comment}\n{prop_name}: {prop_type};"))
         else:
             blocks.append(Stripped(f"{prop_name}: {prop_type};"))
 
@@ -1129,7 +1127,7 @@ def _generate_interface(
     # region Signatures
 
     for signature in interface.signatures:
-        signature_blocks = []  # type: List[Stripped]
+        signature_blocks: List[Stripped] = []
 
         signature_comment, signature_comment_error = _generate_comment_for_method(
             method=interface.base.methods_by_name[signature.name], cls=interface.base
@@ -1148,7 +1146,7 @@ def _generate_interface(
         )
         # fmt: on
 
-        arg_codes = []  # type: List[Stripped]
+        arg_codes: List[Stripped] = []
         for arg in signature.arguments:
             arg_type = typescript_common.generate_type(
                 type_annotation=arg.type_annotation
@@ -1207,7 +1205,7 @@ def _generate_interface(
 
     # endregion
 
-    comment = None  # type: Optional[Stripped]
+    comment: Optional[Stripped] = None
     if interface.description is not None:
         # fmt: off
         comment, comment_errors = (
@@ -1408,7 +1406,7 @@ def _transpile_method(
         inference=type_inference.by_method[method], method=method
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in method.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -1509,7 +1507,7 @@ def _generate_class(
 
     model_type_literal = typescript_naming.enum_literal_name(Identifier(cls.name))
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -1522,12 +1520,12 @@ def _generate_class(
 {I}return <{model_type_enum}>{concrete_cls_index};  // {model_type_literal}
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # region Property definitions
 
     for prop in cls.properties:
-        prop_comment = None  # type: Optional[Stripped]
+        prop_comment: Optional[Stripped] = None
         if prop.description is not None:
             prop_comment, prop_comment_errors = _generate_comment_for_property(
                 cls=cls, prop=prop
@@ -1592,7 +1590,7 @@ def _generate_class(
 
     # region Methods
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for method in cls.methods:
         if isinstance(method, intermediate.ImplementationSpecificMethod):
@@ -1741,7 +1739,7 @@ transformWithContext<ContextT, T>(
 
     # region Description
 
-    comment = None  # type: Optional[Stripped]
+    comment: Optional[Stripped] = None
     if cls.description is not None:
         comment, comment_errors = _generate_comment_for_cls_or_enum(cls_or_enum=cls)
         if comment_errors is not None:
@@ -1767,7 +1765,7 @@ transformWithContext<ContextT, T>(
     # on transformer pattern, where we generate the corresponding type-switching
     # transformers. See ``AS_*_TRANSFORMER``'s.
 
-    interface_names = []  # type: List[Identifier]
+    interface_names: List[Identifier] = []
 
     if len(cls.concrete_descendants) > 0:
         # NOTE (mristin):
@@ -1828,7 +1826,7 @@ export class {name}
 
 def _generate_abstract_visitor(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate code for the abstract visitor."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -1838,7 +1836,7 @@ visit(that: Class): void {{
 {I}that.accept(this);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         visit_name = typescript_naming.method_name(Identifier(f"visit_{cls.name}"))
@@ -1883,7 +1881,7 @@ def _generate_abstract_visitor_with_context(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate code for the abstract visitor with context."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -1899,7 +1897,7 @@ visitWithContext(
 {I}that.acceptWithContext(this, context);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         visit_with_context_name = typescript_naming.method_name(
@@ -1948,7 +1946,7 @@ export abstract class AbstractVisitorWithContext<ContextT> {
 
 def _generate_pass_through_visitor(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate code for the pass-through visitor."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         visit_name = typescript_naming.method_name(Identifier(f"visit_{cls.name}"))
@@ -2001,7 +1999,7 @@ def _generate_pass_through_visitor_with_context(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate code for the pass-through visitor with context."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -2014,7 +2012,7 @@ visitWithContext(
 {I}that.acceptWithContext(this, context);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         visit_with_context_name = typescript_naming.method_name(
@@ -2070,7 +2068,7 @@ export class PassThroughVisitorWithContext<ContextT>
 
 def _generate_abstract_transformer(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate code for the abstract transformer."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -2080,7 +2078,7 @@ transform(that: Class): T {{
 {I}return that.transform(this);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         transform_name = typescript_naming.method_name(
@@ -2131,7 +2129,7 @@ def _generate_abstract_transformer_with_context(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate code for the abstract transformer with context."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -2148,7 +2146,7 @@ transformWithContext(
 {I}return that.transformWithContext(this, context);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         transform_with_context_name = typescript_naming.method_name(
@@ -2202,7 +2200,7 @@ def _generate_transformer_with_default(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate code for the transformer with default transformation."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -2222,7 +2220,7 @@ constructor(defaultResult: T) {{
 {I}this.defaultResult = defaultResult;
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         transform_name = typescript_naming.method_name(
@@ -2281,7 +2279,7 @@ def _generate_transformer_with_default_and_context(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate code for the transformer with default transformation and context."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -2301,7 +2299,7 @@ constructor(defaultResult: T) {{
 {I}this.defaultResult = defaultResult;
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         transform_with_context_name = typescript_naming.method_name(
@@ -2387,7 +2385,7 @@ def _generate_comment_for_meta_model(
 def _generate_as_interface_transformer(
     interface: intermediate.Interface, symbol_table: intermediate.SymbolTable
 ) -> Stripped:
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     interface_name = typescript_naming.interface_name(interface.name)
 
@@ -2450,7 +2448,7 @@ class {transformer_name}
 
 
 def _generate_type_matcher(symbol_table: intermediate.SymbolTable) -> Stripped:
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         transform_name = typescript_naming.method_name(
             Identifier(f"transform_{cls.name}_with_context")
@@ -2559,9 +2557,9 @@ def generate(
     spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code of the data structures representing the meta-model."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     if symbol_table.meta_model.description is not None:
         # fmt: off
@@ -2712,7 +2710,7 @@ export abstract class Class {{
     if len(errors) > 0:
         return None, errors
 
-    observed_monikers = set()  # type: Set[str]
+    observed_monikers: Set[str] = set()
 
     for concrete_cls in symbol_table.concrete_classes:
         for prop in concrete_cls.properties:

@@ -89,7 +89,7 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
 
     # endregion
 
-    base_rel_path = pathlib.Path(".")
+    base_rel_path = pathlib.Path()
     assert not base_rel_path.is_absolute()
 
     rel_paths_generators: Sequence[

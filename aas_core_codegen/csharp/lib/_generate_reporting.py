@@ -334,7 +334,7 @@ namespace {namespace}
     writer.write(f"\n{I}}}  // public static class Reporting")
     writer.write(f"\n}}  // namespace {namespace}")
 
-    using_directives = []  # type: List[Stripped]
+    using_directives: List[Stripped] = []
     using_directives.extend(
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )
@@ -348,7 +348,6 @@ using System.Collections.Generic;  // can't alias"""
         )
     )
 
-    # pylint: disable=line-too-long
     blocks = [
         csharp_common.WARNING,
         Stripped("\n".join(using_directives)),

@@ -169,21 +169,19 @@ class _Collector(parse_tree.Visitor):
         """
         self.type_map = type_map
 
-        self.binding_by_name = dict()  # type: MutableMapping[parse_tree.Name, _Binding]
+        self.binding_by_name: MutableMapping[parse_tree.Name, _Binding] = dict()
 
-        self.binding_by_definition = (
-            dict()
-        )  # type: MutableMapping[parse_tree.Node, _Binding]
+        self.binding_by_definition: MutableMapping[parse_tree.Node, _Binding] = dict()
 
-        self.reassigned = set()  # type: Set[_Binding]
+        self.reassigned: Set[_Binding] = set()
 
         #: Expressions whose values are mutated in place: the collections of
         #: the index targets, the sets which we add to, and the lists and the sets
         #: passed to the mutable arguments
-        self.mutated = []  # type: List[parse_tree.Expression]
+        self.mutated: List[parse_tree.Expression] = []
 
         #: Names of the properties replaced by a setter
-        self.set_property_names = set()  # type: Set[Identifier]
+        self.set_property_names: Set[Identifier] = set()
 
         #: Set if an index target replaces an item which is not a primitive value
         self.replaces_non_primitive_item = False
@@ -197,31 +195,31 @@ class _Collector(parse_tree.Visitor):
 
         #: Nodes whose values are copied in C++ from an access path, while Python
         #: shares them
-        self.copies = []  # type: List[Tuple[parse_tree.Node, str]]
+        self.copies: List[Tuple[parse_tree.Node, str]] = []
 
         #: Local sets which we move into a returned tuple literal
-        self.moved = set()  # type: Set[parse_tree.Node]
+        self.moved: Set[parse_tree.Node] = set()
 
         #: Generators of the ``any`` and ``all`` expressions, whose loop variables
         #: are parameters of lambdas in C++
-        self.lambda_generators = (
-            set()
-        )  # type: Set[Union[parse_tree.ForEach, parse_tree.ForRange]]
+        self.lambda_generators: Set[
+            Union[parse_tree.ForEach, parse_tree.ForRange]
+        ] = set()
 
-        self.errors = []  # type: List[Error]
+        self.errors: List[Error] = []
 
         argument_names = [arg.name for arg in arguments]
         if binds_self:
             argument_names.append(Identifier("self"))
 
-        self._scopes = [
+        self._scopes: List[MutableMapping[Identifier, _Binding]] = [
             {
                 name: _Binding(
                     identifier=name, kind=_BindingKind.ARGUMENT, definition=None
                 )
                 for name in argument_names
             }
-        ]  # type: List[MutableMapping[Identifier, _Binding]]
+        ]
 
     def _find(self, identifier: Identifier) -> Optional[_Binding]:
         for scope in reversed(self._scopes):
@@ -320,7 +318,7 @@ class _Collector(parse_tree.Visitor):
         arguments: Sequence[intermediate.Argument],
     ) -> None:
         """Collect the facts about the ``arg_nodes`` passed to mutable arguments."""
-        for arg_node, argument in zip(arg_nodes, arguments):
+        for arg_node, argument in zip(arg_nodes, arguments, strict=False):
             if not argument.mutable:
                 continue
 
@@ -538,7 +536,7 @@ def analyze(
     errors = list(collector.errors)
 
     def path_of(node: parse_tree.Node) -> Optional[_Path]:
-        segments = []  # type: List[Union[parse_tree.Member, parse_tree.Index]]
+        segments: List[Union[parse_tree.Member, parse_tree.Index]] = []
         while isinstance(node, (parse_tree.Member, parse_tree.Index)):
             segments.append(node)
             node = (
@@ -612,7 +610,7 @@ def analyze(
 
         return binding
 
-    mutable_bindings = set()  # type: Set[_Binding]
+    mutable_bindings: Set[_Binding] = set()
     worklist = list(collector.mutated)
     while len(worklist) > 0:
         binding = mutated_binding(worklist.pop())
@@ -639,9 +637,7 @@ def analyze(
 
     # endregion
 
-    declaration_by_definition = (
-        dict()
-    )  # type: MutableMapping[parse_tree.Node, Declaration]
+    declaration_by_definition: MutableMapping[parse_tree.Node, Declaration] = dict()
 
     for definition, binding in collector.binding_by_definition.items():
         if isinstance(definition, parse_tree.Assignment):

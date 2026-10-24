@@ -30,7 +30,7 @@ def generate(
 
     The ``namespace`` indicates the fully-qualified name of the base project.
     """
-    blocks = [
+    blocks: List[str] = [
         Stripped(
             f"""\
 class TracingVisitorThrough : Our.Visitation.VisitorThrough
@@ -115,7 +115,7 @@ private static void CompareOrRerecordTrace(
 {I}}}
 }}"""
         ),
-    ]  # type: List[str]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_csharp = csharp_naming.class_name(concrete_cls.name)

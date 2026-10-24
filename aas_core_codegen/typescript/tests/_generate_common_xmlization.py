@@ -26,7 +26,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code for common XML de/serialization shared across the tests."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -44,7 +44,7 @@ import * as OurXmlization from "../src/xmlization";
 
 import * as TestCommon from "./common";"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_typescript = typescript_naming.class_name(concrete_cls.name)

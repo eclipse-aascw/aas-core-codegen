@@ -14,6 +14,7 @@ https://swtch.com/~rsc/regexp/regexp2.html
 The ideas for additional instructions were taken from:
 https://www.codeproject.com/Articles/5256833/Regex-as-a-Tiny-Threaded-Virtual-Machine
 """
+import itertools
 import dataclasses
 import io
 from typing import (
@@ -30,12 +31,14 @@ from typing import (
 
 from icontract import require
 
-from aas_core_codegen.common import assert_never, pairwise
+from aas_core_codegen.common import assert_never
 from aas_core_codegen.parse import retree as parse_retree, tree as parse_tree
 
 
 class Character(str):
     """Represent a single character."""
+
+    __slots__ = ()
 
     @require(lambda text: len(text) == 1)
     def __new__(cls, text: str) -> "Character":
@@ -77,7 +80,7 @@ def check_ranges_sorted_and_non_overlapping(ranges: Sequence[Range]) -> Optional
     If there are no errors, return ``None``. Otherwise, return a message explaining
     what precisely was not satisfied.
     """
-    for this_range, next_range in pairwise(ranges):
+    for this_range, next_range in itertools.pairwise(ranges):
         if ord(this_range.first) >= ord(next_range.last):
             return (
                 f"The range {this_range} and its next range {next_range} "
@@ -292,7 +295,7 @@ class _Translator(parse_retree.Transformer[_Node]):
         else:
             pass
 
-        children = []  # type: List[_NodeOrLeaf]
+        children: List[_NodeOrLeaf] = []
 
         final_label = self._obtain_label()
 
@@ -380,10 +383,10 @@ class _Translator(parse_retree.Transformer[_Node]):
             if node.quantifier.minimum == 1 and node.quantifier.maximum == 1:
                 return self.transform(node.value)
 
-            children = []  # type: List[_NodeOrLeaf]
+            children: List[_NodeOrLeaf] = []
 
             if node.quantifier.maximum is not None:
-                for _ in range(0, node.quantifier.minimum):
+                for _ in range(node.quantifier.minimum):
                     children.append(self.transform(node.value))
 
                 optional_count = node.quantifier.maximum - node.quantifier.minimum
@@ -427,7 +430,7 @@ class _Translator(parse_retree.Transformer[_Node]):
                 else:
                     # NOTE (mristin):
                     # The last mandatory repetition will be used for the unbounded loop.
-                    for _ in range(0, node.quantifier.minimum - 1):
+                    for _ in range(node.quantifier.minimum - 1):
                         children.append(self.transform(node.value))
 
                     l1 = self._obtain_label()
@@ -618,7 +621,7 @@ class _Translator(parse_retree.Transformer[_Node]):
 
         # endregion
 
-        children = []  # type: List[_NodeOrLeaf]
+        children: List[_NodeOrLeaf] = []
         for concatenant in concatenants:
             child = self.transform(concatenant)
             children.append(child)
@@ -651,7 +654,7 @@ def _recursively_convert_node_for_public(raw_node_or_leaf: _NodeOrLeaf) -> NodeO
         )
 
     elif isinstance(raw_node_or_leaf, _Node):
-        children = []  # type: List[NodeOrLeaf]
+        children: List[NodeOrLeaf] = []
         for raw_child in raw_node_or_leaf.children:
             children.append(_recursively_convert_node_for_public(raw_child))
 
@@ -663,7 +666,7 @@ def _recursively_convert_node_for_public(raw_node_or_leaf: _NodeOrLeaf) -> NodeO
 
 def _linearize(node: _Node) -> List[_Leaf]:
     """Make recursively a linear list over all the leaves."""
-    lst = []  # type: List[_Leaf]
+    lst: List[_Leaf] = []
     for child in node.children:
         if isinstance(child, _Leaf):
             lst.append(child)
@@ -693,7 +696,7 @@ def _relabel_in_place(root: _Node) -> None:
 
     # NOTE (mristin):
     # We map on the ``id(leaf)`` as the leaves are not hashable.
-    leaf_to_index = dict()  # type: MutableMapping[int, int]
+    leaf_to_index: MutableMapping[int, int] = dict()
 
     for leaf in linearized_leaves:
         if isinstance(leaf.instruction, _InstructionNoop):
@@ -707,13 +710,13 @@ def _relabel_in_place(root: _Node) -> None:
     # arbitrary labelling 🠒 labeling according to indices.
     #
     # Only the leaves indicated by new labels will finally have a label at the end.
-    old_to_new_label = dict()  # type: MutableMapping[int, int]
+    old_to_new_label: MutableMapping[int, int] = dict()
 
     # NOTE (mristin):
     # We iterate in reverse over the leaves so that a single non-no-op instruction
     # can accumulate multiple labels for itself.
 
-    leaf_after_noop = None  # type: Optional[_Leaf]
+    leaf_after_noop: Optional[_Leaf] = None
     for leaf in reversed(linearized_leaves):
         if isinstance(leaf.instruction, _InstructionNoop):
             if leaf.label is not None:
@@ -767,7 +770,7 @@ def _remove_noop_in_place(node: _Node) -> None:
 
     The no-op instructions are expected to have no labels attached to them.
     """
-    new_children = []  # type: List[_NodeOrLeaf]
+    new_children: List[_NodeOrLeaf] = []
     for child in node.children:
         if isinstance(child, _Leaf):
             if isinstance(child.instruction, _InstructionNoop):
@@ -822,8 +825,8 @@ def _determine_min_and_max_label(node_or_leaf: NodeOrLeaf) -> Optional[Tuple[int
             return None
 
     elif isinstance(node_or_leaf, Node):
-        minimum = None  # type: Optional[int]
-        maximum = None  # type: Optional[int]
+        minimum: Optional[int] = None
+        maximum: Optional[int] = None
 
         for child in node_or_leaf.children:
             maybe_child_min_max = _determine_min_and_max_label(node_or_leaf=child)

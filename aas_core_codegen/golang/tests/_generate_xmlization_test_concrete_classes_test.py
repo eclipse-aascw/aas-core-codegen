@@ -28,7 +28,7 @@ def _generate_for_cls(cls: intermediate.ConcreteClass) -> List[Stripped]:
 
     unmarshal_function = golang_naming.function_name(Identifier("unmarshal"))
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     interface_name = golang_naming.interface_name(cls.name)
 
@@ -183,7 +183,9 @@ func {test_name}(t *testing.T) {{
 #: belong to. A recorded example has to serialize back to itself, character for
 #: character, so it can hold neither a value written in another form than it
 #: was read nor one whose written form the targets spell differently.
-_LEXICAL_CASES_BY_PRIMITIVE = {
+_LEXICAL_CASES_BY_PRIMITIVE: Mapping[
+    intermediate.PrimitiveType, List[Tuple[str, str]]
+] = {
     intermediate.PrimitiveType.FLOAT: [
         # NOTE:
         # A literal too large for a double is not an error: XSD rounds it to
@@ -218,7 +220,7 @@ _LEXICAL_CASES_BY_PRIMITIVE = {
         ("true", "true"),
         ("false", "false"),
     ],
-}  # type: Mapping[intermediate.PrimitiveType, List[Tuple[str, str]]]
+}
 
 
 def _lexical_test_name_chunk(text: str) -> str:
@@ -248,9 +250,7 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
     if cls is None:
         return []
 
-    prop_by_a_type = (
-        dict()
-    )  # type: Dict[intermediate.PrimitiveType, intermediate.Property]
+    prop_by_a_type: Dict[intermediate.PrimitiveType, intermediate.Property] = dict()
     for prop in cls.properties:
         assert isinstance(prop.type_annotation, intermediate.PrimitiveTypeAnnotation)
         prop_by_a_type.setdefault(prop.type_annotation.a_type, prop)
@@ -275,7 +275,7 @@ def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stri
     cls_name_xml = naming.xml_class_name(cls.name)
     unmarshal_function = golang_naming.function_name(Identifier("unmarshal"))
 
-    result = [
+    result: List[Stripped] = [
         Stripped(
             f"""\
 // Read the first recorded example of {interface_name} with the content of
@@ -332,7 +332,7 @@ func {cls_name_go}(
 {I}return instance
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for a_type, prop in relevant:
         prop_xml_name = naming.xml_property(prop.name)
@@ -350,7 +350,7 @@ func {cls_name_go}(
         for a_text, expected in _LEXICAL_CASES_BY_PRIMITIVE[a_type]:
             test_name = golang_naming.function_name(
                 Identifier(
-                    f"Test_{prop.name}_read_from_" f"{_lexical_test_name_chunk(a_text)}"
+                    f"Test_{prop.name}_read_from_{_lexical_test_name_chunk(a_text)}"
                 )
             )
 
@@ -384,7 +384,7 @@ func {test_name}(t *testing.T) {{
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to test the XML de/serialization of concrete classes."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for concrete_cls in symbol_table.concrete_classes:
         blocks.extend(_generate_for_cls(cls=concrete_cls))

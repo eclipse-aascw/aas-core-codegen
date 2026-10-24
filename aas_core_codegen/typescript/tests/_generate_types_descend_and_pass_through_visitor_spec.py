@@ -27,7 +27,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test the ``descend`` methods and ``PassThroughVisitor``."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -132,7 +132,7 @@ function compareOrRecordTrace(
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_typescript = typescript_naming.class_name(concrete_cls.name)

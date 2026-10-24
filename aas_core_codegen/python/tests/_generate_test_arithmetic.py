@@ -32,7 +32,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
     generate the tests so that the clients can look up the behavior, and compare it
     against the other SDKs, see :py:mod:`aas_core_codegen.tests_common`.
     """
-    methods = []  # type: List[Stripped]
+    methods: List[Stripped] = []
 
     if intermediate_uses.modulo(symbol_table):
         for i, case in enumerate(tests_common.FLOOR_MOD_CASES):

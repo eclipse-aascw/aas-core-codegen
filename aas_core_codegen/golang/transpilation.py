@@ -4,6 +4,7 @@ import ast
 import io
 import textwrap
 from typing import (
+    Final,
     Tuple,
     Optional,
     List,
@@ -172,7 +173,7 @@ def generate_type(
         return value_type, None
 
     elif isinstance(type_annotation, intermediate_type_inference.TupleTypeAnnotation):
-        item_types = []  # type: List[Stripped]
+        item_types: List[Stripped] = []
         for item in type_annotation.items:
             item_type, error_msg = generate_type(
                 type_annotation=item, types_package=types_package
@@ -220,7 +221,7 @@ class Transpiler(
 ):
     """Transpile a node of our AST to Go code, or return an error."""
 
-    _GOLANG_COMPARISON_MAP = {
+    _GOLANG_COMPARISON_MAP: Final[Mapping[parse_tree.Comparator, str]] = {
         parse_tree.Comparator.LT: "<",
         parse_tree.Comparator.LE: "<=",
         parse_tree.Comparator.GT: ">",
@@ -254,7 +255,7 @@ class Transpiler(
 
         # Keep track whenever we define a variable name, so that we can know how to
         # generate the reference in the Go code.
-        self._variable_name_set = set()  # type: Set[Identifier]
+        self._variable_name_set: Set[Identifier] = set()
 
     def _type_parameter_of(
         self, type_annotation: intermediate_type_inference.TypeAnnotationUnion
@@ -456,7 +457,7 @@ class Transpiler(
         "de-reference" the enumeration literals from an enumeration, but
         generate the constant name here.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_member(
@@ -596,7 +597,7 @@ class Transpiler(
             return None, error
         assert index is not None
 
-        index_as_int = None  # type: Optional[int]
+        index_as_int: Optional[int] = None
         try:
             index_as_int = int(index)
         except ValueError:
@@ -604,7 +605,6 @@ class Transpiler(
 
         if index_as_int is not None and index_as_int < 0:
             if "\n" in collection:
-                # pylint: disable=invalid-unary-operand-type
                 index = Stripped(
                     f"""\
 len(
@@ -612,9 +612,7 @@ len(
 ) - {-index_as_int}"""
                 )
             else:
-                index = Stripped(
-                    f"len({collection}) - {-index_as_int}"  # pylint: disable=invalid-unary-operand-type
-                )
+                index = Stripped(f"len({collection}) - {-index_as_int}")
 
         no_parentheses_types = (
             parse_tree.Member,
@@ -644,19 +642,19 @@ len(
     def transform_slice(
         self, node: parse_tree.Slice
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         collection, error = self.transform(node.collection)
         if error is not None:
             errors.append(error)
 
-        start = None  # type: Optional[Stripped]
+        start: Optional[Stripped] = None
         if node.start is not None:
             start, error = self.transform(node.start)
             if error is not None:
                 errors.append(error)
 
-        end = None  # type: Optional[Stripped]
+        end: Optional[Stripped] = None
         if node.end is not None:
             end, error = self.transform(node.end)
             if error is not None:
@@ -950,7 +948,7 @@ strings.Contains(
                 f"this is an assertion violation!",
             )
 
-        checks = []  # type: List[Stripped]
+        checks: List[Stripped] = []
         for cls_name in node.classes:
             function_name = self._our_type_name(
                 golang_naming.function_name(Identifier(f"is_{cls_name.identifier}"))
@@ -1030,7 +1028,7 @@ strings.Contains(
     def transform_method_call(
         self, node: parse_tree.MethodCall
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         instance, error = self._transform_and_dereference_if_necessary(
             node.member.instance
@@ -1038,7 +1036,7 @@ strings.Contains(
         if error is not None:
             errors.append(error)
 
-        args = []  # type: List[Stripped]
+        args: List[Stripped] = []
         for arg_node in node.args:
             arg, error = self.transform(arg_node)
             if error is not None:
@@ -1185,7 +1183,7 @@ ourcommon.{function_name}(
 
         args = [
             self._as_int64_position(arg_node, arg)
-            for arg_node, arg in zip(node.args, args)
+            for arg_node, arg in zip(node.args, args, strict=True)
         ]
 
         args_joined = ", ".join(args)
@@ -1210,7 +1208,7 @@ ourcommon.{function_name}(
     def transform_function_call(
         self, node: parse_tree.FunctionCall
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # The validity of the arguments is checked in
@@ -1228,7 +1226,7 @@ ourcommon.{function_name}(
                 f"but its inferred type was {func_type}",
             )
 
-        args = []  # type: List[Stripped]
+        args: List[Stripped] = []
         for i, arg_node in enumerate(node.args):
             # NOTE (mristin):
             # The type parameter of a generic sequence can not be inferred from
@@ -1292,7 +1290,7 @@ ourcommon.{function_name}(
 
             args = [
                 self._as_int64_position(arg_node, arg)
-                for arg_node, arg in zip(node.args, args)
+                for arg_node, arg in zip(node.args, args, strict=True)
             ]
 
             args_joined = ", ".join(args)
@@ -1533,8 +1531,8 @@ ourcommon.{PARSE_SAFE_INT_FUNCTION_NAME}(
     def transform_tuple(
         self, node: parse_tree.Tuple
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        item_exprs = []  # type: List[Stripped]
+        errors: List[Error] = []
+        item_exprs: List[Stripped] = []
 
         for value_node in node.values:
             item_expr, error = self._transform_and_dereference_if_necessary(value_node)
@@ -1576,8 +1574,8 @@ ourcommon.{PARSE_SAFE_INT_FUNCTION_NAME}(
     def transform_list_literal(
         self, node: parse_tree.ListLiteral
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        items = []  # type: List[Stripped]
+        errors: List[Error] = []
+        items: List[Stripped] = []
 
         for item_node in node.items:
             item, error = self._transform_and_dereference_if_necessary(item_node)
@@ -1678,7 +1676,7 @@ ourcommon.{PARSE_SAFE_INT_FUNCTION_NAME}(
     def transform_name(
         self, node: parse_tree.Name
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def transform_not(
         self, node: parse_tree.Not
@@ -1707,8 +1705,8 @@ ourcommon.{PARSE_SAFE_INT_FUNCTION_NAME}(
     def transform_and(
         self, node: parse_tree.And
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        values = []  # type: List[Stripped]
+        errors: List[Error] = []
+        values: List[Stripped] = []
 
         for value_node in node.values:
             value, error = self._transform_and_dereference_if_necessary(value_node)
@@ -1748,8 +1746,8 @@ ourcommon.{PARSE_SAFE_INT_FUNCTION_NAME}(
     def transform_or(
         self, node: parse_tree.Or
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        values = []  # type: List[Stripped]
+        errors: List[Error] = []
+        values: List[Stripped] = []
 
         for value_node in node.values:
             value, error = self._transform_and_dereference_if_necessary(value_node)
@@ -1789,7 +1787,7 @@ ourcommon.{PARSE_SAFE_INT_FUNCTION_NAME}(
     def _transform_add_or_sub(
         self, node: Union[parse_tree.Add, parse_tree.Sub]
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         left, error = self._transform_and_dereference_if_necessary(node.left)
         if error is not None:
@@ -1881,7 +1879,7 @@ ourcommon.{PARSE_SAFE_INT_FUNCTION_NAME}(
     def transform_mod(
         self, node: parse_tree.Mod
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         left, error = self._transform_and_dereference_if_necessary(node.left)
         if error is not None:
@@ -2059,8 +2057,8 @@ int(
         # NOTE (mristin):
         # We need the interpolation if we got so far.
 
-        text_parts = []  # type: List[str]
-        args = []  # type: List[str]
+        text_parts: List[str] = []
+        args: List[str] = []
 
         for value in node.values:
             if isinstance(value, str):
@@ -2135,11 +2133,11 @@ fmt.Sprintf(
     def _transform_any_or_all(
         self, node: Union[parse_tree.Any, parse_tree.All]
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
-        iteration = None  # type: Optional[Stripped]
-        start = None  # type: Optional[Stripped]
-        end = None  # type: Optional[Stripped]
+        iteration: Optional[Stripped] = None
+        start: Optional[Stripped] = None
+        end: Optional[Stripped] = None
 
         if isinstance(node.generator, parse_tree.ForEach):
             iteration, error = self.transform(node.generator.iteration)
@@ -2184,7 +2182,7 @@ fmt.Sprintf(
         # parameter as well.
         type_parameter = self._type_parameter_of(variable_type_annotation)
         if type_parameter is not None:
-            variable_type_go = Stripped(type_parameter)  # type: Optional[Stripped]
+            variable_type_go: Optional[Stripped] = Stripped(type_parameter)
         else:
             variable_type_go, error_msg = generate_type(
                 type_annotation=variable_type_annotation,
@@ -2355,7 +2353,7 @@ ourcommon.{qualifier_function}(
     def transform_assignment(
         self, node: parse_tree.Assignment
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         if isinstance(node.target, parse_tree.Member):
             # NOTE (mristin):
@@ -2438,7 +2436,7 @@ ourcommon.{qualifier_function}(
 
         is_definition = False
 
-        target = None  # type: Optional[Stripped]
+        target: Optional[Stripped] = None
         if (
             isinstance(node.target, parse_tree.Name)
             and self._environment.find(identifier=node.target.identifier) is None
@@ -2631,8 +2629,8 @@ return {indent_but_first_line(value, I)}"""
         )
         self._environment = scope_environment
 
-        errors = []  # type: List[Error]
-        stmts = []  # type: List[Stripped]
+        errors: List[Error] = []
+        stmts: List[Stripped] = []
         try:
             for stmt in statements:
                 code, error = self.transform(stmt)
@@ -2662,15 +2660,15 @@ return {indent_but_first_line(value, I)}"""
 
         assert subject is not None
 
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We collect the headers of the clauses together with their statements, and
         # treat the default as the last clause.
-        clauses = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+        clauses: List[Tuple[str, Sequence[parse_tree.StatementUnion]]] = []
 
         for case in node.cases:
-            labels = []  # type: List[Stripped]
+            labels: List[Stripped] = []
             for label in case.labels:
                 label_code, error = self.transform(label)
                 if error is not None:
@@ -2719,13 +2717,13 @@ return {indent_but_first_line(value, I)}"""
     def transform_for(
         self, node: parse_tree.For
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         variable_name = node.generator.variable.identifier
         variable_type_annotation = self.type_map[node.generator.variable]
         variable = golang_naming.variable_name(variable_name)
 
-        header = None  # type: Optional[str]
+        header: Optional[str] = None
         if isinstance(node.generator, parse_tree.ForEach):
             # NOTE (mristin):
             # Lists are represented as slices in Go, which are never pointers.
@@ -2845,7 +2843,7 @@ return {indent_but_first_line(value, I)}"""
     def transform_assert(
         self, node: parse_tree.Assert
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We transpile the negation of the condition as a ``not`` so that
@@ -2858,7 +2856,7 @@ return {indent_but_first_line(value, I)}"""
         if error is not None:
             errors.append(error)
 
-        message = None  # type: Optional[Stripped]
+        message: Optional[Stripped] = None
         if node.message is None:
             message = golang_common.string_literal(
                 f"Assertion failed: {ast.unparse(node.condition.original_node)}"
@@ -2908,12 +2906,12 @@ if (
     def transform_if(
         self, node: parse_tree.If
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We collect the headers of the branches together with their statements,
         # and treat the default as the last branch.
-        branches = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+        branches: List[Tuple[str, Sequence[parse_tree.StatementUnion]]] = []
 
         for i, branch in enumerate(node.branches):
             condition, error = self._transform_and_dereference_if_necessary(

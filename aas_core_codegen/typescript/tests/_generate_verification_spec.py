@@ -22,7 +22,7 @@ from aas_core_codegen.typescript.common import INDENT as I
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test verification helpers and functions."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -76,7 +76,7 @@ test("verification error stores provided path", () => {{
 {I}expect(error.path.toString()).toStrictEqual(".idShort");
 }});"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for verification in symbol_table.verification_functions:
         if verification.visibility is not intermediate.Visibility.PUBLIC:

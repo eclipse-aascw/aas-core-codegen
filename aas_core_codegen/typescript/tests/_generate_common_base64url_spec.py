@@ -20,7 +20,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate() -> str:
     """Generate the unit tests for Base64-URL functions."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -201,7 +201,7 @@ test("invalid characters in input", () => {{
 {I}}}
 }});"""
         ),
-    ]  # type: List[Stripped]
+    ]
     writer = io.StringIO()
     for i, block in enumerate(blocks):
         if i > 0:

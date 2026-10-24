@@ -36,7 +36,7 @@ def _generate_mutating_visitor_interface(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the interface for a mutating visitor."""
-    visit_methods = []  # type: List[Stripped]
+    visit_methods: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         method_name = cpp_naming.method_name(Identifier(f"visit_{cls.name}"))
@@ -108,7 +108,7 @@ def _generate_mutating_pass_through_visitor_definition(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the definition of a no-op mutating visitor."""
-    visit_methods = []  # type: List[Stripped]
+    visit_methods: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         method_name = cpp_naming.method_name(Identifier(f"visit_{cls.name}"))
@@ -160,7 +160,7 @@ def generate_header(
 
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 #ifndef {include_guard_var}
@@ -183,7 +183,7 @@ namespace visitation {"""
         _generate_mutating_visitor_interface(symbol_table=symbol_table),
         _generate_mutating_abstract_visitor_definition(),
         _generate_mutating_pass_through_visitor_definition(symbol_table=symbol_table),
-    ]  # type: List[Stripped]
+    ]
 
     blocks.extend(
         [
@@ -214,7 +214,7 @@ def _generate_dispatching_visit_switch_statement(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the dispatching statement for the visitor's main ``Visit`` method."""
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         model_type_literal = cpp_naming.enum_literal_name(cls.name)
         visit_name = cpp_naming.method_name(Identifier(f"visit_{cls.name}"))
@@ -276,7 +276,7 @@ def _generate_mutating_abstract_visitor_implementation(
         symbol_table=symbol_table
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("// region AbstractVisitor"),
         Stripped(
             f"""\
@@ -287,7 +287,7 @@ void AbstractVisitor::Visit(
 }}"""
         ),
         Stripped("// endregion"),
-    ]  # type: List[Stripped]
+    ]
 
     return blocks
 
@@ -307,7 +307,7 @@ def _generate_visit_named_union_switch(
 
     The ``visitor`` is the C++ expression of the pointer to the visitor.
     """
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for i in range(len(named_union.roots)):
         case_blocks.append(
             Stripped(
@@ -484,7 +484,7 @@ def _generate_pass_through_visit_body_for_class(
 
     Return (code, True if any of the properties will be recursively visited)
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for prop in cls.properties:
         descendability = intermediate.map_descendability(prop.type_annotation)
@@ -612,7 +612,7 @@ def generate_implementation(
 
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f"""\
@@ -626,14 +626,14 @@ def generate_implementation(
         ),
         cpp_common.generate_namespace_opening(namespace),
         *_generate_mutating_abstract_visitor_implementation(symbol_table=symbol_table),
-    ]  # type: List[Stripped]
+    ]
 
     # NOTE (mristin):
     # The descendability maps the nested type annotations before the type
     # annotations which hold them. Hence, a pass-through function always comes
     # after the functions it calls, as C++ requires.
-    pass_through_functions = []  # type: List[Stripped]
-    observed_monikers = set()  # type: Set[str]
+    pass_through_functions: List[Stripped] = []
+    observed_monikers: Set[str] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:

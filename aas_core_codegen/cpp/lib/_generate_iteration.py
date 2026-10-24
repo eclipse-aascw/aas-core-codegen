@@ -41,7 +41,7 @@ from aas_core_codegen.cpp.common import (
 
 def _generate_property_enum(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the enum which represents all the properties of all the classes."""
-    literal_name_set = set()  # type: Set[Identifier]
+    literal_name_set: Set[Identifier] = set()
     for cls in symbol_table.classes:
         for prop in cls.properties:
             literal_name_set.add(cpp_naming.enum_literal_name(prop.name))
@@ -88,7 +88,7 @@ def generate_header(
     property_enum = cpp_naming.enum_name(Identifier("Property"))
     property_to_wstring = cpp_naming.function_name(Identifier("property_to_wstring"))
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 #ifndef {include_guard_var}
@@ -461,7 +461,7 @@ class DescentOnce : public IDescent {{
 }};  // class DescentOnce"""
         ),
         Stripped("// endregion Iterators and descent"),
-    ]  # type: List[Stripped]
+    ]
 
     if len(symbol_table.enumerations) > 0:
         blocks.append(Stripped("// region Over enumerations"))
@@ -513,8 +513,8 @@ def _generate_property_to_wstring_implementation(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the implementation of the stringification for ``Property`` enum."""
-    literal_name_to_getter = dict()  # type: Dict[Identifier, Identifier]
-    literal_name_set = set()  # type: Set[Identifier]
+    literal_name_to_getter: Dict[Identifier, Identifier] = dict()
+    literal_name_set: Set[Identifier] = set()
 
     for cls in symbol_table.classes:
         for prop in cls.properties:
@@ -527,7 +527,7 @@ def _generate_property_to_wstring_implementation(
 
     property_enum = cpp_naming.enum_name(Identifier("Property"))
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for literal_name in literal_names:
         getter = literal_name_to_getter[literal_name]
 
@@ -793,7 +793,7 @@ std::wstring Path::ToWstring() const {{
 # stop the iteration at any point without having iterated over the rest.
 
 #: Define the iterator over no instances.
-_EMPTY = [
+_EMPTY: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -838,11 +838,11 @@ std::unique_ptr<impl::IIterator> Empty() {{
 {I}return common::make_unique<EmptyIterator>();
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over a single instance.
-_ONE = [
+_ONE: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -898,11 +898,11 @@ std::unique_ptr<impl::IIterator> One(
 {I}return common::make_unique<OneIterator>(std::move(instance));
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the children, one after another.
-_CHAIN = [
+_CHAIN: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1014,11 +1014,11 @@ std::unique_ptr<impl::IIterator> Chain(
 {I}return common::make_unique<ChainIterator>(std::move(collected));
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the instances in a property.
-_IN_PROPERTY = [
+_IN_PROPERTY: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1082,11 +1082,11 @@ std::unique_ptr<impl::IIterator> InProperty(
 {I}return common::make_unique<InPropertyIterator>(property, std::move(child));
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the instances in a component of a tuple.
-_AT_INDEX = [
+_AT_INDEX: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1150,11 +1150,11 @@ std::unique_ptr<impl::IIterator> AtIndex(
 {I}return common::make_unique<AtIndexIterator>(index, std::move(child));
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the items of a list.
-_EACH = [
+_EACH: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1270,11 +1270,11 @@ std::unique_ptr<impl::IIterator> Each(
 {I}return common::make_unique<EachIterator<T> >(&items, over_item, recursive);
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over an instance, and then over the instances it references.
-_ONE_THEN_OVER = [
+_ONE_THEN_OVER: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1373,7 +1373,7 @@ std::unique_ptr<impl::IIterator> OneThenOver(
 {I}return Chain(One(instance), Over(*instance, recursive));
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 # endregion Combinators
 
@@ -1612,7 +1612,7 @@ def _generate_over_function(
         )
 
     elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
-        components = []  # type: List[Stripped]
+        components: List[Stripped] = []
         for i, item in enumerate(type_annotation.items):
             item_expression = _generate_over_expression(
                 type_annotation=item,
@@ -1671,7 +1671,7 @@ switch (value.index()) {{
         assert expression is not None
         body = Stripped(f"return {expression};")
 
-    alias = None  # type: Optional[Stripped]
+    alias: Optional[Stripped] = None
 
     if isinstance(
         type_annotation,
@@ -1752,7 +1752,7 @@ def _generate_over_class(
     The ``function_name_set`` contains the names of the collected functions, see
     :py:func:`cpp_over.collect_function_types`.
     """
-    parts = []  # type: List[Stripped]
+    parts: List[Stripped] = []
 
     for prop in cls.properties:
         expression = _generate_over_expression(
@@ -1821,7 +1821,7 @@ std::unique_ptr<impl::IIterator> DispatchOnModelType(
 }}"""
         )
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for cls in yielding_classes:
         model_type_literal = cpp_naming.enum_literal_name(cls.name)
         interface_name = cpp_naming.interface_name(cls.name)
@@ -1898,7 +1898,7 @@ def _generate_iteration_over_instances(
         for function_type in function_types
     ]
 
-    generated = [
+    generated: List[Stripped] = [
         *(alias for alias, _ in aliases_and_functions if alias is not None),
         *(function for _, function in aliases_and_functions),
         *(
@@ -1906,7 +1906,7 @@ def _generate_iteration_over_instances(
             for cls in yielding_classes
         ),
         _generate_dispatch_on_model_type(yielding_classes=yielding_classes),
-    ]  # type: List[Stripped]
+    ]
 
     generated_code = "\n".join(generated)
 
@@ -2080,7 +2080,7 @@ void PrependToPath(const Iterator& iterator, Path* path) {{
 
 def _generate_descent_and_descent_once_implementations() -> List[Stripped]:
     """Generate the implementation of the descent iterables."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for descent, recursive in (("Descent", "true"), ("DescentOnce", "false")):
         blocks.append(
@@ -2135,7 +2135,7 @@ def _generate_over_enum_implementation(enum: intermediate.Enumeration) -> Stripp
     enum_name = cpp_naming.enum_name(enum.name)
     over_enum = cpp_naming.constant_name(Identifier(f"over_{enum.name}"))
 
-    literals = []  # type: List[Stripped]
+    literals: List[Stripped] = []
     for literal in enum.literals:
         literal_name = cpp_naming.enum_literal_name(literal.name)
         literals.append(Stripped(f"types::{enum_name}::{literal_name}"))
@@ -2166,7 +2166,7 @@ def generate_implementation(
 
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f'''\
@@ -2181,7 +2181,7 @@ def generate_implementation(
         *_generate_key_segment_implementation(),
         *_generate_path_implementation(),
         Stripped("// endregion Pathing"),
-    ]  # type: List[Stripped]
+    ]
 
     iteration_blocks, errors = _generate_iteration_over_instances(
         symbol_table=symbol_table

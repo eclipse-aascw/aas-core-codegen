@@ -27,7 +27,7 @@ def generate(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> List[java_common.JavaFile]:
     """Generate the unit tests for the helpers of the operations on strings."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     if intermediate_uses.string_len_call(type_inference):
         for len_case in string_helper_cases.LEN_CASES:

@@ -35,7 +35,7 @@ def generate(
 
     The ``namespace`` indicates the fully-qualified name of the base project.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for i, (text, expected_int) in enumerate(tests_common.PARSE_INT_CASES):
         blocks.append(

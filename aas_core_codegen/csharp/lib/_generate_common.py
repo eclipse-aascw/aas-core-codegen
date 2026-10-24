@@ -67,7 +67,7 @@ def _generate_string_helpers(
     uses_lstrip = intermediate_uses.lstrip_call(type_inference)
     uses_rstrip = intermediate_uses.rstrip_call(type_inference)
 
-    members = []  # type: List[Stripped]
+    members: List[Stripped] = []
 
     if uses_len or uses_slicing or uses_find or uses_lstrip or uses_rstrip:
         members.append(
@@ -609,7 +609,7 @@ def _generate_set_helpers(symbol_table: intermediate.SymbolTable) -> Stripped:
     The strings are sorted with ``StringHelpers.CompareByCodePoints``, since
     the transpiled code compares them in the same way.
     """
-    members = []  # type: List[Stripped]
+    members: List[Stripped] = []
 
     for enumeration in intermediate_uses.enumerations_in_set_properties(symbol_table):
         enum_name = csharp_naming.enum_name(enumeration.name)
@@ -626,7 +626,7 @@ def _generate_set_helpers(symbol_table: intermediate.SymbolTable) -> Stripped:
             enumeration.literals, key=lambda a_literal: a_literal.value
         )
 
-        cases = []  # type: List[str]
+        cases: List[str] = []
         for rank, literal in enumerate(sorted_literals):
             literal_name = csharp_naming.enum_literal_name(literal.name)
             cases.append(
@@ -722,7 +722,7 @@ def generate(
 
     The ``namespace`` defines the base C# namespace of the generated code.
     """
-    blocks = [_TUPLE_HELPERS]  # type: List[Stripped]
+    blocks: List[Stripped] = [_TUPLE_HELPERS]
 
     # NOTE (mristin):
     # We transpile ``startswith`` and ``endswith`` to the native methods, so they

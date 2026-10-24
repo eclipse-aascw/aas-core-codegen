@@ -51,7 +51,7 @@ def generate(
     and make sure it matches the Python semantics, see
     :py:mod:`aas_core_codegen.tests_common`.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     if intermediate_uses.modulo(symbol_table):
         for i, case in enumerate(tests_common.FLOOR_MOD_CASES):

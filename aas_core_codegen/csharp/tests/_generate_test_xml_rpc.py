@@ -35,7 +35,7 @@ def generate(namespace: csharp_common.NamespaceIdentifier) -> str:
     """
     some_ns_value = "https://example.com/xml-rpc"
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 private static string SerializeToString(Nodes.JsonNode? that)
@@ -555,7 +555,7 @@ public void Test_deserialize_rejects_an_element_within_a_namespace()
 {II}$"Unexpected cause: {{error.Cause}}");
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     blocks_joined = "\n\n".join(blocks)
 

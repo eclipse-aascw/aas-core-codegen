@@ -614,7 +614,7 @@ def generate(qualified_module_name: python_common.QualifiedModuleName) -> str:
     The ``qualified_module_name`` indicates the fully-qualified name of the base
     module.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_module_docstring(qualified_module_name=qualified_module_name),
         python_common.WARNING,
         Stripped(
@@ -651,7 +651,7 @@ from {qualified_module_name}.xmlcommon import (
 )"""
         ),
         Stripped("# region De-serialization"),
-    ]  # type: List[Stripped]
+    ]
 
     blocks.extend(_generate_reading_blocks())
 
