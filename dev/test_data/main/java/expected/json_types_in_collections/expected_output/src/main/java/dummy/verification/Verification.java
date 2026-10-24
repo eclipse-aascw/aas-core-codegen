@@ -177,6 +177,28 @@ public class Verification {
               return error;
             }));
 
+      if (that.getOptionalObjects().isPresent()) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(that.getOptionalObjects().get())
+            .flatMap(Verification::verifyListOf_jsonObject)
+              .map(error -> {
+                error.prependSegment(
+                  new Reporting.NameSegment("optionalObjects"));
+                return error;
+              }));
+      }
+
+      if (that.getOptionalObject().isPresent()) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(that.getOptionalObject().get())
+            .flatMap(Verification::verifyJsonObject)
+              .map(error -> {
+                error.prependSegment(
+                  new Reporting.NameSegment("optionalObject"));
+                return error;
+              }));
+      }
+
       return errorStream;
     }
   }
@@ -272,6 +294,23 @@ public class Verification {
               new Reporting.IndexSegment(3));
             return error;
           }));
+  }
+
+  /**
+   * Verify the items of {@code that} recursively.
+   */
+  private static Stream<Reporting.Error> verifyListOf_jsonObject(
+    List<ObjectNode> that) {
+    return Verification.zip(
+      IntStream.iterate(0, i -> i + 1).boxed(),
+      that.stream())
+        .flatMap(itemTuple ->
+          Verification.verifyJsonObject(itemTuple.getSecond())
+            .map(error -> {
+              error.prependSegment(
+                new Reporting.IndexSegment(itemTuple.getFirst()));
+              return error;
+            }));
   }
 
   private static class _Pair<A, B> {

@@ -75,20 +75,20 @@ The obtained content and the content of {path} do not match:
             raise AssertionError(writer.getvalue())
 
 
-def trace(
-    that: Union[
-        bool,
-        int,
-        float,
-        str,
-        bytes,
-        enum.Enum,
-        our_types.Class,
-        Sequence[
-            Union[bool, int, float, str, bytes, enum.Enum, our_types.Class]
-        ],
-    ],
-) -> str:
+#: Represent a value which can be traced, including the nested sequences
+Traceable = Union[
+    bool,
+    int,
+    float,
+    str,
+    bytes,
+    enum.Enum,
+    our_types.Class,
+    Sequence["Traceable"],
+]
+
+
+def trace(that: Traceable) -> str:
     """
     Generate a segment in a trace of an iteration.
 

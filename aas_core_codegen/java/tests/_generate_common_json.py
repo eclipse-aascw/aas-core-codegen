@@ -66,6 +66,8 @@ public static JsonNode toJson(Object something)
 {II}return BinaryNode.valueOf((byte[]) something);
 {I}}} else if (something instanceof IClass) {{
 {II}return Jsonization.Serialize.toJsonObject((IClass) something);
+{I}}} else if (something instanceof JsonNode) {{
+{II}return (JsonNode) something;
 {I}}} else {{
 {II}throw new IllegalArgumentException(
 {III}"The conversion of type "

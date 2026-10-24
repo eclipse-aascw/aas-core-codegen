@@ -366,6 +366,25 @@ function *verify_TupleOf4_str_jsonValue_jsonArray_jsonObject(
 }
 
 /**
+ * Verify the items of `that` recursively.
+ */
+function *verify_ListOf_jsonObject(
+  that: ReadonlyArray<OurTypes.JsonObject>
+): IterableIterator<VerificationError> {
+  for (let i = 0; i < that.length; i++) {
+    for (const error of verifyJsonObject(that[i])) {
+      error.path.prepend(
+        new IndexSegment(
+          that,
+          i
+        )
+      );
+      yield error;
+    }
+  }
+}
+
+/**
  * Verify an instance of the model recursively or non-recursively (depending on the context).
  */
 class Verifier
@@ -397,6 +416,30 @@ class Verifier
           )
         );
         yield error;
+      }
+
+      if (that.optionalObjects !== null) {
+        for (const error of verify_ListOf_jsonObject(that.optionalObjects)) {
+          error.path.prepend(
+            new PropertySegment(
+              that,
+              "optionalObjects"
+            )
+          );
+          yield error;
+        }
+      }
+
+      if (that.optionalObject !== null) {
+        for (const error of verifyJsonObject(that.optionalObject)) {
+          error.path.prepend(
+            new PropertySegment(
+              that,
+              "optionalObject"
+            )
+          );
+          yield error;
+        }
       }
     }
   }

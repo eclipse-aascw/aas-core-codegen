@@ -63,6 +63,40 @@ namespace dummy.Tests
                 }
             }
         }
+
+        [Test]
+        public void Test_Something_OptionalObjectOrDefault_non_default()
+        {
+            Our.Something instance = (
+                Our.Tests.CommonJsonization.LoadMaximalSomething());
+
+            var value = instance.OptionalObjectOrDefault();
+
+            CompareOrRerecordValue(
+                value,
+                Path.Combine(
+                    Our.Tests.Common.TestDataDir,
+                    "XOrDefault",
+                    "Something",
+                    "OptionalObjectOrDefault.non-default.json"));
+        }  // public void Test_Something_OptionalObjectOrDefault_non_default
+
+        [Test]
+        public void Test_Something_OptionalObjectOrDefault_default()
+        {
+            Our.Something instance = (
+                Our.Tests.CommonJsonization.LoadMinimalSomething());
+
+            var value = instance.OptionalObjectOrDefault();
+
+            CompareOrRerecordValue(
+                value,
+                Path.Combine(
+                    Our.Tests.Common.TestDataDir,
+                    "XOrDefault",
+                    "Something",
+                    "OptionalObjectOrDefault.default.json"));
+        }  // public void Test_Something_OptionalObjectOrDefault_default
     }  // class TestXOrDefault
 }  // namespace dummy.Tests
 

@@ -432,6 +432,26 @@ func readAtV4_jsonObject(
 	return readJsonObject(decoder, current)
 }
 
+// Read a scalar item expected in the element `v`.
+//
+// The `current` token is expected to point to the content of that element, and
+// the resulting `next` token points to its end element.
+func readAtV_jsonObject(
+	decoder *xml.Decoder,
+	current xml.Token,
+	local string,
+) (value ourtypes.JsonObject,
+	next xml.Token,
+	err error,
+) {
+	if local != "v" {
+		err = unexpectedItemElement(local, "v")
+		return
+	}
+
+	return readJsonObject(decoder, current)
+}
+
 // Read a tuple of 4 item(s) with `readItem1`, `readItem2`, *etc.* on
 // the correspondingly positioned item, or return an error.
 //
@@ -603,9 +623,13 @@ func readSomethingAsSequence(
 ) {
 	var theValues []ourtypes.JsonValue
 	var theTupleWithJson ourcommon.Tuple4[string, ourtypes.JsonValue, ourtypes.JsonArray, ourtypes.JsonObject]
+	var theOptionalObjects []ourtypes.JsonObject
+	var theOptionalObject ourtypes.JsonObject
 
 	foundValues := false
 	foundTupleWithJson := false
+	foundOptionalObjects := false
+	foundOptionalObject := false
 
 	for {
 		var local string
@@ -642,6 +666,24 @@ func readSomethingAsSequence(
 				readAtV4_jsonObject,
 			)
 			foundTupleWithJson = true
+		case "optionalObjects":
+			if foundOptionalObjects {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
+			theOptionalObjects, current, valueErr = readListOf(
+				decoder, current, readAtV_jsonObject,
+			)
+			foundOptionalObjects = true
+		case "optionalObject":
+			if foundOptionalObject {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
+			theOptionalObject, current, valueErr = readJsonObject(
+				decoder, current,
+			)
+			foundOptionalObject = true
 		default:
 			valueErr = xmlcommon.NewDeserializationError(
 				"Unexpected property",
@@ -670,6 +712,8 @@ func readSomethingAsSequence(
 		theValues,
 		theTupleWithJson,
 	)
+	instance.SetOptionalObjects(theOptionalObjects)
+	instance.SetOptionalObject(theOptionalObject)
 	return
 }
 
@@ -1036,6 +1080,18 @@ func writeAtV4_jsonObject(
 	)
 }
 
+// Write the scalar `value` in the element `v`.
+//
+// Do not flush.
+func writeAtV_jsonObject(
+	encoder *xml.Encoder,
+	value ourtypes.JsonObject,
+) error {
+	return xmlcommon.WriteElement(
+		encoder, "v", value, xmlrpc.WriteObjectContent,
+	)
+}
+
 // Write `that` with `writeItem1`, `writeItem2`, *etc.* on the
 // correspondingly positioned item, or return an error.
 //
@@ -1106,6 +1162,18 @@ func writeListOf_jsonValue(
 	)
 }
 
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOf_jsonObject(
+	encoder *xml.Encoder,
+	list []ourtypes.JsonObject,
+) error {
+	return writeList(
+		encoder, list, writeAtV_jsonObject,
+	)
+}
+
 // Write the items of `that` as a sequence of XML elements.
 //
 // Do not flush.
@@ -1152,6 +1220,26 @@ func writeSomethingAsSequence(
 			"tupleWithJson",
 			that.TupleWithJson(),
 			writeTupleOf4_string_jsonValue_jsonArray_jsonObject,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"OptionalObjects()",
+		writeOptionalSlice(
+			encoder, "optionalObjects", that.OptionalObjects(), writeListOf_jsonObject,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"OptionalObject()",
+		writeOptionalJsonObject(
+			encoder, "optionalObject", that.OptionalObject(), xmlrpc.WriteObjectContent,
 		),
 	)
 	if err != nil {

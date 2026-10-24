@@ -111,6 +111,23 @@ const std::string serialized(
 {I})
 );"""
                 )
+            elif isinstance(
+                method.returns,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # The objects of nlohmann::json keep their keys sorted, so
+                # the dump does not depend on the order of the keys.
+                serialization_snippet = Stripped(
+                    f"""\
+const std::string serialized(
+{I}instance->{method_name}().dump()
+);"""
+                )
             else:
                 if isinstance(
                     method.returns, intermediate.OurTypeAnnotation

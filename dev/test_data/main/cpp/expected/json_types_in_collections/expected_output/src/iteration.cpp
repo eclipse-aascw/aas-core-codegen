@@ -20,6 +20,10 @@ std::wstring PropertyToWstring(
   Property property
 ) {
   switch (property) {
+    case Property::kOptionalObject:
+      return L"optional_object";
+    case Property::kOptionalObjects:
+      return L"optional_objects";
     case Property::kTupleWithJson:
       return L"tuple_with_json";
     case Property::kValues:

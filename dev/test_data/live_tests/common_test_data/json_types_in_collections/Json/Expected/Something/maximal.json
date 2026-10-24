@@ -25,5 +25,23 @@
       "x": 1.5,
       "y": 2.5
     }
-  ]
+  ],
+  "optionalObjects": [
+    {
+      "a": 1.5,
+      "b": "second"
+    },
+    {
+      "nested": {
+        "x": true
+      }
+    }
+  ],
+  "optionalObject": {
+    "c": [
+      1.5,
+      "two"
+    ],
+    "z": "last"
+  }
 }

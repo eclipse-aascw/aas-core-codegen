@@ -52,7 +52,14 @@ def main() -> int:
             )
 
             for cmd in [
-                [str(venv_python), "-m", "mypy", "--strict", qualified_module_name],
+                [
+                    str(venv_python),
+                    "-m",
+                    "mypy",
+                    "--strict",
+                    qualified_module_name,
+                    "dev/tests",
+                ],
                 [
                     str(venv_python),
                     "-m",

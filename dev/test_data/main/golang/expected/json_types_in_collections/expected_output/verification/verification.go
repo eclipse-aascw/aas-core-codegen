@@ -236,6 +236,40 @@ func VerifySomething(
 		return
 	}
 
+	if that.OptionalObjects() != nil {
+		abort = verifyListOf_jsonObject(
+			that.OptionalObjects(),
+			func(err *VerificationError) bool {
+				err.Path.PrependName(
+					&ourreporting.NameSegment{
+						Name: "OptionalObjects",
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
+	}
+
+	if that.OptionalObject() != nil {
+		abort = verifyJsonObject(
+			that.OptionalObject(),
+			func(err *VerificationError) bool {
+				err.Path.PrependName(
+					&ourreporting.NameSegment{
+						Name: "OptionalObject",
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
+	}
+
 	return
 }
 
@@ -312,6 +346,31 @@ func verifyTupleOf4_string_jsonValue_jsonArray_jsonObject(
 	)
 	if abort {
 		return
+	}
+
+	return
+}
+
+// Verify the items of `that` recursively.
+func verifyListOf_jsonObject(
+	that []ourtypes.JsonObject,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	for i, item := range that {
+		abort = verifyJsonObject(
+			item,
+			func(err *VerificationError) bool {
+				err.Path.PrependIndex(
+					&ourreporting.IndexSegment{
+						Index: i,
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
 	}
 
 	return

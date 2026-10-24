@@ -69,6 +69,14 @@ namespace AasCore.Aas3_0.Tests
                     );
             case Our.IClass instance:
                 return Our.Jsonization.Serialize.ToJsonObject(instance);
+            case Nodes.JsonNode aNode:
+                // NOTE (mristin):
+                // A JSON node remembers its parent, so we copy it before handing it
+                // out. ``DeepClone`` arrived only in .NET 8, so we serialize instead.
+                return System.Text.Json.JsonSerializer.SerializeToNode(aNode)
+                    ?? throw new System.InvalidOperationException(
+                        $"Could not copy the JSON node {aNode.ToJsonString()}"
+                    );
             default:
                 throw new System.ArgumentException(
                     $"The conversion of type {something.GetType()} "

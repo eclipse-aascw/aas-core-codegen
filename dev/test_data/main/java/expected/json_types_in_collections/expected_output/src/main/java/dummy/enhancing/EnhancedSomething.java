@@ -53,6 +53,34 @@ public class EnhancedSomething<EnhancementT>
     instance.setTupleWithJson(tupleWithJson);
   }
 
+  @Override
+  public Optional<List<ObjectNode>> getOptionalObjects() {
+    return instance.getOptionalObjects();
+  }
+
+  @Override
+  public void setOptionalObjects(List<ObjectNode> optionalObjects) {
+    instance.setOptionalObjects(optionalObjects);
+  }
+
+  @Override
+  public Optional<ObjectNode> getOptionalObject() {
+    return instance.getOptionalObject();
+  }
+
+  @Override
+  public void setOptionalObject(ObjectNode optionalObject) {
+    instance.setOptionalObject(optionalObject);
+  }
+
+  public Iterable<ObjectNode> overOptionalObjectsOrEmpty() {
+    return instance.overOptionalObjectsOrEmpty();
+  }
+
+  public ObjectNode optionalObjectOrDefault() {
+    return instance.optionalObjectOrDefault();
+  }
+
   public Iterable<IClass> descendOnce() {
     return instance.descendOnce();
   }

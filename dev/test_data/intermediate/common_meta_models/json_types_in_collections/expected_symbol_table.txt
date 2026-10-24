@@ -44,8 +44,100 @@ SymbolTable(
           specified_for='Reference to ConcreteClass Something',
           json_name='tupleWithJson',
           xml_name='tupleWithJson',
+          parsed=...),
+        Property(
+          name='optional_objects',
+          type_annotation=OptionalTypeAnnotation(
+            value=ListTypeAnnotation(
+              items=JsonObjectTypeAnnotation(
+                key=PrimitiveTypeAnnotation(
+                  a_type='STR',
+                  parsed=...),
+                parsed=...),
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='optionalObjects',
+          xml_name='optionalObjects',
+          parsed=...),
+        Property(
+          name='optional_object',
+          type_annotation=OptionalTypeAnnotation(
+            value=JsonObjectTypeAnnotation(
+              key=PrimitiveTypeAnnotation(
+                a_type='STR',
+                parsed=...),
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='optionalObject',
+          xml_name='optionalObject',
           parsed=...)],
-      methods=[],
+      methods=[
+        UnderstoodMethod(
+          name='optional_object_or_default',
+          visibility='PUBLIC',
+          arguments=[],
+          returns=JsonObjectTypeAnnotation(
+            key=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            parsed=...),
+          description=DescriptionOfSignature(
+            summary='<paragraph>Return <ReferenceToAttribute refuri="optional_object">optional_object</ReferenceToAttribute> if set, or the one from the tuple.</paragraph>',
+            remarks=[],
+            arguments_by_name=[],
+            returns=None,
+            parsed=...),
+          specified_for='Reference to ConcreteClass Something',
+          contracts=Contracts(
+            preconditions=[],
+            snapshots=[],
+            postconditions=[]),
+          non_mutating=True,
+          parsed=...,
+          body=[
+            textwrap.dedent("""\
+              If(
+                branches=[
+                  IfBranch(
+                    condition=IsNotNone(
+                      value=Member(
+                        instance=Name(
+                          identifier='self',
+                          original_node=...),
+                        name='optional_object',
+                        original_node=...),
+                      original_node=...),
+                    body=[
+                      Return(
+                        value=Member(
+                          instance=Name(
+                            identifier='self',
+                            original_node=...),
+                          name='optional_object',
+                          original_node=...),
+                        original_node=...)],
+                    original_node=...)],
+                default=None,
+                original_node=...)"""),
+            textwrap.dedent("""\
+              Return(
+                value=Index(
+                  collection=Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='tuple_with_json',
+                    original_node=...),
+                  index=Constant(
+                    value=3,
+                    original_node=...),
+                  original_node=...),
+                original_node=...)""")],
+          arguments_by_name=...)],
       constructor=Constructor(
         name='__init__',
         arguments=[
@@ -77,6 +169,36 @@ SymbolTable(
               parsed=...),
             default=None,
             mutable=False,
+            parsed=...),
+          Argument(
+            name='optional_objects',
+            type_annotation=OptionalTypeAnnotation(
+              value=ListTypeAnnotation(
+                items=JsonObjectTypeAnnotation(
+                  key=PrimitiveTypeAnnotation(
+                    a_type='STR',
+                    parsed=...),
+                  parsed=...),
+                parsed=...),
+              parsed=...),
+            default=DefaultPrimitive(
+              value=None,
+              parsed=...),
+            mutable=True,
+            parsed=...),
+          Argument(
+            name='optional_object',
+            type_annotation=OptionalTypeAnnotation(
+              value=JsonObjectTypeAnnotation(
+                key=PrimitiveTypeAnnotation(
+                  a_type='STR',
+                  parsed=...),
+                parsed=...),
+              parsed=...),
+            default=DefaultPrimitive(
+              value=None,
+              parsed=...),
+            mutable=False,
             parsed=...)],
         returns=None,
         description=None,
@@ -96,6 +218,16 @@ SymbolTable(
             AssignArgument(
               name='tuple_with_json',
               argument='tuple_with_json',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_objects',
+              argument='optional_objects',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_object',
+              argument='optional_object',
               default=None)""")],
         inlined_statements=[
           textwrap.dedent("""\
@@ -107,6 +239,16 @@ SymbolTable(
             AssignArgument(
               name='tuple_with_json',
               argument='tuple_with_json',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_objects',
+              argument='optional_objects',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_object',
+              argument='optional_object',
               default=None)""")]),
       invariants=[],
       serialization=Serialization(

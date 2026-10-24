@@ -83,7 +83,7 @@ func stringify(value interface{{}}) (got string) {{
 {III}parts := make([]string, reflected.Len())
 
 {III}for i := 0; i < reflected.Len(); i++ {{
-{IIII}item := reflected.Index(i)
+{IIII}item := reflected.Index(i).Interface()
 {IIII}parts[i] = stringify(item)
 {III}}}
 
@@ -94,6 +94,8 @@ func stringify(value interface{{}}) (got string) {{
 {IIII}got = mustJSONMarshal(casted)
 {III}case int:
 {IIII}got = mustJSONMarshal(casted)
+{III}case float64:
+{IIII}got = mustJSONMarshal(casted)
 {III}case string:
 {IIII}got = mustJSONMarshal(casted)
 {III}case []byte:
@@ -102,6 +104,11 @@ func stringify(value interface{{}}) (got string) {{
 {IIII}got = casted.String()
 {III}case ourtypes.IClass:
 {IIII}got = ourtesting.TraceMark(casted)
+{III}case map[string]interface{{}}:
+{IIII}// NOTE (mristin):
+{IIII}// This is a JSON object. The JSON marshalling sorts the keys of a map,
+{IIII}// so the result does not depend on their order.
+{IIII}got = mustJSONMarshal(casted)
 {III}default:
 {IIII}panic(
 {IIII}{I}fmt.Sprintf(

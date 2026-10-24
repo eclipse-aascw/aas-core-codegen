@@ -30,6 +30,10 @@ public class Something implements ISomething {
 
   private Tuple4<String, JsonNode, ArrayNode, ObjectNode> tupleWithJson;
 
+  private List<ObjectNode> optionalObjects;
+
+  private ObjectNode optionalObject;
+
   public Something(
     List<JsonNode> values,
     Tuple4<String, JsonNode, ArrayNode, ObjectNode> tupleWithJson) {
@@ -39,6 +43,21 @@ public class Something implements ISomething {
     this.tupleWithJson = Objects.requireNonNull(
       tupleWithJson,
       "Argument \"tupleWithJson\" must be non-null.");
+  }
+
+  public Something(
+    List<JsonNode> values,
+    Tuple4<String, JsonNode, ArrayNode, ObjectNode> tupleWithJson,
+    List<ObjectNode> optionalObjects,
+    ObjectNode optionalObject) {
+    this.values = Objects.requireNonNull(
+      values,
+      "Argument \"values\" must be non-null.");
+    this.tupleWithJson = Objects.requireNonNull(
+      tupleWithJson,
+      "Argument \"tupleWithJson\" must be non-null.");
+    this.optionalObjects = optionalObjects;
+    this.optionalObject = optionalObject;
   }
 
   @Override
@@ -63,6 +82,45 @@ public class Something implements ISomething {
     this.tupleWithJson = Objects.requireNonNull(
       tupleWithJson,
       "Argument \"tupleWithJson\" must be non-null.");
+  }
+
+  @Override
+  public Optional<List<ObjectNode>> getOptionalObjects() {
+    return Optional.ofNullable(optionalObjects);
+  }
+
+  @Override
+  public void setOptionalObjects(List<ObjectNode> optionalObjects) {
+    this.optionalObjects = optionalObjects;
+  }
+
+  @Override
+  public Optional<ObjectNode> getOptionalObject() {
+    return Optional.ofNullable(optionalObject);
+  }
+
+  @Override
+  public void setOptionalObject(ObjectNode optionalObject) {
+    this.optionalObject = optionalObject;
+  }
+
+  /**
+   * Iterate over {@link Something#optionalObjects}, if set,
+   * and otherwise return an empty iterator.
+   */
+  public Iterable<ObjectNode> overOptionalObjectsOrEmpty() {
+    return getOptionalObjects().orElseGet(Collections::emptyList);
+  }
+
+  /**
+   * Return {@link #getOptionalObject()} if set, or the one from the tuple.
+   */
+  @Override
+  public ObjectNode optionalObjectOrDefault() {
+    if (this.getOptionalObject().isPresent()) {
+        return this.getOptionalObject().get();
+    }
+    return this.getTupleWithJson().item4();
   }
 
   /**

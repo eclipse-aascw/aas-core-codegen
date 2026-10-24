@@ -13,6 +13,7 @@ from aas_core_codegen.common import (
     indent_but_first_line,
 )
 from aas_core_codegen.python import common as python_common, naming as python_naming
+from aas_core_codegen.python.tests import _generate_common as python_tests_common
 from aas_core_codegen.python.common import (
     INDENT as I,
     INDENT2 as II,
@@ -55,7 +56,13 @@ def _generate_test_case(cls: intermediate.ConcreteClass) -> Optional[Stripped]:
 
         traced: Stripped
         if isinstance(prop.type_annotation.value, intermediate.ListTypeAnnotation):
-            traced = Stripped(f"list(instance.{over_x_or_empty_name}())")
+            if python_tests_common.contains_json(prop.type_annotation.value):
+                traced = python_tests_common.generate_trace_argument(
+                    type_annotation=prop.type_annotation.value,
+                    expression=f"instance.{over_x_or_empty_name}()",
+                )
+            else:
+                traced = Stripped(f"list(instance.{over_x_or_empty_name}())")
         elif isinstance(prop.type_annotation.value, intermediate.SetTypeAnnotation):
             # NOTE (mristin):
             # The order of the items of a set is undefined, so we sort the traces of

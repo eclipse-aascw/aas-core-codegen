@@ -27,8 +27,10 @@ namespace iteration {
  * Define the properties over all the classes to compactly represent the paths.
  */
 enum class Property : std::uint32_t {
-  kTupleWithJson = 0,
-  kValues = 1
+  kOptionalObject = 0,
+  kOptionalObjects = 1,
+  kTupleWithJson = 2,
+  kValues = 3
 };
 
 std::wstring PropertyToWstring(

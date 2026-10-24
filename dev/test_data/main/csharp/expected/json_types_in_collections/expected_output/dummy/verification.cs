@@ -69,6 +69,30 @@ namespace dummy
                         new Reporting.NameSegment("tupleWithJson"));
                     yield return error;
                 }
+
+                if (that.OptionalObjects != null)
+                {
+                    foreach (
+                        var error in Verification.Verify_ListOf_jsonObject(
+                            that.OptionalObjects))
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment("optionalObjects"));
+                        yield return error;
+                    }
+                }
+
+                if (that.OptionalObject != null)
+                {
+                    foreach (
+                        var error in JsonValueVerification.Verify(
+                            that.OptionalObject, JsonValueVerification.ExpectedShape.Object))
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment("optionalObject"));
+                        yield return error;
+                    }
+                }
             }
         }  // private class Transformer
 
@@ -138,6 +162,27 @@ namespace dummy
                 error.PrependSegment(
                     new Reporting.IndexSegment(3));
                 yield return error;
+            }
+        }
+
+        /// <summary>
+        /// Verify the items of <paramref name="that" /> recursively.
+        /// </summary>
+        private static IEnumerable<Reporting.Error> Verify_ListOf_jsonObject(
+            List<Nodes.JsonObject> that)
+        {
+            int index = 0;
+            foreach (var item in that)
+            {
+                foreach (
+                    var error in JsonValueVerification.Verify(
+                        item, JsonValueVerification.ExpectedShape.Object))
+                {
+                    error.PrependSegment(
+                        new Reporting.IndexSegment(index));
+                    yield return error;
+                }
+                index++;
             }
         }
     }  // public static class Verification

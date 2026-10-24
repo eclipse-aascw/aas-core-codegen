@@ -126,6 +126,30 @@ export class Something extends Class {
 
   tupleWithJson: [string, JsonValue, JsonArray, JsonObject];
 
+  optionalObjects: Array<JsonObject> | null;
+
+  optionalObject: JsonObject | null;
+
+  /**
+   * Yield from {@link optionalObjects} if it is set, or yield nothing.
+   */
+  *overOptionalObjectsOrEmpty(): IterableIterator<JsonObject> {
+    if (this.optionalObjects !== null) {
+      yield * this.optionalObjects;
+    }
+    return;
+  }
+
+  /**
+   * Return {@link optionalObject} if set, or the one from the tuple.
+   */
+  optionalObjectOrDefault(): JsonObject {
+    if (this.optionalObject !== null) {
+      return this.optionalObject;
+    }
+    return this.tupleWithJson[3];
+  }
+
   /**
    * Iterate over the instances referenced from this instance.
    *
@@ -200,11 +224,15 @@ export class Something extends Class {
 
   constructor(
     values: Array<JsonValue>,
-    tupleWithJson: [string, JsonValue, JsonArray, JsonObject]
+    tupleWithJson: [string, JsonValue, JsonArray, JsonObject],
+    optionalObjects: Array<JsonObject> | null = null,
+    optionalObject: JsonObject | null = null
   ) {
     super();
     this.values = values;
     this.tupleWithJson = tupleWithJson;
+    this.optionalObjects = optionalObjects;
+    this.optionalObject = optionalObject;
   }
 }
 

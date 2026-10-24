@@ -494,6 +494,8 @@ func somethingFromMapWithoutDispatch(
 ) {
 	var theValues []ourtypes.JsonValue
 	var theTupleWithJson ourcommon.Tuple4[string, ourtypes.JsonValue, ourtypes.JsonArray, ourtypes.JsonObject]
+	var theOptionalObjects []ourtypes.JsonObject
+	var theOptionalObject ourtypes.JsonObject
 
 	foundValues := false
 	foundTupleWithJson := false
@@ -513,6 +515,12 @@ func somethingFromMapWithoutDispatch(
 				jsonObjectFromJsonable,
 			)
 			foundTupleWithJson = true
+
+		case "optionalObjects":
+			theOptionalObjects, err = parseArray(v, jsonObjectFromJsonable)
+
+		case "optionalObject":
+			theOptionalObject, err = jsonObjectFromJsonable(v)
 
 		default:
 			err = newDeserializationError(
@@ -547,6 +555,12 @@ func somethingFromMapWithoutDispatch(
 	result = ourtypes.NewSomething(
 		theValues,
 		theTupleWithJson,
+	)
+	result.SetOptionalObjects(
+		theOptionalObjects,
+	)
+	result.SetOptionalObject(
+		theOptionalObject,
 	)
 
 	return
@@ -1030,6 +1044,24 @@ func somethingToMap(
 	if err != nil {
 		mustSerializationError(err).prependName("TupleWithJson()")
 		return
+	}
+
+	if that.OptionalObjects() != nil {
+		result["optionalObjects"], err = serializeArray(
+			that.OptionalObjects(), jsonAbleToJsonable[ourtypes.JsonObject],
+		)
+		if err != nil {
+			mustSerializationError(err).prependName("OptionalObjects()")
+			return
+		}
+	}
+
+	if that.OptionalObject() != nil {
+		result["optionalObject"], err = jsonValueToJsonable(that.OptionalObject())
+		if err != nil {
+			mustSerializationError(err).prependName("OptionalObject()")
+			return
+		}
 	}
 
 	return

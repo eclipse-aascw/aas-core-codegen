@@ -432,6 +432,15 @@ public class Jsonization {
       }
 
       /**
+       * Parse {@code node} as a list of {@code ObjectNode}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<ObjectNode>> parseListOf_jsonObject(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryJsonObjectFrom);
+      }
+
+      /**
        * Deserialize an instance of Something from {@code node}.
        *
        * @param node JSON node to be parsed
@@ -443,6 +452,8 @@ public class Jsonization {
 
         List<JsonNode> theValues = null;
         Tuple4<String, JsonNode, ArrayNode, ObjectNode> theTupleWithJson = null;
+        List<ObjectNode> theOptionalObjects = null;
+        ObjectNode theOptionalObject = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
           final Map.Entry<String, JsonNode> keyValue = iterator.next();
@@ -467,6 +478,22 @@ public class Jsonization {
               theTupleWithJson = parsed.getResult();
               break;
             }
+            case "optionalObjects": {
+              final Reporting.Result<List<ObjectNode>> parsed = parseListOf_jsonObject(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
+              }
+              theOptionalObjects = parsed.getResult();
+              break;
+            }
+            case "optionalObject": {
+              final Reporting.Result<? extends ObjectNode> parsed = tryJsonObjectFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
+              }
+              theOptionalObject = parsed.getResult();
+              break;
+            }
             default:
               return unexpectedProperty(key);
           }
@@ -482,7 +509,9 @@ public class Jsonization {
 
         return Reporting.Result.success(new Something(
           theValues,
-          theTupleWithJson));
+          theTupleWithJson,
+          theOptionalObjects,
+          theOptionalObject));
       }
     }
 
@@ -833,6 +862,14 @@ public class Jsonization {
           "getTupleWithJson()",
           that.getTupleWithJson(),
           _Transformer::serializeTupleOf4_string_jsonValue_jsonValue_jsonValue);
+
+        setOptionalProperty(
+          result, "optionalObjects", "getOptionalObjects()",
+          that.getOptionalObjects(), _Transformer::serializeListOf_jsonValue);
+
+        setOptionalProperty(
+          result, "optionalObject", "getOptionalObject()",
+          that.getOptionalObject(), _Transformer::jsonValueToJsonNode);
 
         return result;
       }

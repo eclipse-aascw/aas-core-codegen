@@ -56,6 +56,28 @@ namespace dummy
                 set => _instance.TupleWithJson = value;
             }
 
+            public List<Nodes.JsonObject>? OptionalObjects
+            {
+                get => _instance.OptionalObjects;
+                set => _instance.OptionalObjects = value;
+            }
+
+            public Nodes.JsonObject? OptionalObject
+            {
+                get => _instance.OptionalObject;
+                set => _instance.OptionalObject = value;
+            }
+
+            public IEnumerable<Nodes.JsonObject> OverOptionalObjectsOrEmpty()
+            {
+                return _instance.OverOptionalObjectsOrEmpty();
+            }
+
+            public Nodes.JsonObject OptionalObjectOrDefault()
+            {
+                return _instance.OptionalObjectOrDefault();
+            }
+
             public IEnumerable<Our.IClass> DescendOnce()
             {
                 return _instance.DescendOnce();

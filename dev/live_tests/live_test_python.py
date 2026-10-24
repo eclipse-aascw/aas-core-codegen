@@ -136,6 +136,20 @@ disable={pylint_disables}
         f"# This is {qualified_module_name}!\n", encoding="utf-8"
     )
 
+    # NOTE (mristin):
+    # The tests import each other as ``tests.*``. We make them a package as in
+    # the generated SDKs so that mypy can resolve these imports.
+    (project_dir / "dev" / "tests" / "__init__.py").write_text(
+        "# This is the package of the tests.\n", encoding="utf-8"
+    )
+
+    # NOTE (mristin):
+    # The tests import each other as ``tests.*``. We make them a package as in
+    # the generated SDKs so that mypy can resolve these imports.
+    (project_dir / "dev" / "tests" / "__init__.py").write_text(
+        "# This is the package of the tests.\n", encoding="utf-8"
+    )
+
     return qualified_module_name
 
 
@@ -272,7 +286,17 @@ def main() -> int:
                 )
                 subprocess.check_call(cmd, cwd=project_dir)
 
-            cmd = [str(venv_python), "-m", "mypy", "--strict", qualified_module_name]
+            # NOTE (mristin):
+            # We type-check the tests as well since the type errors in them would
+            # otherwise remain uncovered, as the generated SDKs check them, too.
+            cmd = [
+                str(venv_python),
+                "-m",
+                "mypy",
+                "--strict",
+                qualified_module_name,
+                "dev/tests",
+            ]
             print(
                 f"Running {live_tests_common.escape_and_join_command(cmd)} "
                 f"in {project_dir}"

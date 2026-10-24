@@ -16,11 +16,19 @@ Something::Something(
     nlohmann::json,
     nlohmann::json,
     nlohmann::json
-  > tuple_with_json
+  > tuple_with_json,
+  common::optional<
+    std::vector<nlohmann::json>
+  > optional_objects,
+  common::optional<nlohmann::json> optional_object
 ) {
   values_ = std::move(values);
 
   tuple_with_json_ = std::move(tuple_with_json);
+
+  optional_objects_ = std::move(optional_objects);
+
+  optional_object_ = std::move(optional_object);
 }
 
 ModelType Something::model_type() const {
@@ -68,6 +76,47 @@ void Something::set_tuple_with_json(
   > value
 ) {
   tuple_with_json_ = value;
+}
+
+const common::optional<
+  std::vector<nlohmann::json>
+>& Something::optional_objects() const {
+  return optional_objects_;
+}
+
+common::optional<
+  std::vector<nlohmann::json>
+>& Something::mutable_optional_objects() {
+  return optional_objects_;
+}
+
+void Something::set_optional_objects(
+  common::optional<
+    std::vector<nlohmann::json>
+  > value
+) {
+  optional_objects_ = value;
+}
+
+const common::optional<nlohmann::json>& Something::optional_object() const {
+  return optional_object_;
+}
+
+common::optional<nlohmann::json>& Something::mutable_optional_object() {
+  return optional_object_;
+}
+
+void Something::set_optional_object(
+  common::optional<nlohmann::json> value
+) {
+  optional_object_ = value;
+}
+
+nlohmann::json Something::OptionalObjectOrDefault() const {
+  if (this->optional_object().has_value()) {
+    return (*(this->optional_object()));
+  }
+  return std::get<3>(this->tuple_with_json());
 }
 
 // endregion Something

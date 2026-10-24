@@ -34,7 +34,9 @@ public class TestCopying {
 
       return (
         that.getValues().equals(casted.getValues())
-        && that.getTupleWithJson().equals(casted.getTupleWithJson()));
+        && that.getTupleWithJson().equals(casted.getTupleWithJson())
+        && that.getOptionalObjects().equals(casted.getOptionalObjects())
+        && that.getOptionalObject().equals(casted.getOptionalObject()));
     }
   } // class _DeepEqualiser
 
@@ -45,7 +47,9 @@ public class TestCopying {
     Something other) {
     return (
       that.getValues().equals(other.getValues())
-      && that.getTupleWithJson().equals(other.getTupleWithJson()));
+      && that.getTupleWithJson().equals(other.getTupleWithJson())
+      && that.getOptionalObjects().equals(other.getOptionalObjects())
+      && that.getOptionalObject().equals(other.getOptionalObject()));
   }
 
   private static Boolean SomethingDeepEquals(Something that, Something other) {

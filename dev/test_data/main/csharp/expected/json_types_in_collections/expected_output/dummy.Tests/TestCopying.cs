@@ -66,7 +66,17 @@ namespace dummy.Tests
                         casted.Values)
                     && Check_TupleOf4_string_jsonValue_jsonArray_jsonObject(
                         that.TupleWithJson,
-                        casted.TupleWithJson));
+                        casted.TupleWithJson)
+                    && ((that.OptionalObjects != null && casted.OptionalObjects != null)
+                        ? Check_ListOf_jsonObject(
+                            that.OptionalObjects,
+                            casted.OptionalObjects)
+                        : that.OptionalObjects == null && casted.OptionalObjects == null)
+                    && ((that.OptionalObject != null && casted.OptionalObject != null)
+                        ? JsonNodesEqualButDistinct(
+                            that.OptionalObject,
+                            casted.OptionalObject)
+                        : that.OptionalObject == null && casted.OptionalObject == null));
             }
 
             private bool Check_ListOf_jsonValue(
@@ -108,6 +118,29 @@ namespace dummy.Tests
                         that.Item4,
                         other.Item4));
             }
+
+            private bool Check_ListOf_jsonObject(
+                List<Nodes.JsonObject> that,
+                List<Nodes.JsonObject> other)
+            {
+                if (ReferenceEquals(that, other) || that.Count != other.Count)
+                {
+                    return false;
+                }
+
+                for (int i = 0; i < that.Count; i++)
+                {
+                    if (!(
+                        JsonNodesEqualButDistinct(
+                            that[i],
+                            other[i])))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
         }  // internal class DeepCopyChecker
 
         private static readonly DeepCopyChecker DeepCopyCheckerInstance = (
@@ -119,7 +152,9 @@ namespace dummy.Tests
         {
             return (
                 that.Values == other.Values
-                && that.TupleWithJson == other.TupleWithJson);
+                && that.TupleWithJson == other.TupleWithJson
+                && that.OptionalObjects == other.OptionalObjects
+                && that.OptionalObject == other.OptionalObject);
         }
 
         [Test]

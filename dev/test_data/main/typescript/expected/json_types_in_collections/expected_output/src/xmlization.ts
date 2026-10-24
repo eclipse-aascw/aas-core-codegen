@@ -43,6 +43,7 @@ import {
   tokenizeXml,
   writeElement,
   writeList,
+  writeOptionalProperty,
   writeProperty
 } from "./xmlcommon";
 
@@ -377,6 +378,16 @@ function parseAtV4_jsonObject(
   );
 }
 
+function parseAtV_jsonObject(
+  cursor: XmlCursor
+): OurCommon.Either<OurTypes.JsonObject, DeserializationError> {
+  return parseNamedElement(
+    cursor,
+    "v",
+    parse_jsonObject
+  );
+}
+
 function parseAtV_jsonValue(
   cursor: XmlCursor
 ): OurCommon.Either<OurTypes.JsonValue, DeserializationError> {
@@ -384,6 +395,15 @@ function parseAtV_jsonValue(
     cursor,
     "v",
     parse_jsonValue
+  );
+}
+
+function parse_ListOf_jsonObject(
+  cursor: XmlCursor
+): OurCommon.Either<Array<OurTypes.JsonObject>, DeserializationError> {
+  return parseList<OurTypes.JsonObject>(
+    cursor,
+    parseAtV_jsonObject
   );
 }
 
@@ -456,6 +476,18 @@ function writeAtV4_jsonObject(
   );
 }
 
+function writeAtV_jsonObject(
+  parts: Array<string>,
+  value: OurTypes.JsonObject
+): void {
+  writeElement(
+    parts,
+    "v",
+    value,
+    write_jsonObject
+  );
+}
+
 function writeAtV_jsonValue(
   parts: Array<string>,
   value: OurTypes.JsonValue
@@ -465,6 +497,17 @@ function writeAtV_jsonValue(
     "v",
     value,
     write_jsonValue
+  );
+}
+
+function write_ListOf_jsonObject(
+  parts: Array<string>,
+  values: Array<OurTypes.JsonObject>
+): void {
+  writeList(
+    parts,
+    values,
+    writeAtV_jsonObject
   );
 }
 
@@ -508,6 +551,8 @@ function parseSomethingFromSequence(
 ): OurCommon.Either<OurTypes.Something, DeserializationError> {
   let theValues: Array<OurTypes.JsonValue> | null = null;
   let theTupleWithJson: [string, OurTypes.JsonValue, OurTypes.JsonArray, OurTypes.JsonObject] | null = null;
+  let theOptionalObjects: Array<OurTypes.JsonObject> | null = null;
+  let theOptionalObject: OurTypes.JsonObject | null = null;
 
   const className = OurTypes.Something.name;
 
@@ -561,6 +606,38 @@ function parseSomethingFromSequence(
         break;
       }
 
+      case "optionalObjects": {
+        if (theOptionalObjects !== null) {
+          propertyError = duplicatePropertyError(propertyLocalName);
+          break;
+        }
+
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_jsonObject
+        );
+        propertyError = parsed.error;
+        theOptionalObjects = parsed.value;
+        break;
+      }
+
+      case "optionalObject": {
+        if (theOptionalObject !== null) {
+          propertyError = duplicatePropertyError(propertyLocalName);
+          break;
+        }
+
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_jsonObject
+        );
+        propertyError = parsed.error;
+        theOptionalObject = parsed.value;
+        break;
+      }
+
       default: {
         propertyError = new DeserializationError(
           `Unexpected XML property: ${propertyLocalName}`
@@ -594,7 +671,9 @@ function parseSomethingFromSequence(
 
   const instance = new OurTypes.Something(
     theValues,
-    theTupleWithJson
+    theTupleWithJson,
+    theOptionalObjects,
+    theOptionalObject
   );
   return new OurCommon.Either<OurTypes.Something, DeserializationError>(
     instance,
@@ -623,6 +702,18 @@ function writeSomethingAsSequence(
     "tupleWithJson",
     that.tupleWithJson,
     write_TupleOf4_str_jsonValue_jsonArray_jsonObject
+  );
+  writeOptionalProperty(
+    parts,
+    "optionalObjects",
+    that.optionalObjects,
+    write_ListOf_jsonObject
+  );
+  writeOptionalProperty(
+    parts,
+    "optionalObject",
+    that.optionalObject,
+    write_jsonObject
   );
 }
 

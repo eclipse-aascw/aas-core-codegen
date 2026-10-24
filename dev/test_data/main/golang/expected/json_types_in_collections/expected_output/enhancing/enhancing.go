@@ -62,6 +62,32 @@ func (es *enhancedSomething[E]) SetTupleWithJson(
 	es.instance.SetTupleWithJson(value)
 }
 
+func (es *enhancedSomething[E]) OptionalObjects(
+) []ourtypes.JsonObject {
+	return es.instance.OptionalObjects()
+}
+
+func (es *enhancedSomething[E]) SetOptionalObjects(
+	value []ourtypes.JsonObject,
+) {
+	es.instance.SetOptionalObjects(value)
+}
+
+func (es *enhancedSomething[E]) OptionalObject(
+) ourtypes.JsonObject {
+	return es.instance.OptionalObject()
+}
+
+func (es *enhancedSomething[E]) SetOptionalObject(
+	value ourtypes.JsonObject,
+) {
+	es.instance.SetOptionalObject(value)
+}
+
+func (s *enhancedSomething[E]) OptionalObjectOrDefault() ourtypes.JsonObject {
+	return s.instance.OptionalObjectOrDefault()
+}
+
 func (es *enhancedSomething[E]) getEnhancement(
 ) E {
 	return es.enhancement

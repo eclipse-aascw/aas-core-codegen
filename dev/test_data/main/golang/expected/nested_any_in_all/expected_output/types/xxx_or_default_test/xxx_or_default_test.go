@@ -50,7 +50,7 @@ func stringify(value interface{}) (got string) {
 			parts := make([]string, reflected.Len())
 
 			for i := 0; i < reflected.Len(); i++ {
-				item := reflected.Index(i)
+				item := reflected.Index(i).Interface()
 				parts[i] = stringify(item)
 			}
 
@@ -61,6 +61,8 @@ func stringify(value interface{}) (got string) {
 				got = mustJSONMarshal(casted)
 			case int:
 				got = mustJSONMarshal(casted)
+			case float64:
+				got = mustJSONMarshal(casted)
 			case string:
 				got = mustJSONMarshal(casted)
 			case []byte:
@@ -69,6 +71,11 @@ func stringify(value interface{}) (got string) {
 				got = casted.String()
 			case ourtypes.IClass:
 				got = ourtesting.TraceMark(casted)
+			case map[string]interface{}:
+				// NOTE (mristin):
+				// This is a JSON object. The JSON marshalling sorts the keys of a map,
+				// so the result does not depend on their order.
+				got = mustJSONMarshal(casted)
 			default:
 				panic(
 					fmt.Sprintf(

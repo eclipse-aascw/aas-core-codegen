@@ -931,6 +931,12 @@ function jsonObjectFromJsonable(
  * @returns `that`, as a value of a JSON document
  * @throws {@link SerializationError} if `that` is not JSON-able
  */
+function jsonValueToJsonable(that: OurTypes.JsonArray): Array<JsonValue>;
+// NOTE (mristin):
+// The copy keeps the shape of `that`, so we tell the compiler with the overloads.
+// Otherwise, the result could not go into, *e.g.*, an `Array<JsonObject>`.
+function jsonValueToJsonable(that: OurTypes.JsonObject): JsonObject;
+function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue;
 function jsonValueToJsonable(that: OurTypes.JsonValue): JsonValue {
   if (that === null || that === undefined) {
     throw new SerializationError(

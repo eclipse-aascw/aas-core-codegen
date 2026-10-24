@@ -132,6 +132,26 @@ class Something(Class):
 
     tuple_with_json: Tuple[str, JsonValue, JsonArray, JsonObject]
 
+    optional_objects: Optional[List[JsonObject]]
+
+    optional_object: Optional[JsonObject]
+
+    def over_optional_objects_or_empty(
+            self
+    ) -> Iterator[JsonObject]:
+        """Yield from :py:attr:`.optional_objects` if set."""
+        if self.optional_objects is not None:
+            yield from self.optional_objects
+
+    def optional_object_or_default(self) -> JsonObject:
+        """
+        Return :py:attr:`optional_object` if set, or the one from the tuple.
+        """
+        # pylint: disable=all
+        if self.optional_object is not None:
+            return self.optional_object
+        return self.tuple_with_json[3]
+
     def descend_once(self) -> Iterator[Class]:
         """
         Iterate over the instances referenced from this instance.
@@ -198,11 +218,15 @@ class Something(Class):
     def __init__(
             self,
             values: List[JsonValue],
-            tuple_with_json: Tuple[str, JsonValue, JsonArray, JsonObject]
+            tuple_with_json: Tuple[str, JsonValue, JsonArray, JsonObject],
+            optional_objects: Optional[List[JsonObject]] = None,
+            optional_object: Optional[JsonObject] = None
     ) -> None:
         """Initialize with the given values."""
         self.values = values
         self.tuple_with_json = tuple_with_json
+        self.optional_objects = optional_objects
+        self.optional_object = optional_object
 
 
 class AbstractVisitor:

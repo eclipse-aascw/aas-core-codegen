@@ -335,6 +335,12 @@ public class Xmlization {
         _DeserializeImplementation::readAtV4_jsonObject);
     }
 
+    private static Reporting.Result<List<ObjectNode>> readListOf_jsonObject(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readAtV_jsonObject);
+    }
+
     private static Reporting.Result<? extends JsonNode> readAtV_jsonValue(
       XMLEventReader reader) {
       return XmlCommon.readNamedElement(
@@ -375,6 +381,14 @@ public class Xmlization {
         _DeserializeImplementation::readTextAs_jsonObject);
     }
 
+    private static Reporting.Result<? extends ObjectNode> readAtV_jsonObject(
+      XMLEventReader reader) {
+      return XmlCommon.readNamedElement(
+        reader,
+        "v",
+        _DeserializeImplementation::readTextAs_jsonObject);
+    }
+
     /**
      * Deserialize an instance of class Something from a sequence of XML elements.
      *
@@ -387,6 +401,8 @@ public class Xmlization {
       boolean isEmptySequence) {
       List<JsonNode> theValues = null;
       Tuple4<String, JsonNode, ArrayNode, ObjectNode> theTupleWithJson = null;
+      List<ObjectNode> theOptionalObjects = null;
+      ObjectNode theOptionalObject = null;
 
       if (!isEmptySequence) {
         while (!atEndOfSequence(reader)) {
@@ -431,6 +447,36 @@ public class Xmlization {
               }
               break;
             }
+            case "optionalObjects": {
+              if (theOptionalObjects != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
+              final Reporting.Result<List<ObjectNode>> value =
+                readListOf_jsonObject(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theOptionalObjects = value.getResult();
+              }
+              break;
+            }
+            case "optionalObject": {
+              if (theOptionalObject != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
+              final Reporting.Result<ObjectNode> value =
+                readTextAs_jsonObject(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theOptionalObject = value.getResult();
+              }
+              break;
+            }
             default:
               return unexpectedProperty("Something", elementName);
           }
@@ -465,7 +511,9 @@ public class Xmlization {
 
       return Reporting.Result.success(new Something(
         theValues,
-        theTupleWithJson));
+        theTupleWithJson,
+        theOptionalObjects,
+        theOptionalObject));
     }
 
     /**
@@ -595,6 +643,27 @@ public class Xmlization {
     }
 
     /**
+     * Write {@code that} as the XML element of a property called
+     * {@code name} if it has been given, and write nothing at all otherwise.
+     *
+     * <p>The {@link Optional} is taken apart here, once, instead of at every
+     * optional property: asking it and then unwrapping it at the call site
+     * would call the getter twice, and every call allocates an
+     * {@link Optional} of its own.
+     */
+    private static <T> void writeOptionalProperty(
+      String name,
+      String getterName,
+      Optional<T> that,
+      XMLStreamWriter writer,
+      XmlCommon.ContentWriter<? super T> writeContent) {
+      final T value = that.orElse(null);
+      if (value != null) {
+        writeProperty(name, getterName, value, writer, writeContent);
+      }
+    }
+
+    /**
      * Write {@code that} as the content of an element holding a JSON-able
      * value.
      */
@@ -660,6 +729,22 @@ public class Xmlization {
       }
     }
 
+    private static void writeListOf_jsonObject(
+      List<? extends ObjectNode> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (ObjectNode item : that) {
+          writeAtV_jsonObject(item, writer);
+          index++;
+        }
+      } catch (XmlCommon.SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
     private static void writeAtV_jsonValue(
       JsonNode that,
       XMLStreamWriter writer) {
@@ -710,6 +795,16 @@ public class Xmlization {
         _VisitorWithWriter::writeJsonObjectContent);
     }
 
+    private static void writeAtV_jsonObject(
+      ObjectNode that,
+      XMLStreamWriter writer) {
+      XmlCommon.writeElement(
+        "v",
+        that,
+        writer,
+        _VisitorWithWriter::writeJsonObjectContent);
+    }
+
     private static void writeSomethingAsSequence(
       ISomething that,
       XMLStreamWriter writer) {
@@ -726,6 +821,20 @@ public class Xmlization {
         that.getTupleWithJson(),
         writer,
         _VisitorWithWriter::writeTupleOf4_stringified_jsonValue_jsonArray_jsonObject);
+
+      writeOptionalProperty(
+        "optionalObjects",
+        "getOptionalObjects()",
+        that.getOptionalObjects(),
+        writer,
+        _VisitorWithWriter::writeListOf_jsonObject);
+
+      writeOptionalProperty(
+        "optionalObject",
+        "getOptionalObject()",
+        that.getOptionalObject(),
+        writer,
+        _VisitorWithWriter::writeJsonObjectContent);
     }
 
     @Override

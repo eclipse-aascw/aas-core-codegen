@@ -76,6 +76,21 @@ type ISomething interface {
 	SetTupleWithJson(
 		value ourcommon.Tuple4[string, JsonValue, JsonArray, JsonObject],
 	);
+
+	OptionalObjects() []JsonObject;
+
+	SetOptionalObjects(
+		value []JsonObject,
+	);
+
+	OptionalObject() JsonObject;
+
+	SetOptionalObject(
+		value JsonObject,
+	);
+
+	// Return [ISomething.OptionalObject] if set, or the one from the tuple.
+	OptionalObjectOrDefault() JsonObject;
 }
 
 // Check whether the instance corresponds to [ourtypes.ISomething]
@@ -94,6 +109,8 @@ func IsSomething(
 type Something struct {
 	values []JsonValue
 	tupleWithJson ourcommon.Tuple4[string, JsonValue, JsonArray, JsonObject]
+	optionalObjects []JsonObject
+	optionalObject JsonObject
 }
 
 func (s *Something) Values(
@@ -118,9 +135,39 @@ func (s *Something) SetTupleWithJson(
 	s.tupleWithJson = value
 }
 
+func (s *Something) OptionalObjects(
+) []JsonObject {
+	return s.optionalObjects
+}
+
+func (s *Something) SetOptionalObjects(
+	value []JsonObject,
+) {
+	s.optionalObjects = value
+}
+
+func (s *Something) OptionalObject(
+) JsonObject {
+	return s.optionalObject
+}
+
+func (s *Something) SetOptionalObject(
+	value JsonObject,
+) {
+	s.optionalObject = value
+}
+
 func (s *Something) ModelType(
 ) ModelType {
 	return ModelTypeSomething
+}
+
+// Return [ISomething.OptionalObject] if set, or the one from the tuple.
+func (s *Something) OptionalObjectOrDefault() JsonObject {
+	if s.OptionalObject() != nil {
+		return s.OptionalObject()
+	}
+	return s.TupleWithJson().Item4
 }
 
 // Apply the action on the instances referenced from s.
@@ -175,6 +222,8 @@ func NewSomething(
 	return &Something{
 		values: values,
 		tupleWithJson: tupleWithJson,
+		optionalObjects: nil,
+		optionalObject: nil,
 	}
 }
 
