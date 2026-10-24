@@ -367,7 +367,7 @@ def {function_name}(
 {II}Instance of :py:class:`.types.{cls_name}` read from
 {II}:paramref:`path`
 {I}\"\"\"
-{I}with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+{I}with open(os.fspath(path), encoding='utf-8') as fid:
 {II}iterator = has_iterparse.iterparse(
 {III}fid,
 {III}['start', 'end']
@@ -764,7 +764,7 @@ def {function_name}(
 {I}:return:
 {II}Instance read from the file at :paramref:`path`
 {I}\"\"\"
-{I}with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+{I}with open(os.fspath(path), encoding='utf-8') as fid:
 {II}iterator = has_iterparse.iterparse(
 {III}fid,
 {III}['start', 'end']
@@ -2913,7 +2913,7 @@ def _read_dispatched(
 {I}\"\"\"
 {I}tag_wo_ns = parse_element_tag(element)
 
-{I}read_as_sequence = dispatch.get(tag_wo_ns, None)
+{I}read_as_sequence = dispatch.get(tag_wo_ns)
 {I}if read_as_sequence is None:
 {II}raise DeserializationException(
 {III}f"Expected the element tag to be a valid model type "
@@ -2958,7 +2958,7 @@ def _read_properties(
 
 {I}raise_if_has_tail_or_attrib(element)
 
-{I}values = dict()  # type: Dict[str, Any]
+{I}values = {{}}  # type: Dict[str, Any]
 
 {I}while True:
 {II}# NOTE (mristin):
@@ -2995,7 +2995,7 @@ def _read_properties(
 {IIIII}f"Property {{tag_wo_ns!r}} occurred more than once"
 {IIII})
 
-{III}reader = readers.get(tag_wo_ns, None)
+{III}reader = readers.get(tag_wo_ns)
 {III}if reader is None:
 {IIII}raise DeserializationException(
 {IIIII}f"Expected an element representing a property, "
@@ -3220,7 +3220,7 @@ def _read_instance_from_iterparse(
 {II}return read_as_element(next_element, iterator)
 {I}except DeserializationException as exception:
 {II}exception.path._prepend(ElementSegment(next_element))
-{II}raise exception"""
+{II}raise"""
         ),
         "_remove_whitespace": Stripped(
             f'''\
@@ -3475,7 +3475,7 @@ def _read_float_from_element_text(
 {II})
 {I})
 
-{I}value = _TEXT_TO_XS_DOUBLE_LITERALS.get(text, None)
+{I}value = _TEXT_TO_XS_DOUBLE_LITERALS.get(text)
 {I}if value is None:
 {II}# NOTE (mristin):
 {II}# ``float`` is far too permissive to be handed the text directly: it
@@ -3493,11 +3493,10 @@ def _read_float_from_element_text(
 {II}try:
 {III}value = float(text)
 {II}except ValueError:
-{III}# pylint: disable=raise-missing-from
 {III}raise DeserializationException(
 {IIII}f"Expected a floating-point number, "
 {IIII}f"but got an element with text: {{text!r}}"
-{III})
+{III}) from None
 
 {I}return value"""
         ),
@@ -3552,11 +3551,10 @@ def _read_bytes_from_element_text(
 {I}try:
 {II}value = base64.b64decode(text)
 {I}except Exception:
-{II}# pylint: disable=raise-missing-from
 {II}raise DeserializationException(
 {III}f"Expected a text as base64-encoded bytes, "
 {III}f"but got an element with text: {{text!r}}"
-{II})
+{II}) from None
 
 {I}return value"""
         ),

@@ -16,8 +16,7 @@ from live_tests import common as live_tests_common
 #: ``dev/pyproject.toml`` of the project
 DEV_DEPENDENCIES: Final[Sequence[str]] = (
     "mypy==2.4.0",
-    "pylint==2.15.4; python_version<'3.11'",
-    "pylint==4.0.3; python_version>'3.10'",
+    "ruff==0.17.2",
 )
 
 
@@ -87,40 +86,45 @@ packages = [
 ]
 
 # NOTE (mristin):
-# We put the configuration of mypy and pylint in separate files as it is a nightmare
+# We put the configuration of mypy and ruff in separate files as it is a nightmare
 # to configure them with pyproject.toml not living in the current working directory
 # which is the repository root.
 """,
         encoding="utf-8",
     )
 
-    pylint_rc = project_dir / "dev" / "pylint.rc"
+    # NOTE (mristin):
+    # The default rule set of ruff includes many stylistic rules, such as
+    # the PEP 585 annotations, which clash with the style of the generated code.
+    # We select the rule families which point to bugs and code smells instead.
+    #
+    # We ignore the rules which flag the code transpiled from the meta-model, such
+    # as ``not (x in y)``, ``-(-x)`` or ``range(0, n)``, since the transpiled code
+    # deliberately mirrors the meta-model. We also ignore the rules which go against
+    # the style of the generated code, such as the unused imports, as the generated
+    # code imports the modules uniformly, or the version blocks for Python 3.7.
+    (project_dir / "dev" / "ruff.toml").write_text(
+        """\
+target-version = "py38"
 
-    pylint_disables = (
-        "too-few-public-methods,len-as-condition,duplicate-code,no-else-raise,"
-        "no-else-return,too-many-locals,too-many-branches,"
-        "too-many-nested-blocks,too-many-return-statements,"
-        "unsubscriptable-object,not-an-iterable,broad-except,"
-        "too-many-statements,protected-access,unnecessary-pass,"
-        "too-many-statements,too-many-arguments,no-member,"
-        "too-many-instance-attributes,too-many-lines,undefined-variable,"
-        "unnecessary-lambda,assignment-from-none,useless-return,"
-        "unused-argument,too-many-boolean-expressions,"
-        "consider-using-f-string,use-dict-literal,invalid-name,"
-        "no-else-continue,no-else-break,unneeded-not,"
-        "too-many-public-methods,line-too-long,too-many-ancestors,"
-        "wrong-import-position,too-many-positional-arguments,"
-        "wrong-import-order,unused-import,missing-docstring,"
-        "superfluous-parens"
-    )
-
-    pylint_rc.write_text(
-        f"""\
-[FORMAT]
-max-line-length=120
-
-[MESSAGES CONTROL]
-disable={pylint_disables}
+[lint]
+select = [
+    "ASYNC", "B", "C4", "DTZ", "E", "ERA", "EXE", "F", "FIX", "FLY", "FURB", "G",
+    "INT", "ISC", "LOG", "N", "PERF", "PGH", "PIE", "PLC", "PLE", "PLW", "PYI",
+    "RET", "RSE", "RUF", "SIM", "SLOT", "T10", "T20", "TC", "TD", "TID", "TRY",
+    "UP", "W", "YTT"
+]
+ignore = [
+    # Transpiled from the meta-model
+    "B002", "E713", "FURB110", "ISC003", "PERF401", "PERF402", "PIE808",
+    "SIM102", "SIM103", "SIM108", "SIM110", "SIM114", "SIM201", "SIM202",
+    "SIM208", "SIM300", "UP034", "UP037",
+    # Text from the meta-model
+    "RUF001", "RUF002", "RUF003",
+    # Style of the generated code
+    "E501", "F401", "N801", "N818", "PERF203", "RET503", "RET505", "TRY003",
+    "TRY004", "TRY300", "TRY301", "UP035", "UP036",
+]
 """,
         encoding="utf-8",
     )
@@ -306,9 +310,11 @@ def main() -> int:
             cmd = [
                 str(venv_python),
                 "-m",
-                "pylint",
-                "--rcfile=dev/pylint.rc",
+                "ruff",
+                "check",
+                "--config=dev/ruff.toml",
                 qualified_module_name,
+                "dev/tests",
             ]
             print(
                 f"Running {live_tests_common.escape_and_join_command(cmd)} "

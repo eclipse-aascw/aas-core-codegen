@@ -298,7 +298,7 @@ def _dispatch_from_jsonable(
     """
     mapping = _as_mapping(jsonable)
 
-    model_type = mapping.get("modelType", None)
+    model_type = mapping.get("modelType")
     if model_type is None:
         raise DeserializationException(
             "Expected the property modelType, but found none"
@@ -315,7 +315,7 @@ def _dispatch_from_jsonable(
         exception.path._prepend(PropertySegment(mapping, "modelType"))
         raise exception
 
-    parse = dispatch.get(model_type, None)
+    parse = dispatch.get(model_type)
     if parse is None:
         raise DeserializationException(
             f"Unexpected model type for {name}: {model_type}"
@@ -906,7 +906,7 @@ def _lang_string_to_jsonable(
     that: our_types.LangString
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['language'] = that.language
     except SerializationException as exception:
@@ -924,7 +924,7 @@ def _lang_string_set_to_jsonable(
     that: our_types.LangStringSet
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['langStrings'] = _list_of__lang_string_to_jsonable(
             that.lang_strings
@@ -939,7 +939,7 @@ def _iec_content_to_jsonable(
     that: our_types.IecContent
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     if that.definition is not None:
         try:
             jsonable['definition'] = _list_of__lang_string_to_jsonable(
@@ -956,7 +956,7 @@ def _other_content_to_jsonable(
     that: our_types.OtherContent
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     jsonable['modelType'] = 'OtherContent'
     return jsonable
 
@@ -965,7 +965,7 @@ def _specification_to_jsonable(
     that: our_types.Specification
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['content'] = that.content.transform(_SERIALIZER)
     except SerializationException as exception:
@@ -978,7 +978,7 @@ def _something_to_jsonable(
     that: our_types.Something
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['defaultLanguage'] = that.default_language
     except SerializationException as exception:

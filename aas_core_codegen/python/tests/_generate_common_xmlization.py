@@ -138,11 +138,8 @@ def check_equal(
 {II}stop_recursion = True
 {II}yield Difference(f"Expected tail {{expected.tag!r}}, but got {{got.tag!r}}")
 
-{I}expected_children = [  # pylint: disable=unnecessary-comprehension
-{II}child for child in expected
-{I}]
-
-{I}got_children = [child for child in got]  # pylint: disable=unnecessary-comprehension
+{I}expected_children = list(expected)
+{I}got_children = list(got)
 
 {I}if len(expected_children) != len(got_children):
 {II}stop_recursion = True
@@ -151,7 +148,7 @@ def check_equal(
 {III}f"but got {{len(got_children)}} child element(s)"
 {II})
 
-{I}children_tag_unique = len(set(child.tag for child in expected_children)) == len(
+{I}children_tag_unique = len({{child.tag for child in expected_children}}) == len(
 {II}expected_children
 {I})
 

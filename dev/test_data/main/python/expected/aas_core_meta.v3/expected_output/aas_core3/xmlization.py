@@ -283,7 +283,7 @@ def has_semantics_from_file(
         Instance of :py:class:`.types.HasSemantics` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -462,7 +462,7 @@ def extension_from_file(
         Instance of :py:class:`.types.Extension` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -641,7 +641,7 @@ def has_extensions_from_file(
         Instance of :py:class:`.types.HasExtensions` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -820,7 +820,7 @@ def referable_from_file(
         Instance of :py:class:`.types.Referable` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -999,7 +999,7 @@ def identifiable_from_file(
         Instance of :py:class:`.types.Identifiable` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1178,7 +1178,7 @@ def has_kind_from_file(
         Instance of :py:class:`.types.HasKind` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1357,7 +1357,7 @@ def has_data_specification_from_file(
         Instance of :py:class:`.types.HasDataSpecification` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1536,7 +1536,7 @@ def administrative_information_from_file(
         Instance of :py:class:`.types.AdministrativeInformation` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1715,7 +1715,7 @@ def qualifiable_from_file(
         Instance of :py:class:`.types.Qualifiable` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1894,7 +1894,7 @@ def qualifier_from_file(
         Instance of :py:class:`.types.Qualifier` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2073,7 +2073,7 @@ def asset_administration_shell_from_file(
         Instance of :py:class:`.types.AssetAdministrationShell` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2252,7 +2252,7 @@ def asset_information_from_file(
         Instance of :py:class:`.types.AssetInformation` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2431,7 +2431,7 @@ def resource_from_file(
         Instance of :py:class:`.types.Resource` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2610,7 +2610,7 @@ def specific_asset_id_from_file(
         Instance of :py:class:`.types.SpecificAssetID` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2789,7 +2789,7 @@ def submodel_from_file(
         Instance of :py:class:`.types.Submodel` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2968,7 +2968,7 @@ def submodel_element_from_file(
         Instance of :py:class:`.types.SubmodelElement` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -3147,7 +3147,7 @@ def relationship_element_from_file(
         Instance of :py:class:`.types.RelationshipElement` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -3326,7 +3326,7 @@ def submodel_element_list_from_file(
         Instance of :py:class:`.types.SubmodelElementList` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -3505,7 +3505,7 @@ def submodel_element_collection_from_file(
         Instance of :py:class:`.types.SubmodelElementCollection` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -3684,7 +3684,7 @@ def data_element_from_file(
         Instance of :py:class:`.types.DataElement` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -3863,7 +3863,7 @@ def property_from_file(
         Instance of :py:class:`.types.Property` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -4042,7 +4042,7 @@ def multi_language_property_from_file(
         Instance of :py:class:`.types.MultiLanguageProperty` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -4221,7 +4221,7 @@ def range_from_file(
         Instance of :py:class:`.types.Range` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -4400,7 +4400,7 @@ def reference_element_from_file(
         Instance of :py:class:`.types.ReferenceElement` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -4579,7 +4579,7 @@ def blob_from_file(
         Instance of :py:class:`.types.Blob` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -4758,7 +4758,7 @@ def file_from_file(
         Instance of :py:class:`.types.File` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -4937,7 +4937,7 @@ def annotated_relationship_element_from_file(
         Instance of :py:class:`.types.AnnotatedRelationshipElement` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -5116,7 +5116,7 @@ def entity_from_file(
         Instance of :py:class:`.types.Entity` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -5295,7 +5295,7 @@ def event_payload_from_file(
         Instance of :py:class:`.types.EventPayload` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -5474,7 +5474,7 @@ def event_element_from_file(
         Instance of :py:class:`.types.EventElement` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -5653,7 +5653,7 @@ def basic_event_element_from_file(
         Instance of :py:class:`.types.BasicEventElement` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -5832,7 +5832,7 @@ def operation_from_file(
         Instance of :py:class:`.types.Operation` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -6011,7 +6011,7 @@ def operation_variable_from_file(
         Instance of :py:class:`.types.OperationVariable` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -6190,7 +6190,7 @@ def capability_from_file(
         Instance of :py:class:`.types.Capability` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -6369,7 +6369,7 @@ def concept_description_from_file(
         Instance of :py:class:`.types.ConceptDescription` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -6548,7 +6548,7 @@ def reference_from_file(
         Instance of :py:class:`.types.Reference` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -6727,7 +6727,7 @@ def key_from_file(
         Instance of :py:class:`.types.Key` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -6906,7 +6906,7 @@ def abstract_lang_string_from_file(
         Instance of :py:class:`.types.AbstractLangString` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -7085,7 +7085,7 @@ def lang_string_name_type_from_file(
         Instance of :py:class:`.types.LangStringNameType` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -7264,7 +7264,7 @@ def lang_string_text_type_from_file(
         Instance of :py:class:`.types.LangStringTextType` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -7443,7 +7443,7 @@ def environment_from_file(
         Instance of :py:class:`.types.Environment` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -7622,7 +7622,7 @@ def data_specification_content_from_file(
         Instance of :py:class:`.types.DataSpecificationContent` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -7801,7 +7801,7 @@ def embedded_data_specification_from_file(
         Instance of :py:class:`.types.EmbeddedDataSpecification` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -7980,7 +7980,7 @@ def level_type_from_file(
         Instance of :py:class:`.types.LevelType` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -8159,7 +8159,7 @@ def value_reference_pair_from_file(
         Instance of :py:class:`.types.ValueReferencePair` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -8338,7 +8338,7 @@ def value_list_from_file(
         Instance of :py:class:`.types.ValueList` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -8517,7 +8517,7 @@ def lang_string_preferred_name_type_iec_61360_from_file(
         Instance of :py:class:`.types.LangStringPreferredNameTypeIEC61360` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -8696,7 +8696,7 @@ def lang_string_short_name_type_iec_61360_from_file(
         Instance of :py:class:`.types.LangStringShortNameTypeIEC61360` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -8875,7 +8875,7 @@ def lang_string_definition_type_iec_61360_from_file(
         Instance of :py:class:`.types.LangStringDefinitionTypeIEC61360` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -9054,7 +9054,7 @@ def data_specification_iec_61360_from_file(
         Instance of :py:class:`.types.DataSpecificationIEC61360` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -9229,7 +9229,7 @@ def from_file(
     :return:
         Instance read from the file at :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -9433,7 +9433,7 @@ def _read_dispatched(
     """
     tag_wo_ns = parse_element_tag(element)
 
-    read_as_sequence = dispatch.get(tag_wo_ns, None)
+    read_as_sequence = dispatch.get(tag_wo_ns)
     if read_as_sequence is None:
         raise DeserializationException(
             f"Expected the element tag to be a valid model type "
@@ -9477,7 +9477,7 @@ def _read_properties(
 
     raise_if_has_tail_or_attrib(element)
 
-    values = dict()  # type: Dict[str, Any]
+    values = {}  # type: Dict[str, Any]
 
     while True:
         # NOTE (mristin):
@@ -9514,7 +9514,7 @@ def _read_properties(
                     f"Property {tag_wo_ns!r} occurred more than once"
                 )
 
-            reader = readers.get(tag_wo_ns, None)
+            reader = readers.get(tag_wo_ns)
             if reader is None:
                 raise DeserializationException(
                     f"Expected an element representing a property, "
@@ -9618,7 +9618,7 @@ def _read_instance_from_iterparse(
         return read_as_element(next_element, iterator)
     except DeserializationException as exception:
         exception.path._prepend(ElementSegment(next_element))
-        raise exception
+        raise
 
 
 def _remove_whitespace(text: str) -> str:
@@ -9788,11 +9788,10 @@ def _read_bytes_from_element_text(
     try:
         value = base64.b64decode(text)
     except Exception:
-        # pylint: disable=raise-missing-from
         raise DeserializationException(
             f"Expected a text as base64-encoded bytes, "
             f"but got an element with text: {text!r}"
-        )
+        ) from None
 
     return value
 

@@ -71,7 +71,7 @@ def {from_str_name}(
 {II}the corresponding literal of :py:class:`{qualified_module_name}.{name}`
 {II}or ``None``, if :paramref:`text` invalid.
 {I}\"\"\"
-{I}return {from_str_map_name}.get(text, None)"""
+{I}return {from_str_map_name}.get(text)"""
     )
 
     blocks.append(Stripped(from_str_writer.getvalue()))

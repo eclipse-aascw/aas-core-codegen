@@ -450,7 +450,7 @@ def _dispatch_from_jsonable(
 {I}"""
 {I}mapping = _as_mapping(jsonable)
 
-{I}model_type = mapping.get("modelType", None)
+{I}model_type = mapping.get("modelType")
 {I}if model_type is None:
 {II}raise DeserializationException(
 {III}"Expected the property modelType, but found none"
@@ -467,7 +467,7 @@ def _dispatch_from_jsonable(
 {II}exception.path._prepend(PropertySegment(mapping, "modelType"))
 {II}raise exception
 
-{I}parse = dispatch.get(model_type, None)
+{I}parse = dispatch.get(model_type)
 {I}if parse is None:
 {II}raise DeserializationException(
 {III}f"Unexpected model type for {{name}}: {{model_type}}"
@@ -541,10 +541,9 @@ def _float_from_jsonable(
 {I}try:
 {II}value = float(jsonable)
 {I}except OverflowError:
-{II}# pylint: disable=raise-missing-from
 {II}raise DeserializationException(
 {III}f"Expected a float, but got an integer too large for it: {{jsonable}}"
-{II})
+{II}) from None
 
 {I}# NOTE (mristin):
 {I}# JSON knows neither an infinity nor a not-a-number, so a conformant parser
@@ -732,7 +731,7 @@ def _json_value_from_jsonable(
 {II}return jsonable
 
 {I}if isinstance(jsonable, (dict, collections.abc.Mapping)):
-{II}mapping = dict()  # type: Dict[str, Any]
+{II}mapping = {{}}  # type: Dict[str, Any]
 {II}for key, jsonable_value in jsonable.items():
 {III}if not isinstance(key, str):
 {IIII}raise DeserializationException(
@@ -1752,7 +1751,7 @@ def _json_value_to_jsonable(
 {II}return value
 
 {I}if isinstance(value, (dict, collections.abc.Mapping)):
-{II}mapping = dict()  # type: Dict[str, Any]
+{II}mapping = {{}}  # type: Dict[str, Any]
 {II}for key, item_value in value.items():
 {III}if not isinstance(key, str):
 {IIII}raise SerializationException(
@@ -2401,7 +2400,7 @@ def _generate_cls_to_jsonable(cls: intermediate.ConcreteClass) -> Stripped:
     function_name = _cls_serializer_name(cls)
 
     body_blocks = [
-        Stripped("jsonable: MutableMapping[str, MutableJsonable] = dict()")
+        Stripped("jsonable: MutableMapping[str, MutableJsonable] = {}")
     ]  # type: List[Stripped]
 
     for prop in cls.properties:

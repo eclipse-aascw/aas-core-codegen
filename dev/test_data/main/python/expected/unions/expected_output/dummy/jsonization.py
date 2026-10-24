@@ -298,7 +298,7 @@ def _dispatch_from_jsonable(
     """
     mapping = _as_mapping(jsonable)
 
-    model_type = mapping.get("modelType", None)
+    model_type = mapping.get("modelType")
     if model_type is None:
         raise DeserializationException(
             "Expected the property modelType, but found none"
@@ -315,7 +315,7 @@ def _dispatch_from_jsonable(
         exception.path._prepend(PropertySegment(mapping, "modelType"))
         raise exception
 
-    parse = dispatch.get(model_type, None)
+    parse = dispatch.get(model_type)
     if parse is None:
         raise DeserializationException(
             f"Unexpected model type for {name}: {model_type}"
@@ -1542,7 +1542,7 @@ def _structural_first_to_jsonable(
     that: our_types.StructuralFirst
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['uniqueToFirst'] = that.unique_to_first
     except SerializationException as exception:
@@ -1555,7 +1555,7 @@ def _structural_second_to_jsonable(
     that: our_types.StructuralSecond
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['uniqueToSecond'] = that.unique_to_second
     except SerializationException as exception:
@@ -1568,7 +1568,7 @@ def _mixed_abstract_descendant_one_to_jsonable(
     that: our_types.MixedAbstractDescendantOne
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['uniqueToAbstractDescendantOne'] = that.unique_to_abstract_descendant_one
     except SerializationException as exception:
@@ -1581,7 +1581,7 @@ def _mixed_abstract_descendant_two_to_jsonable(
     that: our_types.MixedAbstractDescendantTwo
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['uniqueToAbstractDescendantTwo'] = that.unique_to_abstract_descendant_two
     except SerializationException as exception:
@@ -1594,7 +1594,7 @@ def _mixed_concrete_with_descendants_to_jsonable(
     that: our_types.MixedConcreteWithDescendants
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['someBaseProperty'] = that.some_base_property
     except SerializationException as exception:
@@ -1608,7 +1608,7 @@ def _mixed_concrete_with_descendants_child_to_jsonable(
     that: our_types.MixedConcreteWithDescendantsChild
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['someBaseProperty'] = that.some_base_property
     except SerializationException as exception:
@@ -1627,7 +1627,7 @@ def _mixed_concrete_leaf_to_jsonable(
     that: our_types.MixedConcreteLeaf
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['uniqueToConcreteLeaf'] = that.unique_to_concrete_leaf
     except SerializationException as exception:
@@ -1640,7 +1640,7 @@ def _model_typed_first_to_jsonable(
     that: our_types.ModelTypedFirst
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['someProperty'] = that.some_property
     except SerializationException as exception:
@@ -1654,7 +1654,7 @@ def _model_typed_second_to_jsonable(
     that: our_types.ModelTypedSecond
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['someProperty'] = that.some_property
     except SerializationException as exception:
@@ -1668,7 +1668,7 @@ def _something_to_jsonable(
     that: our_types.Something
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['structuralProperty'] = that.structural_property.transform(_SERIALIZER)
     except SerializationException as exception:

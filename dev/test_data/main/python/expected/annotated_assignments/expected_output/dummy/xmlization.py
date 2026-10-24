@@ -283,7 +283,7 @@ def item_from_file(
         Instance of :py:class:`.types.Item` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -462,7 +462,7 @@ def parent_from_file(
         Instance of :py:class:`.types.Parent` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -641,7 +641,7 @@ def child_a_from_file(
         Instance of :py:class:`.types.ChildA` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -820,7 +820,7 @@ def child_b_from_file(
         Instance of :py:class:`.types.ChildB` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -999,7 +999,7 @@ def something_from_file(
         Instance of :py:class:`.types.Something` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1174,7 +1174,7 @@ def from_file(
     :return:
         Instance read from the file at :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1378,7 +1378,7 @@ def _read_dispatched(
     """
     tag_wo_ns = parse_element_tag(element)
 
-    read_as_sequence = dispatch.get(tag_wo_ns, None)
+    read_as_sequence = dispatch.get(tag_wo_ns)
     if read_as_sequence is None:
         raise DeserializationException(
             f"Expected the element tag to be a valid model type "
@@ -1422,7 +1422,7 @@ def _read_properties(
 
     raise_if_has_tail_or_attrib(element)
 
-    values = dict()  # type: Dict[str, Any]
+    values = {}  # type: Dict[str, Any]
 
     while True:
         # NOTE (mristin):
@@ -1459,7 +1459,7 @@ def _read_properties(
                     f"Property {tag_wo_ns!r} occurred more than once"
                 )
 
-            reader = readers.get(tag_wo_ns, None)
+            reader = readers.get(tag_wo_ns)
             if reader is None:
                 raise DeserializationException(
                     f"Expected an element representing a property, "
@@ -1563,7 +1563,7 @@ def _read_instance_from_iterparse(
         return read_as_element(next_element, iterator)
     except DeserializationException as exception:
         exception.path._prepend(ElementSegment(next_element))
-        raise exception
+        raise
 
 
 def _remove_whitespace(text: str) -> str:
@@ -1810,11 +1810,10 @@ def _read_bytes_from_element_text(
     try:
         value = base64.b64decode(text)
     except Exception:
-        # pylint: disable=raise-missing-from
         raise DeserializationException(
             f"Expected a text as base64-encoded bytes, "
             f"but got an element with text: {text!r}"
-        )
+        ) from None
 
     return value
 

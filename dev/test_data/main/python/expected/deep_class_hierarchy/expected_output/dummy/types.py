@@ -23,12 +23,12 @@ class Class(abc.ABC):
     @abc.abstractmethod
     def descend_once(self) -> Iterator["Class"]:
         """Iterate over all the instances referenced from this one."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def descend(self) -> Iterator["Class"]:
         """Iterate recursively over all the instances referenced from this one."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def accept(
@@ -40,7 +40,7 @@ class Class(abc.ABC):
 
         :param visitor: to be dispatched
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def accept_with_context(
@@ -54,7 +54,7 @@ class Class(abc.ABC):
         :param visitor: to be dispatched
         :param context: of the visitation
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform(
@@ -67,7 +67,7 @@ class Class(abc.ABC):
         :param transformer: to be dispatched
         :return: transformed self
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_with_context(
@@ -81,7 +81,7 @@ class Class(abc.ABC):
         :param transformer: to be dispatched
         :return: transformed self
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 # pylint: disable=redefined-builtin
@@ -605,7 +605,7 @@ class AbstractVisitor:
             that: Branch
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_leaf(
@@ -613,7 +613,7 @@ class AbstractVisitor:
             that: Leaf
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_blossom(
@@ -621,7 +621,7 @@ class AbstractVisitor:
             that: Blossom
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_plain_marker(
@@ -629,7 +629,7 @@ class AbstractVisitor:
             that: PlainMarker
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_something(
@@ -637,7 +637,7 @@ class AbstractVisitor:
             that: Something
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_container(
@@ -645,7 +645,7 @@ class AbstractVisitor:
             that: Container
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class AbstractVisitorWithContext(Generic[ContextT]):
@@ -665,7 +665,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_leaf_with_context(
@@ -674,7 +674,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_blossom_with_context(
@@ -683,7 +683,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_plain_marker_with_context(
@@ -692,7 +692,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_something_with_context(
@@ -701,7 +701,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_container_with_context(
@@ -710,7 +710,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class PassThroughVisitor(AbstractVisitor):
@@ -863,7 +863,7 @@ class AbstractTransformer(Generic[T]):
             that: Branch
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_leaf(
@@ -871,7 +871,7 @@ class AbstractTransformer(Generic[T]):
             that: Leaf
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_blossom(
@@ -879,7 +879,7 @@ class AbstractTransformer(Generic[T]):
             that: Blossom
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_plain_marker(
@@ -887,7 +887,7 @@ class AbstractTransformer(Generic[T]):
             that: PlainMarker
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_something(
@@ -895,7 +895,7 @@ class AbstractTransformer(Generic[T]):
             that: Something
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_container(
@@ -903,7 +903,7 @@ class AbstractTransformer(Generic[T]):
             that: Container
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class AbstractTransformerWithContext(
@@ -925,7 +925,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_leaf_with_context(
@@ -934,7 +934,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_blossom_with_context(
@@ -943,7 +943,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_plain_marker_with_context(
@@ -952,7 +952,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_something_with_context(
@@ -961,7 +961,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_container_with_context(
@@ -970,7 +970,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class TransformerWithDefault(AbstractTransformer[T]):

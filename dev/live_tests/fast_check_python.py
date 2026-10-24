@@ -1,10 +1,10 @@
 """
-Check the Python generated code with mypy and pylint, but do not run the tests.
+Check the Python generated code with mypy and ruff, but do not run the tests.
 
 This is meant to fail fast before running the slow live tests. The projects are
 prepared exactly as in the live test so that both can share ``--output_dir``.
 
-Unlike the live test, we skip the tests and only run mypy and pylint, which are
+Unlike the live test, we skip the tests and only run mypy and ruff, which are
 installed once in the virtual environment shared by all the cases.
 """
 
@@ -63,9 +63,11 @@ def main() -> int:
                 [
                     str(venv_python),
                     "-m",
-                    "pylint",
-                    "--rcfile=dev/pylint.rc",
+                    "ruff",
+                    "check",
+                    "--config=dev/ruff.toml",
                     qualified_module_name,
+                    "dev/tests",
                 ],
             ]:
                 print(

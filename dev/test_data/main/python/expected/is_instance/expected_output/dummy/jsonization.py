@@ -299,7 +299,7 @@ def _dispatch_from_jsonable(
     """
     mapping = _as_mapping(jsonable)
 
-    model_type = mapping.get("modelType", None)
+    model_type = mapping.get("modelType")
     if model_type is None:
         raise DeserializationException(
             "Expected the property modelType, but found none"
@@ -316,7 +316,7 @@ def _dispatch_from_jsonable(
         exception.path._prepend(PropertySegment(mapping, "modelType"))
         raise exception
 
-    parse = dispatch.get(model_type, None)
+    parse = dispatch.get(model_type)
     if parse is None:
         raise DeserializationException(
             f"Unexpected model type for {name}: {model_type}"
@@ -367,10 +367,9 @@ def _float_from_jsonable(
     try:
         value = float(jsonable)
     except OverflowError:
-        # pylint: disable=raise-missing-from
         raise DeserializationException(
             f"Expected a float, but got an integer too large for it: {jsonable}"
-        )
+        ) from None
 
     # NOTE (mristin):
     # JSON knows neither an infinity nor a not-a-number, so a conformant parser
@@ -1397,7 +1396,7 @@ def _leaf_to_jsonable(
     that: our_types.Leaf
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['identifier'] = that.identifier
     except SerializationException as exception:
@@ -1416,7 +1415,7 @@ def _ordered_container_to_jsonable(
     that: our_types.OrderedContainer
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['identifier'] = that.identifier
     except SerializationException as exception:
@@ -1442,7 +1441,7 @@ def _unordered_container_to_jsonable(
     that: our_types.UnorderedContainer
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['identifier'] = that.identifier
     except SerializationException as exception:
@@ -1463,7 +1462,7 @@ def _global_attribute_to_jsonable(
     that: our_types.GlobalAttribute
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['kind'] = that.kind
     except SerializationException as exception:
@@ -1477,7 +1476,7 @@ def _local_attribute_to_jsonable(
     that: our_types.LocalAttribute
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['name'] = that.name
     except SerializationException as exception:
@@ -1491,7 +1490,7 @@ def _attribute_operand_to_jsonable(
     that: our_types.AttributeOperand
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['attribute'] = that.attribute.transform(_SERIALIZER)
     except SerializationException as exception:
@@ -1505,7 +1504,7 @@ def _string_literal_to_jsonable(
     that: our_types.StringLiteral
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['text'] = that.text
     except SerializationException as exception:
@@ -1519,7 +1518,7 @@ def _number_literal_to_jsonable(
     that: our_types.NumberLiteral
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['number'] = _float_to_jsonable(
             that.number
@@ -1535,7 +1534,7 @@ def _something_to_jsonable(
     that: our_types.Something
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['root'] = that.root.transform(_SERIALIZER)
     except SerializationException as exception:

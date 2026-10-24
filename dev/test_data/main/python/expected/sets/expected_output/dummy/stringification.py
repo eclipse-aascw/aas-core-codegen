@@ -41,7 +41,7 @@ def kind_from_str(
         the corresponding literal of :py:class:`dummy.Kind`
         or ``None``, if :paramref:`text` invalid.
     """
-    return _KIND_FROM_STR.get(text, None)
+    return _KIND_FROM_STR.get(text)
 
 
 _DIRECTION_FROM_STR: Mapping[str, our_types.Direction] = {
@@ -66,7 +66,7 @@ def direction_from_str(
         the corresponding literal of :py:class:`dummy.Direction`
         or ``None``, if :paramref:`text` invalid.
     """
-    return _DIRECTION_FROM_STR.get(text, None)
+    return _DIRECTION_FROM_STR.get(text)
 
 
 _RANK_OF_DIRECTION: Final[Mapping[our_types.Direction, int]] = {

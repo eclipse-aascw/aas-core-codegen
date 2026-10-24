@@ -21,7 +21,9 @@ def assert_never(value: NoReturn) -> NoReturn:
     Please see the following page for more details:
     https://hakibenita.com/python-mypy-exhaustive-checking
     """
-    assert False, f"Unhandled value: {value} ({type(value).__name__})"
+    raise AssertionError(
+        f"Unhandled value: {value} ({type(value).__name__})"
+    )
 
 
 def try_to_cast_to_array_like(

@@ -11,6 +11,7 @@ from aas_core_codegen.python.common import (
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
+    INDENT5 as IIIII,
 )
 
 
@@ -292,8 +293,10 @@ class TestWriting(unittest.TestCase):
 {III}),
 {III}(
 {IIII}{{'k': 0.0}},
-{IIII}'<struct><member><name>k</name>'
-{IIII}'<value><double>0.0</double></value></member></struct>'
+{IIII}(
+{IIIII}'<struct><member><name>k</name>'
+{IIIII}'<value><double>0.0</double></value></member></struct>'
+{IIII})
 {III}),
 {II}]  # type: List[Tuple[our_types.JsonValue, str]]
 
@@ -355,7 +358,7 @@ class TestWriting(unittest.TestCase):
 {III}our_xmlcommon.SerializationException
 {II}) as context:
 {III}our_xmlrpc.write_struct_body(
-{IIII}cast(Mapping[str, Any], {{1: 'no string key'}}), writer
+{IIII}cast('Mapping[str, Any]', {{1: 'no string key'}}), writer
 {III})
 
 {II}self.assertEqual('', context.exception.path)

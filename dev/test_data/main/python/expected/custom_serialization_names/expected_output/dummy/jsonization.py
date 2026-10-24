@@ -404,7 +404,7 @@ def _query_condition_to_jsonable(
     that: our_types.QueryCondition
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     if that.eq is not None:
         try:
             jsonable['$eq'] = that.eq

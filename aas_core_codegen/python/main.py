@@ -229,7 +229,7 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
             ),
         ),
         (
-            tests_rel_path / "test_for_over_X_or_empty.py",
+            tests_rel_path / "test_for_over_x_or_empty.py",
             lambda: (
                 python_tests.generate_test_for_over_x_or_empty(
                     symbol_table=context.symbol_table,

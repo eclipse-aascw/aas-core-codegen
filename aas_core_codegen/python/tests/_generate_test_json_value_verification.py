@@ -193,7 +193,7 @@ class TestJsonArrayAndJsonObject(unittest.TestCase):
 {I}def test_an_array_has_to_be_an_array(self) -> None:
 {II}paths_and_causes = _paths_and_causes(
 {III}our_json_value_verification.verify_json_array(
-{IIII}cast(Sequence[Any], {{"a": 1}})
+{IIII}cast("Sequence[Any]", {{"a": 1}})
 {III})
 {II})
 
@@ -215,7 +215,7 @@ class TestJsonArrayAndJsonObject(unittest.TestCase):
 {I}def test_an_object_has_to_be_an_object(self) -> None:
 {II}paths_and_causes = _paths_and_causes(
 {III}our_json_value_verification.verify_json_object(
-{IIII}cast(Mapping[str, Any], [1, 2])
+{IIII}cast("Mapping[str, Any]", [1, 2])
 {III})
 {II})
 

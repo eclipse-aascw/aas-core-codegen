@@ -63,12 +63,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .extension_from_file(path)
+                    .extension_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -123,12 +123,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .administrative_information_from_file(path)
+                    .administrative_information_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -183,12 +183,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .qualifier_from_file(path)
+                    .qualifier_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -243,12 +243,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .asset_administration_shell_from_file(path)
+                    .asset_administration_shell_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -303,12 +303,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .asset_information_from_file(path)
+                    .asset_information_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -363,12 +363,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .resource_from_file(path)
+                    .resource_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -423,12 +423,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .specific_asset_id_from_file(path)
+                    .specific_asset_id_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -483,12 +483,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .submodel_from_file(path)
+                    .submodel_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -543,12 +543,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .relationship_element_from_file(path)
+                    .relationship_element_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -603,12 +603,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .submodel_element_list_from_file(path)
+                    .submodel_element_list_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -663,12 +663,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .submodel_element_collection_from_file(path)
+                    .submodel_element_collection_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -723,12 +723,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .property_from_file(path)
+                    .property_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -783,12 +783,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .multi_language_property_from_file(path)
+                    .multi_language_property_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -843,12 +843,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .range_from_file(path)
+                    .range_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -903,12 +903,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .reference_element_from_file(path)
+                    .reference_element_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -963,12 +963,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .blob_from_file(path)
+                    .blob_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1023,12 +1023,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .file_from_file(path)
+                    .file_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1083,12 +1083,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .annotated_relationship_element_from_file(path)
+                    .annotated_relationship_element_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1143,12 +1143,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .entity_from_file(path)
+                    .entity_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1203,12 +1203,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .event_payload_from_file(path)
+                    .event_payload_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1263,12 +1263,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .basic_event_element_from_file(path)
+                    .basic_event_element_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1323,12 +1323,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .operation_from_file(path)
+                    .operation_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1383,12 +1383,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .operation_variable_from_file(path)
+                    .operation_variable_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1443,12 +1443,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .capability_from_file(path)
+                    .capability_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1503,12 +1503,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .concept_description_from_file(path)
+                    .concept_description_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1563,12 +1563,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .reference_from_file(path)
+                    .reference_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1623,12 +1623,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .key_from_file(path)
+                    .key_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1683,12 +1683,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .lang_string_name_type_from_file(path)
+                    .lang_string_name_type_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1743,12 +1743,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .lang_string_text_type_from_file(path)
+                    .lang_string_text_type_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1803,12 +1803,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .environment_from_file(path)
+                    .environment_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1863,12 +1863,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .embedded_data_specification_from_file(path)
+                    .embedded_data_specification_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1923,12 +1923,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .level_type_from_file(path)
+                    .level_type_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -1983,12 +1983,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .value_reference_pair_from_file(path)
+                    .value_reference_pair_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -2043,12 +2043,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .value_list_from_file(path)
+                    .value_list_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -2103,12 +2103,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .lang_string_preferred_name_type_iec_61360_from_file(path)
+                    .lang_string_preferred_name_type_iec_61360_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -2163,12 +2163,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .lang_string_short_name_type_iec_61360_from_file(path)
+                    .lang_string_short_name_type_iec_61360_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -2223,12 +2223,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .lang_string_definition_type_iec_61360_from_file(path)
+                    .lang_string_definition_type_iec_61360_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -2283,12 +2283,12 @@ class TestRoundTrips(unittest.TestCase):
 
             # region From file
             with tempfile.TemporaryDirectory() as tmp_dir:
-                path = pathlib.Path(tmp_dir) / "something.xml"
-                path.write_text(text, encoding="utf-8")
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
 
                 got_from_file = (
                     our_xmlization
-                    .data_specification_iec_61360_from_file(path)
+                    .data_specification_iec_61360_from_file(tmp_path)
                 )
             et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
             tests.common_xmlization.remove_redundant_whitespace(et_from_file)
@@ -2322,7 +2322,7 @@ class TestLexicalForms(unittest.TestCase):
         self.assertGreater(
             len(paths),
             0,
-            f"Expected at least one recorded example of levelType, but got none",
+            "Expected at least one recorded example of levelType, but got none",
         )
 
         original = paths[0].read_text(encoding="utf-8")

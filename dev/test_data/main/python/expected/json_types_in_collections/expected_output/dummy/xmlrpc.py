@@ -149,7 +149,7 @@ def _read_discriminator(
                 return False
 
             raise DeserializationException(
-                f"Expected \"0\" or \"1\" as the text of a <boolean> element, "
+                f'Expected "0" or "1" as the text of a <boolean> element, '
                 f"but got: {text!r}"
             )
 
@@ -332,7 +332,7 @@ def read_struct_body(
 
     raise_if_non_whitespace_text(element, '<member> elements')
 
-    result = dict()  # type: Dict[str, Any]
+    result = {}  # type: Dict[str, Any]
 
     while True:
         next_event_element = next(iterator, None)

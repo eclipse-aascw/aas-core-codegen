@@ -31,12 +31,12 @@ class Class(abc.ABC):
     @abc.abstractmethod
     def descend_once(self) -> Iterator["Class"]:
         """Iterate over all the instances referenced from this one."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def descend(self) -> Iterator["Class"]:
         """Iterate recursively over all the instances referenced from this one."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def accept(
@@ -48,7 +48,7 @@ class Class(abc.ABC):
 
         :param visitor: to be dispatched
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def accept_with_context(
@@ -62,7 +62,7 @@ class Class(abc.ABC):
         :param visitor: to be dispatched
         :param context: of the visitation
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform(
@@ -75,7 +75,7 @@ class Class(abc.ABC):
         :param transformer: to be dispatched
         :return: transformed self
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_with_context(
@@ -89,7 +89,7 @@ class Class(abc.ABC):
         :param transformer: to be dispatched
         :return: transformed self
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 # pylint: disable=redefined-builtin
@@ -372,7 +372,7 @@ class AbstractVisitor:
             that: ChildA
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_child_b(
@@ -380,7 +380,7 @@ class AbstractVisitor:
             that: ChildB
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_something(
@@ -388,7 +388,7 @@ class AbstractVisitor:
             that: Something
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class AbstractVisitorWithContext(Generic[ContextT]):
@@ -408,7 +408,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_child_b_with_context(
@@ -417,7 +417,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_something_with_context(
@@ -426,7 +426,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class PassThroughVisitor(AbstractVisitor):
@@ -528,7 +528,7 @@ class AbstractTransformer(Generic[T]):
             that: ChildA
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_child_b(
@@ -536,7 +536,7 @@ class AbstractTransformer(Generic[T]):
             that: ChildB
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_something(
@@ -544,7 +544,7 @@ class AbstractTransformer(Generic[T]):
             that: Something
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class AbstractTransformerWithContext(
@@ -566,7 +566,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_child_b_with_context(
@@ -575,7 +575,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_something_with_context(
@@ -584,7 +584,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class TransformerWithDefault(AbstractTransformer[T]):

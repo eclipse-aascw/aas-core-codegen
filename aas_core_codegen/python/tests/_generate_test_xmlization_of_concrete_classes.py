@@ -139,7 +139,7 @@ def _read_with(self, xml_name: str, text: str) -> our_types.{python_naming.class
 {I}self.assertGreater(
 {II}len(paths),
 {II}0,
-{II}f"Expected at least one recorded example of {xml_class_name}, but got none",
+{II}"Expected at least one recorded example of {xml_class_name}, but got none",
 {I})
 
 {I}original = paths[0].read_text(encoding="utf-8")
@@ -280,12 +280,12 @@ def {test_method_name}(self) -> None:
 
 {II}# region From file
 {II}with tempfile.TemporaryDirectory() as tmp_dir:
-{III}path = pathlib.Path(tmp_dir) / "something.xml"
-{III}path.write_text(text, encoding="utf-8")
+{III}tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+{III}tmp_path.write_text(text, encoding="utf-8")
 
 {III}got_from_file = (
 {IIII}our_xmlization
-{IIII}.{from_file}(path)
+{IIII}.{from_file}(tmp_path)
 {III})
 {II}et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
 {II}tests.common_xmlization.remove_redundant_whitespace(et_from_file)

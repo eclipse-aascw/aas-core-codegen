@@ -117,7 +117,9 @@ def assert_never(value: NoReturn) -> NoReturn:
 {I}Please see the following page for more details:
 {I}https://hakibenita.com/python-mypy-exhaustive-checking
 {I}\"\"\"
-{I}assert False, f"Unhandled value: {{value}} ({{type(value).__name__}})\""""
+{I}raise AssertionError(
+{II}f"Unhandled value: {{value}} ({{type(value).__name__}})"
+{I})"""
         ),
         Stripped(
             f'''\
