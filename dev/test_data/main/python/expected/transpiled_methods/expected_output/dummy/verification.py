@@ -70,7 +70,6 @@ def reset_and_check(
     """
     Check calling the methods which mutate the instance and the arguments.
     """
-    # pylint: disable=all
     item.reset()
     item.fill_numbers(numbers)
     item.copy_count_to(other)

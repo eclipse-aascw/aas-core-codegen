@@ -12,7 +12,6 @@ Otherwise, it throws. Hence, the meta-model checks the text before it calls ``in
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -93,11 +92,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     number: str
 

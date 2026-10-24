@@ -66,7 +66,6 @@ def first_text_is_not_empty(
     texts: Sequence[str]
 ) -> bool:
     """Check the for-each with an unconditional early return."""
-    # pylint: disable=all
     for text in texts:
         return len(text) > 0
     return True
@@ -76,7 +75,6 @@ def no_number_is_zero(
     numbers: Sequence[int]
 ) -> bool:
     """Check the for-each with an early return in a switch."""
-    # pylint: disable=all
     for number in numbers:
         if number == 0:
             return False
@@ -89,7 +87,6 @@ def no_number_is_minus_one(
     """
     Check the for-range with a variable defined in the body of the loop.
     """
-    # pylint: disable=all
     for i in range(0, len(numbers)):
         number = numbers[i]
         if number == -1:
@@ -101,7 +98,6 @@ def no_number_after_the_first_is_one(
     numbers: Sequence[int]
 ) -> bool:
     """Check the for-range which does not start at zero."""
-    # pylint: disable=all
     for i in range(1, len(numbers)):
         if numbers[i] == 1:
             return False
@@ -114,7 +110,6 @@ def sum_is_small(
     """
     Check the for-each which assigns to a variable defined before the loop.
     """
-    # pylint: disable=all
     total = 0
     for number in numbers:
         total = total + number
@@ -125,7 +120,6 @@ def no_item_has_an_empty_text(
     items: Sequence[our_types.Item]
 ) -> bool:
     """Check the nested for-each loops."""
-    # pylint: disable=all
     for item in items:
         texts = item.texts
         for text in texts:
@@ -138,7 +132,6 @@ def is_neither_thirteen_nor_unlucky(
     texts: Sequence[str]
 ) -> bool:
     """Check the loop variable re-used in a sibling loop."""
-    # pylint: disable=all
     for x in texts:
         if x == 'thirteen':
             return False
@@ -153,7 +146,6 @@ def alpha_has_no_negative_numbers(
     numbers: Sequence[int]
 ) -> bool:
     """Check the for-each in a switch branch."""
-    # pylint: disable=all
     if kind == our_types.Kind.ALPHA:
         for number in numbers:
             if number == -2:
@@ -167,7 +159,6 @@ def sum_of_odd_numbers_is_small(
     """
     Check the for-each with a continue in a switch followed by statements.
     """
-    # pylint: disable=all
     total = 0
     for number in numbers:
         if (number % 2) == (0):
@@ -182,7 +173,6 @@ def items_are_few_and_texts_expected(
     """
     Check the continue in all the branches of a switch in a nested for-range.
     """
-    # pylint: disable=all
     count = 0
     for item in items:
         for i in range(0, len(item.texts)):
@@ -203,7 +193,6 @@ def numbers_before_stop_are_few(
     """
     Check the for-each with a break in a switch followed by statements.
     """
-    # pylint: disable=all
     count = 0
     for number in numbers:
         if number == -50:
@@ -218,7 +207,6 @@ def weights_before_end_are_small(
     """
     Check the break in a chain of if and elif which compares a single subject.
     """
-    # pylint: disable=all
     total = 0
     for number in numbers:
         if number == 3:
@@ -249,7 +237,6 @@ def texts_before_stop_are_few(
     """
     Check the break in the nested branches of a switch in a nested for-range.
     """
-    # pylint: disable=all
     count = 0
     for item in items:
         for i in range(0, len(item.texts)):

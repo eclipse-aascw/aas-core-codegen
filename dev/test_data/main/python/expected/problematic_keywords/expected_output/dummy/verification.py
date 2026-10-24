@@ -65,14 +65,12 @@ Error = our_reporting.Error
 def interface(
     something: str
 ) -> bool:
-    # pylint: disable=all
     return True
 
 
 def void(
     something: str
 ) -> bool:
-    # pylint: disable=all
     return True
 
 

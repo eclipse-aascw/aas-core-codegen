@@ -11,8 +11,6 @@ if sys.version_info >= (3, 8):
 else:
     from typing_extensions import Final
 
-import dummy.types as our_types
-
 #: List the texts which must not be used.
 RESERVED_TEXTS: Final[AbstractSet[str]] = {
     'reserved',

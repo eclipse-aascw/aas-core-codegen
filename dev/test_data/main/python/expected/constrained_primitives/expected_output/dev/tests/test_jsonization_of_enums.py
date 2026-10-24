@@ -5,13 +5,7 @@
 # Do NOT edit or append.
 
 
-# pylint: disable=missing-docstring
-
-
 import unittest
-
-
-import dummy.jsonization as our_jsonization
 
 
 class TestRoundTrips(unittest.TestCase):

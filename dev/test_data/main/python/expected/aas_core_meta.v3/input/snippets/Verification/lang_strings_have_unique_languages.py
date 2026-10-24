@@ -5,7 +5,7 @@ def lang_strings_have_unique_languages(
     Check that :paramref:`lang_strings` are specified each for a unique
     language.
     """
-    language_set = set()  # type: Set[str]
+    language_set: Set[str] = set()
     for lang_string in lang_strings:
         if lang_string.language in language_set:
             return False

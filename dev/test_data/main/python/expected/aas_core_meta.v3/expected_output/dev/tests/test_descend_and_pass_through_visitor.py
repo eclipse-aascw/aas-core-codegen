@@ -8,9 +8,6 @@ Test jointly :py:method:`aas_core3.types.Class.descend` and
 # Do NOT edit or append.
 
 
-# pylint: disable=missing-docstring
-
-
 from typing import (
     List,
     Sequence
@@ -30,7 +27,7 @@ class _TracingVisitor(our_types.PassThroughVisitor):
 
     def __init__(self) -> None:
         """Initialize with an empty log."""
-        self._log = []  # type: List[str]
+        self._log: List[str] = []
 
     @property
     def log(self) -> Sequence[str]:

@@ -14,7 +14,6 @@ distinguishes the characters from the code units.
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -95,11 +94,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     text: str
 

@@ -66,7 +66,6 @@ def switch_on_enum_without_default(
     kind: our_types.Kind
 ) -> bool:
     """Check the switch with no default."""
-    # pylint: disable=all
     if kind == our_types.Kind.ALPHA:
         return True
     elif kind == our_types.Kind.DELTA:
@@ -78,7 +77,6 @@ def switch_on_enum_with_default(
     kind: our_types.Kind
 ) -> bool:
     """Check the switch with a case per form of labels and a default."""
-    # pylint: disable=all
     if kind == our_types.Kind.ALPHA:
         return True
     elif kind in (our_types.Kind.BETA, our_types.Kind.GAMMA):
@@ -91,7 +89,6 @@ def switch_on_enum_with_labels_in_tuple(
     kind: our_types.Kind
 ) -> bool:
     """Check the switch with the labels given as a tuple."""
-    # pylint: disable=all
     if kind in (our_types.Kind.ALPHA, our_types.Kind.BETA, our_types.Kind.GAMMA):
         return True
     else:
@@ -104,7 +101,6 @@ def switch_on_enum_with_pass(
     """
     Check the switch with the branches which pass and complete normally.
     """
-    # pylint: disable=all
     result = True
     if kind in (our_types.Kind.ALPHA, our_types.Kind.BETA):
         pass
@@ -120,7 +116,6 @@ def switch_on_enum_with_variables_in_cases(
     text: str
 ) -> bool:
     """Check the variables defined in the cases of the switch."""
-    # pylint: disable=all
     if kind == our_types.Kind.ALPHA:
         length = len(text)
         return length > 1
@@ -135,7 +130,6 @@ def switch_on_str(
     text: str
 ) -> bool:
     """Check the switch on a string."""
-    # pylint: disable=all
     if text == 'alpha':
         return True
     elif text in ('beta', 'gamma'):
@@ -150,7 +144,6 @@ def switch_on_length(
     text: str
 ) -> bool:
     """Check the switch on the length of a string."""
-    # pylint: disable=all
     if len(text) == 2:
         return False
     elif len(text) in (3, 30):
@@ -163,7 +156,6 @@ def switch_on_constrained_str(
     text: str
 ) -> bool:
     """Check the switch on a constrained primitive."""
-    # pylint: disable=all
     if text in ('forbidden', 'banned'):
         return False
     else:
@@ -174,7 +166,6 @@ def switch_on_int(
     number: int
 ) -> bool:
     """Check the switch on an integer."""
-    # pylint: disable=all
     if number == -1:
         return False
     elif number in (0, 1):
@@ -194,7 +185,6 @@ def nested_switches(
 
     The lone ``if``'s are if-statements, not switches.
     """
-    # pylint: disable=all
     if kind == our_types.Kind.ALPHA:
         if number == 0:
             return True
@@ -219,7 +209,6 @@ def switch_with_reassigned_int(
     Check the integer variable defined with a literal, and re-assigned
     an integer argument in a branch of the switch.
     """
-    # pylint: disable=all
     result = 0
     if kind == our_types.Kind.BETA:
         result = number

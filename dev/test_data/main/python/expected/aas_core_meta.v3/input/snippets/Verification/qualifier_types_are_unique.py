@@ -4,7 +4,7 @@ def qualifier_types_are_unique(qualifiers: Iterable[our_types.Qualifier]) -> boo
     :py:attr:`.types.Qualifier.type`'s
     in the :paramref:`qualifiers`.
     """
-    type_set = set()  # type: Set[str]
+    type_set: Set[str] = set()
     for qualifier in qualifiers:
         if qualifier.type in type_set:
             return False

@@ -69,7 +69,6 @@ def first_child_a_is_small(
     """
     Check an optional class declared with ``None`` and assigned in a loop.
     """
-    # pylint: disable=all
     found: Optional[our_types.ChildA] = None
     for parent in parents:
         if isinstance(parent, our_types.ChildA):
@@ -86,7 +85,6 @@ def text_is_allowed_unless_long(
     """
     Check an optional reset to ``None`` in the branch where it is non-null.
     """
-    # pylint: disable=all
     trimmed: Optional[str] = text
     if (
         (
@@ -122,7 +120,6 @@ def last_child_b_is_not_zero(
     parents: Sequence[our_types.Parent]
 ) -> bool:
     """Check a non-optional variable declared wider than its value."""
-    # pylint: disable=all
     last: our_types.Parent = parent
     for other in parents:
         last = other
@@ -135,7 +132,6 @@ def child_a_declarations_agree(
     parent: our_types.Parent
 ) -> bool:
     """Check the declarations from a value narrowed by ``isinstance``."""
-    # pylint: disable=all
     if isinstance(parent, our_types.ChildA):
         child: our_types.ChildA = parent
         child_copy = parent
@@ -158,7 +154,6 @@ def optionals_from_values_are_small(
     """
     Check the optionals declared with a non-optional and an optional value.
     """
-    # pylint: disable=all
     maybe_number: Optional[int] = number
     maybe_text: Optional[str] = optional_text
     if (
@@ -179,7 +174,6 @@ def primitive_locals_are_consistent(
     flag: bool
 ) -> bool:
     """Check the primitive declarations and their re-assignments."""
-    # pylint: disable=all
     count: int = 0
     if flag:
         count = count + 1
@@ -207,7 +201,6 @@ def kinds_are_consistent(
     optional_kind: Optional[our_types.Kind]
 ) -> bool:
     """Check the declarations of the enumerations."""
-    # pylint: disable=all
     current: our_types.Kind = kind
     other: Optional[our_types.Kind] = None
     if optional_kind is not None:
@@ -225,7 +218,6 @@ def code_is_not_reserved(
     code: str
 ) -> bool:
     """Check the declarations of a constrained primitive."""
-    # pylint: disable=all
     exact: str = code
     plain: str = code
     return (
@@ -239,7 +231,6 @@ def data_is_small(
     data: Optional[bytes]
 ) -> bool:
     """Check the declaration of an optional byte array."""
-    # pylint: disable=all
     trimmed: Optional[bytes] = data
     if trimmed is None:
         return True
@@ -251,7 +242,6 @@ def texts_are_few(
     optional_texts: Optional[Sequence[str]]
 ) -> bool:
     """Check the declarations of the lists."""
-    # pylint: disable=all
     all_texts: Sequence[str] = texts
     maybe_texts: Optional[Sequence[str]] = optional_texts
     if (
@@ -270,7 +260,6 @@ def tuples_are_consistent(
     optional_parent: Optional[our_types.Parent]
 ) -> bool:
     """Check the declarations of the tuples."""
-    # pylint: disable=all
     pair: Tuple[str, int] = (text, number)
     optional_pair: Optional[Tuple[str, our_types.Parent]] = None
     if optional_parent is not None:
@@ -291,7 +280,6 @@ def union_locals_are_consistent(
     item: our_types.Item
 ) -> bool:
     """Check the declarations of the named unions."""
-    # pylint: disable=all
     current: our_types.ParentOrItem = parent
     if isinstance(parent, our_types.ChildA):
         current = parent
@@ -323,7 +311,6 @@ def member_is_lucky(
     member: Optional[our_types.ParentOrItem]
 ) -> bool:
     """Check reading the optional named union of a property."""
-    # pylint: disable=all
     if (
         (
             (member is not None)
@@ -339,7 +326,6 @@ def wrap_into_member(
     item: our_types.Item
 ) -> bool:
     """Check wrapping an instance into the named union of a property."""
-    # pylint: disable=all
     something.optional_member = item
     return True
 
@@ -352,7 +338,6 @@ def final_locals_are_consistent(
     parent: our_types.Parent
 ) -> bool:
     """Check the immutable variables declared as ``Final[...]``."""
-    # pylint: disable=all
     limit: Final[int] = 1000
     label: Final[str] = text
     maybe_text: Final[Optional[str]] = optional_text
@@ -395,7 +380,6 @@ def text_is_short(
     """
     Check the optional text passed on as ``None`` from other functions.
     """
-    # pylint: disable=all
     return (
         (
             (text is None)
@@ -407,7 +391,6 @@ def none_is_short_and_text_is_short(
     text: str
 ) -> bool:
     """Check ``None`` passed as an optional argument."""
-    # pylint: disable=all
     return (
         (
             text_is_short(None)

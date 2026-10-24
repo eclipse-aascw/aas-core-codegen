@@ -66,7 +66,6 @@ def date_before_time_is_long_enough(
     text: str
 ) -> bool:
     """Check the slice up to the position found with ``find``."""
-    # pylint: disable=all
     position = text.find('T')
     if position == -1:
         return True
@@ -79,7 +78,6 @@ def time_after_date_is_long_enough(
     """
     Check the slice from the position after the one found with ``find``.
     """
-    # pylint: disable=all
     position = text.find('T')
     if position == -1:
         return True
@@ -92,7 +90,6 @@ def month_is_september(
     """
     Check ``find`` with a start and the slice between the found positions.
     """
-    # pylint: disable=all
     first = text.find('-')
     if first == -1:
         return True
@@ -106,7 +103,6 @@ def seconds_follow_colon(
     text: str
 ) -> bool:
     """Check the slices and ``find`` with negative literal positions."""
-    # pylint: disable=all
     position = text.find('T')
     if position == -1:
         return True
@@ -132,7 +128,6 @@ def last_character_is_not_z(
     The transpiled code needs to follow the Python semantics: a negative position
     counts from the end, and the positions out of range are clamped.
     """
-    # pylint: disable=all
     position = text.find('#')
     return (
         (
@@ -148,7 +143,6 @@ def name_starts_with_prefix(
     name: str
 ) -> bool:
     """Check the slice of a constrained primitive with literal bounds."""
-    # pylint: disable=all
     return (
         (
             len(name) < 4
@@ -162,7 +156,6 @@ def name_has_no_space_after_prefix(
     """
     Check ``find`` on a constrained primitive and a slice with a literal start.
     """
-    # pylint: disable=all
     return (
         (
             len(name) < 4
@@ -174,7 +167,6 @@ def word_is_between_bounds(
     word: str
 ) -> bool:
     """Check the ordering of a string with the literals on both sides."""
-    # pylint: disable=all
     return (
         (
             'A' <= word
@@ -187,7 +179,6 @@ def word_is_not_after_other_word(
     other_word: str
 ) -> bool:
     """Check the ordering of a constrained primitive with a string."""
-    # pylint: disable=all
     return (
         (
             (not (word > other_word))
@@ -205,7 +196,6 @@ def word_sorts_before_replacement_character(
     after the replacement character (U+FFFD), but its UTF-16 code units (U+D83D and
     U+DE00) sort before it.
     """
-    # pylint: disable=all
     return word < '�'
 
 
@@ -215,7 +205,6 @@ def has_at_most_two_significant_decimals(
     """
     Check ``rstrip`` on the fraction found with ``find`` and slicing.
     """
-    # pylint: disable=all
     position = amount.find('.')
     if position == -1:
         return True
@@ -231,7 +220,6 @@ def name_with_extension_is_short(
     We concatenate two literals on purpose, since C++ can not add two string
     literals natively.
     """
-    # pylint: disable=all
     extension = '.' + 'txt'
     path = name + extension
     return len(path) <= 12

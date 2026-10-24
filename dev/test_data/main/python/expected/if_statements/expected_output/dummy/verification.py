@@ -66,7 +66,6 @@ def if_with_a_single_branch(
     text: str
 ) -> bool:
     """Check the if-statement with a single branch and no default."""
-    # pylint: disable=all
     if len(text) > 10:
         return False
     return True
@@ -82,7 +81,6 @@ def if_elif_else(
     The last ``elif`` compares against a constant, but it is still a branch of
     the if-statement as the chain does not start as a switch.
     """
-    # pylint: disable=all
     if (
         (
             number < 0
@@ -110,7 +108,6 @@ def if_with_pass(
     number: int
 ) -> bool:
     """Check the if-statement with an empty branch."""
-    # pylint: disable=all
     if (
         (
             flag
@@ -133,7 +130,6 @@ def if_in_default_of_switch(
     The ``elif`` becomes an if-statement in the default of the switch, and nests
     a lone ``if`` in turn, which is an if-statement as well.
     """
-    # pylint: disable=all
     if kind == our_types.Kind.ALPHA:
         return number < 10
     elif kind == our_types.Kind.GAMMA:
@@ -156,7 +152,6 @@ def lone_if_on_length(
     The lone ``if`` is not a switch, so its subject needs not be an enumeration,
     a string or an integer.
     """
-    # pylint: disable=all
     if len(text) == 0:
         return (
             (
@@ -170,7 +165,6 @@ def if_with_non_null_in_condition(
     item: our_types.Item
 ) -> bool:
     """Check the condition which guards an optional value itself."""
-    # pylint: disable=all
     if (
         (
             (item.optional_text is not None)
@@ -187,7 +181,6 @@ def if_with_reassigned_variable(
     """
     Check the variable defined before the if-statement and assigned in it.
     """
-    # pylint: disable=all
     result = 0
     if (
         (
@@ -207,7 +200,6 @@ def if_with_continue_in_for(
     """
     Check the ``continue`` in a branch of an if-statement nested in a for-loop.
     """
-    # pylint: disable=all
     count = 0
     for i in range(0, 10):
         if (
@@ -225,7 +217,6 @@ def narrowing_in_body(
     parent: Optional[our_types.Parent]
 ) -> bool:
     """Check the narrowing in the body of a branch by its condition."""
-    # pylint: disable=all
     if (
         (
             (parent is not None)
@@ -240,7 +231,6 @@ def narrowing_in_elif_and_else(
     parent: Optional[our_types.Parent]
 ) -> bool:
     """Check the narrowing by the negation of the previous conditions."""
-    # pylint: disable=all
     if parent is None:
         return True
     elif not isinstance(parent, our_types.ChildB):
@@ -259,7 +249,6 @@ def narrowing_after_early_return(
     """
     Check the narrowing after an if-statement whose branch always returns.
     """
-    # pylint: disable=all
     if (
         (
             (parent is None)
@@ -276,7 +265,6 @@ def narrowing_after_the_only_completing_branch(
     """
     Check the narrowing after an if-statement whose ``else`` always returns.
     """
-    # pylint: disable=all
     if (
         (
             (parent is not None)
@@ -295,7 +283,6 @@ def child_as_have_texts(
     """
     Check the narrowing after the ``continue`` and the early return in a loop.
     """
-    # pylint: disable=all
     for parent in parents:
         if not isinstance(parent, our_types.ChildA):
             continue
@@ -312,7 +299,6 @@ def texts_before_container_are_short(
     """
     Check the narrowing after the ``continue`` in a loop with a ``break``.
     """
-    # pylint: disable=all
     total = 0
     for parent in parents:
         if isinstance(parent, our_types.Container):
@@ -327,7 +313,6 @@ def text_or_default_is_short(
     parent: our_types.Parent
 ) -> bool:
     """Check the narrowing by the value assigned in a branch."""
-    # pylint: disable=all
     text = parent.optional_text
     if text is None:
         text = 'default'
@@ -341,7 +326,6 @@ def last_child_a_is_small(
     """
     Check the narrowing of a variable to a class by the assigned value.
     """
-    # pylint: disable=all
     last = parent
     for other in parents:
         if isinstance(other, our_types.ChildA):
@@ -357,7 +341,6 @@ def has_marker_in_tree(
     """
     Check the recursive chain of ``isinstance`` checks with early returns.
     """
-    # pylint: disable=all
     if (
         (
             (parent.optional_text is not None)

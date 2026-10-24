@@ -92,11 +92,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Kind(enum.Enum):
-    # pylint: disable=missing-class-docstring
+
 
     ALPHA = 'alpha'
 
@@ -104,7 +101,7 @@ class Kind(enum.Enum):
 
 
 class Item(Class):
-    # pylint: disable=missing-class-docstring
+
 
     texts: List[str]
 
@@ -117,7 +114,6 @@ class Item(Class):
         text: str
     ) -> bool:
         """Check that :paramref:`text` is among the texts."""
-        # pylint: disable=all
         return (
             any(
                 existing == text
@@ -126,7 +122,6 @@ class Item(Class):
 
     def total_length(self) -> int:
         """Sum up the lengths of the texts."""
-        # pylint: disable=all
         result = 0
         for text in self.texts:
             result = result + len(text)
@@ -137,7 +132,6 @@ class Item(Class):
         limit: int
     ) -> bool:
         """Check that the count does not exceed :paramref:`limit`."""
-        # pylint: disable=all
         return self.count <= limit
 
     def is_count_between(
@@ -148,7 +142,6 @@ class Item(Class):
         """
         Check that the count is between :paramref:`low` and :paramref:`high`.
         """
-        # pylint: disable=all
         return (
             (
                 low <= self.count
@@ -159,7 +152,6 @@ class Item(Class):
         """
         Check that there are no texts, calling another method on ``self``.
         """
-        # pylint: disable=all
         return (
             (
                 len(self.texts) == 0
@@ -168,12 +160,10 @@ class Item(Class):
 
     def _doubled_count(self) -> int:
         """Double the count."""
-        # pylint: disable=all
         return self.count + self.count
 
     def parity(self) -> int:
         """Compute the parity of the count with the modulo as in Python."""
-        # pylint: disable=all
         return abs(self.count % 2)
 
     def fill_numbers(
@@ -181,7 +171,6 @@ class Item(Class):
         numbers: List[int]
     ) -> None:
         """Overwrite all the :paramref:`numbers` with the count."""
-        # pylint: disable=all
         for i in range(0, len(numbers)):
             numbers[i] = self.count
 
@@ -190,7 +179,6 @@ class Item(Class):
         other: 'Item'
     ) -> None:
         """Copy the count to :paramref:`other`."""
-        # pylint: disable=all
         other.count = self.count
 
     def fill_texts(
@@ -204,7 +192,6 @@ class Item(Class):
         as that would be too inefficient. Please verify the instance explicitly
         once you are done with the changes.
         """
-        # pylint: disable=all
         for i in range(0, len(self.texts)):
             self.texts[i] = text
 
@@ -216,7 +203,6 @@ class Item(Class):
         as that would be too inefficient. Please verify the instance explicitly
         once you are done with the changes.
         """
-        # pylint: disable=all
         self.fill_texts('')
         self.count = 0
         self.kind = Kind.ALPHA
@@ -229,7 +215,6 @@ class Item(Class):
         as that would be too inefficient. Please verify the instance explicitly
         once you are done with the changes.
         """
-        # pylint: disable=all
         self.count = self.count + 1
         return self._doubled_count()
 
@@ -246,7 +231,7 @@ class Item(Class):
 
 
 class First(Item):
-    # pylint: disable=missing-class-docstring
+
 
     def descend_once(self) -> Iterator[Class]:
         """
@@ -327,13 +312,12 @@ class First(Item):
 
 
 class Second(Item):
-    # pylint: disable=missing-class-docstring
+
 
     note: str
 
     def prefix(self) -> str:
         """Return the first three characters of the note."""
-        # pylint: disable=all
         return self.note[:3]
 
     def descend_once(self) -> Iterator[Class]:

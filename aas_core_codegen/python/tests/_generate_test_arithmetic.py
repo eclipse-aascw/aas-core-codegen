@@ -83,10 +83,6 @@ semantics with dedicated helper functions, and test the very same cases.
 """'''
         ),
         python_common.WARNING,
-        Stripped(
-            """\
-# pylint: disable=missing-docstring"""
-        ),
         Stripped("import unittest"),
         Stripped(
             f"""\

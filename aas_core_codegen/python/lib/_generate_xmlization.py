@@ -2958,7 +2958,7 @@ def _read_properties(
 
 {I}raise_if_has_tail_or_attrib(element)
 
-{I}values = {{}}  # type: Dict[str, Any]
+{I}values: Dict[str, Any] = {{}}
 
 {I}while True:
 {II}# NOTE (mristin):
@@ -3041,7 +3041,7 @@ def _read_list_of_items(
 {III}f"but got text: {{element.text!r}}"
 {II})
 
-{I}result = []  # type: List[_ValueT]
+{I}result: List[_ValueT] = []
 
 {I}while True:
 {II}# NOTE (mristin):
@@ -3109,7 +3109,7 @@ def _read_set_of_items(
 {III}f"but got text: {{element.text!r}}"
 {II})
 
-{I}result = set()  # type: Set[_ValueT]
+{I}result: Set[_ValueT] = set()
 
 {I}while True:
 {II}next_event_element = next(iterator, None)

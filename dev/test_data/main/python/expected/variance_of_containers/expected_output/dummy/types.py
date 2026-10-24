@@ -13,7 +13,6 @@ and the mutable ``List[...]`` arguments remain invariant.
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -95,11 +94,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Item(Class):
-    # pylint: disable=missing-class-docstring
+
 
     name: str
 
@@ -116,7 +112,7 @@ class Item(Class):
 
 
 class SomeItem(Item):
-    # pylint: disable=missing-class-docstring
+
 
     def descend_once(self) -> Iterator[Class]:
         """
@@ -195,7 +191,7 @@ class SomeItem(Item):
 
 
 class SpecialItem(SomeItem):
-    # pylint: disable=missing-class-docstring
+
 
     level: int
 
@@ -278,7 +274,7 @@ class SpecialItem(SomeItem):
 
 
 class Container(Class):
-    # pylint: disable=missing-class-docstring
+
 
     items: List['Item']
 
@@ -304,7 +300,6 @@ class Container(Class):
         :py:class:`Item` can be passed to it, but not the sequences of
         the descendants.
         """
-        # pylint: disable=all
         return len(items)
 
     def descend_once(self) -> Iterator[Class]:
@@ -383,7 +378,7 @@ class Container(Class):
 
 
 class Wrapper(Class):
-    # pylint: disable=missing-class-docstring
+
 
     container: 'Container'
 

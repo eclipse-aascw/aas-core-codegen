@@ -3,7 +3,6 @@
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -122,11 +121,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     values: List[JsonValue]
 
@@ -147,7 +143,6 @@ class Something(Class):
         """
         Return :py:attr:`optional_object` if set, or the one from the tuple.
         """
-        # pylint: disable=all
         if self.optional_object is not None:
             return self.optional_object
         return self.tuple_with_json[3]

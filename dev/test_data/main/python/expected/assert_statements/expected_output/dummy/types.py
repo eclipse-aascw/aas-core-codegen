@@ -11,7 +11,6 @@ check their preconditions first. Hence, the generated SDKs never throw.
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -92,11 +91,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Parent(Class):
-    # pylint: disable=missing-class-docstring
+
 
     number: int
 
@@ -106,7 +102,7 @@ class Parent(Class):
 
 
 class ChildA(Parent):
-    # pylint: disable=missing-class-docstring
+
 
     a_only: int
 
@@ -187,7 +183,7 @@ class ChildA(Parent):
 
 
 class ChildB(Parent):
-    # pylint: disable=missing-class-docstring
+
 
     def descend_once(self) -> Iterator[Class]:
         """
@@ -261,7 +257,7 @@ class ChildB(Parent):
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     number: int
 
@@ -275,7 +271,6 @@ class Something(Class):
 
     def doubled_number(self) -> int:
         """Check the assertion in a method."""
-        # pylint: disable=all
         doubled = self.number + self.number
         assert (doubled - self.number) == (self.number), 'Doubling must be reversible'
         return doubled

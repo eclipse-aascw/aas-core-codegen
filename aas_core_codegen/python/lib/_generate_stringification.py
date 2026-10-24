@@ -160,11 +160,18 @@ def generate(
     """
     ranked_enumerations = intermediate_uses.enumerations_in_set_properties(symbol_table)
 
+    blocks = [
+        Stripped('"""De-serialize enumerations from string representations."""'),
+        python_common.WARNING,
+    ]
+
     # NOTE (mristin):
-    # We import ``Final`` only for the ranks so that the import is never unused.
-    imports = (
-        Stripped(
-            f"""\
+    # We import ``Final`` only for the ranks, and nothing at all if there are no
+    # enumerations, so that the imports are never unused.
+    if len(ranked_enumerations) > 0:
+        blocks.append(
+            Stripped(
+                f"""\
 import sys
 from typing import (
 {I}Mapping,
@@ -177,24 +184,22 @@ else:
 {I}from typing_extensions import Final
 
 import {qualified_module_name}.types as our_types"""
+            )
         )
-        if len(ranked_enumerations) > 0
-        else Stripped(
-            f"""\
+    elif len(symbol_table.enumerations) > 0:
+        blocks.append(
+            Stripped(
+                f"""\
 from typing import (
 {I}Mapping,
 {I}Optional,
 )
 
 import {qualified_module_name}.types as our_types"""
+            )
         )
-    )
-
-    blocks = [
-        Stripped('"""De-serialize enumerations from string representations."""'),
-        python_common.WARNING,
-        imports,
-    ]
+    else:
+        pass
 
     ranked_enumeration_ids = {id(enumeration) for enumeration in ranked_enumerations}
 

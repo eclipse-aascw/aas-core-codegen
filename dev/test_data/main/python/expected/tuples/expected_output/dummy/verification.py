@@ -66,7 +66,6 @@ def some_verification(
     x: str,
     y: int
 ) -> bool:
-    # pylint: disable=all
     return (
         (
             (x, y)[0] == x
@@ -79,7 +78,6 @@ def narrowed_pair_is_positive(
     y: Optional[int]
 ) -> bool:
     """Pack a narrowed optional value type into a tuple."""
-    # pylint: disable=all
     if y is None:
         return False
     pair: Tuple[str, int] = (x, y)

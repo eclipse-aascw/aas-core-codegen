@@ -66,7 +66,6 @@ def negated(
     result: our_types.Result
 ) -> our_types.Result:
     """Negate :paramref:`result`, returning an enumeration literal."""
-    # pylint: disable=all
     if result == our_types.Result.OK:
         return our_types.Result.NOT_OK
     return our_types.Result.OK

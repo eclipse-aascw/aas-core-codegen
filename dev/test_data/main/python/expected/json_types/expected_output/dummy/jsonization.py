@@ -151,7 +151,7 @@ class Path:
 
     def __init__(self) -> None:
         """Initialize as an empty path."""
-        self._segments = []  # type: List[Segment]
+        self._segments: List[Segment] = []
 
     @property
     def segments(self) -> Sequence[Segment]:
@@ -166,7 +166,7 @@ class Path:
         if len(self._segments) == 0:
             return ""
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
 
         iterator = iter(self._segments)
         first = next(iterator)
@@ -340,7 +340,7 @@ def _json_value_from_jsonable(
         return jsonable
 
     if isinstance(jsonable, (dict, collections.abc.Mapping)):
-        mapping = {}  # type: Dict[str, Any]
+        mapping: Dict[str, Any] = {}
         for key, jsonable_value in jsonable.items():
             if not isinstance(key, str):
                 raise DeserializationException(
@@ -359,7 +359,7 @@ def _json_value_from_jsonable(
 
     array_like = our_common.try_to_cast_to_array_like(jsonable)
     if array_like is not None:
-        items = []  # type: List[Any]
+        items: List[Any] = []
         for i, jsonable_item in enumerate(array_like):
             try:
                 items.append(_json_value_from_jsonable(jsonable_item))
@@ -519,7 +519,7 @@ class SerializationException(Exception):
     ) -> None:
         """Initialize with the given :paramref:`cause` and an empty path."""
         self.cause = cause
-        self._segments = []  # type: List[str]
+        self._segments: List[str] = []
 
     @property
     def path(self) -> str:
@@ -610,7 +610,7 @@ def _json_value_to_jsonable(
         return value
 
     if isinstance(value, (dict, collections.abc.Mapping)):
-        mapping = {}  # type: Dict[str, Any]
+        mapping: Dict[str, Any] = {}
         for key, item_value in value.items():
             if not isinstance(key, str):
                 raise SerializationException(
@@ -629,7 +629,7 @@ def _json_value_to_jsonable(
 
     array_like = our_common.try_to_cast_to_array_like(value)
     if array_like is not None:
-        items = []  # type: List[Any]
+        items: List[Any] = []
         for i, item_value in enumerate(array_like):
             try:
                 items.append(_json_value_to_jsonable(item_value))

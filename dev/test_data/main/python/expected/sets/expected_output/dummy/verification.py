@@ -67,7 +67,6 @@ def texts_are_unique(
     texts: Sequence[str]
 ) -> bool:
     """Check a local set of strings."""
-    # pylint: disable=all
     seen: Set[str] = set()
     for text in texts:
         if text in seen:
@@ -80,7 +79,6 @@ def numbers_are_unique_between_zeros(
     numbers: Sequence[int]
 ) -> bool:
     """Check a local set of integers which we reset at every zero."""
-    # pylint: disable=all
     seen: Set[int] = set()
     for number in numbers:
         if number == 0:
@@ -96,7 +94,6 @@ def kinds_are_unique(
     kinds: Sequence[our_types.Kind]
 ) -> bool:
     """Check a local set of enumeration literals."""
-    # pylint: disable=all
     seen: Set[our_types.Kind] = set()
     for kind in kinds:
         if kind in seen:
@@ -109,7 +106,6 @@ def codes_are_unique(
     codes: Sequence[str]
 ) -> bool:
     """Check a local set of constrained primitives."""
-    # pylint: disable=all
     seen: Set[str] = set()
     for code in codes:
         if code in seen:
@@ -122,7 +118,6 @@ def flags_are_uniform(
     flags: Sequence[bool]
 ) -> bool:
     """Check a local set of booleans queried with literals."""
-    # pylint: disable=all
     seen: Set[bool] = set()
     for flag in flags:
         seen.add(flag)
@@ -139,7 +134,6 @@ def lengths_are_unique(
     """
     Check a local set of integers filled with and queried by lengths.
     """
-    # pylint: disable=all
     seen: Set[int] = set()
     for text in texts:
         if len(text) in seen:
@@ -155,7 +149,6 @@ def add_texts(
     """
     Add :paramref:`texts` to :paramref:`collected`, a mutable set argument.
     """
-    # pylint: disable=all
     for text in texts:
         collected.add(text)
     return True
@@ -168,7 +161,6 @@ def is_in_texts(
     """
     Check whether :paramref:`text` is in :paramref:`texts`, a read-only set.
     """
-    # pylint: disable=all
     return text in texts
 
 
@@ -179,7 +171,6 @@ def is_in_optional_texts(
     """
     Check whether :paramref:`text` is in :paramref:`texts`, if specified.
     """
-    # pylint: disable=all
     if texts is None:
         return False
     return text in texts
@@ -192,7 +183,6 @@ def is_in_kinds(
     """
     Check whether :paramref:`kind` is in :paramref:`kinds`, a read-only set.
     """
-    # pylint: disable=all
     return kind in kinds
 
 
@@ -206,7 +196,6 @@ def texts_are_disjoint(
     We collect the texts into a local set through a mutable set argument, and
     pass the local sets, possibly optional, as read-only arguments.
     """
-    # pylint: disable=all
     seen: Set[str] = set()
     add_texts(texts, seen)
     others: Optional[Set[str]] = None
@@ -229,7 +218,6 @@ def text_is_not_reserved(
     """
     Check a constant set passed as a read-only and as an optional argument.
     """
-    # pylint: disable=all
     return (
         (
             (not is_in_texts(text, our_constants.RESERVED_TEXTS))
@@ -246,7 +234,6 @@ def texts_are_all_short(
     texts: AbstractSet[str]
 ) -> bool:
     """Check a for-loop over a read-only set argument."""
-    # pylint: disable=all
     for text in texts:
         if len(text) > 10:
             return False
@@ -257,7 +244,6 @@ def unique_texts_are_all_short(
     texts: Sequence[str]
 ) -> bool:
     """Collect :paramref:`texts` into a local set, and check them all."""
-    # pylint: disable=all
     seen: Set[str] = set()
     add_texts(texts, seen)
     return texts_are_all_short(seen)
@@ -265,7 +251,6 @@ def unique_texts_are_all_short(
 
 def seven_is_lucky() -> bool:
     """Check the constant set of lucky numbers without any arguments."""
-    # pylint: disable=all
     return 7 in our_constants.LUCKY_NUMBERS
 
 
@@ -275,7 +260,6 @@ def numbers_are_all_small(
     """
     Check ``all`` over a local set, and call a function without arguments.
     """
-    # pylint: disable=all
     seen: Set[int] = set()
     for number in numbers:
         seen.add(number)
@@ -295,7 +279,6 @@ def at_most_one_text_is_reserved(
     texts: Sequence[str]
 ) -> bool:
     """Check the intersection of a constant set with a local set."""
-    # pylint: disable=all
     seen: Set[str] = set()
     add_texts(texts, seen)
     reserved = set(our_constants.RESERVED_TEXTS & seen)
@@ -312,7 +295,6 @@ def some_kind_is_not_special(
     We also add :paramref:`optional_kind`, if specified, to check adding
     a narrowed optional to a set.
     """
-    # pylint: disable=all
     seen: Set[our_types.Kind] = set()
     for kind in kinds:
         seen.add(kind)

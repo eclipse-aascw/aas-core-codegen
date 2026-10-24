@@ -70,7 +70,6 @@ def is_described(
 
     This is meant to check the result of :py:meth:`.types.Item.describe`.
     """
-    # pylint: disable=all
     return len(text) > 0
 
 

@@ -3,7 +3,6 @@
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -84,11 +83,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Item(Class):
-    # pylint: disable=missing-class-docstring
+
 
     number: str
 
@@ -113,7 +109,7 @@ class Item(Class):
 
 
 class Box(Item):
-    # pylint: disable=missing-class-docstring
+
 
     def __wrap(self, text: str) -> str:
         """Wrap :paramref:`text` in square brackets."""

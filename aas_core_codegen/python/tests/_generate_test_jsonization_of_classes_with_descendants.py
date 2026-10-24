@@ -1,7 +1,7 @@
 """Generate code to test JSON de/serialization of classes with descendants."""
 
 import io
-from typing import List
+from typing import List, Optional
 
 from icontract import ensure
 
@@ -16,7 +16,10 @@ from aas_core_codegen.python.common import (
 )
 
 
-def _generate_test_case(symbol_table: intermediate.SymbolTable) -> Stripped:
+def _generate_test_case(
+    symbol_table: intermediate.SymbolTable,
+) -> Optional[Stripped]:
+    """Generate the test case, or return None if there is nothing to test."""
     test_methods: List[Stripped] = []
 
     for cls in symbol_table.classes:
@@ -75,13 +78,10 @@ def {test_method_name}(self) -> None:
             ),
         )
 
-    body = (
-        "\n\n".join(test_methods)
-        if len(test_methods) > 0
-        else """\
-# There are no classes with concrete descendants.
-pass"""
-    )
+    if len(test_methods) == 0:
+        return None
+
+    body = "\n\n".join(test_methods)
 
     return Stripped(
         f"""\
@@ -109,32 +109,55 @@ def generate(
 """Test JSON de/serialization of classes with descendants."""'''
         ),
         python_common.WARNING,
-        Stripped(
-            """\
-# pylint: disable=missing-docstring"""
-        ),
-        Stripped(
-            """\
+    ]
+
+    # NOTE (mristin):
+    # We import the modules only if there is anything to test so that
+    # the imports are never unused.
+    test_case = _generate_test_case(symbol_table=symbol_table)
+    if test_case is None:
+        blocks.extend(
+            [
+                Stripped("import unittest"),
+                Stripped(
+                    f"""\
+class TestRoundTrips(unittest.TestCase):
+{I}# There are no classes with concrete descendants.
+{I}pass"""
+                ),
+            ]
+        )
+    else:
+        blocks.extend(
+            [
+                Stripped(
+                    """\
 import json
 import unittest"""
-        ),
-        Stripped(
-            f"""\
+                ),
+                Stripped(
+                    f"""\
 import {qualified_module_name}.jsonization as our_jsonization"""
-        ),
-        Stripped(
-            """\
+                ),
+                Stripped(
+                    """\
 import tests.common
 import tests.common_jsonization"""
-        ),
-        _generate_test_case(symbol_table=symbol_table),
-        Stripped(
-            f"""\
+                ),
+                test_case,
+            ]
+        )
+
+    blocks.extend(
+        [
+            Stripped(
+                f"""\
 if __name__ == "__main__":
 {I}unittest.main()"""
-        ),
-        python_common.WARNING,
-    ]
+            ),
+            python_common.WARNING,
+        ]
+    )
 
     out = io.StringIO()
     for i, block in enumerate(blocks):

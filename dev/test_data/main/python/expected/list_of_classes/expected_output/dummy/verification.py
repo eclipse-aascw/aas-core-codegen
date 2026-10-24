@@ -66,7 +66,6 @@ def names_of(
     simples: Sequence[our_types.Simple]
 ) -> List[str]:
     """Give the names of :paramref:`simples` in the same order."""
-    # pylint: disable=all
     names: List[str] = []
     for simple in simples:
         names.append(simple.name)
@@ -78,7 +77,6 @@ def simples_with(
     simples: Sequence[our_types.Simple]
 ) -> List[our_types.Simple]:
     """Give :paramref:`simple` followed by :paramref:`simples`."""
-    # pylint: disable=all
     result = [simple]
     for other in simples:
         result.append(other)
@@ -94,7 +92,6 @@ def some_items_of(
     The appended items are narrowed down to :py:class:`.types.SomeItem`, while the list
     holds :py:class:`.types.AbstractItem`'s.
     """
-    # pylint: disable=all
     result: List[our_types.AbstractItem] = []
     for item in items:
         if isinstance(item, our_types.SomeItem):
@@ -111,7 +108,6 @@ def is_in_simples(
 
     The targets compare the instances of the classes by their references.
     """
-    # pylint: disable=all
     return simple in simples
 
 
@@ -125,7 +121,6 @@ def is_in_local_copy_of_simples(
     The local copy is built with ``append``, and holds the same instances as
     :paramref:`simples`.
     """
-    # pylint: disable=all
     copied: List[our_types.Simple] = []
     for other in simples:
         copied.append(other)

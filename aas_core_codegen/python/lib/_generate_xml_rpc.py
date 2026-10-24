@@ -237,7 +237,7 @@ def read_array_body(
 {I}try:
 {II}raise_if_non_whitespace_text(data_element, '<value> elements')
 
-{II}result = []  # type: List[Any]
+{II}result: List[Any] = []
 
 {II}while True:
 {III}# NOTE (mristin):
@@ -327,7 +327,7 @@ def read_struct_body(
 
 {I}raise_if_non_whitespace_text(element, '<member> elements')
 
-{I}result = {{}}  # type: Dict[str, Any]
+{I}result: Dict[str, Any] = {{}}
 
 {I}while True:
 {II}next_event_element = next(iterator, None)

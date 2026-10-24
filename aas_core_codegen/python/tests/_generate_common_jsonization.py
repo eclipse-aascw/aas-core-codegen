@@ -87,10 +87,6 @@ def generate(
         python_common.WARNING,
         Stripped(
             """\
-# pylint: disable=missing-docstring"""
-        ),
-        Stripped(
-            """\
 import collections.abc
 import json
 import pathlib

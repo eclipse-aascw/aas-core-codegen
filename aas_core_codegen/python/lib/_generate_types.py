@@ -387,15 +387,12 @@ def _generate_enum(
         else:
             writer.write(
                 f"""\
-{I}# pylint: disable=missing-class-docstring
 {I}pass
 """
             )
     else:
         if docstring is not None:
             writer.write(textwrap.indent(docstring, I))
-        else:
-            writer.write(f"{I}# pylint: disable=missing-class-docstring")
 
         for literal in enum.literals:
             writer.write("\n\n")
@@ -1005,11 +1002,6 @@ def {method_name}(
         writer.write("\n")
         writer.write(textwrap.indent(docstring, I))
 
-    # NOTE (mristin):
-    # The transpiled code is not idiomatic Python, so we do not lint it, as is
-    # the case with the verification functions.
-    writer.write(f"\n{I}# pylint: disable=all")
-
     if len(body) == 0:
         writer.write(f"\n{I}pass")
     else:
@@ -1291,8 +1283,6 @@ def transform_with_context(
 
     if docstring is not None:
         writer.write(textwrap.indent(docstring, I))
-    else:
-        writer.write(f"{I}# pylint: disable=missing-class-docstring")
 
     if len(blocks) == 0:
         # NOTE (mristin):
@@ -2001,13 +1991,13 @@ def generate(
         for node in parse_tree.over_nodes(body_node)
     )
 
+    maybe_import_enum = "\nimport enum" if len(symbol_table.enumerations) > 0 else ""
     maybe_import_sys = "\nimport sys" if len(final_annotations) > 0 else ""
 
     import_blocks: List[Stripped] = [
         Stripped(
             f"""\
-import abc
-import enum{maybe_import_sys}
+import abc{maybe_import_enum}{maybe_import_sys}
 from typing import (
 {typing_imports_joined}
 )"""
@@ -2108,10 +2098,6 @@ class Class(abc.ABC):
 {II}:return: transformed self
 {II}\"\"\"
 {II}raise NotImplementedError"""
-            ),
-            Stripped(
-                """\
-# pylint: disable=redefined-builtin"""
             ),
         ]
     )

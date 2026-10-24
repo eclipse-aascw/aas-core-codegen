@@ -5,9 +5,6 @@
 # Do NOT edit or append.
 
 
-# pylint: disable=missing-docstring
-
-
 import collections.abc
 import json
 import pathlib

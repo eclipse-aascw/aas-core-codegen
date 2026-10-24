@@ -100,11 +100,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Kind(enum.Enum):
-    # pylint: disable=missing-class-docstring
+
 
     ALPHA = 'alpha'
 
@@ -114,7 +111,7 @@ class Kind(enum.Enum):
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     texts: List[str]
 
@@ -131,7 +128,6 @@ class Something(Class):
 
     def unique_kinds(self) -> Set['Kind']:
         """Return a local set from a method."""
-        # pylint: disable=all
         result: Set['Kind'] = set()
         for kind in self.kinds:
             result.add(kind)

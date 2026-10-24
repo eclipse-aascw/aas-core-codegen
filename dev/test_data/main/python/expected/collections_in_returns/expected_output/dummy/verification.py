@@ -66,7 +66,6 @@ def unique_texts_of(
     texts: Sequence[str]
 ) -> Set[str]:
     """Return a local set of strings."""
-    # pylint: disable=all
     result: Set[str] = set()
     for text in texts:
         result.add(text)
@@ -77,7 +76,6 @@ def unique_kinds_of(
     kinds: Sequence[our_types.Kind]
 ) -> Set[our_types.Kind]:
     """Return a local set of enumeration literals."""
-    # pylint: disable=all
     result: Set[our_types.Kind] = set()
     for kind in kinds:
         result.add(kind)
@@ -90,7 +88,6 @@ def optional_unique_texts_of(
     """
     Return either ``None`` or the result of a call as an optional set.
     """
-    # pylint: disable=all
     if texts is None:
         return None
     return unique_texts_of(texts)
@@ -100,7 +97,6 @@ def copy_of_texts(
     texts: Sequence[str]
 ) -> List[str]:
     """Return a copy of a list."""
-    # pylint: disable=all
     return list(texts)
 
 
@@ -110,7 +106,6 @@ def unique_texts_and_duplicates_of(
     """
     Return a tuple literal of a local set and an integer, possibly a literal.
     """
-    # pylint: disable=all
     seen: Set[str] = set()
     duplicates: int = 0
     for text in texts:
@@ -128,7 +123,6 @@ def copy_and_unique_texts_of(
     """
     Return a tuple literal of a copied list and the result of a call.
     """
-    # pylint: disable=all
     return (list(texts), unique_texts_of(texts))
 
 
@@ -141,7 +135,6 @@ def unique_texts_twice_of(
     C++ moves a local set into a returned tuple literal, but must not move a set
     which occurs twice, as the second item would be moved-from and empty.
     """
-    # pylint: disable=all
     seen: Set[str] = set()
     for text in texts:
         seen.add(text)
@@ -152,7 +145,6 @@ def texts_are_unique(
     texts: Sequence[str]
 ) -> bool:
     """Check the items of a returned tuple holding a set."""
-    # pylint: disable=all
     unique_and_duplicates = unique_texts_and_duplicates_of(texts)
     return (
         (
@@ -165,7 +157,6 @@ def copied_texts_are_unique(
     texts: Sequence[str]
 ) -> bool:
     """Check a returned copy of a list against a returned set."""
-    # pylint: disable=all
     copy_and_unique = copy_and_unique_texts_of(texts)
     return len(copy_and_unique[0]) == len(copy_and_unique[1])
 
@@ -176,7 +167,6 @@ def optional_texts_are_unique(
     """
     Assign a returned optional set to a local variable, and check it.
     """
-    # pylint: disable=all
     if texts is None:
         return True
     unique = optional_unique_texts_of(texts)
@@ -191,7 +181,6 @@ def no_kind_is_gamma(
     kinds: Sequence[our_types.Kind]
 ) -> bool:
     """Loop over a returned set."""
-    # pylint: disable=all
     for kind in unique_kinds_of(kinds):
         if kind == our_types.Kind.GAMMA:
             return False

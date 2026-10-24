@@ -67,7 +67,6 @@ def specifies_the_type(
     mapping: our_types.JsonObject
 ) -> bool:
     """Check that the :paramref:`mapping` specifies the type."""
-    # pylint: disable=all
     return 'type' in mapping
 
 
@@ -81,7 +80,6 @@ def is_acceptable(
     checked about it here. This function exists so that an indexing into
     a JSON-able object or array has somewhere to be handed over to.
     """
-    # pylint: disable=all
     return True
 
 

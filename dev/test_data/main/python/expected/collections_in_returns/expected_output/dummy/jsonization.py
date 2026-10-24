@@ -151,7 +151,7 @@ class Path:
 
     def __init__(self) -> None:
         """Initialize as an empty path."""
-        self._segments = []  # type: List[Segment]
+        self._segments: List[Segment] = []
 
     @property
     def segments(self) -> Sequence[Segment]:
@@ -166,7 +166,7 @@ class Path:
         if len(self._segments) == 0:
             return ""
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
 
         iterator = iter(self._segments)
         first = next(iterator)
@@ -319,7 +319,7 @@ def _list_from_jsonable(
             f"Expected something array-like, but got: {type(jsonable)}"
         )
 
-    result = []  # type: List[_ValueT]
+    result: List[_ValueT] = []
     for i, jsonable_item in enumerate(array_like):
         try:
             item = parse_item(jsonable_item)
@@ -354,7 +354,7 @@ def _set_from_jsonable(
             f"Expected something array-like, but got: {type(jsonable)}"
         )
 
-    result = set()  # type: Set[_ValueT]
+    result: Set[_ValueT] = set()
     for i, jsonable_item in enumerate(array_like):
         try:
             item = parse_item(jsonable_item)
@@ -589,7 +589,7 @@ class SerializationException(Exception):
     ) -> None:
         """Initialize with the given :paramref:`cause` and an empty path."""
         self.cause = cause
-        self._segments = []  # type: List[str]
+        self._segments: List[str] = []
 
     @property
     def path(self) -> str:
@@ -638,7 +638,7 @@ def _list_of__kind_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -660,7 +660,7 @@ def _list_of__set_of__str_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(

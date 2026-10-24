@@ -67,7 +67,6 @@ def names_with(
     names: Sequence[str]
 ) -> List[str]:
     """Give :paramref:`name` followed by :paramref:`names`."""
-    # pylint: disable=all
     result = [name]
     for other in names:
         result.append(other)
@@ -80,7 +79,6 @@ def initials_of(
     """
     Give the first characters of :paramref:`names` in the same order.
     """
-    # pylint: disable=all
     initials: List[str] = []
     for name in names:
         initials.append(name[:1])
@@ -91,7 +89,6 @@ def initials_are_unique(
     names: Sequence[str]
 ) -> bool:
     """Check that :paramref:`names` start with unique characters."""
-    # pylint: disable=all
     initials: List[str] = []
     for name in names:
         initial = name[:1]
@@ -106,7 +103,6 @@ def is_in_names(
     names: Sequence[str]
 ) -> bool:
     """Check whether :paramref:`text` is in :paramref:`names`."""
-    # pylint: disable=all
     return text in names
 
 
@@ -114,7 +110,6 @@ def contains_space(
     name: str
 ) -> bool:
     """Check whether :paramref:`name` contains a space."""
-    # pylint: disable=all
     return ' ' in name
 
 

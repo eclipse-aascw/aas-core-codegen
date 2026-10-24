@@ -69,7 +69,6 @@ def flags_are_ordered(
     """
     Check all the ordering comparisons of booleans, where ``False < True``.
     """
-    # pylint: disable=all
     return (
         (
             (
@@ -89,7 +88,6 @@ def count_is_in_range(
     count: int
 ) -> bool:
     """Check the ordering comparisons of integers."""
-    # pylint: disable=all
     return (
         (
             0 <= count
@@ -103,7 +101,6 @@ def ratio_is_in_range(
     ratio: float
 ) -> bool:
     """Check the ordering comparisons of floats."""
-    # pylint: disable=all
     return (
         (
             0.0 <= ratio
@@ -118,7 +115,6 @@ def text_fits_into_count(
     count: int
 ) -> bool:
     """Check the ordering comparisons of lengths with integers."""
-    # pylint: disable=all
     return (
         (
             len(text) <= count

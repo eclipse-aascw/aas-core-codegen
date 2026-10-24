@@ -278,7 +278,7 @@ def lang_strings_have_unique_languages(
     Check that :paramref:`lang_strings` are specified each for a unique
     language.
     """
-    language_set = set()  # type: Set[str]
+    language_set: Set[str] = set()
     for lang_string in lang_strings:
         if lang_string.language in language_set:
             return False
@@ -294,7 +294,7 @@ def qualifier_types_are_unique(qualifiers: Iterable[our_types.Qualifier]) -> boo
     :py:attr:`.types.Qualifier.type`'s
     in the :paramref:`qualifiers`.
     """
-    type_set = set()  # type: Set[str]
+    type_set: Set[str] = set()
     for qualifier in qualifiers:
         if qualifier.type in type_set:
             return False
@@ -1429,7 +1429,6 @@ def is_model_reference_to(
     """
     Check that the target of the model reference matches the :paramref:`expected_type`.
     """
-    # pylint: disable=all
     return (
         (
             reference.type == our_types.ReferenceTypes.MODEL_REFERENCE
@@ -1444,7 +1443,6 @@ def is_model_reference_to_referable(
     """
     Check that the target of the reference matches a :py:attr:`.constants.AAS_REFERABLES`.
     """
-    # pylint: disable=all
     return (
         (
             reference.type == our_types.ReferenceTypes.MODEL_REFERENCE
@@ -1458,7 +1456,7 @@ def id_shorts_are_unique(referables: Iterable[our_types.Referable]) -> bool:
     Check that all :py:attr:`.types.Referable.id_short` are unique
     among :paramref:`referables`.
     """
-    id_short_set = set()  # type: Set[str]
+    id_short_set: Set[str] = set()
     for referable in referables:
         if referable.id_short in id_short_set:
             return False
@@ -1509,7 +1507,7 @@ def extension_names_are_unique(extensions: Iterable[our_types.Extension]) -> boo
     Check that all :py:attr:`.types.Extension.name` are unique
     among :paramref:`extensions`.
     """
-    name_set = set()  # type: Set[str]
+    name_set: Set[str] = set()
     for extension in extensions:
         if extension.name in name_set:
             return False
@@ -1526,7 +1524,7 @@ def submodel_elements_have_identical_semantic_ids(
     Check that all :paramref:`elements` have the identical
     :py:attr:`.types.HasSemantics.semantic_id`.
     """
-    that_semantic_id = None  # type: Optional[our_types.Reference]
+    that_semantic_id: Optional[our_types.Reference] = None
 
     for element in elements:
         if element.semantic_id is None:

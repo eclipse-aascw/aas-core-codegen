@@ -34,10 +34,6 @@ Test jointly :py:method:`{qualified_module_name}.types.Class.descend` and
         ),
         python_common.WARNING,
         Stripped(
-            """\
-# pylint: disable=missing-docstring"""
-        ),
-        Stripped(
             f"""\
 from typing import (
 {I}List,
@@ -61,7 +57,7 @@ class _TracingVisitor(our_types.PassThroughVisitor):
 
 {I}def __init__(self) -> None:
 {II}"""Initialize with an empty log."""
-{II}self._log = []  # type: List[str]
+{II}self._log: List[str] = []
 
 {I}@property
 {I}def log(self) -> Sequence[str]:

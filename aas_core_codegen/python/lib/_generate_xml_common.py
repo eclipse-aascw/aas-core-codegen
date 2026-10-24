@@ -370,7 +370,7 @@ class Path:
 
 {I}def __init__(self) -> None:
 {II}\"\"\"Initialize as an empty path.\"\"\"
-{II}self._segments = []  # type: List[Segment]
+{II}self._segments: List[Segment] = []
 
 {I}@property
 {I}def segments(self) -> Sequence[Segment]:
@@ -421,7 +421,7 @@ class SerializationException(Exception):
 {I}) -> None:
 {II}\"\"\"Initialize with the given :paramref:`cause` and an empty path.\"\"\"
 {II}self.cause = cause
-{II}self._segments = []  # type: List[str]
+{II}self._segments: List[str] = []
 
 {I}@property
 {I}def path(self) -> str:

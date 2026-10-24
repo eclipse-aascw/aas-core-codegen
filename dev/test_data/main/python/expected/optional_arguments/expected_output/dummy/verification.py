@@ -66,7 +66,6 @@ def text_is_short(
     text: Optional[str]
 ) -> bool:
     """Check the optional string argument."""
-    # pylint: disable=all
     return (
         (
             (text is None)
@@ -78,7 +77,6 @@ def text_is_not_banned(
     text: Optional[str]
 ) -> bool:
     """Check the optional string argument compared for equality."""
-    # pylint: disable=all
     return (
         (
             (text is None)
@@ -92,7 +90,6 @@ def forwards_text(
     """
     Check the optional argument passed on to another verification function.
     """
-    # pylint: disable=all
     return text_is_not_banned(text)
 
 
@@ -100,7 +97,6 @@ def number_is_small(
     number: Optional[int]
 ) -> bool:
     """Check the optional integer argument."""
-    # pylint: disable=all
     return (
         (
             (number is None)
@@ -112,7 +108,6 @@ def item_has_name(
     item: Optional[our_types.Item]
 ) -> bool:
     """Check the optional instance argument."""
-    # pylint: disable=all
     return (
         (
             (item is None)
@@ -124,7 +119,6 @@ def texts_are_few(
     texts: Optional[Sequence[str]]
 ) -> bool:
     """Check the optional list argument."""
-    # pylint: disable=all
     return (
         (
             (texts is None)
@@ -136,7 +130,6 @@ def kind_is_not_gamma(
     kind: Optional[our_types.Kind]
 ) -> bool:
     """Check the optional enumeration argument."""
-    # pylint: disable=all
     return (
         (
             (kind is None)
@@ -148,7 +141,6 @@ def note_is_short(
     item: our_types.Item
 ) -> bool:
     """Check the local variable holding an optional property."""
-    # pylint: disable=all
     note = item.note
     return (
         (

@@ -32,10 +32,6 @@ def generate(qualified_module_name: python_common.QualifiedModuleName) -> str:
         python_common.WARNING,
         Stripped(
             """\
-# pylint: disable=missing-docstring"""
-        ),
-        Stripped(
-            """\
 import unittest"""
         ),
         Stripped(

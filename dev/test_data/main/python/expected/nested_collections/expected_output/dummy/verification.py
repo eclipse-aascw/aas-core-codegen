@@ -67,7 +67,6 @@ def grid_is_rectangular(
     grid: Sequence[Sequence[int]]
 ) -> bool:
     """Check that all the rows of :paramref:`grid` are equally long."""
-    # pylint: disable=all
     if len(grid) < 1:
         return True
     first_row: Final[Sequence[int]] = grid[0]
@@ -81,7 +80,6 @@ def colors_are_disjoint(
     sets_of_colors: Sequence[AbstractSet[our_types.Color]]
 ) -> bool:
     """Check that no color appears in more than one set."""
-    # pylint: disable=all
     seen: Set[our_types.Color] = set()
     for colors in sets_of_colors:
         for color in colors:
@@ -98,7 +96,6 @@ def some_label_is_known(
     """
     Check that :paramref:`label` is in some set of the nested pairs.
     """
-    # pylint: disable=all
     return (
         any(
             any(
@@ -115,7 +112,6 @@ def reset_corner(
     """
     Reset the first cell of the first row of :paramref:`grid`, if any.
     """
-    # pylint: disable=all
     if (
         (
             len(grid) > 0

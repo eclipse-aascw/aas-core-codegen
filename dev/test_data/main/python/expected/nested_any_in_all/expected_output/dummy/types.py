@@ -3,7 +3,6 @@
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -84,11 +83,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class LangString(Class):
-    # pylint: disable=missing-class-docstring
+
 
     language: str
 
@@ -168,7 +164,7 @@ class LangString(Class):
 
 
 class LangStringSet(Class):
-    # pylint: disable=missing-class-docstring
+
 
     lang_strings: List['LangString']
 
@@ -236,12 +232,12 @@ class LangStringSet(Class):
 
 
 class Content(Class):
-    # pylint: disable=missing-class-docstring
+
     pass
 
 
 class IecContent(Content):
-    # pylint: disable=missing-class-docstring
+
 
     definition: Optional[List['LangString']]
 
@@ -317,7 +313,7 @@ class IecContent(Content):
 
 
 class OtherContent(Content):
-    # pylint: disable=missing-class-docstring
+
 
     def descend_once(self) -> Iterator[Class]:
         """
@@ -384,7 +380,7 @@ class OtherContent(Content):
 
 
 class Specification(Class):
-    # pylint: disable=missing-class-docstring
+
 
     content: 'Content'
 
@@ -455,7 +451,7 @@ class Specification(Class):
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     default_language: str
 

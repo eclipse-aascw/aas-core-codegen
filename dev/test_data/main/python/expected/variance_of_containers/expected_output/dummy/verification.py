@@ -71,7 +71,6 @@ def names_are_unique(
     The :paramref:`items` are a generic sequence, so the sequences of
     the descendants of :py:class:`.types.Item` can be passed without a copy.
     """
-    # pylint: disable=all
     name_set: Set[str] = set()
     for item in items:
         if item.name in name_set:
@@ -84,7 +83,6 @@ def names_are_non_empty(
     items: Sequence[our_types.Item]
 ) -> bool:
     """Iterate over a generic sequence in a generator."""
-    # pylint: disable=all
     return (
         all(
             len(item.name) > 0
@@ -96,7 +94,6 @@ def some_special_item_has_level(
     items: Sequence[our_types.Item]
 ) -> bool:
     """Narrow the items of a generic sequence in a generator."""
-    # pylint: disable=all
     return (
         any(
             (
@@ -111,7 +108,6 @@ def first_is_special(
     items: Sequence[our_types.Item]
 ) -> bool:
     """Index a generic sequence, and narrow the item."""
-    # pylint: disable=all
     if len(items) == 0:
         return False
     first = items[0]
@@ -130,7 +126,6 @@ def nicknames_are_unique(
     a local variable takes an optional property of an item of a generic sequence,
     and the loop continues if it is None.
     """
-    # pylint: disable=all
     nickname_set: Set[str] = set()
     for item in items:
         nickname = item.nickname
@@ -151,7 +146,6 @@ def levels_of_special_items_are_positive(
     The loop variable is of the type parameter in Go, so the down-cast needs to
     go through ``any(...)``, and of the template parameter in C++.
     """
-    # pylint: disable=all
     for item in items:
         if isinstance(item, our_types.SpecialItem):
             if item.level <= 0:
@@ -170,7 +164,6 @@ def last_is_special(
     it without ``any(...)``, and C++ binds the item to a constant reference to
     the shared pointer of the parent class.
     """
-    # pylint: disable=all
     if len(items) == 0:
         return False
     last: Final[our_types.Item] = items[len(items) - 1]
@@ -193,7 +186,6 @@ def names_are_disjoint(
     generators iterate over two different generic sequences, so their variables
     are of two different type parameters.
     """
-    # pylint: disable=all
     return (
         all(
             all(
@@ -220,7 +212,6 @@ def aliased_names_are_unique(
     and Java infer its type with ``var``. The ``alias_of_alias`` aliases an alias,
     and the ``optional_alias`` aliases an optional generic sequence.
     """
-    # pylint: disable=all
     alias: Final[Sequence[our_types.Item]] = items
     alias_of_alias: Final[Sequence[our_types.Item]] = alias
     optional_alias: Final[Optional[Sequence[our_types.Item]]] = optional_items
@@ -258,7 +249,6 @@ def contains_some_item(
     and C++ converts the member to the shared pointer of :py:class:`.types.Item` so that
     the raw pointers are comparable for any template parameter.
     """
-    # pylint: disable=all
     return some_item in items
 
 
@@ -271,7 +261,6 @@ def items_overlap(
 
     The member and the items are of two different type parameters.
     """
-    # pylint: disable=all
     return (
         any(
             other_item in items
@@ -289,7 +278,6 @@ def contains_special_item(
     The :py:class:`.types.SpecialItem` has no descendants, so the :paramref:`items` are not
     a generic sequence, but Go still compares the instances as ``any``'s.
     """
-    # pylint: disable=all
     return special_item in items
 
 
@@ -304,7 +292,6 @@ def container_names_are_unique(
     ``Final[...]``. Both hold the sequences of :py:class:`.types.SomeItem`, and are passed
     on to the generic sequences of :py:class:`.types.Item`, required as well as optional.
     """
-    # pylint: disable=all
     some_items = container.some_items
     all_some_items: Final[Sequence[our_types.SomeItem]] = container.some_items
     return (
@@ -319,7 +306,6 @@ def optional_names_are_unique(
     items: Optional[Sequence[our_types.Item]]
 ) -> bool:
     """Pass an optional generic sequence on to a generic sequence."""
-    # pylint: disable=all
     return (
         (
             (items is None)
@@ -339,7 +325,6 @@ def some_names_are_unique(
     as an optional sequence and, once narrowed, as a required sequence of the parent
     class of the parent class.
     """
-    # pylint: disable=all
     return (
         (
             names_are_unique(some_items)
@@ -364,7 +349,6 @@ def levels_are_positive(
     The :py:class:`.types.SpecialItem` has no descendants, so the :paramref:`items` are not
     a generic sequence.
     """
-    # pylint: disable=all
     return (
         all(
             item.level > 0
