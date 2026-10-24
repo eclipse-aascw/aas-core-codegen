@@ -346,10 +346,9 @@ def _float_from_jsonable(
     try:
         value = float(jsonable)
     except OverflowError:
-        # pylint: disable=raise-missing-from
         raise DeserializationException(
             f"Expected a float, but got an integer too large for it: {jsonable}"
-        )
+        ) from None
 
     # NOTE (mristin):
     # JSON knows neither an infinity nor a not-a-number, so a conformant parser
@@ -602,7 +601,7 @@ def _something_to_jsonable(
     that: our_types.Something
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['someBool'] = that.some_bool
     except SerializationException as exception:

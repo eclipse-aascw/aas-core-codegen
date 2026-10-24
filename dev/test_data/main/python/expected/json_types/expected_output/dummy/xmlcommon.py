@@ -58,26 +58,26 @@ class Element(Protocol):
     @property
     def attrib(self) -> Optional[Mapping[str, str]]:
         """Attributes of the element"""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @property
     def text(self) -> Optional[str]:
         """Text content of the element"""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @property
     def tail(self) -> Optional[str]:
         """Tail text of the element"""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @property
     def tag(self) -> str:
         """Tag of the element; with a namespace provided as a ``{...}`` prefix"""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def clear(self) -> None:
         """Behave like :py:meth:`xml.etree.ElementTree.Element.clear`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class HasIterparse(Protocol):
@@ -597,13 +597,11 @@ def read_str_from_element_text(
         text = end_element.text
 
     raise_if_has_tail_or_attrib(element)
-    result = (
+    return (
         text
         if text is not None
         else ""
     )
-
-    return result
 
 
 #: Match a run of the whitespace characters which XSD knows

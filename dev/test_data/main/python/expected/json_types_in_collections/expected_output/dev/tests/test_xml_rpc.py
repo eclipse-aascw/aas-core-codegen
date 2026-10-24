@@ -253,8 +253,10 @@ class TestWriting(unittest.TestCase):
             ),
             (
                 {'k': 0.0},
-                '<struct><member><name>k</name>'
-                '<value><double>0.0</double></value></member></struct>'
+                (
+                    '<struct><member><name>k</name>'
+                    '<value><double>0.0</double></value></member></struct>'
+                )
             ),
         ]  # type: List[Tuple[our_types.JsonValue, str]]
 
@@ -316,7 +318,7 @@ class TestWriting(unittest.TestCase):
             our_xmlcommon.SerializationException
         ) as context:
             our_xmlrpc.write_struct_body(
-                cast(Mapping[str, Any], {1: 'no string key'}), writer
+                cast('Mapping[str, Any]', {1: 'no string key'}), writer
             )
 
         self.assertEqual('', context.exception.path)

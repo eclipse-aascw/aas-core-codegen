@@ -298,7 +298,7 @@ def _dispatch_from_jsonable(
     """
     mapping = _as_mapping(jsonable)
 
-    model_type = mapping.get("modelType", None)
+    model_type = mapping.get("modelType")
     if model_type is None:
         raise DeserializationException(
             "Expected the property modelType, but found none"
@@ -315,7 +315,7 @@ def _dispatch_from_jsonable(
         exception.path._prepend(PropertySegment(mapping, "modelType"))
         raise exception
 
-    parse = dispatch.get(model_type, None)
+    parse = dispatch.get(model_type)
     if parse is None:
         raise DeserializationException(
             f"Unexpected model type for {name}: {model_type}"
@@ -548,7 +548,7 @@ def _box_to_jsonable(
     that: our_types.Box
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['label'] = that.label
     except SerializationException as exception:

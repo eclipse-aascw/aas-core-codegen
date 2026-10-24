@@ -294,7 +294,7 @@ To fail fast, run the fast checks first, which prepare the projects exactly like
 * ``dev/live_tests/fast_check_csharp.py`` -- C# (``dotnet build``)
 * ``dev/live_tests/fast_check_golang.py`` -- Go (``go test -exec true``, which compiles the tests without running them)
 * ``dev/live_tests/fast_check_java.py`` -- Java (``javac`` directly, bypassing Maven)
-* ``dev/live_tests/fast_check_python.py`` -- Python (``mypy`` and ``pylint``)
+* ``dev/live_tests/fast_check_python.py`` -- Python (``mypy`` and ``ruff``)
 * ``dev/live_tests/fast_check_typescript.py`` -- TypeScript (``tsc``, ``prettier`` and ``eslint``)
 
 The fast checks and the live test of the same language can share ``--output_dir``, so that the live test re-uses the prepared projects, installed dependencies and incremental builds.
@@ -347,7 +347,7 @@ Each script requires the corresponding language toolchain to be installed and av
 
 *Python*
     Python 3.9 or later (the same interpreter that runs the script).
-    The script creates a dedicated virtual environment inside the temporary project directory and installs ``mypy`` and ``pylint`` to type-check and lint the generated code before running the tests.
+    The script creates a dedicated virtual environment inside the temporary project directory and installs ``mypy`` and ``ruff`` to type-check and lint the generated code before running the tests.
 
 *TypeScript*
     ``node`` and ``npm``.

@@ -284,7 +284,7 @@ def abstract_item_from_file(
         Instance of :py:class:`.types.AbstractItem` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -463,7 +463,7 @@ def some_item_from_file(
         Instance of :py:class:`.types.SomeItem` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -642,7 +642,7 @@ def another_item_from_file(
         Instance of :py:class:`.types.AnotherItem` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -821,7 +821,7 @@ def something_from_file(
         Instance of :py:class:`.types.Something` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -996,7 +996,7 @@ def from_file(
     :return:
         Instance read from the file at :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1146,7 +1146,7 @@ def _read_dispatched(
     """
     tag_wo_ns = parse_element_tag(element)
 
-    read_as_sequence = dispatch.get(tag_wo_ns, None)
+    read_as_sequence = dispatch.get(tag_wo_ns)
     if read_as_sequence is None:
         raise DeserializationException(
             f"Expected the element tag to be a valid model type "
@@ -1190,7 +1190,7 @@ def _read_properties(
 
     raise_if_has_tail_or_attrib(element)
 
-    values = dict()  # type: Dict[str, Any]
+    values = {}  # type: Dict[str, Any]
 
     while True:
         # NOTE (mristin):
@@ -1227,7 +1227,7 @@ def _read_properties(
                     f"Property {tag_wo_ns!r} occurred more than once"
                 )
 
-            reader = readers.get(tag_wo_ns, None)
+            reader = readers.get(tag_wo_ns)
             if reader is None:
                 raise DeserializationException(
                     f"Expected an element representing a property, "
@@ -1448,7 +1448,7 @@ def _read_instance_from_iterparse(
         return read_as_element(next_element, iterator)
     except DeserializationException as exception:
         exception.path._prepend(ElementSegment(next_element))
-        raise exception
+        raise
 
 
 #: Match the lexical space of ``xs:long``.

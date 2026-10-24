@@ -340,7 +340,7 @@ def _json_value_from_jsonable(
         return jsonable
 
     if isinstance(jsonable, (dict, collections.abc.Mapping)):
-        mapping = dict()  # type: Dict[str, Any]
+        mapping = {}  # type: Dict[str, Any]
         for key, jsonable_value in jsonable.items():
             if not isinstance(key, str):
                 raise DeserializationException(
@@ -610,7 +610,7 @@ def _json_value_to_jsonable(
         return value
 
     if isinstance(value, (dict, collections.abc.Mapping)):
-        mapping = dict()  # type: Dict[str, Any]
+        mapping = {}  # type: Dict[str, Any]
         for key, item_value in value.items():
             if not isinstance(key, str):
                 raise SerializationException(
@@ -649,7 +649,7 @@ def _something_to_jsonable(
     that: our_types.Something
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
-    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable: MutableMapping[str, MutableJsonable] = {}
     try:
         jsonable['value'] = _json_value_to_jsonable(
             that.value

@@ -95,8 +95,7 @@ def assert_tracing_logs_from_descend_and_visitor_are_the_same(
 {I}test_case.assertGreater(len(log_from_visitor), 0)
 {I}test_case.assertEqual(tests.common.trace(that), log_from_visitor[0])
 
-{I}# noinspection PyTypeChecker
-{I}test_case.assertListEqual(log_from_descend, log_from_visitor[1:])  # type: ignore'''
+{I}test_case.assertSequenceEqual(log_from_descend, log_from_visitor[1:])'''
         ),
         Stripped(
             f"""\

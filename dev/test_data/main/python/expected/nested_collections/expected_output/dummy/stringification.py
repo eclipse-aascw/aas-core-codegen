@@ -41,7 +41,7 @@ def color_from_str(
         the corresponding literal of :py:class:`dummy.Color`
         or ``None``, if :paramref:`text` invalid.
     """
-    return _COLOR_FROM_STR.get(text, None)
+    return _COLOR_FROM_STR.get(text)
 
 
 _RANK_OF_COLOR: Final[Mapping[our_types.Color, int]] = {

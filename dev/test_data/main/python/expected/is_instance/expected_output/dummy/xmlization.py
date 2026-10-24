@@ -283,7 +283,7 @@ def element_from_file(
         Instance of :py:class:`.types.Element` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -462,7 +462,7 @@ def leaf_from_file(
         Instance of :py:class:`.types.Leaf` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -641,7 +641,7 @@ def container_from_file(
         Instance of :py:class:`.types.Container` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -820,7 +820,7 @@ def ordered_container_from_file(
         Instance of :py:class:`.types.OrderedContainer` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -999,7 +999,7 @@ def unordered_container_from_file(
         Instance of :py:class:`.types.UnorderedContainer` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1178,7 +1178,7 @@ def global_attribute_from_file(
         Instance of :py:class:`.types.GlobalAttribute` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1357,7 +1357,7 @@ def local_attribute_from_file(
         Instance of :py:class:`.types.LocalAttribute` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1536,7 +1536,7 @@ def attribute_operand_from_file(
         Instance of :py:class:`.types.AttributeOperand` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1715,7 +1715,7 @@ def string_literal_from_file(
         Instance of :py:class:`.types.StringLiteral` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1894,7 +1894,7 @@ def number_literal_from_file(
         Instance of :py:class:`.types.NumberLiteral` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2073,7 +2073,7 @@ def something_from_file(
         Instance of :py:class:`.types.Something` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2248,7 +2248,7 @@ def from_file(
     :return:
         Instance read from the file at :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2452,7 +2452,7 @@ def _read_dispatched(
     """
     tag_wo_ns = parse_element_tag(element)
 
-    read_as_sequence = dispatch.get(tag_wo_ns, None)
+    read_as_sequence = dispatch.get(tag_wo_ns)
     if read_as_sequence is None:
         raise DeserializationException(
             f"Expected the element tag to be a valid model type "
@@ -2496,7 +2496,7 @@ def _read_properties(
 
     raise_if_has_tail_or_attrib(element)
 
-    values = dict()  # type: Dict[str, Any]
+    values = {}  # type: Dict[str, Any]
 
     while True:
         # NOTE (mristin):
@@ -2533,7 +2533,7 @@ def _read_properties(
                     f"Property {tag_wo_ns!r} occurred more than once"
                 )
 
-            reader = readers.get(tag_wo_ns, None)
+            reader = readers.get(tag_wo_ns)
             if reader is None:
                 raise DeserializationException(
                     f"Expected an element representing a property, "
@@ -2637,7 +2637,7 @@ def _read_instance_from_iterparse(
         return read_as_element(next_element, iterator)
     except DeserializationException as exception:
         exception.path._prepend(ElementSegment(next_element))
-        raise exception
+        raise
 
 
 _XS_BOOLEAN_LITERAL_SET = {
@@ -2732,7 +2732,7 @@ def _read_float_from_element_text(
         )
     )
 
-    value = _TEXT_TO_XS_DOUBLE_LITERALS.get(text, None)
+    value = _TEXT_TO_XS_DOUBLE_LITERALS.get(text)
     if value is None:
         # NOTE (mristin):
         # ``float`` is far too permissive to be handed the text directly: it
@@ -2750,11 +2750,10 @@ def _read_float_from_element_text(
         try:
             value = float(text)
         except ValueError:
-            # pylint: disable=raise-missing-from
             raise DeserializationException(
                 f"Expected a floating-point number, "
                 f"but got an element with text: {text!r}"
-            )
+            ) from None
 
     return value
 

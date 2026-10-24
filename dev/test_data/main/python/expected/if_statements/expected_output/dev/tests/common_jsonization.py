@@ -57,7 +57,7 @@ def check_equal(
     :yield: differences
     """
     if isinstance(expected, (bool, int, float, str, bytes)):
-        if type(expected) != type(got):  # pylint: disable=unidiomatic-typecheck
+        if type(expected) is not type(got):
             yield Difference(f"Expected {type(expected)}, but got {type(got)}")
 
         if expected != got:
@@ -81,13 +81,13 @@ def check_equal(
         if not isinstance(got, collections.abc.Mapping):
             yield Difference(f"Expected a mapping, but got {type(got)}")
         else:
-            if not all(isinstance(key, str) for key in expected.keys()):
+            if not all(isinstance(key, str) for key in expected):
                 raise ValueError(
                     f"Expected all keys in the expected JSON-able value to be strings, "
                     f"but got: {list(expected.keys())}"
                 )
 
-            if not all(isinstance(key, str) for key in got.keys()):
+            if not all(isinstance(key, str) for key in got):
                 yield Difference(
                     f"Expected all keys in a mapping to be strings, "
                     f"but got: {list(got.keys())}"
@@ -166,7 +166,7 @@ def must_load(
     except Exception as exception:
         raise RuntimeError(f"Failed to read from {path}") from exception
 
-    from_jsonable = _MODEL_TYPE_TO_FROM_JSONABLE.get(model_type, None)
+    from_jsonable = _MODEL_TYPE_TO_FROM_JSONABLE.get(model_type)
     if from_jsonable is None:
         raise AssertionError(
             "The model type is not mapped to "
@@ -181,7 +181,7 @@ def must_load(
             f"with model type {model_type} from {path}"
         ) from exception
 
-    cls = _MODEL_TYPE_TO_CLASS.get(model_type, None)
+    cls = _MODEL_TYPE_TO_CLASS.get(model_type)
     if cls is None:
         raise AssertionError(
             "The model type is not mapped to the class: {model_type!r}"

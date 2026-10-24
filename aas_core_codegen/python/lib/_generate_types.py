@@ -1340,7 +1340,7 @@ def {visit_name}(
 {II}that: {cls_name}
 ) -> None:
 {I}\"\"\"Visit :paramref:`that`.\"\"\"
-{I}raise NotImplementedError()"""
+{I}raise NotImplementedError"""
             )
         )
 
@@ -1394,7 +1394,7 @@ def {visit_with_context_name}(
 {II}context: ContextT
 ) -> None:
 {I}\"\"\"Visit :paramref:`that` in :paramref:`context`.\"\"\"
-{I}raise NotImplementedError()"""
+{I}raise NotImplementedError"""
             )
         )
 
@@ -1557,7 +1557,7 @@ def {transform_name}(
 {II}that: {cls_name}
 ) -> T:
 {I}\"\"\"Transform :paramref:`that`.\"\"\"
-{I}raise NotImplementedError()"""
+{I}raise NotImplementedError"""
             )
         )
 
@@ -1612,7 +1612,7 @@ def {transform_with_context_name}(
 {II}context: ContextT
 ) -> T:
 {I}\"\"\"Transform :paramref:`that` in :paramref:`context`.\"\"\"
-{I}raise NotImplementedError()"""
+{I}raise NotImplementedError"""
             )
         )
 
@@ -2051,12 +2051,12 @@ class Class(abc.ABC):
 {I}@abc.abstractmethod
 {I}def descend_once(self) -> Iterator["Class"]:
 {II}\"\"\"Iterate over all the instances referenced from this one.\"\"\"
-{II}raise NotImplementedError()
+{II}raise NotImplementedError
 
 {I}@abc.abstractmethod
 {I}def descend(self) -> Iterator["Class"]:
 {II}\"\"\"Iterate recursively over all the instances referenced from this one.\"\"\"
-{II}raise NotImplementedError()
+{II}raise NotImplementedError
 
 {I}@abc.abstractmethod
 {I}def accept(
@@ -2068,7 +2068,7 @@ class Class(abc.ABC):
 
 {II}:param visitor: to be dispatched
 {II}\"\"\"
-{II}raise NotImplementedError()
+{II}raise NotImplementedError
 
 {I}@abc.abstractmethod
 {I}def accept_with_context(
@@ -2082,7 +2082,7 @@ class Class(abc.ABC):
 {II}:param visitor: to be dispatched
 {II}:param context: of the visitation
 {II}\"\"\"
-{II}raise NotImplementedError()
+{II}raise NotImplementedError
 
 {I}@abc.abstractmethod
 {I}def transform(
@@ -2095,7 +2095,7 @@ class Class(abc.ABC):
 {II}:param transformer: to be dispatched
 {II}:return: transformed self
 {II}\"\"\"
-{II}raise NotImplementedError()
+{II}raise NotImplementedError
 
 {I}@abc.abstractmethod
 {I}def transform_with_context(
@@ -2109,7 +2109,7 @@ class Class(abc.ABC):
 {II}:param transformer: to be dispatched
 {II}:return: transformed self
 {II}\"\"\"
-{II}raise NotImplementedError()"""
+{II}raise NotImplementedError"""
             ),
             Stripped(
                 """\

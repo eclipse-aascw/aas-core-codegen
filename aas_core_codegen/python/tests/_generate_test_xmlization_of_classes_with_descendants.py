@@ -79,10 +79,10 @@ def {test_method_name}(self) -> None:
 
 {III}# region From file
 {III}with tempfile.TemporaryDirectory() as tmp_dir:
-{IIII}path = pathlib.Path(tmp_dir) / "something.xml"
-{IIII}path.write_text(text, encoding="utf-8")
+{IIII}tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+{IIII}tmp_path.write_text(text, encoding="utf-8")
 
-{IIII}got_from_file = our_xmlization.{from_file}(path)
+{IIII}got_from_file = our_xmlization.{from_file}(tmp_path)
 {III}et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
 {III}tests.common_xmlization.remove_redundant_whitespace(et_from_file)
 {III}tests.common_xmlization.assert_elements_equal(et_concrete, et_from_file)

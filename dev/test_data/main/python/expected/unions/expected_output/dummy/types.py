@@ -24,12 +24,12 @@ class Class(abc.ABC):
     @abc.abstractmethod
     def descend_once(self) -> Iterator["Class"]:
         """Iterate over all the instances referenced from this one."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def descend(self) -> Iterator["Class"]:
         """Iterate recursively over all the instances referenced from this one."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def accept(
@@ -41,7 +41,7 @@ class Class(abc.ABC):
 
         :param visitor: to be dispatched
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def accept_with_context(
@@ -55,7 +55,7 @@ class Class(abc.ABC):
         :param visitor: to be dispatched
         :param context: of the visitation
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform(
@@ -68,7 +68,7 @@ class Class(abc.ABC):
         :param transformer: to be dispatched
         :return: transformed self
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_with_context(
@@ -82,7 +82,7 @@ class Class(abc.ABC):
         :param transformer: to be dispatched
         :return: transformed self
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 # pylint: disable=redefined-builtin
@@ -1076,7 +1076,7 @@ class AbstractVisitor:
             that: StructuralFirst
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_structural_second(
@@ -1084,7 +1084,7 @@ class AbstractVisitor:
             that: StructuralSecond
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_mixed_abstract_descendant_one(
@@ -1092,7 +1092,7 @@ class AbstractVisitor:
             that: MixedAbstractDescendantOne
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_mixed_abstract_descendant_two(
@@ -1100,7 +1100,7 @@ class AbstractVisitor:
             that: MixedAbstractDescendantTwo
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_mixed_concrete_with_descendants(
@@ -1108,7 +1108,7 @@ class AbstractVisitor:
             that: MixedConcreteWithDescendants
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_mixed_concrete_with_descendants_child(
@@ -1116,7 +1116,7 @@ class AbstractVisitor:
             that: MixedConcreteWithDescendantsChild
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_mixed_concrete_leaf(
@@ -1124,7 +1124,7 @@ class AbstractVisitor:
             that: MixedConcreteLeaf
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_model_typed_first(
@@ -1132,7 +1132,7 @@ class AbstractVisitor:
             that: ModelTypedFirst
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_model_typed_second(
@@ -1140,7 +1140,7 @@ class AbstractVisitor:
             that: ModelTypedSecond
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_something(
@@ -1148,7 +1148,7 @@ class AbstractVisitor:
             that: Something
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class AbstractVisitorWithContext(Generic[ContextT]):
@@ -1168,7 +1168,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_structural_second_with_context(
@@ -1177,7 +1177,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_mixed_abstract_descendant_one_with_context(
@@ -1186,7 +1186,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_mixed_abstract_descendant_two_with_context(
@@ -1195,7 +1195,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_mixed_concrete_with_descendants_with_context(
@@ -1204,7 +1204,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_mixed_concrete_with_descendants_child_with_context(
@@ -1213,7 +1213,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_mixed_concrete_leaf_with_context(
@@ -1222,7 +1222,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_model_typed_first_with_context(
@@ -1231,7 +1231,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_model_typed_second_with_context(
@@ -1240,7 +1240,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_something_with_context(
@@ -1249,7 +1249,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class PassThroughVisitor(AbstractVisitor):
@@ -1470,7 +1470,7 @@ class AbstractTransformer(Generic[T]):
             that: StructuralFirst
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_structural_second(
@@ -1478,7 +1478,7 @@ class AbstractTransformer(Generic[T]):
             that: StructuralSecond
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_mixed_abstract_descendant_one(
@@ -1486,7 +1486,7 @@ class AbstractTransformer(Generic[T]):
             that: MixedAbstractDescendantOne
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_mixed_abstract_descendant_two(
@@ -1494,7 +1494,7 @@ class AbstractTransformer(Generic[T]):
             that: MixedAbstractDescendantTwo
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_mixed_concrete_with_descendants(
@@ -1502,7 +1502,7 @@ class AbstractTransformer(Generic[T]):
             that: MixedConcreteWithDescendants
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_mixed_concrete_with_descendants_child(
@@ -1510,7 +1510,7 @@ class AbstractTransformer(Generic[T]):
             that: MixedConcreteWithDescendantsChild
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_mixed_concrete_leaf(
@@ -1518,7 +1518,7 @@ class AbstractTransformer(Generic[T]):
             that: MixedConcreteLeaf
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_model_typed_first(
@@ -1526,7 +1526,7 @@ class AbstractTransformer(Generic[T]):
             that: ModelTypedFirst
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_model_typed_second(
@@ -1534,7 +1534,7 @@ class AbstractTransformer(Generic[T]):
             that: ModelTypedSecond
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_something(
@@ -1542,7 +1542,7 @@ class AbstractTransformer(Generic[T]):
             that: Something
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class AbstractTransformerWithContext(
@@ -1564,7 +1564,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_structural_second_with_context(
@@ -1573,7 +1573,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_mixed_abstract_descendant_one_with_context(
@@ -1582,7 +1582,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_mixed_abstract_descendant_two_with_context(
@@ -1591,7 +1591,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_mixed_concrete_with_descendants_with_context(
@@ -1600,7 +1600,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_mixed_concrete_with_descendants_child_with_context(
@@ -1609,7 +1609,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_mixed_concrete_leaf_with_context(
@@ -1618,7 +1618,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_model_typed_first_with_context(
@@ -1627,7 +1627,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_model_typed_second_with_context(
@@ -1636,7 +1636,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_something_with_context(
@@ -1645,7 +1645,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class TransformerWithDefault(AbstractTransformer[T]):

@@ -51,26 +51,26 @@ class Element(Protocol):
 {I}@property
 {I}def attrib(self) -> Optional[Mapping[str, str]]:
 {II}\"\"\"Attributes of the element\"\"\"
-{II}raise NotImplementedError()
+{II}raise NotImplementedError
 
 {I}@property
 {I}def text(self) -> Optional[str]:
 {II}\"\"\"Text content of the element\"\"\"
-{II}raise NotImplementedError()
+{II}raise NotImplementedError
 
 {I}@property
 {I}def tail(self) -> Optional[str]:
 {II}\"\"\"Tail text of the element\"\"\"
-{II}raise NotImplementedError()
+{II}raise NotImplementedError
 
 {I}@property
 {I}def tag(self) -> str:
 {II}\"\"\"Tag of the element; with a namespace provided as a ``{{...}}`` prefix\"\"\"
-{II}raise NotImplementedError()
+{II}raise NotImplementedError
 
 {I}def clear(self) -> None:
 {II}\"\"\"Behave like :py:meth:`xml.etree.ElementTree.Element.clear`.\"\"\"
-{II}raise NotImplementedError()"""
+{II}raise NotImplementedError"""
     )
 
 
@@ -708,13 +708,11 @@ def read_str_from_element_text(
 {II}text = end_element.text
 
 {I}raise_if_has_tail_or_attrib(element)
-{I}result = (
+{I}return (
 {II}text
 {II}if text is not None
 {II}else ""
-{I})
-
-{I}return result'''
+{I})'''
         ),
         Stripped(
             """\

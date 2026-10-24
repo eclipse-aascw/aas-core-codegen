@@ -114,12 +114,12 @@ class Class(abc.ABC):
     @abc.abstractmethod
     def descend_once(self) -> Iterator["Class"]:
         """Iterate over all the instances referenced from this one."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def descend(self) -> Iterator["Class"]:
         """Iterate recursively over all the instances referenced from this one."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def accept(
@@ -131,7 +131,7 @@ class Class(abc.ABC):
 
         :param visitor: to be dispatched
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def accept_with_context(
@@ -145,7 +145,7 @@ class Class(abc.ABC):
         :param visitor: to be dispatched
         :param context: of the visitation
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform(
@@ -158,7 +158,7 @@ class Class(abc.ABC):
         :param transformer: to be dispatched
         :return: transformed self
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_with_context(
@@ -172,7 +172,7 @@ class Class(abc.ABC):
         :param transformer: to be dispatched
         :return: transformed self
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 # pylint: disable=redefined-builtin
@@ -6490,7 +6490,7 @@ class AbstractVisitor:
             that: Extension
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_administrative_information(
@@ -6498,7 +6498,7 @@ class AbstractVisitor:
             that: AdministrativeInformation
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_qualifier(
@@ -6506,7 +6506,7 @@ class AbstractVisitor:
             that: Qualifier
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_asset_administration_shell(
@@ -6514,7 +6514,7 @@ class AbstractVisitor:
             that: AssetAdministrationShell
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_asset_information(
@@ -6522,7 +6522,7 @@ class AbstractVisitor:
             that: AssetInformation
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_resource(
@@ -6530,7 +6530,7 @@ class AbstractVisitor:
             that: Resource
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_specific_asset_id(
@@ -6538,7 +6538,7 @@ class AbstractVisitor:
             that: SpecificAssetID
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_submodel(
@@ -6546,7 +6546,7 @@ class AbstractVisitor:
             that: Submodel
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_relationship_element(
@@ -6554,7 +6554,7 @@ class AbstractVisitor:
             that: RelationshipElement
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_submodel_element_list(
@@ -6562,7 +6562,7 @@ class AbstractVisitor:
             that: SubmodelElementList
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_submodel_element_collection(
@@ -6570,7 +6570,7 @@ class AbstractVisitor:
             that: SubmodelElementCollection
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_property(
@@ -6578,7 +6578,7 @@ class AbstractVisitor:
             that: Property
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_multi_language_property(
@@ -6586,7 +6586,7 @@ class AbstractVisitor:
             that: MultiLanguageProperty
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_range(
@@ -6594,7 +6594,7 @@ class AbstractVisitor:
             that: Range
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_reference_element(
@@ -6602,7 +6602,7 @@ class AbstractVisitor:
             that: ReferenceElement
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_blob(
@@ -6610,7 +6610,7 @@ class AbstractVisitor:
             that: Blob
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_file(
@@ -6618,7 +6618,7 @@ class AbstractVisitor:
             that: File
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_annotated_relationship_element(
@@ -6626,7 +6626,7 @@ class AbstractVisitor:
             that: AnnotatedRelationshipElement
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_entity(
@@ -6634,7 +6634,7 @@ class AbstractVisitor:
             that: Entity
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_event_payload(
@@ -6642,7 +6642,7 @@ class AbstractVisitor:
             that: EventPayload
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_basic_event_element(
@@ -6650,7 +6650,7 @@ class AbstractVisitor:
             that: BasicEventElement
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_operation(
@@ -6658,7 +6658,7 @@ class AbstractVisitor:
             that: Operation
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_operation_variable(
@@ -6666,7 +6666,7 @@ class AbstractVisitor:
             that: OperationVariable
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_capability(
@@ -6674,7 +6674,7 @@ class AbstractVisitor:
             that: Capability
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_concept_description(
@@ -6682,7 +6682,7 @@ class AbstractVisitor:
             that: ConceptDescription
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_reference(
@@ -6690,7 +6690,7 @@ class AbstractVisitor:
             that: Reference
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_key(
@@ -6698,7 +6698,7 @@ class AbstractVisitor:
             that: Key
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_lang_string_name_type(
@@ -6706,7 +6706,7 @@ class AbstractVisitor:
             that: LangStringNameType
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_lang_string_text_type(
@@ -6714,7 +6714,7 @@ class AbstractVisitor:
             that: LangStringTextType
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_environment(
@@ -6722,7 +6722,7 @@ class AbstractVisitor:
             that: Environment
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_embedded_data_specification(
@@ -6730,7 +6730,7 @@ class AbstractVisitor:
             that: EmbeddedDataSpecification
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_level_type(
@@ -6738,7 +6738,7 @@ class AbstractVisitor:
             that: LevelType
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_value_reference_pair(
@@ -6746,7 +6746,7 @@ class AbstractVisitor:
             that: ValueReferencePair
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_value_list(
@@ -6754,7 +6754,7 @@ class AbstractVisitor:
             that: ValueList
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_lang_string_preferred_name_type_iec_61360(
@@ -6762,7 +6762,7 @@ class AbstractVisitor:
             that: LangStringPreferredNameTypeIEC61360
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_lang_string_short_name_type_iec_61360(
@@ -6770,7 +6770,7 @@ class AbstractVisitor:
             that: LangStringShortNameTypeIEC61360
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_lang_string_definition_type_iec_61360(
@@ -6778,7 +6778,7 @@ class AbstractVisitor:
             that: LangStringDefinitionTypeIEC61360
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_data_specification_iec_61360(
@@ -6786,7 +6786,7 @@ class AbstractVisitor:
             that: DataSpecificationIEC61360
     ) -> None:
         """Visit :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class AbstractVisitorWithContext(Generic[ContextT]):
@@ -6806,7 +6806,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_administrative_information_with_context(
@@ -6815,7 +6815,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_qualifier_with_context(
@@ -6824,7 +6824,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_asset_administration_shell_with_context(
@@ -6833,7 +6833,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_asset_information_with_context(
@@ -6842,7 +6842,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_resource_with_context(
@@ -6851,7 +6851,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_specific_asset_id_with_context(
@@ -6860,7 +6860,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_submodel_with_context(
@@ -6869,7 +6869,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_relationship_element_with_context(
@@ -6878,7 +6878,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_submodel_element_list_with_context(
@@ -6887,7 +6887,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_submodel_element_collection_with_context(
@@ -6896,7 +6896,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_property_with_context(
@@ -6905,7 +6905,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_multi_language_property_with_context(
@@ -6914,7 +6914,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_range_with_context(
@@ -6923,7 +6923,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_reference_element_with_context(
@@ -6932,7 +6932,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_blob_with_context(
@@ -6941,7 +6941,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_file_with_context(
@@ -6950,7 +6950,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_annotated_relationship_element_with_context(
@@ -6959,7 +6959,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_entity_with_context(
@@ -6968,7 +6968,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_event_payload_with_context(
@@ -6977,7 +6977,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_basic_event_element_with_context(
@@ -6986,7 +6986,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_operation_with_context(
@@ -6995,7 +6995,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_operation_variable_with_context(
@@ -7004,7 +7004,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_capability_with_context(
@@ -7013,7 +7013,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_concept_description_with_context(
@@ -7022,7 +7022,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_reference_with_context(
@@ -7031,7 +7031,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_key_with_context(
@@ -7040,7 +7040,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_lang_string_name_type_with_context(
@@ -7049,7 +7049,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_lang_string_text_type_with_context(
@@ -7058,7 +7058,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_environment_with_context(
@@ -7067,7 +7067,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_embedded_data_specification_with_context(
@@ -7076,7 +7076,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_level_type_with_context(
@@ -7085,7 +7085,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_value_reference_pair_with_context(
@@ -7094,7 +7094,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_value_list_with_context(
@@ -7103,7 +7103,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_lang_string_preferred_name_type_iec_61360_with_context(
@@ -7112,7 +7112,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_lang_string_short_name_type_iec_61360_with_context(
@@ -7121,7 +7121,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_lang_string_definition_type_iec_61360_with_context(
@@ -7130,7 +7130,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_data_specification_iec_61360_with_context(
@@ -7139,7 +7139,7 @@ class AbstractVisitorWithContext(Generic[ContextT]):
             context: ContextT
     ) -> None:
         """Visit :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class PassThroughVisitor(AbstractVisitor):
@@ -7836,7 +7836,7 @@ class AbstractTransformer(Generic[T]):
             that: Extension
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_administrative_information(
@@ -7844,7 +7844,7 @@ class AbstractTransformer(Generic[T]):
             that: AdministrativeInformation
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_qualifier(
@@ -7852,7 +7852,7 @@ class AbstractTransformer(Generic[T]):
             that: Qualifier
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_asset_administration_shell(
@@ -7860,7 +7860,7 @@ class AbstractTransformer(Generic[T]):
             that: AssetAdministrationShell
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_asset_information(
@@ -7868,7 +7868,7 @@ class AbstractTransformer(Generic[T]):
             that: AssetInformation
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_resource(
@@ -7876,7 +7876,7 @@ class AbstractTransformer(Generic[T]):
             that: Resource
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_specific_asset_id(
@@ -7884,7 +7884,7 @@ class AbstractTransformer(Generic[T]):
             that: SpecificAssetID
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_submodel(
@@ -7892,7 +7892,7 @@ class AbstractTransformer(Generic[T]):
             that: Submodel
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_relationship_element(
@@ -7900,7 +7900,7 @@ class AbstractTransformer(Generic[T]):
             that: RelationshipElement
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_submodel_element_list(
@@ -7908,7 +7908,7 @@ class AbstractTransformer(Generic[T]):
             that: SubmodelElementList
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_submodel_element_collection(
@@ -7916,7 +7916,7 @@ class AbstractTransformer(Generic[T]):
             that: SubmodelElementCollection
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_property(
@@ -7924,7 +7924,7 @@ class AbstractTransformer(Generic[T]):
             that: Property
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_multi_language_property(
@@ -7932,7 +7932,7 @@ class AbstractTransformer(Generic[T]):
             that: MultiLanguageProperty
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_range(
@@ -7940,7 +7940,7 @@ class AbstractTransformer(Generic[T]):
             that: Range
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_reference_element(
@@ -7948,7 +7948,7 @@ class AbstractTransformer(Generic[T]):
             that: ReferenceElement
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_blob(
@@ -7956,7 +7956,7 @@ class AbstractTransformer(Generic[T]):
             that: Blob
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_file(
@@ -7964,7 +7964,7 @@ class AbstractTransformer(Generic[T]):
             that: File
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_annotated_relationship_element(
@@ -7972,7 +7972,7 @@ class AbstractTransformer(Generic[T]):
             that: AnnotatedRelationshipElement
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_entity(
@@ -7980,7 +7980,7 @@ class AbstractTransformer(Generic[T]):
             that: Entity
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_event_payload(
@@ -7988,7 +7988,7 @@ class AbstractTransformer(Generic[T]):
             that: EventPayload
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_basic_event_element(
@@ -7996,7 +7996,7 @@ class AbstractTransformer(Generic[T]):
             that: BasicEventElement
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_operation(
@@ -8004,7 +8004,7 @@ class AbstractTransformer(Generic[T]):
             that: Operation
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_operation_variable(
@@ -8012,7 +8012,7 @@ class AbstractTransformer(Generic[T]):
             that: OperationVariable
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_capability(
@@ -8020,7 +8020,7 @@ class AbstractTransformer(Generic[T]):
             that: Capability
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_concept_description(
@@ -8028,7 +8028,7 @@ class AbstractTransformer(Generic[T]):
             that: ConceptDescription
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_reference(
@@ -8036,7 +8036,7 @@ class AbstractTransformer(Generic[T]):
             that: Reference
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_key(
@@ -8044,7 +8044,7 @@ class AbstractTransformer(Generic[T]):
             that: Key
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_lang_string_name_type(
@@ -8052,7 +8052,7 @@ class AbstractTransformer(Generic[T]):
             that: LangStringNameType
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_lang_string_text_type(
@@ -8060,7 +8060,7 @@ class AbstractTransformer(Generic[T]):
             that: LangStringTextType
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_environment(
@@ -8068,7 +8068,7 @@ class AbstractTransformer(Generic[T]):
             that: Environment
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_embedded_data_specification(
@@ -8076,7 +8076,7 @@ class AbstractTransformer(Generic[T]):
             that: EmbeddedDataSpecification
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_level_type(
@@ -8084,7 +8084,7 @@ class AbstractTransformer(Generic[T]):
             that: LevelType
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_value_reference_pair(
@@ -8092,7 +8092,7 @@ class AbstractTransformer(Generic[T]):
             that: ValueReferencePair
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_value_list(
@@ -8100,7 +8100,7 @@ class AbstractTransformer(Generic[T]):
             that: ValueList
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_lang_string_preferred_name_type_iec_61360(
@@ -8108,7 +8108,7 @@ class AbstractTransformer(Generic[T]):
             that: LangStringPreferredNameTypeIEC61360
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_lang_string_short_name_type_iec_61360(
@@ -8116,7 +8116,7 @@ class AbstractTransformer(Generic[T]):
             that: LangStringShortNameTypeIEC61360
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_lang_string_definition_type_iec_61360(
@@ -8124,7 +8124,7 @@ class AbstractTransformer(Generic[T]):
             that: LangStringDefinitionTypeIEC61360
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_data_specification_iec_61360(
@@ -8132,7 +8132,7 @@ class AbstractTransformer(Generic[T]):
             that: DataSpecificationIEC61360
     ) -> T:
         """Transform :paramref:`that`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class AbstractTransformerWithContext(
@@ -8154,7 +8154,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_administrative_information_with_context(
@@ -8163,7 +8163,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_qualifier_with_context(
@@ -8172,7 +8172,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_asset_administration_shell_with_context(
@@ -8181,7 +8181,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_asset_information_with_context(
@@ -8190,7 +8190,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_resource_with_context(
@@ -8199,7 +8199,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_specific_asset_id_with_context(
@@ -8208,7 +8208,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_submodel_with_context(
@@ -8217,7 +8217,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_relationship_element_with_context(
@@ -8226,7 +8226,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_submodel_element_list_with_context(
@@ -8235,7 +8235,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_submodel_element_collection_with_context(
@@ -8244,7 +8244,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_property_with_context(
@@ -8253,7 +8253,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_multi_language_property_with_context(
@@ -8262,7 +8262,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_range_with_context(
@@ -8271,7 +8271,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_reference_element_with_context(
@@ -8280,7 +8280,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_blob_with_context(
@@ -8289,7 +8289,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_file_with_context(
@@ -8298,7 +8298,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_annotated_relationship_element_with_context(
@@ -8307,7 +8307,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_entity_with_context(
@@ -8316,7 +8316,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_event_payload_with_context(
@@ -8325,7 +8325,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_basic_event_element_with_context(
@@ -8334,7 +8334,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_operation_with_context(
@@ -8343,7 +8343,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_operation_variable_with_context(
@@ -8352,7 +8352,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_capability_with_context(
@@ -8361,7 +8361,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_concept_description_with_context(
@@ -8370,7 +8370,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_reference_with_context(
@@ -8379,7 +8379,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_key_with_context(
@@ -8388,7 +8388,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_lang_string_name_type_with_context(
@@ -8397,7 +8397,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_lang_string_text_type_with_context(
@@ -8406,7 +8406,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_environment_with_context(
@@ -8415,7 +8415,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_embedded_data_specification_with_context(
@@ -8424,7 +8424,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_level_type_with_context(
@@ -8433,7 +8433,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_value_reference_pair_with_context(
@@ -8442,7 +8442,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_value_list_with_context(
@@ -8451,7 +8451,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_lang_string_preferred_name_type_iec_61360_with_context(
@@ -8460,7 +8460,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_lang_string_short_name_type_iec_61360_with_context(
@@ -8469,7 +8469,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_lang_string_definition_type_iec_61360_with_context(
@@ -8478,7 +8478,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def transform_data_specification_iec_61360_with_context(
@@ -8487,7 +8487,7 @@ class AbstractTransformerWithContext(
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class TransformerWithDefault(AbstractTransformer[T]):

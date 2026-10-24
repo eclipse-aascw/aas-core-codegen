@@ -283,7 +283,7 @@ def structural_first_from_file(
         Instance of :py:class:`.types.StructuralFirst` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -462,7 +462,7 @@ def structural_second_from_file(
         Instance of :py:class:`.types.StructuralSecond` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -641,7 +641,7 @@ def mixed_abstract_member_from_file(
         Instance of :py:class:`.types.MixedAbstractMember` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -820,7 +820,7 @@ def mixed_abstract_descendant_one_from_file(
         Instance of :py:class:`.types.MixedAbstractDescendantOne` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -999,7 +999,7 @@ def mixed_abstract_descendant_two_from_file(
         Instance of :py:class:`.types.MixedAbstractDescendantTwo` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1178,7 +1178,7 @@ def mixed_concrete_with_descendants_from_file(
         Instance of :py:class:`.types.MixedConcreteWithDescendants` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1357,7 +1357,7 @@ def mixed_concrete_with_descendants_child_from_file(
         Instance of :py:class:`.types.MixedConcreteWithDescendantsChild` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1536,7 +1536,7 @@ def mixed_concrete_leaf_from_file(
         Instance of :py:class:`.types.MixedConcreteLeaf` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1715,7 +1715,7 @@ def model_typed_first_from_file(
         Instance of :py:class:`.types.ModelTypedFirst` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -1894,7 +1894,7 @@ def model_typed_second_from_file(
         Instance of :py:class:`.types.ModelTypedSecond` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2073,7 +2073,7 @@ def something_from_file(
         Instance of :py:class:`.types.Something` read from
         :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2248,7 +2248,7 @@ def from_file(
     :return:
         Instance read from the file at :paramref:`path`
     """
-    with open(os.fspath(path), "rt", encoding='utf-8') as fid:
+    with open(os.fspath(path), encoding='utf-8') as fid:
         iterator = has_iterparse.iterparse(
             fid,
             ['start', 'end']
@@ -2452,7 +2452,7 @@ def _read_dispatched(
     """
     tag_wo_ns = parse_element_tag(element)
 
-    read_as_sequence = dispatch.get(tag_wo_ns, None)
+    read_as_sequence = dispatch.get(tag_wo_ns)
     if read_as_sequence is None:
         raise DeserializationException(
             f"Expected the element tag to be a valid model type "
@@ -2496,7 +2496,7 @@ def _read_properties(
 
     raise_if_has_tail_or_attrib(element)
 
-    values = dict()  # type: Dict[str, Any]
+    values = {}  # type: Dict[str, Any]
 
     while True:
         # NOTE (mristin):
@@ -2533,7 +2533,7 @@ def _read_properties(
                     f"Property {tag_wo_ns!r} occurred more than once"
                 )
 
-            reader = readers.get(tag_wo_ns, None)
+            reader = readers.get(tag_wo_ns)
             if reader is None:
                 raise DeserializationException(
                     f"Expected an element representing a property, "
@@ -2678,7 +2678,7 @@ def _read_instance_from_iterparse(
         return read_as_element(next_element, iterator)
     except DeserializationException as exception:
         exception.path._prepend(ElementSegment(next_element))
-        raise exception
+        raise
 
 
 _TupleItem1T = TypeVar("_TupleItem1T")
