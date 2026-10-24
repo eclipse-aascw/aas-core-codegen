@@ -19,7 +19,7 @@ from aas_core_codegen.golang import common as golang_common
 # fmt: on
 def generate() -> str:
     """Generate the documentation for ourtesting package."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 // Package ourtesting provides the functions and data structures shared across
@@ -27,7 +27,7 @@ def generate() -> str:
 package ourtesting"""
         ),
         golang_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

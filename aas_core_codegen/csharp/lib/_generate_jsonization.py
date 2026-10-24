@@ -246,7 +246,7 @@ def _generate_as_tuple_helper(arity: int) -> Stripped:
         f"Deserializer<T{i}> deserializeItem{i}" for i in range(arity)
     )
 
-    item_blocks = []  # type: List[Stripped]
+    item_blocks: List[Stripped] = []
     for i in range(arity):
         item_blocks.append(
             Stripped(
@@ -549,7 +549,7 @@ def _generate_from_method_for_interface(
     """Generate the deserialization method for an interface."""
     name = csharp_naming.interface_name(interface.name)
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for implementer in interface.implementers:
         model_type = naming.json_model_type(implementer.name)
         implementer_name = csharp_naming.class_name(implementer.name)
@@ -617,7 +617,7 @@ def _generate_from_method_for_named_union(
     """Generate the deserialization method for a named union."""
     name = csharp_naming.class_name(named_union.name)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 Nodes.JsonObject? obj = node as Nodes.JsonObject;
@@ -628,13 +628,13 @@ if (obj == null)
 {I}return default!;
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # NOTE (mristin):
     # We dispatch on the implementers as only the concrete classes appear on
     # the wire, but wrap each instance in the most specific root of the union.
-    implementers_with_model_type = []  # type: List[intermediate.ConcreteClass]
-    implementers_without_model_type = []  # type: List[intermediate.ConcreteClass]
+    implementers_with_model_type: List[intermediate.ConcreteClass] = []
+    implementers_without_model_type: List[intermediate.ConcreteClass] = []
     for implementer in named_union.implementers:
         if implementer.serialization.with_model_type:
             implementers_with_model_type.append(implementer)
@@ -644,7 +644,7 @@ if (obj == null)
     # region Dispatch by model type
 
     if len(implementers_with_model_type) > 0:
-        case_blocks = []  # type: List[Stripped]
+        case_blocks: List[Stripped] = []
 
         for implementer in implementers_with_model_type:
             model_type = naming.json_model_type(implementer.name)
@@ -875,8 +875,8 @@ def _composed_types_in_initialization_order(
     :py:func:`aas_core_codegen.csharp.common.type_moniker`), so that two
     distinct types can never be conflated into one field.
     """
-    result = []  # type: List[intermediate.ContainerTypeAnnotation]
-    observed = set()  # type: Set[str]
+    result: List[intermediate.ContainerTypeAnnotation] = []
+    observed: Set[str] = set()
 
     def register(type_anno: intermediate.TypeAnnotationUnion) -> None:
         """Register what ``type_anno`` needs, its items first."""
@@ -966,11 +966,11 @@ def _generate_from_method_for_class(
     cls: intermediate.ConcreteClass,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the deserialization method for a concrete class."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     name = csharp_naming.class_name(cls.name)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 error = null;
@@ -983,7 +983,7 @@ if (obj == null)
 {I}return default!;
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # region Initialize argument variables to null
 
@@ -1013,7 +1013,7 @@ if (obj == null)
 
     # region Switch on property name
 
-    cases = []  # type: List[Stripped]
+    cases: List[Stripped] = []
     for arg in cls.constructor.arguments:
         json_name = cls.properties_by_name[arg.name].json_name
         assert not csharp_common.needs_escaping(json_name)
@@ -1111,7 +1111,7 @@ foreach (var keyValue in obj)
 
     # region Check required
 
-    required_checks = []  # type: List[Stripped]
+    required_checks: List[Stripped] = []
     for arg in cls.constructor.arguments:
         if isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation):
             continue
@@ -1157,8 +1157,8 @@ if (modelType == null)
 
     # fmt: off
     assert (
-            set(prop.name for prop in cls.properties)
-            == set(arg.name for arg in cls.constructor.arguments)
+            {prop.name for prop in cls.properties}
+            == {arg.name for arg in cls.constructor.arguments}
     ), (
         f"Expected the properties to coincide with constructor arguments, "
         f"but they do not for {cls.name!r}:"
@@ -1461,9 +1461,9 @@ def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the implementation of the deserialization."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = [_generate_describe_helper()]  # type: List[Stripped]
+    blocks: List[Stripped] = [_generate_describe_helper()]
 
     for primitive_type in intermediate.PrimitiveType:
         blocks.append(_generate_primitive_converter(primitive_type))
@@ -1632,7 +1632,7 @@ def _generate_deserialize(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the deserializer with a deserialization method for each class."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
             blocks.append(
@@ -1677,9 +1677,9 @@ def _generate_deserialize(
 """
     )
 
-    first_cls = (
+    first_cls: Optional[intermediate.ClassUnion] = (
         symbol_table.classes[0] if len(symbol_table.classes) > 0 else None
-    )  # type: Optional[intermediate.ClassUnion]
+    )
 
     if first_cls is not None:
         cls_name: str
@@ -1870,7 +1870,7 @@ def _generate_atomic_serializer_helpers(
     overload is not among them, as it is emitted unconditionally: a direct
     call site converting an integer property needs it as well.
     """
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
 
     for primitive_type, csharp_type, conversion_expr in (
         (intermediate.PrimitiveType.BOOL, "bool", "Nodes.JsonValue.Create(that)"),
@@ -1935,8 +1935,8 @@ def _property_serializer_type_annotations(
     of ``IClass`` be handed over where one of a more specific interface is
     expected.
     """
-    result = []  # type: List[intermediate.TypeAnnotationUnion]
-    observed = set()  # type: Set[Identifier]
+    result: List[intermediate.TypeAnnotationUnion] = []
+    observed: Set[Identifier] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -1964,7 +1964,7 @@ def _property_primitive_types(
     These need a ``ToJsonValue`` overload of their own, exactly as the items
     of a list or of a tuple do.
     """
-    result = set()  # type: Set[intermediate.PrimitiveType]
+    result: Set[intermediate.PrimitiveType] = set()
 
     for type_anno in type_annos:
         primitive_type = intermediate.try_primitive_type(type_anno)
@@ -1983,7 +1983,7 @@ def _composed_primitive_types(
     Only these need a ``ToJsonValue`` overload of their own -- see
     :py:func:`_generate_atomic_serializer_helpers`.
     """
-    result = set()  # type: Set[intermediate.PrimitiveType]
+    result: Set[intermediate.PrimitiveType] = set()
 
     def register(item_type_anno: intermediate.TypeAnnotationUnion) -> None:
         """Register the primitive type of ``item_type_anno``, if it has one."""
@@ -2476,9 +2476,9 @@ def _generate_transform_for_class(
     cls: intermediate.ConcreteClass,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transform method to a JSON object for the given concrete class."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = [Stripped("var result = new Nodes.JsonObject();")]  # type: List[Stripped]
+    blocks: List[Stripped] = [Stripped("var result = new Nodes.JsonObject();")]
 
     for prop in cls.properties:
         block, error = _generate_transform_property(prop=prop)
@@ -2697,9 +2697,9 @@ def _generate_transformer(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a transformer which transforms instances of the meta-model to JSON."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /// <summary>
@@ -2781,7 +2781,7 @@ private static Nodes.JsonValue ToJsonValue(double that)
 {I}return Nodes.JsonValue.Create(that);
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if len(symbol_table.named_unions) > 0:
         blocks.append(_generate_transform_iunion_helper())
@@ -2902,7 +2902,7 @@ def _generate_serialize(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the static serializer."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /// <summary>
@@ -2926,7 +2926,7 @@ public static Nodes.JsonObject ToJsonObject(Our.IClass that)
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for enum in symbol_table.enumerations:
         name = csharp_naming.enum_name(enum.name)
@@ -2962,9 +2962,9 @@ public static Nodes.JsonValue {name}ToJsonValue(Our.{name} that)
 """
     )
 
-    first_cls = (
+    first_cls: Optional[intermediate.ClassUnion] = (
         symbol_table.classes[0] if len(symbol_table.classes) > 0 else None
-    )  # type: Optional[intermediate.ClassUnion]
+    )
 
     if first_cls is not None:
         cls_name: str
@@ -3028,7 +3028,7 @@ def generate(
 
     The ``namespace`` defines the base C# namespace of the generated code.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     deserialize_impl_block, deserialize_impl_errors = _generate_deserialize_impl(
         symbol_table=symbol_table
@@ -3109,13 +3109,13 @@ internal class SerializationFailure : System.Exception
 }}"""
     )
 
-    jsonization_blocks = [
+    jsonization_blocks: List[Stripped] = [
         deserialize_impl_block,
         exception_block,
         deserialize_block,
         transformer_block,
         serialize_block,
-    ]  # type: List[Stripped]
+    ]
 
     jsonization_writer = io.StringIO()
     jsonization_writer.write(
@@ -3144,7 +3144,7 @@ namespace {namespace}
     jsonization_writer.write(f"\n{I}}}  // public static class Jsonization")
     jsonization_writer.write(f"\n}}  // namespace {namespace}")
 
-    using_directives = []  # type: List[Stripped]
+    using_directives: List[Stripped] = []
     using_directives.extend(
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )
@@ -3159,7 +3159,6 @@ using System.Collections.Generic;  // can't alias"""
         )
     )
 
-    # pylint: disable=line-too-long
     blocks = [
         csharp_common.WARNING,
         Stripped("\n".join(using_directives)),

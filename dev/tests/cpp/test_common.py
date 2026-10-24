@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import unittest
 
 from aas_core_codegen.cpp import common as cpp_common

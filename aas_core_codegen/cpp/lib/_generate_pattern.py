@@ -167,7 +167,7 @@ def _render_comment_re_node(re_node: parse_retree.Node) -> Stripped:
 
     text = "".join(parts)  # type: ignore
 
-    if text.endswith(" ") or text.endswith("\t") or text.endswith("\n"):
+    if text.endswith((" ", "\t", "\n")):
         return Stripped(f"/* {text} */")
 
     if not text.endswith("\\"):
@@ -208,7 +208,7 @@ program.emplace_back({maybe_label_comment}
             node_or_leaf.instruction,
             (intermediate_revm.InstructionSet, intermediate_revm.InstructionNotSet),
         ):
-            ranges = []  # type: List[Stripped]
+            ranges: List[Stripped] = []
             for rng in node_or_leaf.instruction.ranges:
                 first_literal = cpp_common.wchar_literal(rng.first)
                 last_literal = cpp_common.wchar_literal(rng.last)
@@ -458,7 +458,7 @@ def generate_implementation(
         cpp_common.generate_namespace_opening(namespace),
     ]
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for verification in symbol_table.verification_functions:
         if not isinstance(verification, intermediate.PatternVerification):

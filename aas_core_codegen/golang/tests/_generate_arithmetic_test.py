@@ -47,7 +47,7 @@ def _float64_literal(value: float) -> str:
 
 def _generate_test_floor_mod() -> Stripped:
     """Generate the table-driven test of the modulo."""
-    case_blocks = []  # type: List[str]
+    case_blocks: List[str] = []
     for case in tests_common.FLOOR_MOD_CASES:
         case_blocks.append(
             f"""\
@@ -88,7 +88,7 @@ func Test{function_name}(t *testing.T) {{
 
 def _generate_test_abs_int64() -> Stripped:
     """Generate the table-driven test of the absolute value of integers."""
-    case_blocks = []  # type: List[str]
+    case_blocks: List[str] = []
     for argument, expected in tests_common.ABS_INT_CASES:
         case_blocks.append(
             f"{{{_int64_literal(argument)}, {_int64_literal(expected)}}},"
@@ -127,7 +127,7 @@ func Test{function_name}(t *testing.T) {{
 
 def _generate_test_abs_float64() -> Stripped:
     """Generate the table-driven test of the absolute value of floating-point numbers."""
-    case_blocks = []  # type: List[str]
+    case_blocks: List[str] = []
     for argument, expected in tests_common.ABS_FLOAT_CASES:
         case_blocks.append(
             f"{{{_float64_literal(argument)}, {_float64_literal(expected)}}},"
@@ -179,7 +179,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     and make sure it matches the Python semantics, see
     :py:mod:`aas_core_codegen.tests_common`.
     """
-    test_blocks = []  # type: List[Stripped]
+    test_blocks: List[Stripped] = []
 
     if intermediate_uses.modulo(symbol_table):
         test_blocks.append(_generate_test_floor_mod())
@@ -188,7 +188,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
         test_blocks.append(_generate_test_abs_int64())
         test_blocks.append(_generate_test_abs_float64())
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     if golang_common.names_package(test_blocks, "math"):
         import_lines.append(f'{I}"math"')
 
@@ -200,7 +200,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     # NOTE (mristin):
     # We explain the semantics in a detached comment instead of the package
     # documentation to keep the package clause at the top as in the other tests.
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("package common_arithmetic_test"),
         golang_common.WARNING,
         Stripped(
@@ -223,7 +223,7 @@ import (
         ),
         *test_blocks,
         golang_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

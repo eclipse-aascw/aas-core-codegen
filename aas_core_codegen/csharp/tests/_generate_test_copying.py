@@ -20,7 +20,7 @@ from aas_core_codegen.intermediate import uses as intermediate_uses
 
 def _generate_shallow_equals(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the code for a static shallow ``Equals`` method."""
-    exprs = []  # type: List[str]
+    exprs: List[str] = []
     for prop in cls.properties:
         prop_name = csharp_naming.property_name(prop.name)
         exprs.append(f"that.{prop_name} == other.{prop_name}")
@@ -217,7 +217,7 @@ private bool {_check_container_name(type_anno)}(
 
 def _generate_transform_as_check(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the transform method checking the deep copy of ``cls``."""
-    exprs = []  # type: List[Stripped]
+    exprs: List[Stripped] = []
 
     for prop in cls.properties:
         prop_name = csharp_naming.property_name(prop.name)
@@ -347,7 +347,7 @@ def _generate_deep_copy_checker(
     the mutable objects with it, *i.e.*, no instance, list, set, byte array
     or JSON node.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 private static bool BytesEqualButDistinct(
@@ -362,7 +362,7 @@ private static bool BytesEqualButDistinct(
 {II}&& ((System.ReadOnlySpan<byte>)that).SequenceEqual(other));
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if intermediate_uses.json_types(symbol_table):
         blocks.append(
@@ -388,7 +388,7 @@ private static bool JsonNodesEqualButDistinct(
     if len(symbol_table.named_unions) > 0:
         blocks.append(_generate_union_transform_helper())
 
-    observed_monikers = set()  # type: Set[str]
+    observed_monikers: Set[str] = set()
     for concrete_cls in symbol_table.concrete_classes:
         for prop in concrete_cls.properties:
             for (
@@ -443,14 +443,14 @@ def generate(
 
     The ``namespace`` indicates the fully-qualified name of the base project.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_deep_copy_checker(symbol_table=symbol_table),
         Stripped(
             f"""\
 private static readonly DeepCopyChecker DeepCopyCheckerInstance = (
 {I}new DeepCopyChecker());"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         blocks.append(_generate_shallow_equals(cls=concrete_cls))
@@ -496,7 +496,7 @@ public void Test_{cls_name}_deep_copy()
             )
         )
 
-    using_directives = [
+    using_directives: List[Stripped] = [
         Stripped(f"using Our = {namespace};  // renamed"),
         Stripped(
             """\
@@ -504,7 +504,7 @@ public void Test_{cls_name}_deep_copy()
 using System;  // can't alias
 using System.Collections.Generic;  // can't alias"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if intermediate_uses.json_types(symbol_table):
         using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))

@@ -27,7 +27,7 @@ def generate(repo_url: Stripped) -> str:
     """Generate the constants shared across the unit tests."""
     environment_variable = golang_common.repo_url_to_environment_variable(repo_url)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 package ourtesting"""
@@ -82,7 +82,7 @@ func getTestDataDir() string {{
 var TestDataDir = getTestDataDir()"""
         ),
         golang_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

@@ -19,7 +19,7 @@ from aas_core_codegen.java import naming as java_naming
 @ensure(lambda result: result.endswith('"'))
 def string_literal(text: str) -> Stripped:
     """Generate a Java string literal from the ``text``."""
-    escaped = []  # type: List[str]
+    escaped: List[str] = []
 
     for character in text:
         if character == "\t":
@@ -189,7 +189,7 @@ def set_imports_if_necessary(
             uses_set = True
             uses_hash_set = True
 
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
     if uses_hash_set:
         result.append(Stripped("java.util.HashSet"))
 
@@ -489,6 +489,8 @@ PACKAGE_IDENTIFIER_RE = re.compile(r"[a-z_0-9]*(\.[a-z][a-z_0-9]*)*")
 
 class PackageIdentifier(str):
     """Capture a package identifier."""
+
+    __slots__ = ()
 
     @require(lambda identifier: PACKAGE_IDENTIFIER_RE.fullmatch(identifier))
     def __new__(cls, identifier: str) -> "PackageIdentifier":

@@ -56,16 +56,14 @@ def _generate_lexical_test_case(
     if cls is None:
         return None
 
-    prop_by_a_type = (
-        dict()
-    )  # type: Dict[intermediate.PrimitiveType, intermediate.Property]
+    prop_by_a_type: Dict[intermediate.PrimitiveType, intermediate.Property] = dict()
     for prop in cls.properties:
         assert isinstance(prop.type_annotation, intermediate.PrimitiveTypeAnnotation)
         prop_by_a_type.setdefault(prop.type_annotation.a_type, prop)
 
-    float_prop = prop_by_a_type.get(intermediate.PrimitiveType.FLOAT, None)
-    bool_prop = prop_by_a_type.get(intermediate.PrimitiveType.BOOL, None)
-    int_prop = prop_by_a_type.get(intermediate.PrimitiveType.INT, None)
+    float_prop = prop_by_a_type.get(intermediate.PrimitiveType.FLOAT)
+    bool_prop = prop_by_a_type.get(intermediate.PrimitiveType.BOOL)
+    int_prop = prop_by_a_type.get(intermediate.PrimitiveType.INT)
 
     if float_prop is None and bool_prop is None and int_prop is None:
         return None
@@ -73,7 +71,7 @@ def _generate_lexical_test_case(
     xml_class_name = naming.xml_class_name(cls.name)
     from_str = python_naming.function_name(Identifier(f"{cls.name}_from_str"))
 
-    cases = []  # type: List[Tuple[intermediate.Property, str, str]]
+    cases: List[Tuple[intermediate.Property, str, str]] = []
 
     if float_prop is not None:
         # NOTE (mristin):
@@ -92,7 +90,7 @@ def _generate_lexical_test_case(
             ]
         )
 
-    bytes_prop = prop_by_a_type.get(intermediate.PrimitiveType.BYTEARRAY, None)
+    bytes_prop = prop_by_a_type.get(intermediate.PrimitiveType.BYTEARRAY)
 
     if bytes_prop is not None:
         # NOTE (mristin):
@@ -123,7 +121,7 @@ def _generate_lexical_test_case(
             ]
         )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 def _read_with(self, xml_name: str, text: str) -> our_types.{python_naming.class_name(cls.name)}:
@@ -151,7 +149,7 @@ def _read_with(self, xml_name: str, text: str) -> our_types.{python_naming.class
 {II}original[:start] + text + original[end:]
 {I})"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for prop, text, expected in cases:
         prop_xml_name = naming.xml_property(prop.name)
@@ -222,7 +220,7 @@ class TestLexicalForms(unittest.TestCase):
 
 
 def _generate_test_case(symbol_table: intermediate.SymbolTable) -> Stripped:
-    test_methods = []  # type: List[Stripped]
+    test_methods: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         xml_class_name = naming.xml_class_name(cls.name)

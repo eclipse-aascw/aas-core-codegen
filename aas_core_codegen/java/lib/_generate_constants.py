@@ -218,7 +218,7 @@ def generate(
     """
     Generate code to define the constants of the meta-model.
     """
-    enum_imports = set()  # type: Set[Stripped]
+    enum_imports: Set[Stripped] = set()
 
     for constant in symbol_table.constants:
         if not isinstance(constant, intermediate.ConstantSetOfEnumerationLiterals):
@@ -232,9 +232,9 @@ def generate(
 
     enum_imports_block = Stripped("\n".join(sorted(enum_imports)))
 
-    constants_blocks = []  # type: List[Stripped]
+    constants_blocks: List[Stripped] = []
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for constant in symbol_table.constants:
         constants_block: Optional[Stripped]
@@ -281,7 +281,7 @@ public class Constants {
 
     constants_writer.write("\n}")
 
-    blocks = [
+    blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(
             f"""\
@@ -310,7 +310,7 @@ class _ImmutableCollector {{
 {constants_writer.getvalue()}"""
         ),
         java_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     out = io.StringIO()
     for i, constants_block in enumerate(blocks):

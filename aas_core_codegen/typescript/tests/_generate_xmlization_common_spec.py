@@ -24,7 +24,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to execute all common XMLization loader functions once."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -36,7 +36,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
             """\
 import * as TestCommonXmlization from "./commonXmlization";"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         load_maximal_name = typescript_naming.function_name(

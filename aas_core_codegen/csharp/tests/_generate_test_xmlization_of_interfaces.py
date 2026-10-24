@@ -30,7 +30,7 @@ def generate(
 
     The ``namespace`` indicates the fully-qualified name of the base project.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for cls in symbol_table.classes:
         if cls.interface is None or len(cls.interface.implementers) == 0:

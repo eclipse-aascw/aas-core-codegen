@@ -24,7 +24,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test the ``as*`` and ``is*`` functions."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -37,7 +37,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
 import * as OurTypes from "../src/types";
 import * as TestCommonJsonization from "./commonJsonization";"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_typescript = typescript_naming.class_name(concrete_cls.name)
@@ -50,13 +50,13 @@ import * as TestCommonJsonization from "./commonJsonization";"""
             Identifier(f"the_{concrete_cls.name}")
         )
 
-        body_blocks = [
+        body_blocks: List[Stripped] = [
             Stripped(
                 f"""\
 const {instance_var} =
 {I}TestCommonJsonization.{load_minimal_name}();"""
             )
-        ]  # type: List[Stripped]
+        ]
 
         for other_cls in symbol_table.classes:
             is_function_name = typescript_naming.function_name(

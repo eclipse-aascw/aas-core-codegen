@@ -107,6 +107,9 @@ class _LenConstraintOnMemberOrName:
         self.constraint = constraint
 
 
+_ConstraintUnion = Union[_MinLength, _MaxLength, _ExactLength]
+
+
 def _match_len_constraint_on_member_or_name(
     node: parse_tree.Node,
 ) -> Optional[_LenConstraintOnMemberOrName]:
@@ -120,7 +123,7 @@ def _match_len_constraint_on_member_or_name(
     if not isinstance(node, parse_tree.Comparison):
         return None
 
-    constraint = None  # type: Optional[_ConstraintUnion]
+    constraint: Optional[_ConstraintUnion] = None
 
     # region Match a comparison like ``len(self.something) < 42``
 
@@ -209,7 +212,7 @@ def min_with_none(*args: Optional[int]) -> Optional[int]:
     # NOTE (mristin):
     # There is no one-liner in Python for this.
     # See: https://stackoverflow.com/questions/2295461/list-minimum-in-python-with-none
-    minimum = None  # type: Optional[int]
+    minimum: Optional[int] = None
     for arg in args:
         if minimum is None:
             minimum = arg
@@ -232,7 +235,7 @@ def max_with_none(*args: Optional[int]) -> Optional[int]:
     # NOTE (mristin):
     # There is no one-liner in Python for this.
     # See: https://stackoverflow.com/questions/2295461/list-minimum-in-python-with-none
-    maximum = None  # type: Optional[int]
+    maximum: Optional[int] = None
     for arg in args:
         if maximum is None:
             maximum = arg
@@ -280,11 +283,11 @@ def _reduce_constraints(
 
     Return the reduced constraint, or a list of errors.
     """
-    min_len = None  # type: Optional[int]
-    max_len = None  # type: Optional[int]
-    exact_len = None  # type: Optional[int]
+    min_len: Optional[int] = None
+    max_len: Optional[int] = None
+    exact_len: Optional[int] = None
 
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
     for constraint in constraints:
         if isinstance(constraint, _MinLength):
@@ -350,7 +353,7 @@ def len_constraints_from_invariants(
     The constraints are not exhaustive. We only infer constraints based on invariants
     which involve constants. It might be that the actual invariants are tighter.
     """
-    constraint_map = dict()  # type: MutableMapping[Identifier, List[_ConstraintUnion]]
+    constraint_map: MutableMapping[Identifier, List[_ConstraintUnion]] = dict()
 
     # region Infer the constraints in the loose form from all the invariants
 
@@ -358,7 +361,7 @@ def len_constraints_from_invariants(
     # We iterate only once through the invariants instead of inferring the constraints
     # for each property individually to be able to keep linear time complexity.
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for invariant in cls.invariants:
         # NOTE (mristin):
@@ -369,7 +372,7 @@ def len_constraints_from_invariants(
             continue
 
         # noinspection PyUnusedLocal
-        len_constraint_on_prop = None  # type: Optional[_LenConstraintOnProperty]
+        len_constraint_on_prop: Optional[_LenConstraintOnProperty] = None
 
         # Match ``self.something is None or len(self.something) < X``
         conditional_on_prop = infer_for_schema_match.try_conditional_on_prop(
@@ -395,7 +398,7 @@ def len_constraints_from_invariants(
                 )
                 continue
 
-            constraints = constraint_map.get(len_constraint_on_prop.prop_name, None)
+            constraints = constraint_map.get(len_constraint_on_prop.prop_name)
             if constraints is None:
                 constraints = []
                 constraint_map[len_constraint_on_prop.prop_name] = constraints
@@ -409,7 +412,7 @@ def len_constraints_from_invariants(
 
     # region Compress the loose constraints
 
-    result = dict()  # type: MutableMapping[intermediate.Property, LenConstraint]
+    result: MutableMapping[intermediate.Property, LenConstraint] = dict()
 
     for prop_name, constraints in constraint_map.items():
         reduced_constraint, reduction_errors = _reduce_constraints(
@@ -469,9 +472,9 @@ def infer_len_constraint_of_self(
     """
     # region Infer the constraints in the loose form from all the invariants
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    constraints = []  # type: List[_ConstraintUnion]
+    constraints: List[_ConstraintUnion] = []
 
     for invariant in constrained_primitive.invariants:
         # NOTE (mristin):
@@ -523,5 +526,4 @@ def infer_len_constraint_of_self(
     return reduced_constraint, None
 
 
-_ConstraintUnion = Union[_MinLength, _MaxLength, _ExactLength]
 assert_union_of_descendants_exhaustive(union=_ConstraintUnion, base_class=_Constraint)

@@ -32,11 +32,11 @@ def _generate_model_type_from_string(
     # this part of the code base a lot, and have trouble keeping this function in sync
     # with :func:`_generate_enum_from_string`, please consider re-factoring.
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region From-string-map
 
-    items = []  # type: List[str]
+    items: List[str] = []
     for cls in symbol_table.concrete_classes:
         literal_name = golang_naming.enum_literal_name(
             Identifier("Model_type"), cls.name
@@ -99,11 +99,11 @@ def _generate_model_type_to_string(symbol_table: intermediate.SymbolTable) -> St
     # this part of the code base a lot, and have trouble keeping this function in sync
     # with :func:`_generate_enum_to_string`, please consider re-factoring.
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region To-string-map
 
-    items = []  # type: List[str]
+    items: List[str] = []
     for cls in symbol_table.concrete_classes:
         # NOTE (mristin):
         # We assume that enumeration literals are specified using ``iota``.
@@ -195,13 +195,13 @@ func {must_to_str_name}(
 
 def _generate_enum_from_string(enumeration: intermediate.Enumeration) -> Stripped:
     """Generate the functions for de-serializing enumeration from strings."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     name = golang_naming.enum_name(enumeration.name)
 
     # region From-string-map
 
-    items = []  # type: List[str]
+    items: List[str] = []
     for literal in enumeration.literals:
         literal_name = golang_naming.enum_literal_name(enumeration.name, literal.name)
         literal_value = golang_common.string_literal(literal.value)
@@ -252,13 +252,13 @@ func {from_str_name}(
 
 def _generate_enum_to_string(enumeration: intermediate.Enumeration) -> Stripped:
     """Generate the functions for serializing enumerations to strings."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     name = golang_naming.enum_name(enumeration.name)
 
     # region To-string-map
 
-    items = []  # type: List[str]
+    items: List[str] = []
     for literal in enumeration.literals:
         # NOTE (mristin):
         # We assume that enumeration literals are specified using ``iota``.
@@ -377,10 +377,10 @@ import (
         _generate_model_type_to_string(symbol_table=symbol_table),
     ]
 
-    enum_ids_in_set_properties = set(
+    enum_ids_in_set_properties = {
         intermediate.runtime_id(enum)
         for enum in intermediate_uses.enumerations_in_set_properties(symbol_table)
-    )
+    }
 
     for enum in symbol_table.enumerations:
         blocks.append(_generate_enum_from_string(enumeration=enum))
@@ -399,7 +399,7 @@ import (
             # We rank the literals at the generation time by the code points of
             # their serialized values, which is the order of the sets of
             # the enumeration literals in all the SDKs.
-            case_blocks = []  # type: List[Stripped]
+            case_blocks: List[Stripped] = []
             for rank, literal in enumerate(
                 sorted(enum.literals, key=lambda literal: literal.value)
             ):

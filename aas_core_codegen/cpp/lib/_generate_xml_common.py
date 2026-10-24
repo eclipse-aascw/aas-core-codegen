@@ -1896,7 +1896,7 @@ def _generate_self_closing_writer_implementation(
     # NOTE (mristin):
     # Only the XML-RPC subset, over which a JSON-able value is de/serialized,
     # writes elements which reside in no namespace at all.
-    in_no_namespace_blocks = (
+    in_no_namespace_blocks: List[Stripped] = (
         [
             Stripped(
                 f"""\
@@ -1932,7 +1932,7 @@ void SelfClosingWriter::StartElementInNoNamespace(
         ]
         if uses_json_types
         else []
-    )  # type: List[Stripped]
+    )
 
     return [
         Stripped("// region class SelfClosingWriter"),

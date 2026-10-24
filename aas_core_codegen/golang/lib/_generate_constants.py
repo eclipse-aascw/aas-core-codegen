@@ -87,7 +87,7 @@ def _generate_constant_primitive(
                 f"The value of the constant {constant.name!r} overflows "
                 f"64-bit signed integer",
             )
-        writer.write(f"const {constant_name} int64 = {str(constant.value)}")
+        writer.write(f"const {constant_name} int64 = {constant.value!s}")
 
     elif constant.a_type is intermediate.PrimitiveType.FLOAT:
         assert isinstance(constant.value, float)
@@ -128,7 +128,7 @@ def _generate_constant_set_of_primitives(
     constant: intermediate.ConstantSetOfPrimitives,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the definition of a constant set of primitives."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     writer = io.StringIO()
 
@@ -152,7 +152,7 @@ def _generate_constant_set_of_primitives(
             writer.write(comment)
             writer.write("\n")
 
-    literal_codes = []  # type: List[str]
+    literal_codes: List[str] = []
     set_type: str
 
     if constant.a_type is intermediate.PrimitiveType.BOOL:
@@ -246,7 +246,7 @@ def _generate_constant_set_of_enumeration_literals(
 
     enum_name = golang_naming.enum_name(constant.enumeration.name)
 
-    literal_codes = []  # type: List[str]
+    literal_codes: List[str] = []
 
     for literal in constant.literals:
         literal_name = golang_naming.enum_literal_name(
@@ -281,11 +281,11 @@ def generate(
     symbol_table: intermediate.SymbolTable, repo_url: Stripped
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code to define the constants of the meta-model."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     ourtypes_url_literal = golang_common.string_literal(f"{repo_url}/types")
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 // Package constants provides immutable values of the meta-model.
@@ -300,7 +300,7 @@ package constants"""
         # the constants below actually name, and an unused import does not
         # compile in Go.
         Stripped(""),
-    ]  # type: List[Stripped]
+    ]
 
     import_index = len(blocks) - 1
 
@@ -331,7 +331,7 @@ package constants"""
 
     blocks.append(golang_common.WARNING)
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     if golang_common.names_package(blocks, "ourtypes"):
         import_lines.append(f"{I}ourtypes {ourtypes_url_literal}")
 

@@ -87,9 +87,9 @@ class _IntersectionOfPrimitiveSetLiterals:
         self.a_type = a_type
         self._literals = literals
 
-        self._count_by_literal_value = {
-            literal.value: 0 for literal in literals
-        }  # type: MutableMapping[Union[bool, int, float, str, bytearray], int]
+        self._count_by_literal_value: MutableMapping[
+            Union[bool, int, float, str, bytearray], int
+        ] = {literal.value: 0 for literal in literals}
 
         self._counter = 0
 
@@ -124,7 +124,7 @@ def intersect_set_of_primitives_constraints(
     constraints: Sequence[SetOfPrimitivesConstraint],
 ) -> SetOfPrimitivesConstraint:
     """Compute the intersection over all the primitive set literals."""
-    intersection = None  # type: Optional[_IntersectionOfPrimitiveSetLiterals]
+    intersection: Optional[_IntersectionOfPrimitiveSetLiterals] = None
     for constraint in constraints:
         if intersection is None:
             intersection = _IntersectionOfPrimitiveSetLiterals(
@@ -147,9 +147,9 @@ class _IntersectionOfEnumerationLiterals:
         """Initialize with the given set."""
         self._literals = literals
 
-        self._count_by_literal_id = {
-            intermediate.runtime_id(literal): 0 for literal in literals
-        }  # type: MutableMapping[intermediate.IdOfEnumerationLiteral, int]
+        self._count_by_literal_id: MutableMapping[
+            intermediate.IdOfEnumerationLiteral, int
+        ] = {intermediate.runtime_id(literal): 0 for literal in literals}
 
         self._counter = 0
 
@@ -200,8 +200,8 @@ def intersect_set_of_enumeration_literals_constraints(
     constraints: Sequence[SetOfEnumerationLiteralsConstraint],
 ) -> SetOfEnumerationLiteralsConstraint:
     """Compute the intersection over all the set literals."""
-    enumeration = None  # type: Optional[intermediate.Enumeration]
-    intersection = None  # type: Optional[_IntersectionOfEnumerationLiterals]
+    enumeration: Optional[intermediate.Enumeration] = None
+    intersection: Optional[_IntersectionOfEnumerationLiterals] = None
 
     for constraint in constraints:
         if intersection is None:
@@ -239,19 +239,19 @@ def infer_set_constraints_by_property_from_invariants(
     The constraints are not exhaustive. We only infer constraints based on invariants
     which involve constant sets. It might be that the actual invariants are tighter.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # fmt: off
     sets_of_primitives_by_property: MutableMapping[
         intermediate.Property,
         List[SetOfPrimitivesConstraint]
-    ] = collections.defaultdict(lambda: [])
+    ] = collections.defaultdict(list)
     # fmt: on
 
     # fmt: off
     sets_of_enumeration_literals_by_property: MutableMapping[
         intermediate.Property, List[SetOfEnumerationLiteralsConstraint]
-    ] = collections.defaultdict(lambda: [])
+    ] = collections.defaultdict(list)
     # fmt: on
 
     # region Collect
@@ -274,7 +274,7 @@ def infer_set_constraints_by_property_from_invariants(
             # Match ``self.something in X``
             node = invariant.body
 
-        matches = []  # type: List[_PropNameInNamedContainer]
+        matches: List[_PropNameInNamedContainer] = []
 
         if isinstance(node, parse_tree.And):
             for value_node in node.values:

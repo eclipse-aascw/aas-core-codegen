@@ -29,11 +29,11 @@ def _generate_ivisitor(
     symbol_table: intermediate.SymbolTable, package: java_common.PackageIdentifier
 ) -> Stripped:
     """Generate the visitor interface."""
-    java_imports = [
+    java_imports: List[Stripped] = [
         Stripped(f"import {package}.types.model.*;"),
-    ]  # type: List[Stripped]
+    ]
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # Abstract classes have no particular implementation, so we do not visit
     # them.
@@ -99,7 +99,7 @@ def _generate_visitor_through(
     symbol_table: intermediate.SymbolTable, package: java_common.PackageIdentifier
 ) -> Stripped:
     """Generate the visitor that simply iterates over the instances."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # Abstract classes are modeled as interfaces in Java, so we do not transform
     # them.
@@ -151,12 +151,12 @@ def _generate_abstract_visitor(
     symbol_table: intermediate.SymbolTable, package: java_common.PackageIdentifier
 ) -> Stripped:
     """Generate the visitor that performs double-dispatch."""
-    java_imports = [
+    java_imports: List[Stripped] = [
         Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.visitation.IVisitor;"),
-    ]  # type: List[Stripped]
+    ]
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public void visit(IClass that)
@@ -164,7 +164,7 @@ public void visit(IClass that)
 {I}that.accept(this);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # Abstract classes have no particular implementation, so we do not transform
     # them.
@@ -213,11 +213,11 @@ def _generate_ivisitor_with_context(
     symbol_table: intermediate.SymbolTable, package: java_common.PackageIdentifier
 ) -> Stripped:
     """Generate the interface for the visitor with context."""
-    java_imports = [
+    java_imports: List[Stripped] = [
         Stripped(f"import {package}.types.model.*;"),
-    ]  # type: List[Stripped]
+    ]
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # Abstract classes have no particular implementation, so we do not visit
     # them.
@@ -274,12 +274,12 @@ def _generate_abstract_visitor_with_context(
     symbol_table: intermediate.SymbolTable, package: java_common.PackageIdentifier
 ) -> Stripped:
     """Generate the visitor with context that performs double-dispatch."""
-    java_imports = [
+    java_imports: List[Stripped] = [
         Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.visitation.IVisitorWithContext;"),
-    ]  # type: List[Stripped]
+    ]
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public void visit(IClass that, ContextT context)
@@ -287,7 +287,7 @@ public void visit(IClass that, ContextT context)
 {I}that.accept(this, context);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # Abstract classes have no particular implementation, so we do not visit
     # them.
@@ -341,11 +341,11 @@ def _generate_itransformer(
     symbol_table: intermediate.SymbolTable, package: java_common.PackageIdentifier
 ) -> Stripped:
     """Generate the transformer interface."""
-    java_imports = [
+    java_imports: List[Stripped] = [
         Stripped(f"import {package}.types.model.*;"),
-    ]  # type: List[Stripped]
+    ]
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # Abstract classes have no particular implementation, so we do not transform
     # them.
@@ -400,12 +400,12 @@ def _generate_abstract_transformer(
     symbol_table: intermediate.SymbolTable, package: java_common.PackageIdentifier
 ) -> Stripped:
     """Generate the most abstract transformer that merely double-dispatches."""
-    java_imports = [
+    java_imports: List[Stripped] = [
         Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.visitation.ITransformer;"),
-    ]  # type: List[Stripped]
+    ]
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public T transform(IClass that)
@@ -413,7 +413,7 @@ public T transform(IClass that)
 {I}return that.transform(this);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # Abstract classes have no particular implementation, so we do not transform
     # them.
@@ -465,11 +465,11 @@ def _generate_itransformer_with_context(
     symbol_table: intermediate.SymbolTable, package: java_common.PackageIdentifier
 ) -> Stripped:
     """Generate the interface for the transformer with context."""
-    java_imports = [
+    java_imports: List[Stripped] = [
         Stripped(f"import {package}.types.model.*;"),
-    ]  # type: List[Stripped]
+    ]
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # Abstract classes have no particular implementation, so we do not transform
     # them.
@@ -527,12 +527,12 @@ def _generate_abstract_transformer_with_context(
     symbol_table: intermediate.SymbolTable, package: java_common.PackageIdentifier
 ) -> Stripped:
     """Generate the most abstract transformer that merely double-dispatches."""
-    java_imports = [
+    java_imports: List[Stripped] = [
         Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.visitation.ITransformerWithContext;"),
-    ]  # type: List[Stripped]
+    ]
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public T transform(IClass that, ContextT context)
@@ -540,7 +540,7 @@ public T transform(IClass that, ContextT context)
 {I}return that.transform(this, context);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # Abstract classes have no particular implementation, so we do not transform
     # them.
@@ -600,12 +600,12 @@ def _generate_java_file(
 ) -> java_common.JavaFile:
     file_name = Stripped(f"{class_name}.java")
 
-    blocks = [
+    blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(f"package {package}.visitation;"),
         code,
         java_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     file_code = Stripped("\n\n".join(blocks))
 
@@ -627,7 +627,7 @@ def generate(
     Generate code of visitors to iterate over instances.
     """
 
-    files = [
+    files: List[java_common.JavaFile] = [
         _generate_java_file(
             Stripped("IVisitor"),
             _generate_ivisitor(symbol_table=symbol_table, package=package),
@@ -679,7 +679,7 @@ def generate(
             ),
             package,
         ),
-    ]  # type: List[java_common.JavaFile]
+    ]
 
     return files, None
 

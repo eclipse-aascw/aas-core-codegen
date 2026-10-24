@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import ast
 import textwrap
 import unittest
@@ -84,7 +82,7 @@ class Test_with_smoke(unittest.TestCase):
             symbol_table=symbol_table
         )
 
-        type_inference_errors = []  # type: List[str]
+        type_inference_errors: List[str] = []
 
         for our_type in symbol_table.our_types:
             if isinstance(
@@ -920,7 +918,7 @@ __xml_namespace__ = "https://dummy.com"
         self.expect_type_inference_to_fail(
             source=source,
             expected_joined_message=(
-                "The literal 'Gamma' could not be found in the enumeration " "'Kind'"
+                "The literal 'Gamma' could not be found in the enumeration 'Kind'"
             ),
         )
 
@@ -2498,7 +2496,7 @@ def some_func(text: str) -> bool:
     return len(list(text)) > 0"""
             ),
             expected_joined_message=(
-                "We support ``list(...)`` only to copy a non-None list, " "but got: str"
+                "We support ``list(...)`` only to copy a non-None list, but got: str"
             ),
         )
 
@@ -4607,7 +4605,7 @@ class Test_annotated_assignment(unittest.TestCase):
             symbol_table=symbol_table
         )
 
-        messages = []  # type: List[str]
+        messages: List[str] = []
         for verification in symbol_table.verification_functions:
             assert isinstance(verification, intermediate.TranspilableVerification)
 
@@ -5409,7 +5407,7 @@ class Test_set(unittest.TestCase):
             symbol_table=symbol_table
         )
 
-        messages = []  # type: List[str]
+        messages: List[str] = []
         for verification in symbol_table.verification_functions:
             assert isinstance(verification, intermediate.TranspilableVerification)
 
@@ -5946,7 +5944,7 @@ class Test_list_literal_and_append(unittest.TestCase):
             symbol_table=symbol_table
         )
 
-        messages = []  # type: List[str]
+        messages: List[str] = []
         for verification in symbol_table.verification_functions:
             assert isinstance(verification, intermediate.TranspilableVerification)
 
@@ -6377,8 +6375,10 @@ def count_children(self, children: Sequence["Child"]) -> int:
                 "The argument 'parents' of the method 'count_parents' is of type "
                 "List[Parent], but got: List[Child]. "
                 + _COLLECTION_INVARIANCE_EXPLANATION,
-                "The method '__parent_private' of the class 'Child' is private, "
-                "so it can be only called on self from the methods of the class",
+                (
+                    "The method '__parent_private' of the class 'Child' is private, "
+                    "so it can be only called on self from the methods of the class"
+                ),
             ],
         )
 
@@ -6398,8 +6398,10 @@ def count_copies(self, parents: Sequence["Parent"]) -> int:
     copies = list(parents)
     return self.count_parents(parents) + len(copies)""",
             expected_messages=[
-                "The method '__parent_private' of the class 'Child' is private, "
-                "so it can be only called on self from the methods of the class",
+                (
+                    "The method '__parent_private' of the class 'Child' is private, "
+                    "so it can be only called on self from the methods of the class"
+                ),
             ],
         )
 
@@ -6413,8 +6415,10 @@ def increment(self, delta: int) -> int:
     self.reset()
     return self.count""",
             expected_messages=[
-                "The method '__parent_private' of the class 'Child' is private, "
-                "so it can be only called on self from the methods of the class"
+                (
+                    "The method '__parent_private' of the class 'Child' is private, "
+                    "so it can be only called on self from the methods of the class"
+                )
             ],
         )
 
@@ -6425,11 +6429,15 @@ def increment(self, delta: int) -> int:
 def increment(self) -> None:
     self.count = self.count + 1""",
             expected_messages=[
-                "We can not assign to the property 'count' of self, since "
-                "the method 'increment' is marked as @non_mutating, so it must "
-                "not change its instance.",
-                "The method '__parent_private' of the class 'Child' is private, "
-                "so it can be only called on self from the methods of the class",
+                (
+                    "We can not assign to the property 'count' of self, since "
+                    "the method 'increment' is marked as @non_mutating, so it must "
+                    "not change its instance."
+                ),
+                (
+                    "The method '__parent_private' of the class 'Child' is private, "
+                    "so it can be only called on self from the methods of the class"
+                ),
             ],
         )
 
@@ -6440,11 +6448,15 @@ def increment(self) -> None:
 def reset_twice(self) -> None:
     self.reset()""",
             expected_messages=[
-                "The method 'reset' is not marked as @non_mutating, so it might "
-                "mutate its instance, but the method 'reset_twice' is marked as "
-                "@non_mutating, so it must not change its instance.",
-                "The method '__parent_private' of the class 'Child' is private, "
-                "so it can be only called on self from the methods of the class",
+                (
+                    "The method 'reset' is not marked as @non_mutating, so it might "
+                    "mutate its instance, but the method 'reset_twice' is marked as "
+                    "@non_mutating, so it must not change its instance."
+                ),
+                (
+                    "The method '__parent_private' of the class 'Child' is private, "
+                    "so it can be only called on self from the methods of the class"
+                ),
             ],
         )
 
@@ -6459,8 +6471,10 @@ def clear(self, texts: List[str], other: Mutable["Parent"]) -> None:
 def clear_own_texts(self, other: Mutable["Parent"]) -> None:
     self.clear(self.texts, other)""",
             expected_messages=[
-                "The method '__parent_private' of the class 'Child' is private, "
-                "so it can be only called on self from the methods of the class"
+                (
+                    "The method '__parent_private' of the class 'Child' is private, "
+                    "so it can be only called on self from the methods of the class"
+                )
             ],
         )
 
@@ -6470,11 +6484,15 @@ def clear_own_texts(self, other: Mutable["Parent"]) -> None:
 def clear(self, texts: Sequence[str]) -> None:
     texts[0] = 'cleared'""",
             expected_messages=[
-                "We can not assign to an item of the list of texts, since "
-                "the argument 'texts' is declared as a Sequence, which is "
-                "read-only. Please declare it as a List if the method mutates it.",
-                "The method '__parent_private' of the class 'Child' is private, "
-                "so it can be only called on self from the methods of the class",
+                (
+                    "We can not assign to an item of the list of texts, since "
+                    "the argument 'texts' is declared as a Sequence, which is "
+                    "read-only. Please declare it as a List if the method mutates it."
+                ),
+                (
+                    "The method '__parent_private' of the class 'Child' is private, "
+                    "so it can be only called on self from the methods of the class"
+                ),
             ],
         )
 
@@ -6489,11 +6507,15 @@ def clear(self, texts: List[str]) -> None:
 def clear_own_texts(self) -> None:
     self.clear(self.texts)""",
             expected_messages=[
-                "The argument 'texts' of the method 'clear' is mutable, but "
-                "the method 'clear_own_texts' is marked as @non_mutating, so it "
-                "must not change its instance.",
-                "The method '__parent_private' of the class 'Child' is private, "
-                "so it can be only called on self from the methods of the class",
+                (
+                    "The argument 'texts' of the method 'clear' is mutable, but "
+                    "the method 'clear_own_texts' is marked as @non_mutating, so it "
+                    "must not change its instance."
+                ),
+                (
+                    "The method '__parent_private' of the class 'Child' is private, "
+                    "so it can be only called on self from the methods of the class"
+                ),
             ],
         )
 
@@ -6503,10 +6525,14 @@ def clear_own_texts(self) -> None:
 def count_texts(self) -> int:
     self.count = len(self.texts)""",
             expected_messages=[
-                "Expected the method 'count_texts' of the class 'Parent' to end "
-                "with a return statement, since it returns a value",
-                "The method '__parent_private' of the class 'Child' is private, "
-                "so it can be only called on self from the methods of the class",
+                (
+                    "Expected the method 'count_texts' of the class 'Parent' to end "
+                    "with a return statement, since it returns a value"
+                ),
+                (
+                    "The method '__parent_private' of the class 'Child' is private, "
+                    "so it can be only called on self from the methods of the class"
+                ),
             ],
         )
 

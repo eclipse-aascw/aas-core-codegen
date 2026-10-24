@@ -81,7 +81,7 @@ def _verify_intra_structure_collisions(
     our_type: intermediate.OurType,
 ) -> Optional[Error]:
     """Verify that no member names collide in the C# structure of our type."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     if isinstance(our_type, intermediate.Enumeration):
         pass
@@ -94,7 +94,7 @@ def _verify_intra_structure_collisions(
         pass
 
     elif isinstance(our_type, intermediate.Class):
-        observed_member_names = {}  # type: Dict[Identifier, str]
+        observed_member_names: Dict[Identifier, str] = {}
 
         for prop in our_type.properties:
             prop_name = csharp_naming.property_name(prop.name)
@@ -113,7 +113,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model property {prop.name!r}"
                 )
 
-        observed_constructor_arg_names = {}  # type: Dict[Identifier, str]
+        observed_constructor_arg_names: Dict[Identifier, str] = {}
         for constructor_arg in our_type.constructor.arguments:
             arg_name = csharp_naming.argument_name(constructor_arg.name)
 
@@ -150,7 +150,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model method {method.name!r}"
                 )
 
-            observed_method_arg_names = {}  # type: Dict[Identifier, str]
+            observed_method_arg_names: Dict[Identifier, str] = {}
             for arg in method.arguments:
                 arg_name = csharp_naming.argument_name(arg.name)
 
@@ -197,7 +197,7 @@ def _verify_structure_name_collisions(
         ],
     ] = dict()
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # region Inter-structure collisions
 
@@ -215,7 +215,7 @@ def _verify_structure_name_collisions(
 
         if isinstance(our_type, intermediate.Enumeration):
             name = csharp_naming.enum_name(our_type.name)
-            other = observed_structure_names.get(name, None)
+            other = observed_structure_names.get(name)
 
             if other is not None:
                 errors.append(
@@ -234,7 +234,7 @@ def _verify_structure_name_collisions(
         ):
             interface_name = csharp_naming.interface_name(our_type.name)
 
-            other = observed_structure_names.get(interface_name, None)
+            other = observed_structure_names.get(interface_name)
 
             if other is not None:
                 errors.append(
@@ -252,7 +252,7 @@ def _verify_structure_name_collisions(
             if isinstance(our_type, intermediate.ConcreteClass):
                 class_name = csharp_naming.class_name(our_type.name)
 
-                other = observed_structure_names.get(class_name, None)
+                other = observed_structure_names.get(class_name)
 
                 if other is not None:
                     errors.append(
@@ -270,7 +270,7 @@ def _verify_structure_name_collisions(
         elif isinstance(our_type, intermediate.NamedUnion):
             union_name = csharp_naming.class_name(our_type.name)
 
-            other = observed_structure_names.get(union_name, None)
+            other = observed_structure_names.get(union_name)
 
             if other is not None:
                 errors.append(
@@ -297,7 +297,7 @@ def _verify_structure_name_collisions(
     # namespace, and the verification refers to them unqualified from within
     # the static class ``Verification``. Hence, neither a structure nor
     # a verification function must carry the same name.
-    other = observed_structure_names.get(csharp_common.COMMON_CLASS, None)
+    other = observed_structure_names.get(csharp_common.COMMON_CLASS)
     if other is not None:
         errors.append(
             Error(
@@ -323,7 +323,7 @@ def _verify_structure_name_collisions(
     # NOTE (mristin):
     # The descent into the containers lives in a static class in the base
     # namespace as well, and the classes refer to it unqualified.
-    other = observed_structure_names.get(Identifier("Descent"), None)
+    other = observed_structure_names.get(Identifier("Descent"))
     if other is not None:
         errors.append(
             Error(
@@ -364,7 +364,7 @@ def verify(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[VerifiedIntermediateSymbolTable], Optional[List[Error]]]:
     """Verify that C# code can be generated from the ``symbol_table``."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     structure_name_collisions = _verify_structure_name_collisions(
         symbol_table=symbol_table
@@ -557,7 +557,7 @@ def _generate_interface(
         writer.write("\n{\n")
 
     # Code blocks separated by double newlines and indented once
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Getters and setters
 
@@ -602,7 +602,7 @@ def _generate_interface(
         ):
             continue
 
-        signature_blocks = []  # type: List[Stripped]
+        signature_blocks: List[Stripped] = []
 
         signature_comment, signature_comment_error = _generate_comment_for_method(
             method=method
@@ -620,7 +620,7 @@ def _generate_interface(
         )
         # fmt: on
 
-        arg_codes = []  # type: List[Stripped]
+        arg_codes: List[Stripped] = []
         for arg in method.arguments:
             arg_type = csharp_common.generate_type(type_annotation=arg.type_annotation)
             arg_name = csharp_naming.argument_name(arg.name)
@@ -850,7 +850,7 @@ def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> St
     In the recursive case, we in-line the descent into the directly referenced
     instances instead of delegating to ``DescendOnce``, as a simple optimization.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for prop in cls.properties:
         descendability = intermediate.map_descendability(prop.type_annotation)
@@ -865,7 +865,7 @@ def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> St
         # NOTE (mristin):
         # An optional of a value type, such as a tuple, is a ``System.Nullable``,
         # so we have to unwrap it before we can descend into it.
-        access_expr = prop_name  # type: str
+        access_expr: str = prop_name
         if isinstance(
             prop.type_annotation, intermediate.OptionalTypeAnnotation
         ) and csharp_common.is_value_type(type_anno):
@@ -942,7 +942,7 @@ public IEnumerable<IClass> Descend()
 
 def _generate_default_value(default: intermediate.Default) -> Stripped:
     """Generate code representing the default value of an argument."""
-    code = None  # type: Optional[str]
+    code: Optional[str] = None
 
     if default is not None:
         if isinstance(default, intermediate.DefaultPrimitive):
@@ -989,9 +989,9 @@ def _generate_constructor(
 
     cls_name = csharp_naming.class_name(cls.name)
 
-    blocks = []  # type: List[str]
+    blocks: List[str] = []
 
-    arg_codes = []  # type: List[str]
+    arg_codes: List[str] = []
     for arg in cls.constructor.arguments:
         arg_type = csharp_common.generate_type(type_annotation=arg.type_annotation)
         arg_name = csharp_naming.argument_name(arg.name)
@@ -1014,7 +1014,7 @@ def _generate_constructor(
         arg_block_indented = textwrap.indent(arg_block, I)
         blocks.append(Stripped(f"public {cls_name}(\n{arg_block_indented})\n{{"))
 
-    body = []  # type: List[str]
+    body: List[str] = []
     for stmt in cls.constructor.inlined_statements:
         if isinstance(stmt, intermediate_construction.AssignArgument):
             if stmt.default is None:
@@ -1141,7 +1141,7 @@ def _transpile_method(
         inference=type_inference.by_method[method], method=method
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in method.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -1227,7 +1227,7 @@ def _generate_class(
     ``type_inference`` holds the type inference of all the understood methods.
     """
     # Code blocks to be later joined by double newlines and indented once
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Getters and setters
 
@@ -1236,7 +1236,7 @@ def _generate_class(
 
         prop_name = csharp_naming.property_name(prop.name)
 
-        prop_blocks = []  # type: List[Stripped]
+        prop_blocks: List[Stripped] = []
 
         if prop.description is not None:
             (
@@ -1291,7 +1291,7 @@ public IEnumerable<{items_type}> Over{prop_name}OrEmpty()
 
     # region Methods
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for method in cls.methods:
         if isinstance(method, intermediate.ImplementationSpecificMethod):
@@ -1504,13 +1504,13 @@ def _generate_named_union_class(named_union: intermediate.NamedUnion) -> Strippe
     else:
         crefs_joined = ", ".join(crefs[:-1]) + " and " + crefs[-1]
 
-    discriminant_cases = []  # type: List[Stripped]
-    field_decls = []  # type: List[Stripped]
-    constructor_args = []  # type: List[Stripped]
-    constructor_assignments = []  # type: List[Stripped]
-    underlying_cases = []  # type: List[Stripped]
-    from_methods = []  # type: List[Stripped]
-    from_underlying_cases = []  # type: List[Stripped]
+    discriminant_cases: List[Stripped] = []
+    field_decls: List[Stripped] = []
+    constructor_args: List[Stripped] = []
+    constructor_assignments: List[Stripped] = []
+    underlying_cases: List[Stripped] = []
+    from_methods: List[Stripped] = []
+    from_underlying_cases: List[Stripped] = []
 
     field_names = [
         csharp_naming.private_property_name(Identifier(f"as_{root.name}"))
@@ -1522,7 +1522,11 @@ def _generate_named_union_class(named_union: intermediate.NamedUnion) -> Strippe
     ]
 
     for root, interface_name, field_name, constructor_arg_name in zip(
-        named_union.roots, interface_names, field_names, constructor_arg_names
+        named_union.roots,
+        interface_names,
+        field_names,
+        constructor_arg_names,
+        strict=True,
     ):
         discriminant_case = csharp_naming.enum_literal_name(root.name)
         discriminant_cases.append(Stripped(discriminant_case))
@@ -1679,7 +1683,7 @@ def generate(
 
     The ``namespace`` defines the base C# namespace of the generated code.
     """
-    code_blocks = [
+    code_blocks: List[Stripped] = [
         Stripped(
             f"""\
 /// <summary>
@@ -1727,7 +1731,7 @@ public interface IClass
 {II}TContext context);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if len(symbol_table.named_unions) > 0:
         code_blocks.append(
@@ -1761,7 +1765,7 @@ public interface IUnion<T> : IUnion where T : IUnion<T>
             )
         )
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for our_type in symbol_table.our_types:
         if not isinstance(
@@ -1839,8 +1843,8 @@ public interface IUnion<T> : IUnion where T : IUnion<T>
     if len(errors) > 0:
         return None, errors
 
-    descent_methods = []  # type: List[Stripped]
-    observed_monikers = set()  # type: Set[str]
+    descent_methods: List[Stripped] = []
+    observed_monikers: Set[str] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -1893,7 +1897,7 @@ internal static class Descent
             )
         )
 
-    using_directives = []  # type: List[Stripped]
+    using_directives: List[Stripped] = []
     using_directives.extend(
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )
@@ -1920,7 +1924,7 @@ using System.Collections.Generic;  // can't alias{using_linq}"""
 
     code_blocks_joined = "\n\n".join(code_blocks)
 
-    blocks = [
+    blocks: List[Stripped] = [
         csharp_common.WARNING,
         Stripped("\n".join(using_directives)),
         Stripped(
@@ -1931,7 +1935,7 @@ namespace {namespace}
 }}  // namespace {namespace}"""
         ),
         csharp_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     out = io.StringIO()
     for i, block in enumerate(blocks):

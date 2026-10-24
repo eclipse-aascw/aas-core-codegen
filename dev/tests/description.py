@@ -10,7 +10,7 @@ def parse_restructured_text(text: str) -> docutils.nodes.document:
     """Parse the given ReST ``text``."""
     warnings = io.StringIO()
     # noinspection PyUnusedLocal
-    document = None  # type: Optional[docutils.nodes.document]
+    document: Optional[docutils.nodes.document] = None
 
     document = docutils.core.publish_doctree(
         text, settings_overrides={"warning_stream": warnings}

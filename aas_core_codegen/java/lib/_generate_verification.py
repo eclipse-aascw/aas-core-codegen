@@ -56,9 +56,9 @@ def verify(
     verification_functions: Sequence[intermediate.Verification],
 ) -> Optional[List[str]]:
     """Verify all the implementation snippets related to verification."""
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
-    expected_keys = []  # type: List[specific_implementations.ImplementationKey]
+    expected_keys: List[specific_implementations.ImplementationKey] = []
 
     for func in verification_functions:
         if isinstance(func, intermediate.ImplementationSpecificVerification):
@@ -136,7 +136,7 @@ class _PatternVerificationTranspiler(
                 None,
             )
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
         for value in values:
             if isinstance(value, str):
                 string_literal = java_common.string_literal(value)
@@ -259,7 +259,7 @@ def _transpile_pattern_verification(
         Identifier(f"construct_{verification.name}")
     )
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Construct block
 
@@ -270,7 +270,7 @@ private static Pattern {construct_name}() {{
 """
     )
 
-    defined_variables = set()  # type: Set[Identifier]
+    defined_variables: Set[Identifier] = set()
     transpiler = _PatternVerificationTranspiler(defined_variables=defined_variables)
 
     for i, stmt in enumerate(verification.parsed.body):
@@ -491,7 +491,7 @@ def _transpile_transpilable_verification(
         verification=verification,
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in verification.parsed.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -510,8 +510,8 @@ def _transpile_transpilable_verification(
     # ``List<? extends T>``. This way, the lists of the descendants can be passed
     # without a copy. The ``Optional<T>`` is invariant as well, so we declare
     # the optional generic sequences as ``Optional<? extends List<? extends T>>``.
-    arg_defs = []  # type: List[Stripped]
-    remarks_on_generic_sequences = []  # type: List[str]
+    arg_defs: List[Stripped] = []
+    remarks_on_generic_sequences: List[str] = []
     for arg in verification.arguments:
         arg_name = java_naming.argument_name(arg.name)
 
@@ -614,7 +614,7 @@ def _transpile_transpilable_verification(
 
 def _generate_enum_value_sets(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate a class that pre-computes the sets of allowed enumeration literals."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for enum in symbol_table.enumerations:
         enum_name = java_naming.enum_name(enum.name)
@@ -629,7 +629,7 @@ private static final Set<{enum_name}> for{enum_name} = new HashSet<>();"""
         else:
             hash_init_writer = io.StringIO()
 
-            for i, literal in enumerate(enum.literals):
+            for literal in enum.literals:
                 literal_name = java_naming.enum_literal_name(literal.name)
                 hash_init_writer.write(f"temp.add({enum_name}.{literal_name});\n")
 
@@ -1111,8 +1111,8 @@ def _generate_transform_for_class(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transform method to errors for the given concrete class."""
-    errors = []  # type: List[Error]
-    blocks = []  # type: List[Stripped]
+    errors: List[Error] = []
+    blocks: List[Stripped] = []
 
     name = java_naming.class_name(cls.name)
 
@@ -1357,9 +1357,9 @@ def _generate_transformer(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a transformer to double-dispatch an instance to errors."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -1440,8 +1440,8 @@ def _generate_verify_constrained_primitive(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the verify function for the constrained primitives."""
-    errors = []  # type: List[Error]
-    blocks = []  # type: List[Stripped]
+    errors: List[Error] = []
+    blocks: List[Stripped] = []
 
     for invariant in constrained_primitive.invariants:
         invariant_code, error = _transpile_invariant(
@@ -1521,7 +1521,7 @@ def generate(
     Generate code of verification logic.
     """
 
-    imports = [
+    imports: List[Stripped] = [
         Stripped("import java.lang.Iterable;"),
         Stripped("import java.math.BigInteger;"),
         Stripped("import java.util.Arrays;"),
@@ -1544,7 +1544,7 @@ def generate(
         Stripped(f"import {package}.types.enums.*;"),
         Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.visitation.AbstractTransformer;"),
-    ]  # type: List[Stripped]
+    ]
 
     # NOTE (mristin):
     # A JSON-able value is a Jackson node, and only the models which use one
@@ -1562,11 +1562,13 @@ def generate(
     # NOTE (mristin):
     # We verify the containers and the JSON objects with constrained keys
     # through methods of their own, one per verification moniker.
-    own_method_type_annos = (
-        []
-    )  # type: List[Union[intermediate.ContainerTypeAnnotation, intermediate.JsonObjectTypeAnnotation]]
+    own_method_type_annos: List[
+        Union[
+            intermediate.ContainerTypeAnnotation, intermediate.JsonObjectTypeAnnotation
+        ]
+    ] = []
 
-    observed_monikers = set()  # type: Set[str]
+    observed_monikers: Set[str] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -1603,7 +1605,7 @@ def generate(
     # The signatures of the implementation-specific functions are written by hand,
     # but follow the same types. The same holds for the methods verifying
     # the lists.
-    signature_type_annotations = [
+    signature_type_annotations: List[intermediate.TypeAnnotationUnion] = [
         *(
             arg.type_annotation
             for verification in symbol_table.verification_functions
@@ -1614,7 +1616,7 @@ def generate(
             for verification in symbol_table.verification_functions
             if verification.returns is not None
         ),
-    ]  # type: List[intermediate.TypeAnnotationUnion]
+    ]
 
     if (
         intermediate_uses.json_types(symbol_table)
@@ -1638,8 +1640,8 @@ def generate(
     ):
         imports.append(Stripped("import java.util.Optional;"))
 
-    verification_blocks = []  # type: List[Stripped]
-    errors = []  # type: List[Error]
+    verification_blocks: List[Stripped] = []
+    errors: List[Error] = []
 
     for verification in symbol_table.verification_functions:
         if isinstance(verification, intermediate.ImplementationSpecificVerification):
@@ -1877,12 +1879,12 @@ private static <A, B> Stream<_Pair<A, B>> zip(
 
     # region Write an example usage
 
-    first_cls = (
+    first_cls: Optional[intermediate.ClassUnion] = (
         symbol_table.classes[0] if len(symbol_table.classes) > 0 else None
-    )  # type: Optional[intermediate.ClassUnion]
+    )
 
     if first_cls is not None:
-        cls_name = None  # type: Optional[str]
+        cls_name: Optional[str] = None
         if isinstance(first_cls, intermediate.AbstractClass):
             cls_name = java_naming.interface_name(first_cls.name)
         elif isinstance(first_cls, intermediate.ConcreteClass):
@@ -1927,13 +1929,13 @@ public class Verification {
     if len(errors) > 0:
         return None, errors
 
-    blocks = [
+    blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(f"package {package}.verification;"),
         Stripped("\n".join(imports)),
         Stripped(verification_writer.getvalue()),
         java_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     code = "\n\n".join(blocks)
 

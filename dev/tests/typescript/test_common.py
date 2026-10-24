@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import unittest
 
 import aas_core_codegen.typescript.common as typescript_common
@@ -55,18 +53,18 @@ class TestBytesLiteral(unittest.TestCase):
     def test_one(self) -> None:
         self.assertTupleEqual(
             ("new Uint8Array([0x00])", False),
-            typescript_common.bytes_literal(bytes(b"\x00")),
+            typescript_common.bytes_literal(b"\x00"),
         )
 
     def test_eight(self) -> None:
         self.assertTupleEqual(
             ("new Uint8Array([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])", False),
-            typescript_common.bytes_literal(bytes(b"\x00\x01\x02\x03\x04\x05\x06\x07")),
+            typescript_common.bytes_literal(b"\x00\x01\x02\x03\x04\x05\x06\x07"),
         )
 
     def test_nine(self) -> None:
         code, multiline = typescript_common.bytes_literal(
-            bytes(b"\x00\x01\x02\x03\x04\x05\x06\x07\x08")
+            b"\x00\x01\x02\x03\x04\x05\x06\x07\x08"
         )
 
         self.assertEqual(
@@ -83,9 +81,7 @@ new Uint8Array(
 
     def test_sixteen(self) -> None:
         code, multiline = typescript_common.bytes_literal(
-            bytes(
-                b"\x00\x01\x02\x03\x04\x05\x06\x07" b"\x08\x09\x10\x11\x12\x13\x14\x15"
-            )
+            b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x10\x11\x12\x13\x14\x15"
         )
 
         self.assertEqual(

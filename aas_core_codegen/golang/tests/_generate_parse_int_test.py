@@ -24,7 +24,7 @@ def _generate_test_parse_safe_int() -> List[Stripped]:
     """Generate the table-driven tests of parsing the integers."""
     function_name = golang_transpilation.PARSE_SAFE_INT_FUNCTION_NAME
 
-    case_blocks = []  # type: List[str]
+    case_blocks: List[str] = []
     for text, expected in tests_common.PARSE_INT_CASES:
         case_blocks.append(f"{{{golang_common.string_literal(text)}, {expected}}},")
 
@@ -106,7 +106,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     # NOTE (mristin):
     # We explain the semantics in a detached comment instead of the package
     # documentation to keep the package clause at the top as in the other tests.
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("package common_parse_int_test"),
         golang_common.WARNING,
         Stripped(
@@ -129,7 +129,7 @@ import (
         ),
         *_generate_test_parse_safe_int(),
         golang_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

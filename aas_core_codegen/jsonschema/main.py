@@ -48,7 +48,7 @@ def _define_for_enumeration(
 
     The list of definitions is to be *extended* with the resulting mapping.
     """
-    definition = collections.OrderedDict()  # type: MutableMapping[str, Any]
+    definition: MutableMapping[str, Any] = collections.OrderedDict()
     definition["type"] = "string"
     definition["enum"] = sorted(literal.value for literal in enumeration.literals)
 
@@ -157,7 +157,7 @@ def _translate_constraints(
                 base_subschema["maxProperties"] = constraints.len_constraint.max_value
 
     assert (
-        not (len(base_subschema) == 0) or len(additional_subschemas) == 0
+        len(base_subschema) != 0 or len(additional_subschemas) == 0
     ), "If base subschema is empty, no additional subschemas are expected."
 
     if len(base_subschema) == 0:
@@ -307,7 +307,7 @@ def _define_type(
                 definition["uniqueItems"] = True
 
         elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
-            items_type_definitions = []  # type: List[MutableMapping[str, Any]]
+            items_type_definitions: List[MutableMapping[str, Any]] = []
             for item_type_annotation in type_annotation.items:
                 assert not isinstance(
                     item_type_annotation, intermediate.OptionalTypeAnnotation
@@ -433,7 +433,7 @@ def fix_pattern_for_utf16(pattern: str) -> str:
 
     # NOTE (mristin):
     # We have to make this transformation for mypy.
-    parts_str = []  # type: List[str]
+    parts_str: List[str] = []
     for part in parts:
         assert isinstance(part, str), "Only string parts expected, no formatted values"
         parts_str.append(part)
@@ -504,9 +504,9 @@ def _define_properties(
     characters below Basic Multilingual Plane (BMP), and use surrogate pairs to
     represent characters above BMP.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    properties = collections.OrderedDict()  # type: MutableMapping[str, Any]
+    properties: MutableMapping[str, Any] = collections.OrderedDict()
 
     constraints_by_value = constraints_by_class[cls]
 
@@ -595,7 +595,7 @@ def _list_required_properties(cls: intermediate.ClassUnion) -> List[NonEmptyStri
     Only the meta-model properties are listed, so this list might not be exhaustive.
     For example, the JSON property ``modelType`` is not listed here.
     """
-    required = []  # type: List[NonEmptyString]
+    required: List[NonEmptyString] = []
     for prop in cls.properties:
         # NOTE (mristin):
         # We stack the inheritance as ``allOf``. This will impose the stacking
@@ -615,7 +615,7 @@ def _define_all_of_for_inheritance(
     cls: intermediate.ClassUnion,
 ) -> List[MutableMapping[str, Any]]:
     """Generate ``allOf`` definition as inheritance."""
-    all_of = []  # type: List[MutableMapping[str, Any]]
+    all_of: List[MutableMapping[str, Any]] = []
 
     for inheritance in cls.inheritances:
         if isinstance(inheritance, intermediate.AbstractClass):
@@ -666,7 +666,7 @@ def _generate_inheritable_definition(
     """
     all_of = _define_all_of_for_inheritance(cls)
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     properties, properties_error = _define_properties(
         cls=cls,
@@ -694,7 +694,7 @@ def _generate_inheritable_definition(
 
         required.append(NonEmptyString("modelType"))
 
-    definition = collections.OrderedDict()  # type: MutableMapping[str, Any]
+    definition: MutableMapping[str, Any] = collections.OrderedDict()
     if len(cls.inheritances) == 0:
         definition["type"] = "object"
 
@@ -715,7 +715,7 @@ def _generate_inheritable_definition(
     else:
         assert_never(cls)
 
-    result = collections.OrderedDict()  # type: MutableMapping[str, Any]
+    result: MutableMapping[str, Any] = collections.OrderedDict()
 
     if len(all_of) == 0:
         result[definition_name] = {"type": "object"}
@@ -736,7 +736,7 @@ def _generate_choice_definition(
 
     The definitions are to be *extended* with the resulting mapping.
     """
-    one_of = []  # type: List[Mapping[str, Any]]
+    one_of: List[Mapping[str, Any]] = []
     if isinstance(cls, intermediate.ConcreteClass):
         one_of.append({"$ref": f"#/definitions/{naming.json_model_type(cls.name)}"})
 
@@ -806,16 +806,16 @@ def _generate_concrete_definition(
             f"{cls.name!r}"
         )
 
-        all_of = [
+        all_of: List[MutableMapping[str, Any]] = [
             {"$ref": f"#/definitions/{model_type}_abstract"},
             {"properties": {"modelType": {"const": model_type}}},
-        ]  # type: List[MutableMapping[str, Any]]
+        ]
 
         return {model_type: {"allOf": all_of}}, None
 
     all_of = _define_all_of_for_inheritance(cls)
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     properties, properties_error = _define_properties(
         cls=cls,
@@ -835,7 +835,7 @@ def _generate_concrete_definition(
     if cls.serialization.with_model_type:
         properties["modelType"] = {"const": model_type}
 
-    definition = collections.OrderedDict()  # type: MutableMapping[str, Any]
+    definition: MutableMapping[str, Any] = collections.OrderedDict()
     if len(cls.inheritances) == 0:
         definition["type"] = "object"
 
@@ -849,7 +849,7 @@ def _generate_concrete_definition(
 
     model_type = naming.json_model_type(cls.name)
 
-    result = collections.OrderedDict()  # type: MutableMapping[str, Any]
+    result: MutableMapping[str, Any] = collections.OrderedDict()
 
     if len(all_of) == 0:
         result[model_type] = {"type": "object"}
@@ -915,7 +915,7 @@ class Definitions:
 
     def __init__(self) -> None:
         """Initialize as empty."""
-        self._definitions = collections.OrderedDict()  # type: MutableMapping[str, Any]
+        self._definitions: MutableMapping[str, Any] = collections.OrderedDict()
 
     def get(self) -> Mapping[str, Any]:
         """Get the content."""
@@ -1020,7 +1020,7 @@ def generate(
             )
         ]
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     definitions = Definitions()
 
@@ -1141,11 +1141,11 @@ def generate(
     if len(errors) > 0:
         return None, errors
 
-    model_types = sorted(
+    model_types: List[Identifier] = sorted(
         naming.json_model_type(cls.name)
         for cls in symbol_table.concrete_classes
         if cls.serialization.with_model_type
-    )  # type: List[Identifier]
+    )
 
     definitions.update(
         {

@@ -16,7 +16,7 @@ from aas_core_codegen.python.common import (
 
 
 def _generate_test_case(symbol_table: intermediate.SymbolTable) -> Stripped:
-    test_methods = []  # type: List[Stripped]
+    test_methods: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         test_method_name = python_naming.method_name(Identifier(f"test_{cls.name}"))
@@ -75,7 +75,7 @@ def _generate_serialization_failure_test_case(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the tests that a number unrepresentable in JSON is refused."""
-    test_methods = []  # type: List[Stripped]
+    test_methods: List[Stripped] = []
 
     for numeric_place in intermediate.numeric_places(symbol_table):
         if numeric_place.a_type is intermediate.PrimitiveType.FLOAT:

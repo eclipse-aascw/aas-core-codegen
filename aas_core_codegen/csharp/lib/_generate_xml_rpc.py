@@ -58,7 +58,7 @@ def generate(namespace: csharp_common.NamespaceIdentifier) -> str:
 
     The ``namespace`` defines the base C# namespace of the generated code.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /// <summary>
@@ -935,7 +935,7 @@ public static void SerializeValue(
 {I}writer.WriteEndElement();
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     writer.write(
@@ -966,7 +966,7 @@ namespace {namespace}
     writer.write(f"\n{I}}}  // public static class XmlRpc")
     writer.write(f"\n}}  // namespace {namespace}")
 
-    using_directives = []  # type: List[Stripped]
+    using_directives: List[Stripped] = []
     using_directives.extend(
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )

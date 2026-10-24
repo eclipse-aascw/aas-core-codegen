@@ -1,7 +1,3 @@
-# pylint: disable=missing-module-docstring
-# pylint: disable=missing-class-docstring
-# pylint: disable=missing-function-docstring
-
 import io
 import os
 import pathlib
@@ -33,8 +29,10 @@ class Test_against_recorded(unittest.TestCase):
             return_code = smoke_main.execute(model_path=model_pth, stderr=stderr)
             if return_code != 0:
                 parts = [
-                    f"Unexpected non-zero return code from the smoke script "
-                    f"on {model_pth}: {return_code}"
+                    (
+                        f"Unexpected non-zero return code from the smoke script "
+                        f"on {model_pth}: {return_code}"
+                    )
                 ]
                 if stderr.getvalue():
                     parts.append(f"The captured STDERR was:\n{stderr.getvalue()}")
@@ -50,8 +48,10 @@ class Test_against_recorded(unittest.TestCase):
 
             if return_code == 0:
                 parts = [
-                    f"Unexpected zero return code from the smoke script "
-                    f"on {model_pth}: {return_code}"
+                    (
+                        f"Unexpected zero return code from the smoke script "
+                        f"on {model_pth}: {return_code}"
+                    )
                 ]
                 if stderr.getvalue():
                     parts.append(f"The captured STDERR was:\n{stderr.getvalue()}")

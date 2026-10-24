@@ -4,6 +4,7 @@ import ast
 import io
 import textwrap
 from typing import (
+    Final,
     Tuple,
     Optional,
     List,
@@ -191,7 +192,7 @@ def generate_type(
         return Stripped(f"std::vector<{item_type}>"), None
 
     elif isinstance(type_annotation, intermediate_type_inference.TupleTypeAnnotation):
-        item_types = []  # type: List[Stripped]
+        item_types: List[Stripped] = []
         for item in type_annotation.items:
             item_type, error_msg = generate_type(
                 type_annotation=item, types_namespace=types_namespace
@@ -415,7 +416,7 @@ class Transpiler(
 ):
     """Transpile a node of our AST to C++ code, or return an error."""
 
-    _CPP_COMPARISON_MAP = {
+    _CPP_COMPARISON_MAP: Final[Mapping[parse_tree.Comparator, str]] = {
         parse_tree.Comparator.LT: "<",
         parse_tree.Comparator.LE: "<=",
         parse_tree.Comparator.GT: ">",
@@ -463,7 +464,7 @@ class Transpiler(
         # resolve it as a name in the C++ code.
         #
         # While this class does not directly use it, the descendants of this class do!
-        self._variable_name_set = set()  # type: Set[Identifier]
+        self._variable_name_set: Set[Identifier] = set()
 
     def _type_parameter_of(
         self, type_annotation: intermediate_type_inference.TypeAnnotationUnion
@@ -549,7 +550,7 @@ class Transpiler(
             return None, error
         assert index is not None
 
-        index_as_int = None  # type: Optional[int]
+        index_as_int: Optional[int] = None
         try:
             index_as_int = int(index)
         except ValueError:
@@ -559,7 +560,6 @@ class Transpiler(
             return Stripped(f"{collection}.back()"), None
 
         if index_as_int is not None and index_as_int < -1:
-            # pylint: disable=invalid-unary-operand-type
             index = Stripped(f"{collection}.size() - {-index_as_int}")
 
         if "\n" in index:
@@ -933,8 +933,8 @@ class Transpiler(
     def transform_tuple(
         self, node: parse_tree.Tuple
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        value_reprs = []  # type: List[Stripped]
+        errors: List[Error] = []
+        value_reprs: List[Stripped] = []
 
         for value_node in node.values:
             value_repr, error = self._transform_and_value_if_necessary(value_node)
@@ -988,8 +988,8 @@ std::make_tuple(
     def transform_list_literal(
         self, node: parse_tree.ListLiteral
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        items = []  # type: List[Stripped]
+        errors: List[Error] = []
+        items: List[Stripped] = []
 
         for item_node in node.items:
             item, error = self._transform_and_value_if_necessary(item_node)
@@ -1366,7 +1366,7 @@ common::{contains_function}(
                 f"but got: {value_type}",
             )
 
-        checks = []  # type: List[Stripped]
+        checks: List[Stripped] = []
         for cls_name in node.classes:
             is_cls = self._qualify_with_types_namespace(
                 cpp_naming.is_function_name(cls_name.identifier)
@@ -1457,19 +1457,19 @@ common::{contains_function}(
     def transform_slice(
         self, node: parse_tree.Slice
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         collection, error = self._transform_and_value_if_necessary(node.collection)
         if error is not None:
             errors.append(error)
 
-        start = None  # type: Optional[Stripped]
+        start: Optional[Stripped] = None
         if node.start is not None:
             start, error = self._transform_and_value_if_necessary(node.start)
             if error is not None:
                 errors.append(error)
 
-        end = None  # type: Optional[Stripped]
+        end: Optional[Stripped] = None
         if node.end is not None:
             end, error = self._transform_and_value_if_necessary(node.end)
             if error is not None:
@@ -1495,7 +1495,7 @@ common::{contains_function}(
         # instead of the characters on Windows, throws on a start out of range,
         # and does not count the negative positions from the end, unlike Python.
         # See ``SliceStr`` in the generated common module.
-        args = [collection, start if start is not None else "0"]  # type: List[str]
+        args: List[str] = [collection, start if start is not None else "0"]
         if end is not None:
             args.append(end)
 
@@ -1508,13 +1508,13 @@ common::{contains_function}(
         method: intermediate_type_inference.BuiltinMethod,
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
         """Transpile the call to a built-in method such as ``str.find``."""
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         instance, error = self._transform_and_value_if_necessary(node.member.instance)
         if error is not None:
             errors.append(error)
 
-        args = []  # type: List[Stripped]
+        args: List[Stripped] = []
         for arg_node in node.args:
             arg, error = self._transform_and_value_if_necessary(arg_node)
             if error is not None:
@@ -1648,8 +1648,8 @@ common::{function_name}(
         of our method, which we need to pass the mutable lists by reference. They are
         empty for the built-in functions and methods.
         """
-        mutable_arg_set = set()  # type: Set[parse_tree.Expression]
-        for arg_node, argument in zip(arg_nodes, arguments):
+        mutable_arg_set: Set[parse_tree.Expression] = set()
+        for arg_node, argument in zip(arg_nodes, arguments, strict=False):
             if argument.mutable and isinstance(
                 intermediate_type_inference.beneath_optional(self.type_map[arg_node]),
                 (
@@ -1659,8 +1659,8 @@ common::{function_name}(
             ):
                 mutable_arg_set.add(arg_node)
 
-        errors = []  # type: List[Error]
-        args = []  # type: List[Stripped]
+        errors: List[Error] = []
+        args: List[Stripped] = []
         for arg_node in arg_nodes:
             arg_type = self.type_map[arg_node]
 
@@ -1714,7 +1714,7 @@ common::{function_name}(
                 node=node, method=member_type.method
             )
 
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         member_access, error = self._transform_and_value_if_necessary(node.member)
         if error is not None:
@@ -1760,7 +1760,7 @@ common::{function_name}(
     def transform_function_call(
         self, node: parse_tree.FunctionCall
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         func_type = self.type_map[node.name]
 
@@ -1816,7 +1816,7 @@ common::{function_name}(
             # and a required vector through ``common::make_optional``.
             if isinstance(func_type.func, intermediate.TranspilableVerification):
                 for i, (arg_node, argument) in enumerate(
-                    zip(node.args, func_type.func.arguments)
+                    zip(node.args, func_type.func.arguments, strict=False)
                 ):
                     if intermediate.generic_sequence_item_class(argument) is None:
                         continue
@@ -2099,7 +2099,7 @@ common::make_optional(
     def transform_name(
         self, node: parse_tree.Name
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def transform_not(
         self, node: parse_tree.Not
@@ -2130,8 +2130,8 @@ common::make_optional(
     def _transform_and_or_or(
         self, node: Union[parse_tree.And, parse_tree.Or]
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        values = []  # type: List[Stripped]
+        errors: List[Error] = []
+        values: List[Stripped] = []
 
         for value_node in node.values:
             value, error = self._transform_and_value_if_necessary(value_node)
@@ -2218,7 +2218,7 @@ common::make_optional(
     def _transform_add_or_sub(
         self, node: Union[parse_tree.Add, parse_tree.Sub]
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         left, error = self._transform_and_value_if_necessary(node.left)
         if error is not None:
@@ -2352,7 +2352,7 @@ common::make_optional(
     def transform_mod(
         self, node: parse_tree.Mod
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         left, error = self._transform_and_value_if_necessary(node.left)
         if error is not None:
@@ -2508,7 +2508,7 @@ static_cast<size_t>(
         # NOTE (mristin):
         # We need the interpolation if we got so far.
 
-        args = []  # type: List[str]
+        args: List[str] = []
 
         for value in node.values:
             if isinstance(value, str):
@@ -2569,11 +2569,11 @@ common::{concat}(
     def _transform_any_or_all(
         self, node: Union[parse_tree.Any, parse_tree.All]
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
-        iteration = None  # type: Optional[Stripped]
-        start = None  # type: Optional[Stripped]
-        end = None  # type: Optional[Stripped]
+        iteration: Optional[Stripped] = None
+        start: Optional[Stripped] = None
+        end: Optional[Stripped] = None
 
         if isinstance(node.generator, parse_tree.ForEach):
             iteration, error = self._transform_and_value_if_necessary(
@@ -2755,13 +2755,13 @@ common::{qualifier_function}<{variable_type_cpp}>(
     def transform_assignment(
         self, node: parse_tree.Assignment
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         value_type = self.type_map[node.value]
 
         is_definition = False
 
-        target = None  # type: Optional[Stripped]
+        target: Optional[Stripped] = None
         if isinstance(node.target, parse_tree.Name):
             target_type = self._environment.find(identifier=node.target.identifier)
             if target_type is None:
@@ -3082,8 +3082,8 @@ return (
         )
         self._environment = scope_environment
 
-        errors = []  # type: List[Error]
-        stmts = []  # type: List[Stripped]
+        errors: List[Error] = []
+        stmts: List[Stripped] = []
         try:
             for stmt in statements:
                 code, error = self.transform(stmt)
@@ -3127,7 +3127,7 @@ return (
         Each branch is given as its header, *e.g.*, ``else if (x > 0)``, together
         with its statements.
         """
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
         writer = io.StringIO()
 
         for i, (header, statements) in enumerate(branches):
@@ -3168,15 +3168,15 @@ return (
         if not isinstance(node.subject, no_parentheses_types):
             subject = Stripped(f"({subject})")
 
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We collect the headers of the branches together with their statements,
         # and treat the default as the last branch.
-        branches = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+        branches: List[Tuple[str, Sequence[parse_tree.StatementUnion]]] = []
 
         for i, case in enumerate(node.cases):
-            comparisons = []  # type: List[str]
+            comparisons: List[str] = []
             for label in case.labels:
                 label_code, error = self.transform(label)
                 if error is not None:
@@ -3224,15 +3224,15 @@ return (
         if primitive_type is intermediate_type_inference.PrimitiveType.STR:
             return self._transform_switch_as_if_chain(node=node, subject=subject)
 
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We collect the headers of the clauses together with their statements, and
         # treat the default as the last clause.
-        clauses = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+        clauses: List[Tuple[str, Sequence[parse_tree.StatementUnion]]] = []
 
         for case in node.cases:
-            headers = []  # type: List[str]
+            headers: List[str] = []
             for label in case.labels:
                 if isinstance(label, parse_tree.Constant):
                     # NOTE (mristin):
@@ -3307,7 +3307,7 @@ return (
     def transform_for(
         self, node: parse_tree.For
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         variable_name = node.generator.variable.identifier
         variable_type_annotation = self.type_map[node.generator.variable]
@@ -3471,7 +3471,7 @@ for (
     def transform_assert(
         self, node: parse_tree.Assert
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We transpile the negation of the condition as a ``not`` so that
@@ -3488,7 +3488,7 @@ for (
         # The exceptions of the standard library expect a narrow string, which
         # we encode in UTF-8. We convert only the f-strings at run time, since
         # they are transpiled as wide strings.
-        what = None  # type: Optional[Stripped]
+        what: Optional[Stripped] = None
         if node.message is None:
             what = cpp_common.string_literal(
                 f"Assertion failed: {ast.unparse(node.condition.original_node)}"
@@ -3551,12 +3551,12 @@ if (
     def transform_if(
         self, node: parse_tree.If
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We collect the headers of the branches together with their statements,
         # and treat the default as the last branch.
-        branches = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+        branches: List[Tuple[str, Sequence[parse_tree.StatementUnion]]] = []
 
         for i, branch in enumerate(node.branches):
             condition, error = self._transform_and_value_if_necessary(branch.condition)

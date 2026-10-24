@@ -25,7 +25,7 @@ from aas_core_codegen.golang.common import (
 # fmt: on
 def generate() -> str:
     """Generate the functions related to filesystem used across the tests."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 package ourtesting"""
@@ -100,7 +100,7 @@ func FindFilesBySuffixRecursively(root, suffix string) []string {{
 }}"""
         ),
         golang_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

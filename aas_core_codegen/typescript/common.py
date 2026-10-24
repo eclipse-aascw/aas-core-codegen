@@ -251,11 +251,11 @@ def string_literal(
     and the escaping is performed according to:
     https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals
     """
-    escaped_chars = []  # type: List[str]
+    escaped_chars: List[str] = []
 
     if len(text) > 0:
         iterator = iter(text)
-        current_char = next(iterator, None)  # type: Optional[str]
+        current_char: Optional[str] = next(iterator, None)
         assert (
             current_char is not None
         ), "If `text` is non-empty, we have to observe at least a single character"
@@ -263,7 +263,7 @@ def string_literal(
         while current_char is not None:
             next_char = next(iterator, None)
 
-            escaped_char = _BASE_ESCAPING_IN_TYPESCRIPT.get(current_char, None)
+            escaped_char = _BASE_ESCAPING_IN_TYPESCRIPT.get(current_char)
             if escaped_char is not None:
                 escaped_chars.append(escaped_char)
             else:
@@ -357,7 +357,7 @@ def needs_escaping(text: str, in_backticks: bool = False) -> bool:
     If ``in_backticks`` is set, it checks that the ``text`` needs not be escaped if
     enclosed in backticks (instead of double quotes).
     """
-    prev_character = None  # type: Optional[str]
+    prev_character: Optional[str] = None
     for character in text:
         if character in _BASE_ESCAPING_IN_TYPESCRIPT:
             return True
@@ -392,16 +392,16 @@ PRIMITIVE_TYPE_MAP = {
 
 def _assert_all_primitive_types_are_mapped() -> None:
     """Assert that we have explicitly mapped all the primitive types to C#."""
-    all_primitive_literals = set(literal.value for literal in PRIMITIVE_TYPE_MAP)
+    all_primitive_literals = {literal.value for literal in PRIMITIVE_TYPE_MAP}
 
-    mapped_primitive_literals = set(
+    mapped_primitive_literals = {
         literal.value for literal in intermediate.PrimitiveType
-    )
+    }
 
     all_diff = all_primitive_literals.difference(mapped_primitive_literals)
     mapped_diff = mapped_primitive_literals.difference(all_primitive_literals)
 
-    messages = []  # type: List[str]
+    messages: List[str] = []
     if len(mapped_diff) > 0:
         messages.append(
             f"More primitive maps are mapped than there were defined "

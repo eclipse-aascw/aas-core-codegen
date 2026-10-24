@@ -138,9 +138,9 @@ class _ParserRegistry:
 
     def __init__(self) -> None:
         """Initialize with nothing registered."""
-        self._blocks_by_name = dict()  # type: MutableMapping[Identifier, Stripped]
-        self._needed_helpers = set()  # type: Set[str]
-        self._tuple_arities = set()  # type: Set[int]
+        self._blocks_by_name: MutableMapping[Identifier, Stripped] = dict()
+        self._needed_helpers: Set[str] = set()
+        self._tuple_arities: Set[int] = set()
 
     @property
     def blocks(self) -> List[Stripped]:
@@ -255,8 +255,8 @@ def {name}(
 
         self.note_tuple_arity(arity)
 
-        parse_items = []  # type: List[Identifier]
-        item_types = []  # type: List[Stripped]
+        parse_items: List[Identifier] = []
+        item_types: List[Stripped] = []
 
         for item_type_anno in type_annotation.items:
             self.register_parser(item_type_anno)
@@ -350,7 +350,7 @@ def {name}(
 
 #: Shared helpers which a helper itself needs, so that we generate only the helpers
 #: which a meta-model actually reaches, see :py:func:`_collect_needed_helpers`
-_HELPER_DEPENDENCIES = {
+_HELPER_DEPENDENCIES: Mapping[str, Sequence[str]] = {
     "_as_mapping": [],
     "_dispatch_from_jsonable": ["_as_mapping"],
     "_bool_from_jsonable": [],
@@ -363,7 +363,7 @@ _HELPER_DEPENDENCIES = {
     "_json_value_from_jsonable": [],
     "_json_array_from_jsonable": ["_json_value_from_jsonable"],
     "_json_object_from_jsonable": ["_json_value_from_jsonable"],
-}  # type: Mapping[str, Sequence[str]]
+}
 
 
 def _collect_needed_helpers(seeds: AbstractSet[str]) -> Set[str]:
@@ -377,7 +377,7 @@ def _collect_needed_helpers(seeds: AbstractSet[str]) -> Set[str]:
     :param seeds: names of the helpers which are needed
     :return: names of the shared helpers to be generated
     """
-    result = set()  # type: Set[str]
+    result: Set[str] = set()
 
     stack = [seed for seed in seeds if seed in _HELPER_DEPENDENCIES]
     while len(stack) > 0:
@@ -1158,7 +1158,7 @@ def _generate_named_union_from_jsonable(
         if not implementer.serialization.with_model_type
     ]
 
-    blocks = [Stripped("mapping = _as_mapping(jsonable)")]  # type: List[Stripped]
+    blocks: List[Stripped] = [Stripped("mapping = _as_mapping(jsonable)")]
 
     if len(with_model_type) > 0:
         mapping_name = python_naming.private_constant_name(
@@ -1327,7 +1327,7 @@ def _generate_concrete_class_from_jsonable(
         len(cls.concrete_descendants) == 0 and cls.serialization.with_model_type
     )
 
-    blocks = [Stripped("mapping = _as_mapping(jsonable)")]  # type: List[Stripped]
+    blocks: List[Stripped] = [Stripped("mapping = _as_mapping(jsonable)")]
 
     # NOTE (mristin):
     # We check the model type up front, before we parse any of the properties, so
@@ -1368,9 +1368,9 @@ if model_type != {model_type_literal}:
     # region Declare a local for every property, so that the constructor call is
     # type-checked
 
-    variable_by_prop_name = dict()  # type: MutableMapping[Identifier, Identifier]
+    variable_by_prop_name: MutableMapping[Identifier, Identifier] = dict()
 
-    declarations = []  # type: List[Stripped]
+    declarations: List[Stripped] = []
 
     for prop in cls.properties:
         variable = python_naming.variable_name(Identifier(f"the_{prop.name}"))
@@ -1396,8 +1396,8 @@ if model_type != {model_type_literal}:
     # above, or by the dispatch which got us here -- so we only have to accept it.
     # A class which carries no model type refuses it as an unexpected property, as
     # in the other SDKs.
-    branches = []  # type: List[Stripped]
-    keys = []  # type: List[Stripped]
+    branches: List[Stripped] = []
+    keys: List[Stripped] = []
 
     model_type_note: Optional[str] = None
     if checks_model_type:
@@ -1457,7 +1457,7 @@ for key in mapping:
         )
     else:
         switch_writer = io.StringIO()
-        for i, (key, branch) in enumerate(zip(keys, branches)):
+        for i, (key, branch) in enumerate(zip(keys, branches, strict=True)):
             keyword = "if" if i == 0 else "elif"
             switch_writer.write(
                 f"""\
@@ -1564,13 +1564,13 @@ if {variable_by_prop_name[prop.name]} is None:
             Identifier(f"_{cls.name}_from_jsonable_without_dispatch")
         )
 
-    docstring_blocks = [
+    docstring_blocks: List[Stripped] = [
         Stripped(
             f"""\
 Parse an instance of :py:class:`.types.{cls_name}` from the JSON-able
 structure :paramref:`jsonable`."""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if len(cls.concrete_descendants) > 0:
         function_name_with_dispatch = python_naming.function_name(
@@ -1964,9 +1964,9 @@ class _SerializerRegistry:
 
     def __init__(self) -> None:
         """Initialize with nothing registered."""
-        self._blocks_by_name = dict()  # type: MutableMapping[Identifier, Stripped]
+        self._blocks_by_name: MutableMapping[Identifier, Stripped] = dict()
         self._bytes_are_encoded = False
-        self._checked_numbers = set()  # type: Set[intermediate.PrimitiveType]
+        self._checked_numbers: Set[intermediate.PrimitiveType] = set()
         self._json_values_are_serialized = False
 
     @property
@@ -2140,7 +2140,7 @@ def {name}(
         self, type_annotation: intermediate.TupleTypeAnnotation
     ) -> None:
         """Register the serializer of a tuple with items of the ``type_annotation``."""
-        item_expressions = []  # type: List[Stripped]
+        item_expressions: List[Stripped] = []
 
         for i, item_type_anno in enumerate(type_annotation.items):
             self.register_serializer(item_type_anno)
@@ -2164,7 +2164,7 @@ def {name}(
         # and not only the one whose type we can see a refusal for today: nothing
         # below knows at which position the value sits, so a serializer which grows
         # a new way of failing would quietly lose the way to the culprit.
-        append_statements = []  # type: List[Stripped]
+        append_statements: List[Stripped] = []
 
         for i, item_expression in enumerate(item_expressions):
             append_statements.append(
@@ -2333,7 +2333,7 @@ def _generate_number_serializers(
     which is not is not merely dead code: the one of a floating-point number
     needs :py:mod:`math`, which is imported only where a number occurs.
     """
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
 
     blocks = [
         Stripped(
@@ -2386,7 +2386,9 @@ def _float_to_jsonable(
     ]
 
     for primitive_type, block in zip(
-        (intermediate.PrimitiveType.INT, intermediate.PrimitiveType.FLOAT), blocks
+        (intermediate.PrimitiveType.INT, intermediate.PrimitiveType.FLOAT),
+        blocks,
+        strict=True,
     ):
         if primitive_type in checked_numbers:
             result.append(block)
@@ -2399,9 +2401,9 @@ def _generate_cls_to_jsonable(cls: intermediate.ConcreteClass) -> Stripped:
     cls_name = python_naming.class_name(cls.name)
     function_name = _cls_serializer_name(cls)
 
-    body_blocks = [
+    body_blocks: List[Stripped] = [
         Stripped("jsonable: MutableMapping[str, MutableJsonable] = {}")
-    ]  # type: List[Stripped]
+    ]
 
     for prop in cls.properties:
         prop_name = python_naming.property_name(prop.name)
@@ -2467,7 +2469,7 @@ def {function_name}(
 
 def _generate_serializer(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the transformer which dispatches on the class of an instance."""
-    assignments = []  # type: List[Stripped]
+    assignments: List[Stripped] = []
 
     for our_type in symbol_table.our_types:
         if not isinstance(our_type, intermediate.ConcreteClass):
@@ -2594,7 +2596,7 @@ def generate(
 
     # endregion
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 \"\"\"
@@ -2817,7 +2819,7 @@ MutableJsonable = Union[
 {I}MutableMapping[str, Any]
 ]"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     blocks.append(Stripped("# region De-serialization"))
 

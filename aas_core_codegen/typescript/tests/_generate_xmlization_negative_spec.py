@@ -267,12 +267,12 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
     )
 
     xmldom_import = (
-        "import { DOMParser, XMLSerializer } from " '"@xmldom/xmldom";'
+        'import { DOMParser, XMLSerializer } from "@xmldom/xmldom";'
         if xml_serializer_needed
         else 'import { DOMParser } from "@xmldom/xmldom";'
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -321,7 +321,7 @@ function expectDeserializationError(xmlText: string): void {{
 {I}expect(instanceOrError.error).not.toBeNull();
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     first_cls = (
         symbol_table.concrete_classes[0]

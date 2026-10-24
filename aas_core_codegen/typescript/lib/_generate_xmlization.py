@@ -399,7 +399,7 @@ class _ParserRegistry:
 
     def __init__(self) -> None:
         """Initialize with nothing registered."""
-        self._blocks_by_name = dict()  # type: Dict[Identifier, Stripped]
+        self._blocks_by_name: Dict[Identifier, Stripped] = dict()
 
     @property
     def blocks(self) -> List[Stripped]:
@@ -534,8 +534,8 @@ function {name}(
         """Register the parser of the content of an element holding a tuple."""
         arity = len(type_anno.items)
 
-        item_types = []  # type: List[str]
-        parse_items = []  # type: List[str]
+        item_types: List[str] = []
+        parse_items: List[str] = []
 
         for i, item_type_anno in enumerate(type_anno.items):
 
@@ -620,7 +620,7 @@ def _generate_parse_tuple_function(arity: int) -> Stripped:
         f"{I}parseItem{i}: ContentParser<T{i}>" for i in range(arity)
     )
 
-    item_blocks = []  # type: List[str]
+    item_blocks: List[str] = []
     for i in range(arity):
         item_blocks.append(
             f"""\
@@ -730,11 +730,11 @@ def _generate_parse_concrete_class(cls: intermediate.ConcreteClass) -> Stripped:
     function_name = _parse_sequence_function_name_for_concrete_class(cls=cls)
     cls_name = typescript_naming.class_name(cls.name)
 
-    var_declarations = []  # type: List[Stripped]
-    required_checks = []  # type: List[Stripped]
-    parse_cases = []  # type: List[Stripped]
+    var_declarations: List[Stripped] = []
+    required_checks: List[Stripped] = []
+    parse_cases: List[Stripped] = []
 
-    var_name_by_property = {}  # type: Dict[Identifier, Identifier]
+    var_name_by_property: Dict[Identifier, Identifier] = {}
 
     for prop in cls.properties:
         var_name = typescript_naming.variable_name(Identifier(f"the_{prop.name}"))
@@ -893,7 +893,7 @@ def _generate_dispatch_map(
     the parsers are all of the same shape, so the only thing which distinguishes
     one dispatch from another is which local names it accepts.
     """
-    entries = []  # type: List[str]
+    entries: List[str] = []
     for implementer in implementers:
         local_name_literal = typescript_common.string_literal(
             naming.xml_class_name(implementer.name)
@@ -1039,7 +1039,7 @@ export function {function_name}(
 
 def _generate_root_dispatch_map(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the dispatch map from root XML local names to parse functions."""
-    entries = []  # type: List[str]
+    entries: List[str] = []
     for cls in symbol_table.concrete_classes:
         local_name_literal = typescript_common.string_literal(
             naming.xml_class_name(cls.name)
@@ -1313,7 +1313,7 @@ def _generate_write_tuple_function(arity: int) -> Stripped:
         f"{I}writeItem{i}: ContentWriter<T{i}>" for i in range(arity)
     )
 
-    item_statements = []  # type: List[str]
+    item_statements: List[str] = []
     for i in range(arity):
         if i > 0:
             item_statements.append(f"index = {i};")
@@ -1363,7 +1363,7 @@ class _WriterRegistry:
 
     def __init__(self) -> None:
         """Initialize with nothing registered."""
-        self._blocks_by_name = dict()  # type: Dict[Identifier, Stripped]
+        self._blocks_by_name: Dict[Identifier, Stripped] = dict()
 
     @property
     def blocks(self) -> List[Stripped]:
@@ -1511,7 +1511,7 @@ function {name}(
         """Register the writer of the content of an element holding a tuple."""
         arity = len(type_anno.items)
 
-        write_items = []  # type: List[str]
+        write_items: List[str] = []
 
         for i, item_type_anno in enumerate(type_anno.items):
 
@@ -1655,7 +1655,7 @@ function {function_name}(
 
 def _generate_serializer(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the visitor dispatching on the run-time type of an instance."""
-    methods = []  # type: List[Stripped]
+    methods: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         method_name = typescript_naming.method_name(
@@ -1782,14 +1782,14 @@ def _generate_imports(body: str) -> Stripped:
         """Check whether the ``code`` names the ``name``."""
         return re.search(r"\b" + name + r"\b", code) is not None
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 import * as OurCommon from "./common";
 import * as OurTypes from "./types";
 import * as OurStringification from "./stringification";"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     xml_common_names = [name for name in _XML_COMMON_NAMES if is_named(name)]
     assert len(xml_common_names) > 0, "Expected at least one XML primitive to be named"
@@ -1838,7 +1838,7 @@ def generate(
     """Generate code for XML de/serialization."""
     del spec_impls
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # NOTE (mristin):
     # A meta-model which has no interface and no named union dispatches nowhere, and
@@ -2049,7 +2049,7 @@ function duplicatePropertyError(localName: string): DeserializationError {{
         blocks.append(_generate_write_sequence_of_concrete_class(cls=concrete_cls))
 
     for cls in symbol_table.classes:
-        interface = None  # type: Optional[intermediate.Interface]
+        interface: Optional[intermediate.Interface] = None
 
         if isinstance(cls, intermediate.AbstractClass):
             interface = cls.interface
@@ -2296,7 +2296,7 @@ export function toXmlString(that: OurTypes.Class): string {{
 
     # NOTE (mristin):
     # The head is composed last, since the imports are read off the body.
-    head = [
+    head: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -2326,7 +2326,7 @@ export {
 } from "./xmlcommon";
 export type { Segment } from "./xmlcommon";"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for block in head:

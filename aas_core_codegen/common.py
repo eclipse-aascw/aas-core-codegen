@@ -2,7 +2,6 @@
 import ast
 import inspect
 import io
-import itertools
 import re
 import textwrap
 from typing import (
@@ -31,6 +30,8 @@ class Rstripped(str):
 
     The block can be both single-line or multi-line.
     """
+
+    __slots__ = ()
 
     @require(
         lambda block: not block.endswith("\n")
@@ -109,6 +110,8 @@ class XMLTagName(DBC, Stripped):
 class NonEmptyString(DBC, str):
     """Represent a string with at least one character."""
 
+    __slots__ = ()
+
     @require(lambda value: len(value) > 0)
     def __new__(cls, value: str) -> "NonEmptyString":
         return cast(NonEmptyString, value)
@@ -145,7 +148,7 @@ class LinenoColumner:
     """Map the source code to line number and column for precise error messages."""
 
     def __init__(self, atok: asttokens.ASTTokens) -> None:
-        positions = []  # type: List[Tuple[int, int]]
+        positions: List[Tuple[int, int]] = []
         lineno = 1
         column = 0
         for character in atok.get_text(atok.tree):
@@ -221,8 +224,6 @@ class Lines(DBC):
         """
         return cast(Lines, lines)
 
-    # pylint: disable=function-redefined
-
     @overload
     def __getitem__(self, index: int) -> str:
         """Get the item at the given integer index."""
@@ -257,7 +258,7 @@ def assert_never(value: NoReturn) -> NoReturn:
     Please see the following page for more details:
     https://hakibenita.com/python-mypy-exhaustive-checking
     """
-    assert False, f"Unhandled value: {value} ({type(value).__name__})"
+    raise AssertionError(f"Unhandled value: {value} ({type(value).__name__})")
 
 
 def indent_but_first_line(text: str, indention: str) -> str:
@@ -266,7 +267,7 @@ def indent_but_first_line(text: str, indention: str) -> str:
 
     For example, this helps you insert indented blocks into formatted string literals.
     """
-    indented_lines = []  # type: List[str]
+    indented_lines: List[str] = []
     for i, line in enumerate(text.splitlines()):
         if i == 0:
             indented_lines.append(line)
@@ -296,9 +297,9 @@ def assert_union_of_descendants_exhaustive(union: Any, base_class: Any) -> None:
         raise NotImplementedError(f"We do not know how to handle the union: {union}")
 
     # We have to recursively figure out the subclasses.
-    concrete_subclasses = []  # type: List[Any]
+    concrete_subclasses: List[Any] = []
 
-    stack = base_class.__subclasses__()  # type: List[Any]
+    stack: List[Any] = base_class.__subclasses__()
 
     while len(stack) > 0:
         sub_cls = stack.pop()
@@ -455,9 +456,9 @@ def wrap_text_into_lines(text: str, line_width: int = 60) -> List[str]:
     # We do not want to cut out "the", "a" and "an" on separate lines, so we split
     # the text once more in tokens where the articles are kept in the same token as
     # the word.
-    tokens = []  # type: List[str]
+    tokens: List[str] = []
 
-    article = None  # type: Optional[str]
+    article: Optional[str] = None
     for part in parts:
         if article is None:
             if part in ("a", "an", "the"):
@@ -486,10 +487,10 @@ def wrap_text_into_lines(text: str, line_width: int = 60) -> List[str]:
     ]
     assert "".join(tokens) == text
 
-    segments = []  # type: List[str]
+    segments: List[str] = []
 
     accumulation_len = 0
-    accumulation = []  # type: List[str]
+    accumulation: List[str] = []
 
     for token in tokens:
         if len(token) > line_width:
@@ -513,18 +514,6 @@ def wrap_text_into_lines(text: str, line_width: int = 60) -> List[str]:
 
 
 T = TypeVar("T")
-
-
-def pairwise(iterable: Iterable[T]) -> Iterator[Tuple[T, T]]:
-    """
-    Iterate pair-wise over the iterator.
-
-    >>> list(pairwise("ABCDE"))
-    [('A', 'B'), ('B', 'C'), ('C', 'D'), ('D', 'E')]
-    """
-    a, b = itertools.tee(iterable)
-    next(b, None)
-    return zip(a, b)
 
 
 def iterate_except_first(iterable: Iterable[T]) -> Iterator[T]:

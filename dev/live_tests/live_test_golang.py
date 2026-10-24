@@ -1,6 +1,5 @@
 """Run integration tests on the Golang generated code."""
 
-# pylint: disable=wrong-import-position
 
 import argparse
 import os

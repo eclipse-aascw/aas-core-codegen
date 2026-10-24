@@ -459,7 +459,7 @@ def _generate_namespace_bound_readers(uses_json_types: bool) -> Stripped:
     subset in no namespace at all, so each primitive comes in the one or
     the two flavors which are actually called.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -498,7 +498,7 @@ public static <T> Reporting.Result<? extends T> readNamedElement(
 {I}return readNamedElementInNamespace(reader, name, NAMESPACE, readContent);
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if uses_json_types:
         blocks.extend(
@@ -626,7 +626,7 @@ public interface ContentWriter<T> {{
 
 def _generate_write_element(uses_json_types: bool) -> Stripped:
     """Generate the framer writing a value as a named XML element."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -676,7 +676,7 @@ public static <T> void writeElement(
 {I}writeElement(name, that, writer, false, writeContent);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if uses_json_types:
         blocks.append(
@@ -806,7 +806,7 @@ def generate(
     # only generated for a meta-model which actually has a JSON-able type.
     uses_json_types = intermediate_uses.json_types(symbol_table)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -836,7 +836,7 @@ public static final String NAMESPACE =
         _generate_namespace_bound_readers(uses_json_types=uses_json_types),
         _generate_read_nested_element(),
         _generate_write_element(uses_json_types=uses_json_types),
-    ]  # type: List[Stripped]
+    ]
 
     body = "\n\n".join(blocks)
 
@@ -864,7 +864,7 @@ public final class XmlCommon {{
 }}"""
     )
 
-    imports = [
+    imports: List[Stripped] = [
         Stripped("import javax.xml.stream.events.XMLEvent;"),
         Stripped("import javax.xml.stream.XMLEventReader;"),
         Stripped("import javax.xml.stream.XMLStreamConstants;"),
@@ -873,7 +873,7 @@ public final class XmlCommon {{
         Stripped("import java.util.Optional;"),
         Stripped("import java.util.regex.Pattern;"),
         Stripped(f"import {package}.reporting.Reporting;"),
-    ]  # type: List[Stripped]
+    ]
 
     blocks = [
         java_common.WARNING,

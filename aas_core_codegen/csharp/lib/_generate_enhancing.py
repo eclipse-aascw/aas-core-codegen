@@ -81,7 +81,7 @@ def _generate_enhanced_class(
     enhanced_name = csharp_naming.class_name(Identifier(f"enhanced_{cls.name}"))
     interface_name = csharp_naming.interface_name(cls.name)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(f"private readonly Our.{interface_name} _instance;"),
         Stripped(
             f"""\
@@ -93,7 +93,7 @@ public {enhanced_name}(
 {I}_instance = instance;
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for prop in cls.properties:
         prop_type = csharp_common.generate_type(prop.type_annotation)
@@ -387,7 +387,7 @@ private {value_type} {_wrap_container_name(type_anno)}(
 
 def _generate_transform(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the transform method to wrap the instance with an enhancement."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 if (that is Enhanced<TEnhancement>)
@@ -397,7 +397,7 @@ if (that is Enhanced<TEnhancement>)
 {I});
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for prop in cls.properties:
         descendability = intermediate.map_descendability(prop.type_annotation)
@@ -478,7 +478,7 @@ def _generate_wrapper(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transformer that wraps an instance with the enhancement."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             "private readonly System.Func<Our.IClass, TEnhancement?> "
             "_enhancementFactory;"
@@ -492,15 +492,15 @@ internal Wrapper(
 {I}_enhancementFactory = enhancementFactory;
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         blocks.append(_generate_transform(cls=cls))
 
-    container_blocks = []  # type: List[Stripped]
+    container_blocks: List[Stripped] = []
     wraps_classes = False
 
-    observed_monikers = set()  # type: Set[str]
+    observed_monikers: Set[str] = set()
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
             descendability = intermediate.map_descendability(prop.type_annotation)
@@ -599,7 +599,7 @@ def generate(
 
     The ``namespace`` defines the base C# namespace of the generated code.
     """
-    enhancing_blocks = [
+    enhancing_blocks: List[Stripped] = [
         Stripped(
             f"""\
 public abstract class Enhanced<TEnhancement> where TEnhancement : class
@@ -618,9 +618,9 @@ public abstract class Enhanced<TEnhancement> where TEnhancement : class
 {I}}}
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for cls in symbol_table.concrete_classes:
         code, error = _generate_enhanced_class(cls=cls)
@@ -742,7 +742,7 @@ public class Enhancer<TEnhancement>
         )
     )
 
-    using_directives = []  # type: List[Stripped]
+    using_directives: List[Stripped] = []
     using_directives.extend(
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )

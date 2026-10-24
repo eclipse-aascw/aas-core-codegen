@@ -331,7 +331,7 @@ def generate(
     uses_slicing = intermediate_uses.string_slicing(type_inference)
     uses_find = intermediate_uses.string_find_call(type_inference)
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     if intermediate_uses.int_call(symbol_table):
         import_lines.append(f'{I}"fmt"')
 
@@ -345,7 +345,7 @@ def generate(
 
     import_lines_joined = "\n".join(import_lines)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 // Package common provides common functions shared among the other packages.
@@ -481,7 +481,7 @@ func NewAndPointTo[T any](value T) *T {{
 {I}return &value
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     blocks.extend(
         _generate_tuple_struct(arity=arity)

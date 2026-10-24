@@ -21,7 +21,7 @@ def generate(
     """
     Generate code to test the ``Descend`` methods and ``VisitorThrough``.
     """
-    blocks = [
+    blocks: List[str] = [
         Stripped(
             f"""\
 private class _TracingVisitorThrough extends VisitorThrough {{
@@ -80,7 +80,7 @@ private void compareOrRerecordTrace(IClass instance, Path expectedPath) throws I
 {I}}}
 }}"""
         ),
-    ]  # type: List[str]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_java = java_naming.class_name(concrete_cls.name)

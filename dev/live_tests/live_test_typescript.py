@@ -266,7 +266,7 @@ module.exports = {
       }], ...sharedPresets],
     },
     test: {
-      presets: ['@babel/preset-env', ...sharedPresets]    
+      presets: ['@babel/preset-env', ...sharedPresets]
     },
   }
 }

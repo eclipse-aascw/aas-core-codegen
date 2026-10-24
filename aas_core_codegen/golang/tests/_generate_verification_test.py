@@ -135,7 +135,7 @@ def _generate_for_cls(cls: intermediate.ConcreteClass) -> List[Stripped]:
         Identifier(f"{cls.name}_from_jsonable")
     )
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     test_name = golang_naming.function_name(Identifier(f"Test_{cls.name}_OK"))
 
@@ -292,7 +292,7 @@ func {test_name}(t *testing.T) {{
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to test the verification."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("package verification_test"),
         golang_common.WARNING,
         Stripped(
@@ -466,7 +466,7 @@ func assertEqualsExpectedOrRerecordVerificationErrors(
 {I}return
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for enumeration in symbol_table.enumerations:
         blocks.append(_generate_test_runtime_range_for_enum(enumeration=enumeration))

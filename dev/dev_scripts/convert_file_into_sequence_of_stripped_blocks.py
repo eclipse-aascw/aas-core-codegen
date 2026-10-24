@@ -50,8 +50,8 @@ def _split_in_blocks(text: str, indention: str) -> List[str]:
     }
     """
     lines = text.splitlines()
-    blocks = []  # type: List[str]
-    accumulator = []  # type: List[str]
+    blocks: List[str] = []
+    accumulator: List[str] = []
     in_indented_section = False
 
     for line in lines:
@@ -110,9 +110,9 @@ def main() -> int:
 
     path = pathlib.Path(args.path)
 
-    _STR_TO_INDENTION = {literal.value: literal for literal in Indention}
+    str_to_indention = {literal.value: literal for literal in Indention}
 
-    indention_literal = _STR_TO_INDENTION[args.indention]
+    indention_literal = str_to_indention[args.indention]
 
     if indention_literal is Indention.TWO_SPACES:
         indention = " " * 2
@@ -135,12 +135,12 @@ def main() -> int:
             for line in block.splitlines()
         )
 
-        block = block.replace("\\", "\\\\")
+        escaped_block = block.replace("\\", "\\\\")
 
         if needs_f:
-            block = block.replace("{", "{{").replace("}", "}}")
+            escaped_block = escaped_block.replace("{", "{{").replace("}", "}}")
 
-        lines = block.split("\n")
+        lines = escaped_block.split("\n")
 
         # NOTE (mristin):
         # We replace indentation with {I}, {II}, etc. placeholders.
@@ -166,7 +166,7 @@ def main() -> int:
 
                 processed_lines.append(processed_line)
 
-        block = "\n".join(processed_lines)
+        processed_block = "\n".join(processed_lines)
 
         maybe_f = "f" if needs_f else ""
 
@@ -174,7 +174,7 @@ def main() -> int:
             f"""\
 Stripped(
     {maybe_f}'''\\
-{block}'''
+{processed_block}'''
 ),"""
         )
 

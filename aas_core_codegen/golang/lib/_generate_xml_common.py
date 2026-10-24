@@ -965,7 +965,7 @@ def _generate_namespace_bound_readers(uses_json_types: bool) -> List[Stripped]:
     no namespace at all, so each primitive comes in the one or the two flavors
     which are actually called.
     """
-    result = [
+    result: List[Stripped] = [
         Stripped(
             f"""\
 // Check that the `current` token is a valid start element, *i.e.*, lives in
@@ -1020,7 +1020,7 @@ func ReadElementDispatched[T any](
 {I})
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if uses_json_types:
         result.append(
@@ -1377,7 +1377,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
 
     ourreporting_url_literal = golang_common.string_literal(f"{repo_url}/reporting")
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 // Package xmlcommon provides the XML primitives shared by the de/serialization.
@@ -1406,7 +1406,7 @@ import (
 {I}ourreporting {ourreporting_url_literal}
 )"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     blocks.append(
         Stripped(

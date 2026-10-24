@@ -193,7 +193,7 @@ def _generate_as_tuple_combinator(arity: int) -> Stripped:
 
     params_joined = ",\n".join(f"ElementReader<T{i}> readItem{i}" for i in range(arity))
 
-    item_blocks = []  # type: List[Stripped]
+    item_blocks: List[Stripped] = []
     for i in range(arity):
         # NOTE (mristin):
         # A missing item has no element which an index could select, so we report
@@ -339,7 +339,7 @@ def _generate_as_text_combinators(
     being baked in by the generator, so that a call site costs no more than
     it did when there was one hand-rolled reader per type.
     """
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
 
     if not needed.text:
         return result
@@ -629,7 +629,7 @@ def _generate_content_converters(
     primitive_types: Set[intermediate.PrimitiveType],
 ) -> List[Stripped]:
     """Generate the conversions passed to the skeletons, one per primitive."""
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
 
     for a_type, (
         function_name,
@@ -1102,7 +1102,7 @@ def _generate_from_element_fields(
     A class whose de-serialization is implementation-specific brings its own
     function, so it is skipped.
     """
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         name = csharp_naming.class_name(cls.name)
@@ -1149,15 +1149,15 @@ def _content_types_in_initialization_order(
     the de-duplication key, which is sound only because it is injective --
     see :py:func:`aas_core_codegen.csharp.common.type_moniker`.
     """
-    observed = set()  # type: Set[str]
-    result = []  # type: List[intermediate.TypeAnnotationUnion]
+    observed: Set[str] = set()
+    result: List[intermediate.TypeAnnotationUnion] = []
 
     def register(type_anno: intermediate.TypeAnnotationUnion) -> None:
         """Register ``type_anno``, its items first."""
         if isinstance(type_anno, intermediate.ListTypeAnnotation):
-            item_type_annotations = [
+            item_type_annotations: List[intermediate.TypeAnnotationUnion] = [
                 type_anno.items
-            ]  # type: List[intermediate.TypeAnnotationUnion]
+            ]
         elif isinstance(type_anno, intermediate.SetTypeAnnotation):
             item_type_annotations = [type_anno.items]
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
@@ -1204,7 +1204,7 @@ def _generate_content_reader_fields(
     instead of at every property of every instance -- composing them at
     the call site would allocate a delegate on every single read.
     """
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
 
     for type_anno in _content_types_in_initialization_order(symbol_table):
         csharp_type = csharp_common.generate_type(type_anno)
@@ -1307,14 +1307,14 @@ internal static Our.{name} {name}FromSequence(
             None,
         )
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("error = null;"),
-    ]  # type: List[Stripped]
+    ]
 
     assert len(cls.constructor.arguments) > 0, "Otherwise expected hard-wiring above"
-    init_target_var_stmts = []  # type: List[Stripped]
+    init_target_var_stmts: List[Stripped] = []
     for prop in cls.properties:
         target_type = csharp_common.generate_type(prop.type_annotation)
         target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
@@ -1331,7 +1331,7 @@ internal static Our.{name} {name}FromSequence(
     blocks.append(Stripped("\n".join(init_target_var_stmts)))
 
     # noinspection PyListCreation
-    blocks_for_non_empty = []  # type: List[Stripped]
+    blocks_for_non_empty: List[Stripped] = []
 
     blocks_for_non_empty.append(
         Stripped(
@@ -1348,7 +1348,7 @@ if (reader.EOF)
         )
     )
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for prop in cls.properties:
         case_body, error = _generate_deserialize_property(prop=prop, cls=cls)
         if error is not None:
@@ -1474,8 +1474,8 @@ if ({target_var} == null)
 
     # fmt: off
     assert (
-            set(prop.name for prop in cls.properties)
-            == set(arg.name for arg in cls.constructor.arguments)
+            {prop.name for prop in cls.properties}
+            == {arg.name for arg in cls.constructor.arguments}
     ), (
         f"Expected the properties to coincide with constructor arguments, "
         f"but they do not for {cls.name!r}:"
@@ -1573,9 +1573,9 @@ def _generate_deserialize_impl_interface_from_element(
     """Generate the function to de-serialize an ``interface`` from an XML element."""
     name = csharp_naming.interface_name(interface.name)
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
-    case_stmts = []  # type: List[Stripped]
+    case_stmts: List[Stripped] = []
     for implementer in interface.implementers:
         implementer_xml_name_literal = csharp_common.string_literal(
             naming.xml_class_name(implementer.name)
@@ -1655,12 +1655,12 @@ def _generate_deserialize_impl_named_union_from_element(
     """Generate the function to de-serialize a ``named_union`` from an XML element."""
     name = csharp_naming.class_name(named_union.name)
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # NOTE (mristin):
     # We dispatch on the implementers as only the concrete classes appear on
     # the wire, but wrap each instance in the most specific root of the union.
-    case_stmts = []  # type: List[Stripped]
+    case_stmts: List[Stripped] = []
     for implementer in named_union.implementers:
         implementer_xml_name_literal = csharp_common.string_literal(
             naming.xml_class_name(implementer.name)
@@ -1753,7 +1753,7 @@ def _generate_read_json_content_functions() -> List[Stripped]:
     they return a nullable, so these thin wrappers handle the one and unwrap
     the other.
     """
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
 
     for function_name, csharp_type, xml_rpc_function, empty_case in (
         (
@@ -1835,7 +1835,7 @@ def _generate_deserialize_impl(
     """Generate the implementation for deserialization functions."""
     needed_readers = needed_combinators(symbol_table)
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # NOTE (mristin):
     # The base-64 reader leans on ``XmlCommon.WhitespaceRunRegex`` and
@@ -1901,7 +1901,7 @@ def _generate_deserialize_impl(
     blocks.extend(from_element_fields)
     blocks.extend(_generate_content_reader_fields(symbol_table))
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # NOTE (mristin):
     # Enumerations are going to be directly deserialized using
@@ -2048,7 +2048,7 @@ public static Our.{name} {name}From(
 
 def _generate_deserialize(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the public class ``Deserialize``."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # NOTE (mristin):
     # We use stringification for de-serialization of enumerations.
@@ -2507,7 +2507,7 @@ def _generate_dispatch_helpers(
     ``WriteIClass`` is contravariant in its argument, so it doubles as
     the item writer of a list or of a tuple of any of them.
     """
-    result = [
+    result: List[Stripped] = [
         Stripped(
             f"""\
 /// <summary>
@@ -2541,7 +2541,7 @@ internal static void WriteIClass(
 {I}that.Accept(_instance, writer);
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if len(symbol_table.named_unions) > 0:
         result.append(
@@ -2727,7 +2727,7 @@ def _generate_content_writer_fields(
     instead of at every property of every instance -- composing them at
     the call site would allocate a closure on every single write.
     """
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
 
     for type_anno in _content_types_in_initialization_order(symbol_table):
         csharp_type = csharp_common.generate_type(type_anno)
@@ -2770,7 +2770,7 @@ def _generate_serialize_property(
     xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
 
     value_expr = f"that.{prop_name}"
-    condition = None  # type: Optional[str]
+    condition: Optional[str] = None
 
     if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
         if csharp_common.is_value_type(type_anno):
@@ -2826,8 +2826,8 @@ def _generate_class_to_sequence(
     cls: intermediate.ConcreteClass,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the method to write ``cls`` as a sequence of properties as XML."""
-    blocks = []  # type: List[Stripped]
-    errors = []  # type: List[Error]
+    blocks: List[Stripped] = []
+    errors: List[Error] = []
 
     for prop in cls.properties:
         block, error = _generate_serialize_property(prop=prop, cls=cls)
@@ -2905,9 +2905,9 @@ def _generate_visitor(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a visitor which serializes instances of the meta-model to XML."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     needed = needed_combinators(symbol_table)
 
@@ -2993,7 +2993,7 @@ def _generate_serialize(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the static serializer."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /// <summary>
@@ -3020,7 +3020,7 @@ public static void To(
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     writer.write(
@@ -3031,9 +3031,9 @@ public static void To(
 """
     )
 
-    first_cls = (
+    first_cls: Optional[intermediate.ClassUnion] = (
         symbol_table.classes[0] if len(symbol_table.classes) > 0 else None
-    )  # type: Optional[intermediate.ClassUnion]
+    )
 
     if first_cls is not None:
         cls_name: str
@@ -3097,9 +3097,9 @@ def generate(
 
     The ``namespace`` defines the base C# namespace of the generated code.
     """
-    xmlization_blocks = []  # type: List[Stripped]
+    xmlization_blocks: List[Stripped] = []
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     deserialize_impl_block, deserialize_impl_errors = _generate_deserialize_impl(
         symbol_table=symbol_table
@@ -3171,7 +3171,7 @@ namespace {namespace}
     xmlization_writer.write(f"\n{I}}}  // public static class Xmlization")
     xmlization_writer.write(f"\n}}  // namespace {namespace}")
 
-    using_directives = []  # type: List[Stripped]
+    using_directives: List[Stripped] = []
     using_directives.extend(
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )
@@ -3189,7 +3189,6 @@ using System.Collections.Generic;  // can't alias"""
     if intermediate_uses.json_types(symbol_table):
         using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
 
-    # pylint: disable=line-too-long
     blocks = [
         csharp_common.WARNING,
         Stripped("\n".join(using_directives)),

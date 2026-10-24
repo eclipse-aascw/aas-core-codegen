@@ -33,7 +33,7 @@ def generate_implementation(
     """
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             """\
@@ -62,7 +62,7 @@ def generate_implementation(
 
 namespace our = {library_namespace};"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for i, (text, expected_int) in enumerate(tests_common.PARSE_INT_CASES):
         name = cpp_common.string_literal(

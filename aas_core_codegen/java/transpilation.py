@@ -106,7 +106,7 @@ def generate_type(
         return Stripped(f"Set<{item_type}>"), None
 
     elif isinstance(type_annotation, intermediate_type_inference.TupleTypeAnnotation):
-        item_types = []  # type: List[Stripped]
+        item_types: List[Stripped] = []
         for item in type_annotation.items:
             item_type, error = generate_type(type_annotation=item)
             if error is not None:
@@ -185,7 +185,7 @@ class Transpiler(
 ):
     """Transpile a node of our AST to Java code, or return an error."""
 
-    _JAVA_COMPARISON_MAP = {
+    _JAVA_COMPARISON_MAP: Final[Mapping[parse_tree.Comparator, str]] = {
         parse_tree.Comparator.LT: "<",
         parse_tree.Comparator.LE: "<=",
         parse_tree.Comparator.GT: ">",
@@ -214,16 +214,16 @@ class Transpiler(
         # Keep track of the optionals which we use as ``Optional``, *e.g.*, in
         # the is-none checks or as optional arguments, where we must not call
         # ``.get()``.
-        self._beneath_none_check = set()  # type: Set[parse_tree.Node]
+        self._beneath_none_check: Set[parse_tree.Node] = set()
 
         # Keep track of the values passed to the setters and to ``List.set``, which
         # expect ``null`` instead of an empty optional. Thus, we have to unpack
         # the value and fall back if it is not set.
-        self._beneath_call = set()  # type: Set[parse_tree.Node]
+        self._beneath_call: Set[parse_tree.Node] = set()
 
         # Keep track whenever we define a variable name, so that we can know how to
         # generate the reference in the Java code.
-        self._variable_name_set = set()  # type: Set[Identifier]
+        self._variable_name_set: Set[Identifier] = set()
 
     def _unwrap_if_optional(
         self, node: parse_tree.Name, variable: Stripped
@@ -386,14 +386,13 @@ class Transpiler(
             return None, error
         assert index is not None
 
-        index_as_int = None  # type: Optional[int]
+        index_as_int: Optional[int] = None
         try:
             index_as_int = int(index)
         except ValueError:
             pass
 
         if index_as_int is not None and index_as_int < 0:
-            # pylint: disable=invalid-unary-operand-type
             index = Stripped(f"{collection}.size() - {abs(index_as_int)}")
 
         elif (
@@ -472,8 +471,8 @@ class Transpiler(
     def transform_tuple(
         self, node: parse_tree.Tuple
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        item_exprs = []  # type: List[Stripped]
+        errors: List[Error] = []
+        item_exprs: List[Stripped] = []
 
         for value_node in node.values:
             # NOTE (mristin):
@@ -526,8 +525,8 @@ class Transpiler(
     def transform_list_literal(
         self, node: parse_tree.ListLiteral
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        items = []  # type: List[Stripped]
+        errors: List[Error] = []
+        items: List[Stripped] = []
 
         for item_node in node.items:
             item, error = self._transform_as_collection_member(
@@ -585,19 +584,19 @@ new java.util.ArrayList<{item_type}>(
     def transform_slice(
         self, node: parse_tree.Slice
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         collection, error = self.transform(node.collection)
         if error is not None:
             errors.append(error)
 
-        start = None  # type: Optional[Stripped]
+        start: Optional[Stripped] = None
         if node.start is not None:
             start, error = self.transform(node.start)
             if error is not None:
                 errors.append(error)
 
-        end = None  # type: Optional[Stripped]
+        end: Optional[Stripped] = None
         if node.end is not None:
             end, error = self.transform(node.end)
             if error is not None:
@@ -615,7 +614,7 @@ new java.util.ArrayList<{item_type}>(
         # instead of the characters, throws on the positions out of range, and does
         # not count the negative ones from the end, unlike Python. See
         # ``StringHelpers.slice`` in the generated common package.
-        args = [collection, start if start is not None else "0"]  # type: List[str]
+        args: List[str] = [collection, start if start is not None else "0"]
         if end is not None:
             args.append(end)
 
@@ -950,7 +949,7 @@ new java.util.ArrayList<{item_type}>(
     def transform_method_call(
         self, node: parse_tree.MethodCall
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         instance, error = self.transform(node.member.instance)
         if error is not None:
@@ -970,7 +969,7 @@ new java.util.ArrayList<{item_type}>(
             else self._transform_as_long
         )
 
-        args = []  # type: List[Stripped]
+        args: List[Stripped] = []
         for arg_node in node.args:
             arg, error = transform_arg(arg_node)
 
@@ -1126,7 +1125,7 @@ new java.util.ArrayList<{item_type}>(
     def transform_function_call(
         self, node: parse_tree.FunctionCall
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (empwilli):
         # The validity of the arguments is checked in
@@ -1144,7 +1143,7 @@ new java.util.ArrayList<{item_type}>(
                 f"but its inferred type was {func_type}",
             )
 
-        args = []  # type: List[Stripped]
+        args: List[Stripped] = []
         for i, arg_node in enumerate(node.args):
             if isinstance(
                 func_type, intermediate_type_inference.VerificationTypeAnnotation
@@ -1481,7 +1480,7 @@ new java.util.ArrayList<{item_type}>(
     def transform_name(
         self, node: parse_tree.Name
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def transform_not(
         self, node: parse_tree.Not
@@ -1509,8 +1508,8 @@ new java.util.ArrayList<{item_type}>(
     def transform_and(
         self, node: parse_tree.And
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        values = []  # type: List[Stripped]
+        errors: List[Error] = []
+        values: List[Stripped] = []
 
         for value_node in node.values:
             value, error = self.transform(value_node)
@@ -1569,8 +1568,8 @@ new java.util.ArrayList<{item_type}>(
     def transform_or(
         self, node: parse_tree.Or
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
-        values = []  # type: List[Stripped]
+        errors: List[Error] = []
+        values: List[Stripped] = []
 
         for value_node in node.values:
             value, error = self.transform(value_node)
@@ -1629,7 +1628,7 @@ new java.util.ArrayList<{item_type}>(
     def _transform_add_or_sub(
         self, node: Union[parse_tree.Add, parse_tree.Sub]
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         left, error = self.transform(node.left)
         if error is not None:
@@ -1640,7 +1639,7 @@ new java.util.ArrayList<{item_type}>(
             errors.append(error)
 
         if len(errors) > 0:
-            operation_name = None  # type: Optional[str]
+            operation_name: Optional[str] = None
             if isinstance(node, parse_tree.Add):
                 operation_name = "the addition"
             elif isinstance(node, parse_tree.Sub):
@@ -1700,7 +1699,7 @@ new java.util.ArrayList<{item_type}>(
     def transform_mod(
         self, node: parse_tree.Mod
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         result_type = intermediate_type_inference.try_primitive_type(
             self.type_map[node]
@@ -1780,7 +1779,7 @@ new java.util.ArrayList<{item_type}>(
     def transform_joined_str(
         self, node: parse_tree.JoinedStr
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        parts = []  # type: List[str]
+        parts: List[str] = []
         for value in node.values:
             if isinstance(value, str):
                 string_literal = java_common.string_literal(
@@ -1825,11 +1824,11 @@ new java.util.ArrayList<{item_type}>(
     def _transform_any_or_all(
         self, node: Union[parse_tree.Any, parse_tree.All]
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
-        iteration = None  # type: Optional[Stripped]
-        start = None  # type: Optional[Stripped]
-        end = None  # type: Optional[Stripped]
+        iteration: Optional[Stripped] = None
+        start: Optional[Stripped] = None
+        end: Optional[Stripped] = None
 
         if isinstance(node.generator, parse_tree.ForEach):
             iteration, error = self.transform(node.generator.iteration)
@@ -1887,7 +1886,7 @@ new java.util.ArrayList<{item_type}>(
         assert variable is not None
         assert condition is not None
 
-        qualifier_function = None  # type: Optional[str]
+        qualifier_function: Optional[str] = None
         if isinstance(node, parse_tree.Any):
             qualifier_function = "anyMatch"
         elif isinstance(node, parse_tree.All):
@@ -1895,7 +1894,7 @@ new java.util.ArrayList<{item_type}>(
         else:
             assert_never(node)
 
-        source = None  # type: Optional[Stripped]
+        source: Optional[Stripped] = None
         if isinstance(node.generator, parse_tree.ForEach):
             no_parentheses_types_in_this_context = (
                 parse_tree.Member,
@@ -1993,7 +1992,7 @@ new java.util.ArrayList<{item_type}>(
     def transform_assignment(
         self, node: parse_tree.Assignment
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         if isinstance(node.target, (parse_tree.Member, parse_tree.Index)):
             # NOTE (mristin):
@@ -2022,8 +2021,8 @@ new java.util.ArrayList<{item_type}>(
             if error is not None:
                 errors.append(error)
 
-            index_node = None  # type: Optional[parse_tree.Expression]
-            index = None  # type: Optional[Stripped]
+            index_node: Optional[parse_tree.Expression] = None
+            index: Optional[Stripped] = None
             if isinstance(node.target, parse_tree.Index):
                 index_node = node.target.index
                 index, error = self.transform(index_node)
@@ -2056,21 +2055,20 @@ new java.util.ArrayList<{item_type}>(
             ):
                 receiver = Stripped(f"({receiver})")
 
-            arguments = [value]  # type: List[Stripped]
+            arguments: List[Stripped] = [value]
             if isinstance(node.target, parse_tree.Member):
                 method_name = java_naming.setter_name(node.target.name)
             else:
                 assert index_node is not None
                 assert index is not None
 
-                index_as_int = None  # type: Optional[int]
+                index_as_int: Optional[int] = None
                 try:
                     index_as_int = int(index)
                 except ValueError:
                     pass
 
                 if index_as_int is not None and index_as_int < 0:
-                    # pylint: disable=invalid-unary-operand-type
                     index = Stripped(f"{receiver}.size() - {-index_as_int}")
 
                 elif (
@@ -2139,7 +2137,7 @@ new java.util.ArrayList<{item_type}>(
         if error is not None:
             errors.append(error)
 
-        target = None  # type: Optional[Stripped]
+        target: Optional[Stripped] = None
         if isinstance(node.target, parse_tree.Name):
             # NOTE (mristin):
             # We must not unwrap the optional variable which we assign to.
@@ -2298,8 +2296,8 @@ return (
         )
         self._environment = scope_environment
 
-        errors = []  # type: List[Error]
-        stmts = []  # type: List[Stripped]
+        errors: List[Error] = []
+        stmts: List[Stripped] = []
         try:
             for stmt in statements:
                 code, error = self.transform(stmt)
@@ -2344,7 +2342,7 @@ return (
         Each branch is given as its header, *e.g.*, ``else if (x > 0)``, together
         with its statements.
         """
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
         writer = io.StringIO()
 
         for i, (header, statements) in enumerate(branches):
@@ -2385,15 +2383,15 @@ return (
         if not isinstance(node.subject, no_parentheses_types):
             subject = Stripped(f"({subject})")
 
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We collect the headers of the branches together with their statements,
         # and treat the default as the last branch.
-        branches = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+        branches: List[Tuple[str, Sequence[parse_tree.StatementUnion]]] = []
 
         for i, case in enumerate(node.cases):
-            comparisons = []  # type: List[str]
+            comparisons: List[str] = []
             for label in case.labels:
                 label_code, error = self.transform(label)
                 if error is not None:
@@ -2443,15 +2441,15 @@ return (
         ):
             return self._transform_switch_as_if_chain(node=node, subject=subject)
 
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We collect the headers of the clauses together with their statements, and
         # treat the default as the last clause.
-        clauses = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+        clauses: List[Tuple[str, Sequence[parse_tree.StatementUnion]]] = []
 
         for case in node.cases:
-            labels = []  # type: List[str]
+            labels: List[str] = []
             for label in case.labels:
                 if isinstance(label, parse_tree.Member):
                     # NOTE (mristin):
@@ -2503,13 +2501,13 @@ return (
     def transform_for(
         self, node: parse_tree.For
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         variable_name = node.generator.variable.identifier
         variable_type = self.type_map[node.generator.variable]
         variable = java_naming.variable_name(variable_name)
 
-        header = None  # type: Optional[str]
+        header: Optional[str] = None
         if isinstance(node.generator, parse_tree.ForEach):
             iteration, error = self.transform(node.generator.iteration)
             if error is not None:
@@ -2608,7 +2606,7 @@ for (
     def transform_assert(
         self, node: parse_tree.Assert
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We transpile the negation of the condition as a ``not`` so that
@@ -2621,7 +2619,7 @@ for (
         if error is not None:
             errors.append(error)
 
-        message = None  # type: Optional[Stripped]
+        message: Optional[Stripped] = None
         if node.message is None:
             message = java_common.string_literal(
                 f"Assertion failed: {ast.unparse(node.condition.original_node)}"
@@ -2673,12 +2671,12 @@ if (
     def transform_if(
         self, node: parse_tree.If
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         # NOTE (mristin):
         # We collect the headers of the branches together with their statements,
         # and treat the default as the last branch.
-        branches = []  # type: List[Tuple[str, Sequence[parse_tree.StatementUnion]]]
+        branches: List[Tuple[str, Sequence[parse_tree.StatementUnion]]] = []
 
         for i, branch in enumerate(node.branches):
             condition, error = self.transform(branch.condition)

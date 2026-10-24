@@ -36,7 +36,7 @@ def _generate_deserialization_definitions(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
     """Generate the definitions of deserialization functions."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for cls in symbol_table.classes:
         interface_name = cpp_naming.interface_name(cls.name)
@@ -1594,7 +1594,7 @@ def _generate_deserialize_tuple_function(arity: int) -> Stripped:
         f"common::optional<T{i}> item{i};" for i in range(arity)
     )
 
-    item_blocks = []  # type: List[Stripped]
+    item_blocks: List[Stripped] = []
     for i in range(arity):
         item_blocks.append(
             Stripped(
@@ -1814,7 +1814,7 @@ def _generate_model_type_string_to_model_type(
     a ``std::map<std::string, std::function<...>>`` keyed by string per
     abstract class).
     """
-    items = []  # type: List[Stripped]
+    items: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         literal_name = cpp_naming.enum_literal_name(cls.name)
 
@@ -2334,16 +2334,16 @@ def _generate_property_enums_and_maps(
     ``ParseProperties`` switches on a literal, and C++ can not switch on a string,
     so the JSON name of a property has to be translated into one first.
     """
-    result = [
+    result: List[Stripped] = [
         Stripped("namespace properties {"),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         enum_name = cpp_naming.enum_name(Identifier(f"Of_{cls.name}"))
 
-        literals = [
+        literals: List[str] = [
             cpp_naming.enum_literal_name(prop.name) for prop in cls.properties
-        ]  # type: List[str]
+        ]
 
         if cls.serialization.with_model_type:
             assert all(prop.json_name != "modelType" for prop in cls.properties), (
@@ -2379,7 +2379,7 @@ enum class {enum_name} : std::uint32_t {{
 
         map_name = cpp_naming.constant_name(Identifier(f"map_of_{cls.name}"))
 
-        items = []  # type: List[Stripped]
+        items: List[Stripped] = []
 
         for prop in cls.properties:
             items.append(
@@ -2689,8 +2689,8 @@ DeserializeList<
         )
 
     elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        item_types = []  # type: List[Stripped]
-        item_exprs = []  # type: List[Stripped]
+        item_types: List[Stripped] = []
+        item_exprs: List[Stripped] = []
 
         for item_type_anno in type_anno.items:
 
@@ -2910,11 +2910,11 @@ def _generate_parse_properties_of_cls_implementation(
 
     ok_type = _cls_ok_type(cls)
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region The locals which the constructor is finally called with
     if len(cls.properties) > 0:
-        init_statements = []  # type: List[Stripped]
+        init_statements: List[Stripped] = []
 
         for prop in cls.properties:
             var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
@@ -2944,7 +2944,7 @@ common::optional<
     # endregion
 
     # region The property loop
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
 
     for prop in cls.properties:
         literal_name = cpp_naming.enum_literal_name(prop.name)
@@ -3055,8 +3055,8 @@ if (!{var_name}.has_value()) {{
 
     # fmt: off
     assert (
-            set(prop.name for prop in cls.properties)
-            == set(arg.name for arg in cls.constructor.arguments)
+            {prop.name for prop in cls.properties}
+            == {arg.name for arg in cls.constructor.arguments}
     ), (
         f"Expected the properties to coincide with constructor arguments, "
         f"but they do not for {cls.name!r}:"
@@ -3064,7 +3064,7 @@ if (!{var_name}.has_value()) {{
     )
     # fmt: on
 
-    constructor_args = []  # type: List[Stripped]
+    constructor_args: List[Stripped] = []
     for arg in cls.constructor.arguments:
         prop = cls.properties_by_name[arg.name]
 
@@ -3354,7 +3354,7 @@ def _generate_dispatch_deserialize_implementation(
 
     interface_name = cpp_naming.interface_name(cls.name)
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for target_cls in targets:
         literal_name = cpp_naming.enum_literal_name(target_cls.name)
 
@@ -3602,15 +3602,15 @@ def _generate_dispatch_deserialize_implementation_for_named_union(
         Identifier(f"deserialize_{named_union.name}")
     )
 
-    implementers_with_model_type = []  # type: List[intermediate.ConcreteClass]
-    implementers_without_model_type = []  # type: List[intermediate.ConcreteClass]
+    implementers_with_model_type: List[intermediate.ConcreteClass] = []
+    implementers_without_model_type: List[intermediate.ConcreteClass] = []
     for implementer in named_union.implementers:
         if implementer.serialization.with_model_type:
             implementers_with_model_type.append(implementer)
         else:
             implementers_without_model_type.append(implementer)
 
-    body_blocks = [
+    body_blocks: List[Stripped] = [
         Stripped(
             f"""\
 common::optional<DeserializationError> not_an_object(
@@ -3625,10 +3625,10 @@ if (not_an_object.has_value()) {{
 {I});
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if len(implementers_with_model_type) > 0:
-        case_blocks = []  # type: List[Stripped]
+        case_blocks: List[Stripped] = []
         for target_cls in implementers_with_model_type:
             literal_name = cpp_naming.enum_literal_name(target_cls.name)
             snippet = (
@@ -4296,7 +4296,7 @@ def _generate_serialize_tuple_function(arity: int) -> Stripped:
         f"SerializeItemT{i}&& serialize_item{i}" for i in range(arity)
     )
 
-    item_stmts = []  # type: List[Stripped]
+    item_stmts: List[Stripped] = []
     for i in range(arity):
         item_stmts.append(
             Stripped(
@@ -4568,7 +4568,7 @@ def _collect_ids_of_types_with_fallible_serialization(
     is the one being built, so it answers only for the types already in it, which
     is all the fixed point needs and is why it grows until nothing changes.
     """
-    result = set()  # type: Set[intermediate.IdOfOurType]
+    result: Set[intermediate.IdOfOurType] = set()
 
     changed = True
     while changed:
@@ -4826,7 +4826,7 @@ Serialize{union_name}(
         )
 
     elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        item_exprs = []  # type: List[Stripped]
+        item_exprs: List[Stripped] = []
 
         for item_type_anno in type_anno.items:
 
@@ -4966,7 +4966,7 @@ def _generate_serialize_property(
     getter = cpp_naming.getter_name(prop.name)
 
     value_expr: Stripped
-    maybe_var = None  # type: Optional[Identifier]
+    maybe_var: Optional[Identifier] = None
 
     if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
         maybe_var = cpp_naming.variable_name(Identifier(f"maybe_{prop.name}"))
@@ -5039,9 +5039,9 @@ def _generate_serialize_cls(
     """Generate the serialization function for exactly the class ``cls``."""
     fallible = _own_serialization_is_fallible(cls, ids_of_fallible_types)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("nlohmann::json result = nlohmann::json::object();")
-    ]  # type: List[Stripped]
+    ]
 
     if fallible:
         blocks.append(Stripped("common::optional<SerializationError> error;"))
@@ -5385,7 +5385,7 @@ def _generate_dispatching_serialize_cls(
 
     model_type_enum = cpp_naming.enum_name(Identifier("Model_type"))
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for concrete_cls in concrete_classes:
         serialize_name = _concrete_serialize_function_name(concrete_cls)
 
@@ -5491,7 +5491,7 @@ def _generate_serialize_iclass_implementation(
         for cls in symbol_table.concrete_classes
     )
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         serialize_name = _concrete_serialize_function_name(cls)
 
@@ -5653,7 +5653,7 @@ def _generate_serialize_named_union_implementation(
 
     union_name = cpp_naming.union_name(named_union.name)
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for i, root in enumerate(named_union.roots):
         serialize_function = _determine_serialize_function_for_class(root)
 

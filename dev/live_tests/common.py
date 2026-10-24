@@ -83,7 +83,7 @@ def select_case_dirs(
 
     The skipped cases are reported to STDOUT.
     """
-    result = []  # type: List[pathlib.Path]
+    result: List[pathlib.Path] = []
 
     for case_dir in sorted(path for path in expected_dir.iterdir() if path.is_dir()):
         if select is not None and select.match(case_dir.name) is None:

@@ -14,12 +14,12 @@ else:
 
 def main() -> None:
     """Execute the main routine."""
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
     repo_root = pathlib.Path(os.path.realpath(__file__)).parent.parent.parent
     pyproject_toml_path = repo_root / "pyproject.toml"
 
-    with open(pyproject_toml_path, "rb") as f:
+    with pyproject_toml_path.open("rb") as f:
         pyproject_data = tomllib.load(f)
 
     # Get module name from [tool.setuptools.packages.find] include

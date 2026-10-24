@@ -52,7 +52,7 @@ def generate(qualified_module_name: python_common.QualifiedModuleName) -> str:
     The ``qualified_module_name`` indicates the fully-qualified name of the base
     module.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_module_docstring(qualified_module_name=qualified_module_name),
         python_common.WARNING,
         Stripped(
@@ -200,7 +200,7 @@ class Error:
 {I}def __repr__(self) -> str:
 {II}return f"Error(path={{self.path}}, cause={{self.cause}})\""""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

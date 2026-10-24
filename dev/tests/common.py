@@ -11,24 +11,21 @@ from aas_core_codegen import parse, intermediate
 from aas_core_codegen.common import Error
 
 
-# pylint: disable=missing-function-docstring
-
-
 def most_underlying_messages(error_or_errors: Union[Error, Sequence[Error]]) -> str:
     """Find the "leaf" errors and render them as a new-line separated list."""
     if isinstance(error_or_errors, Error):
-        errors = [error_or_errors]  # type: Sequence[Error]
+        errors: Sequence[Error] = [error_or_errors]
     else:
         errors = error_or_errors
 
-    most_underlying_errors = []  # type: List[Error]
+    most_underlying_errors: List[Error] = []
 
     for error in errors:
         if error.underlying is None or len(error.underlying) == 0:
             most_underlying_errors.append(error)
             continue
 
-        stack = error.underlying  # type: List[Error]
+        stack: List[Error] = error.underlying
 
         while len(stack) > 0:
             top_error = stack.pop()
@@ -69,7 +66,7 @@ def parse_source(source: str) -> Tuple[Optional[parse.SymbolTable], Optional[Err
     """Parse the given source text into a symbol table."""
     atok, parse_exception = parse.source_to_atok(source=source)
     if parse_exception:
-        raise parse_exception  # pylint: disable=raising-bad-type
+        raise parse_exception
 
     assert atok is not None
 
@@ -82,7 +79,7 @@ def translate_source_to_intermediate(
 ) -> Tuple[Optional[intermediate.SymbolTable], Optional[Error]]:
     atok, parse_exception = parse.source_to_atok(source=source)
     if parse_exception:
-        raise parse_exception  # pylint: disable=raising-bad-type
+        raise parse_exception
 
     assert atok is not None
 
@@ -98,7 +95,7 @@ def must_translate_source_to_intermediate(
 ) -> intermediate.SymbolTable:
     atok, parse_exception = parse.source_to_atok(source=source)
     if parse_exception:
-        raise parse_exception  # pylint: disable=raising-bad-type
+        raise parse_exception
 
     assert atok is not None
 
@@ -149,12 +146,12 @@ def assert_got_as_expected_output_dir(
     output_dir: pathlib.Path, expected_output_dir: pathlib.Path, normalized_stdout: str
 ) -> None:
     """Assert that the recorded expected output coincides with the output."""
-    output_files = set()  # type: Set[pathlib.Path]
+    output_files: Set[pathlib.Path] = set()
     for file_path in output_dir.rglob("*"):
         if file_path.is_file():
             output_files.add(file_path.relative_to(output_dir))
 
-    expected_files = set()  # type: Set[pathlib.Path]
+    expected_files: Set[pathlib.Path] = set()
     for file_path in expected_output_dir.rglob("*"):
         if file_path.is_file():
             expected_files.add(file_path.relative_to(expected_output_dir))
@@ -230,4 +227,4 @@ def assert_got_as_expected_output_dir(
                     tofile=str(output_path),
                 )
             )
-            raise AssertionError(f"File content mismatch in {rel_path}:\n" f"{diff}")
+            raise AssertionError(f"File content mismatch in {rel_path}:\n{diff}")

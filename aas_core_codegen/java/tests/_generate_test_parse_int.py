@@ -23,7 +23,7 @@ def generate(
     behave the same. The tests are generated from the same cases for all the SDKs,
     see :py:mod:`aas_core_codegen.tests_common`.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for i, (text, expected_int) in enumerate(tests_common.PARSE_INT_CASES):
         blocks.append(

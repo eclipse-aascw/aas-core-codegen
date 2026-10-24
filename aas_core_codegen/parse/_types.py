@@ -182,7 +182,7 @@ class Constant(DBC):
     @abc.abstractmethod
     def __repr__(self) -> str:
         """Represent the instance as a string for easier debugging."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class ConstantPrimitive(Constant):
@@ -459,7 +459,7 @@ class Method(DBC):
         (
                 arg_set := {arg.name for arg in arguments},
                 all(
-                    arg in arg_set  # pylint: disable=used-before-assignment
+                    arg in arg_set
                     for precondition in contracts.preconditions
                     for arg in precondition.args
                 )
@@ -516,14 +516,14 @@ class Method(DBC):
         self.non_mutating = non_mutating
         self.node = node
 
-        self.arguments_by_name = {
+        self.arguments_by_name: Mapping[Identifier, Argument] = {
             argument.name: argument for argument in self.arguments
-        }  # type: Mapping[Identifier, Argument]
+        }
 
     @abc.abstractmethod
     def __repr__(self) -> str:
         # Make abstract to signal that this is a pure abstract class
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class ImplementationSpecificMethod(Method):
@@ -732,17 +732,17 @@ class Class(DBC):
         self.description = description
         self.node = node
 
-        self.properties_by_name = {
+        self.properties_by_name: Mapping[Identifier, Property] = {
             prop.name: prop for prop in properties
-        }  # type: Mapping[Identifier, Property]
+        }
 
-        self.methods_by_name = {
+        self.methods_by_name: Mapping[Identifier, Method] = {
             method.name: method for method in methods
-        }  # type: Mapping[Identifier, Method]
+        }
 
     @abc.abstractmethod
     def __repr__(self) -> str:
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class AbstractClass(Class):
@@ -830,9 +830,9 @@ class Enumeration:
         self.description = description
         self.node = node
 
-        self.literals_by_name = {
+        self.literals_by_name: Mapping[Identifier, EnumerationLiteral] = {
             literal.name: literal for literal in self.literals
-        }  # type: Mapping[Identifier, EnumerationLiteral]
+        }
 
 
 class NamedUnion:

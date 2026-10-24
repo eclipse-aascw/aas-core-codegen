@@ -101,8 +101,8 @@ def _generate_signature(
     instead of ``std::enable_if`` in the signature so that the template can be
     declared and defined separately.
     """
-    type_parameters = []  # type: List[Identifier]
-    arg_definitions = []  # type: List[Stripped]
+    type_parameters: List[Identifier] = []
+    arg_definitions: List[Stripped] = []
     for arg in verification.arguments:
         arg_name = cpp_naming.argument_name(arg.name)
 
@@ -188,7 +188,7 @@ def _generate_verification_function_definition(
 
         return code, None
 
-    remarks_on_generic_sequences = []  # type: List[str]
+    remarks_on_generic_sequences: List[str] = []
     for arg in verification.arguments:
         item_cls = intermediate.generic_sequence_item_class(arg)
         if item_cls is None:
@@ -204,7 +204,7 @@ def _generate_verification_function_definition(
             f"without a copy, as std::vector is invariant"
         )
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
     if verification.description is not None:
         comment, errors = cpp_description.generate_comment_for_summary_remarks(
             description=verification.description,
@@ -293,7 +293,7 @@ def _check_no_calls_to_internal_verifications(
     see :py:func:`_is_generic`, while the internal verification functions are
     declared only in the implementation file.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for node_in_body in verification.parsed.body:
         for node in parse_tree.over_nodes(node_in_body):
             if not isinstance(node, parse_tree.FunctionCall):
@@ -370,7 +370,7 @@ class _TranspilableVerificationTranspiler(cpp_transpilation.Transpiler):
         # an argument to the loop variables, the generator variables and
         # the indexed items, so we can tell by the identity of the type annotation
         # that a value is of the template parameter of a generic sequence.
-        type_parameter_by_items_id = dict()  # type: Dict[int, Identifier]
+        type_parameter_by_items_id: Dict[int, Identifier] = dict()
         for arg in verification.arguments:
             if intermediate.generic_sequence_item_class(arg) is None:
                 continue
@@ -483,7 +483,7 @@ def _generate_implementation_of_transpilable_verification(
         aliasing=aliasing,
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in verification.parsed.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -499,7 +499,7 @@ def _generate_implementation_of_transpilable_verification(
     # NOTE (mristin):
     # We constrain the template parameters of the generic sequences here instead
     # of in the signature, see :py:func:`_generate_signature`.
-    static_asserts = []  # type: List[Stripped]
+    static_asserts: List[Stripped] = []
     for arg in verification.arguments:
         item_cls = intermediate.generic_sequence_item_class(arg)
         if item_cls is None:
@@ -600,7 +600,7 @@ def generate_header(
         f"#include {std_include}" for std_include in sorted(std_includes)
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 #ifndef {include_guard_var}
@@ -827,9 +827,9 @@ class RecursiveVerification : public IVerification {{
 {I}const std::shared_ptr<types::IClass>& instance_;
 }};  // class RecursiveVerification"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # NOTE (mristin):
     # The internal verification functions are declared only in the implementation
@@ -1225,7 +1225,7 @@ def _transpile_invariant(
 # functions in the anonymous namespace.
 
 #: Define the check of a value, listed per shape in ``ChecksOf``.
-_CHECK_STRUCT = [
+_CHECK_STRUCT: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1245,11 +1245,11 @@ struct Check {{
 {I}const wchar_t* message;
 }};  // struct Check"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the interface of the lazy iterators over the values to verify.
-_IITERATOR = [
+_IITERATOR: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1304,11 +1304,11 @@ class IIterator {{
 {I}virtual ~IIterator() = default;
 }};  // class IIterator"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over no values.
-_EMPTY = [
+_EMPTY: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1359,11 +1359,11 @@ std::unique_ptr<IIterator> Empty() {{
 {I}return common::make_unique<EmptyIterator>();
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over a single value which lives in the model.
-_ONE = [
+_ONE: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1424,11 +1424,11 @@ std::unique_ptr<IIterator> One(
 {I}return common::make_unique<OneIterator>(value, shape);
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over a single value of which we keep a copy.
-_ONE_BY_VALUE = [
+_ONE_BY_VALUE: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1494,11 +1494,11 @@ std::unique_ptr<IIterator> OneByValue(
 {I}return common::make_unique<OneByValueIterator<T> >(value, shape);
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the children, one after another.
-_CHAIN = [
+_CHAIN: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1614,11 +1614,11 @@ std::unique_ptr<IIterator> Chain(
 {I}return common::make_unique<ChainIterator>(std::move(collected));
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the values in a property.
-_IN_PROPERTY = [
+_IN_PROPERTY: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1686,11 +1686,11 @@ std::unique_ptr<IIterator> InProperty(
 {I}return common::make_unique<InPropertyIterator>(property, std::move(child));
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the values in a component of a tuple.
-_AT_INDEX = [
+_AT_INDEX: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1758,11 +1758,11 @@ std::unique_ptr<IIterator> AtIndex(
 {I}return common::make_unique<AtIndexIterator>(index, std::move(child));
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the items of a list.
-_EACH = [
+_EACH: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -1879,11 +1879,11 @@ std::unique_ptr<IIterator> Each(
 {I}return common::make_unique<EachIterator<T> >(&items, over_item, recursive);
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the items of a set, in the order of the serialization.
-_EACH_SORTED = [
+_EACH_SORTED: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -2023,11 +2023,11 @@ std::unique_ptr<IIterator> EachSorted(
 {I});
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the instances referenced from another one.
-_OVER = [
+_OVER: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -2124,11 +2124,11 @@ std::unique_ptr<IIterator> ThroughPointer(
 {I}return Over(*instance, recursive);
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the keys of a JSON-able object.
-_EACH_KEY = [
+_EACH_KEY: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -2220,11 +2220,11 @@ std::unique_ptr<IIterator> EachKey(
 {I}return common::make_unique<EachKeyIterator>(&object, shape);
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the iterator over the errors, and its start and end.
-_ERROR_ITERATOR = [
+_ERROR_ITERATOR: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -2434,11 +2434,11 @@ const Iterator& PastLastError() {{
 {I}return iterator;
 }}"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 
 #: Define the verification of the values given by an iterator.
-_VALUES_VERIFICATION = [
+_VALUES_VERIFICATION: Final[Sequence[Stripped]] = [
     Stripped(
         f"""\
 /**
@@ -2467,7 +2467,7 @@ class ValuesVerification : public IVerification {{
 {I}std::unique_ptr<IIterator> values_;
 }};  // class ValuesVerification"""
     ),
-]  # type: Final[Sequence[Stripped]]
+]
 
 # endregion Hand-written C++
 
@@ -2894,7 +2894,7 @@ def _generate_over_function(
         )
 
     elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
-        components = []  # type: List[Stripped]
+        components: List[Stripped] = []
         for i, item in enumerate(type_annotation.items):
             item_expression = _generate_over_expression(
                 type_annotation=item,
@@ -2959,7 +2959,7 @@ switch (value.index()) {{
         assert expression is not None
         body = Stripped(f"return {expression};")
 
-    alias = None  # type: Optional[Stripped]
+    alias: Optional[Stripped] = None
 
     if isinstance(
         type_annotation,
@@ -3047,7 +3047,7 @@ def _generate_over_class(
     The ``function_name_set`` contains the names of the collected functions, see
     :py:func:`cpp_over.collect_function_types`.
     """
-    parts = []  # type: List[Stripped]
+    parts: List[Stripped] = []
 
     if len(cls.invariants) > 0:
         parts.append(
@@ -3113,7 +3113,7 @@ def _generate_over_instance(
     symbol_table: intermediate.SymbolTable, analysis: _Analysis
 ) -> Stripped:
     """Generate the dispatch over the values of an instance on its runtime type."""
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         if id(cls) not in analysis.yielding_class_id_set:
             continue
@@ -3242,9 +3242,9 @@ const types::{interface_name}* that = (
 );"""
         )
 
-    functions = []  # type: List[Stripped]
-    checks = []  # type: List[Stripped]
-    errors = []  # type: List[Error]
+    functions: List[Stripped] = []
+    checks: List[Stripped] = []
+    errors: List[Error] = []
 
     for i, invariant in enumerate(our_type.invariants):
         condition, error = _transpile_invariant(
@@ -3388,9 +3388,9 @@ std::unique_ptr<impl::IVerificator> NewNestedVerificator(
 }}"""
         )
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for literal, json_value_shape in zip(
-        _JSON_SHAPE_LITERALS, ("kAny", "kArray", "kObject")
+        _JSON_SHAPE_LITERALS, ("kAny", "kArray", "kObject"), strict=True
     ):
         case_blocks.append(
             Stripped(
@@ -3551,7 +3551,7 @@ def generate_implementation(
 
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     uses_json = intermediate_uses.json_types(symbol_table)
 
@@ -3576,7 +3576,7 @@ def generate_implementation(
         f"#include {std_include}" for std_include in sorted(std_includes)
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f"""\
@@ -3594,7 +3594,7 @@ def generate_implementation(
         ),
         cpp_common.generate_namespace_opening(namespace),
         *_generate_error_implementation(),
-    ]  # type: List[Stripped]
+    ]
 
     # NOTE (mristin):
     # The internal verification functions live in the anonymous namespace, so that
@@ -3635,7 +3635,7 @@ def generate_implementation(
             # NOTE (mristin):
             # The implementation-specific snippet can be empty, *e.g.*, if
             # the function is templated and defined in the header snippet.
-            definition = None  # type: Optional[Stripped]
+            definition: Optional[Stripped] = None
 
             if isinstance(verification, intermediate.PatternVerification):
                 definition = _generate_pattern_verification_implementation(
@@ -3711,10 +3711,12 @@ namespace {{
 
     # region Checks
 
-    constrained_primitives_and_classes = [
+    constrained_primitives_and_classes: List[
+        Union[intermediate.ConstrainedPrimitive, intermediate.ConcreteClass]
+    ] = [
         *symbol_table.constrained_primitives,
         *symbol_table.concrete_classes,
-    ]  # type: List[Union[intermediate.ConstrainedPrimitive, intermediate.ConcreteClass]]
+    ]
 
     if uses_json:
         taken_literal_set = {
@@ -3731,8 +3733,8 @@ namespace {{
                     )
                 )
 
-    check_functions = []  # type: List[Stripped]
-    checks_of_case_blocks = []  # type: List[Stripped]
+    check_functions: List[Stripped] = []
+    checks_of_case_blocks: List[Stripped] = []
 
     for our_type in constrained_primitives_and_classes:
         if len(our_type.invariants) == 0:
@@ -3771,7 +3773,7 @@ namespace {{
         yields=analysis.yields_recursively,
     )
 
-    generated_over = []  # type: List[Stripped]
+    generated_over: List[Stripped] = []
 
     if collection_errors is not None:
         errors.extend(collection_errors)

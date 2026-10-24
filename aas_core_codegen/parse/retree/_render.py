@@ -1,6 +1,6 @@
 """Render the parsed (and possibly modified) regular expression back into values."""
 import io
-from typing import List, Union, Optional, Mapping
+from typing import Final, List, Union, Optional, Mapping
 
 import more_itertools
 from icontract import require, ensure
@@ -26,7 +26,7 @@ from aas_core_codegen.parse.tree import FormattedValue
 class Renderer(Transformer[List[Union[str, FormattedValue]]]):
     """Render the regular expression back into a joined string."""
 
-    _ESCAPING_IN_CHARACTER_LITERALS = {
+    _ESCAPING_IN_CHARACTER_LITERALS: Final[Mapping[str, str]] = {
         "\t": "\\t",
         "\n": "\\n",
         "\r": "\\r",
@@ -47,7 +47,7 @@ class Renderer(Transformer[List[Union[str, FormattedValue]]]):
         "\\": "\\\\",
     }
 
-    _ESCAPING_IN_RANGE = {
+    _ESCAPING_IN_RANGE: Final[Mapping[str, str]] = {
         "\t": "\\t",
         "\n": "\\n",
         "\r": "\\r",
@@ -89,7 +89,7 @@ class Renderer(Transformer[List[Union[str, FormattedValue]]]):
 
     def transform_union_expr(self, node: UnionExpr) -> List[Union[str, FormattedValue]]:
         """Transform the ``union_expr``."""
-        output = []  # type: List[Union[str, FormattedValue]]
+        output: List[Union[str, FormattedValue]] = []
 
         for i, concatenation in enumerate(node.uniates):
             if i > 0:
@@ -103,7 +103,7 @@ class Renderer(Transformer[List[Union[str, FormattedValue]]]):
         self, node: Concatenation
     ) -> List[Union[str, FormattedValue]]:
         """Transform the ``concatenation``."""
-        output = []  # type: List[Union[str, FormattedValue]]
+        output: List[Union[str, FormattedValue]] = []
         for concatenant in node.concatenants:
             output.extend(self.transform(concatenant))
 
@@ -122,7 +122,7 @@ class Renderer(Transformer[List[Union[str, FormattedValue]]]):
 
     def transform_term(self, node: Term) -> List[Union[str, FormattedValue]]:
         """Transform the ``term``."""
-        output = []  # type: List[Union[str, FormattedValue]]
+        output: List[Union[str, FormattedValue]] = []
 
         if isinstance(node.value, FormattedValue):
             output.append(node.value)
@@ -143,7 +143,7 @@ class Renderer(Transformer[List[Union[str, FormattedValue]]]):
 
     def transform_group(self, node: Group) -> List[Union[str, FormattedValue]]:
         """Transform the ``group``."""
-        output = ["("]  # type: List[Union[str, FormattedValue]]
+        output: List[Union[str, FormattedValue]] = ["("]
         output.extend(self.transform(node.union))
         output.append(")")
         return output
@@ -188,7 +188,7 @@ class Renderer(Transformer[List[Union[str, FormattedValue]]]):
 
     def transform_char_set(self, node: CharSet) -> List[Union[str, FormattedValue]]:
         """Transform the ``char_set``."""
-        output = ["["]  # type: List[Union[str, FormattedValue]]
+        output: List[Union[str, FormattedValue]] = ["["]
 
         already_output_something = False
         if node.complementing:
@@ -276,7 +276,7 @@ def render(
     # Compress the consecutive strings into a single string to have a shorter
     # representation
 
-    output = []  # type: List[Union[str, FormattedValue]]
+    output: List[Union[str, FormattedValue]] = []
     buffer = io.StringIO()
     for value in values:
         if isinstance(value, str):

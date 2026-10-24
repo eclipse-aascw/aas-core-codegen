@@ -18,7 +18,7 @@ from aas_core_codegen.csharp import naming as csharp_naming
 @ensure(lambda result: result.endswith('"'))
 def string_literal(text: str) -> Stripped:
     """Generate a C# string literal from the ``text``."""
-    escaped = []  # type: List[str]
+    escaped: List[str] = []
 
     for character in text:
         if character == "\a":
@@ -83,16 +83,16 @@ PRIMITIVE_TYPE_MAP: Final[Mapping[intermediate.PrimitiveType, Stripped]] = {
 
 def _assert_all_primitive_types_are_mapped() -> None:
     """Assert that we have explicitly mapped all the primitive types to C#."""
-    all_primitive_literals = set(literal.value for literal in PRIMITIVE_TYPE_MAP)
+    all_primitive_literals = {literal.value for literal in PRIMITIVE_TYPE_MAP}
 
-    mapped_primitive_literals = set(
+    mapped_primitive_literals = {
         literal.value for literal in intermediate.PrimitiveType
-    )
+    }
 
     all_diff = all_primitive_literals.difference(mapped_primitive_literals)
     mapped_diff = mapped_primitive_literals.difference(all_primitive_literals)
 
-    messages = []  # type: List[str]
+    messages: List[str] = []
     if len(mapped_diff) > 0:
         messages.append(
             f"More primitive maps are mapped than there were defined "
@@ -284,6 +284,8 @@ NAMESPACE_IDENTIFIER_RE: Final[Pattern[str]] = re.compile(
 class NamespaceIdentifier(str):
     """Capture a namespace identifier."""
 
+    __slots__ = ()
+
     @require(lambda identifier: NAMESPACE_IDENTIFIER_RE.fullmatch(identifier))
     def __new__(cls, identifier: str) -> "NamespaceIdentifier":
         return cast(NamespaceIdentifier, identifier)
@@ -370,13 +372,13 @@ WARNING: Final[Stripped] = Stripped(
 # fmt: off
 @ensure(
     lambda namespace, result:
-    not (namespace != "Our") or len(result) == 1,
+    namespace == "Our" or len(result) == 1,
     "Exactly one block of stripped text to be appended to the list of using directives "
     "if this using directive is necessary"
 )
 @ensure(
     lambda namespace, result:
-    not (namespace == "Our") or len(result) == 0,
+    namespace != "Our" or len(result) == 0,
     "Empty list if no directive is necessary"
 )
 # fmt: on

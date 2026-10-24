@@ -46,7 +46,7 @@ def generate(namespace: csharp_common.NamespaceIdentifier) -> str:
 
     The ``namespace`` defines the base C# namespace of the generated code.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /// <summary>
@@ -215,7 +215,7 @@ public static IEnumerable<Reporting.Error> Verify(
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     writer.write(
@@ -239,7 +239,7 @@ namespace {namespace}
     writer.write(f"\n{I}}}  // public static class JsonValueVerification")
     writer.write(f"\n}}  // namespace {namespace}")
 
-    using_directives = []  # type: List[Stripped]
+    using_directives: List[Stripped] = []
     using_directives.extend(
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )

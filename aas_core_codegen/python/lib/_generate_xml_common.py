@@ -190,10 +190,9 @@ def parse_unqualified_element_tag(
         else ""
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_module_docstring(qualified_module_name=qualified_module_name),
         python_common.WARNING,
-        # pylint: disable=line-too-long
         Stripped(
             f"""\
 import json
@@ -230,7 +229,6 @@ else:
 NAMESPACE = {xml_namespace_literal}"""
         ),
         _generate_protocols(),
-        # pylint: disable=line-too-long
         Stripped(
             f"""\
 class HasIterparse(Protocol):
@@ -898,7 +896,7 @@ class Writer:
 {II})"""
         ),
         Stripped("# endregion"),
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

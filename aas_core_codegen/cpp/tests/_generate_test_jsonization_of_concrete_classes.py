@@ -226,7 +226,7 @@ def generate_implementation(
     # the floating-point numbers.
     limits_include = "\n#include <limits>\n" if len(numeric_places) > 0 else ""
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f"""\
@@ -365,7 +365,7 @@ const std::filesystem::path& DetermineErrorDir() {{
 {I}return *result;
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if len(numeric_places) > 0:
         blocks.extend(_generate_serialization_failure_infrastructure())

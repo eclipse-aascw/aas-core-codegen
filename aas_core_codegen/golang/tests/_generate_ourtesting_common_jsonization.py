@@ -27,7 +27,7 @@ from aas_core_codegen.golang.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to load minimal and maximal examples."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("package ourtesting"),
         golang_common.WARNING,
         Stripped(
@@ -39,7 +39,7 @@ import (
 {I}ourtypes "{repo_url}/types"
 )"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         interface_name = golang_naming.interface_name(concrete_cls.name)

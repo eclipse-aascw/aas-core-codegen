@@ -560,7 +560,7 @@ def _generate_parse_tuple_helper(arity: int) -> Stripped:
         for i in range(arity)
     )
 
-    item_blocks = []  # type: List[Stripped]
+    item_blocks: List[Stripped] = []
     for i in range(arity):
         item_blocks.append(
             Stripped(
@@ -667,7 +667,7 @@ func {function_name}(
 # fmt: on
 def _generate_class_from_map(cls: intermediate.ClassUnion) -> Stripped:
     """Generate a mapping model type 🠒 de-serialization from map."""
-    model_types_dispatch_names = []  # type: List[Tuple[str, str]]
+    model_types_dispatch_names: List[Tuple[str, str]] = []
 
     for descendant in cls.concrete_descendants:
         model_types_dispatch_names.append(
@@ -689,7 +689,7 @@ def _generate_class_from_map(cls: intermediate.ClassUnion) -> Stripped:
             )
         )
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for model_type, dispatch_name in model_types_dispatch_names:
         model_type_literal = golang_common.string_literal(model_type)
         case_blocks.append(
@@ -821,8 +821,8 @@ def _generate_named_union_from_jsonable(
         Identifier(f"{named_union.name}_from_jsonable")
     )
 
-    with_model_type = []  # type: List[intermediate.ConcreteClass]
-    without_model_type = []  # type: List[intermediate.ConcreteClass]
+    with_model_type: List[intermediate.ConcreteClass] = []
+    without_model_type: List[intermediate.ConcreteClass] = []
 
     for implementer in named_union.implementers:
         if implementer.serialization.with_model_type:
@@ -830,7 +830,7 @@ def _generate_named_union_from_jsonable(
         else:
             without_model_type.append(implementer)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 m, ok := jsonable.(map[string]interface{{}})
@@ -839,13 +839,13 @@ if !ok {{
 {I}return
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if len(with_model_type) > 0:
         # NOTE (mristin):
         # The model type is optional here. An implementer which does not specify it is
         # dispatched structurally below, so a missing ``modelType`` is not an error.
-        case_blocks = []  # type: List[Stripped]
+        case_blocks: List[Stripped] = []
         for implementer in with_model_type:
             model_type_literal = golang_common.string_literal(
                 naming.json_model_type(implementer.name)
@@ -979,7 +979,7 @@ def _generate_class_from_jsonable(cls: intermediate.ClassUnion) -> Stripped:
 
     interface_name = golang_naming.interface_name(cls.name)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 m, ok := jsonable.(map[string]interface{{}})
@@ -988,7 +988,7 @@ if !ok {{
 {I}return
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     from_map_name: str
 
@@ -1141,8 +1141,8 @@ def _nested_containers(
     *e.g.*, a constrained primitive and its constrainee, might map to the same
     Golang type.
     """
-    result = []  # type: List[intermediate.ContainerTypeAnnotation]
-    observed_monikers = set()  # type: Set[str]
+    result: List[intermediate.ContainerTypeAnnotation] = []
+    observed_monikers: Set[str] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -1276,7 +1276,7 @@ def _generate_deserialization_switch_statement(
     the properties first. The case for it is therefore empty, and only keeps the model
     type from being reported as an unexpected property.
     """
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
 
     for prop in cls.properties:
         type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -1435,11 +1435,11 @@ def _generate_concrete_class_from_map_without_dispatch(
     )
     # fmt: on
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Initialize
 
-    prop_var_initializations = []  # type: List[Stripped]
+    prop_var_initializations: List[Stripped] = []
     for prop in cls.properties:
         prop_var = golang_naming.variable_name(Identifier(f"the_{prop.name}"))
 
@@ -1452,7 +1452,7 @@ def _generate_concrete_class_from_map_without_dispatch(
     if len(prop_var_initializations) > 0:
         blocks.append(Stripped("\n".join(prop_var_initializations)))
 
-    found_var_initializations = []  # type: List[Stripped]
+    found_var_initializations: List[Stripped] = []
     for prop in cls.properties:
         if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
             continue
@@ -1527,13 +1527,13 @@ if !{found_var} {{
 
     # endregion
 
-    constructing_statements = []  # type: List[Stripped]
+    constructing_statements: List[Stripped] = []
 
-    constructor_arguments = [
+    constructor_arguments: List[Stripped] = [
         golang_naming.variable_name(Identifier(f"the_{arg.name}"))
         for arg in cls.constructor.arguments
         if not isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation)
-    ]  # type: List[Stripped]
+    ]
 
     new_function = golang_naming.function_name(Identifier(f"new_{cls.name}"))
 
@@ -1581,13 +1581,13 @@ result.{setter_name}(
         Identifier(f"{cls.name}_from_map_without_dispatch")
     )
 
-    documentation_blocks = [
+    documentation_blocks: List[Stripped] = [
         Stripped(
             f"""\
 Parse [ourtypes.{interface_name}] from a map,
 or return an error, if any."""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if len(cls.concrete_descendants) > 0:
         function_name_from_jsonable = golang_naming.function_name(
@@ -2299,7 +2299,7 @@ class _ItemSerializerWrappers:
         """Initialize with no wrapper needed at all."""
         self.direct = False
         self.instance = False
-        self.enumerations = []  # type: List[intermediate.Enumeration]
+        self.enumerations: List[intermediate.Enumeration] = []
         self.union = False
         self.json_able = False
 
@@ -2310,18 +2310,18 @@ def _determine_item_serializer_wrappers(
     """Determine the wrappers needed to serialize the list, set and tuple items."""
     result = _ItemSerializerWrappers()
 
-    enumeration_names = set()  # type: Set[Identifier]
+    enumeration_names: Set[Identifier] = set()
 
     # NOTE (mristin):
     # We collect the atomic items of the lists, the sets and the tuples at any
     # depth. A nested collection is serialized by a function of its own, which
     # needs no wrapper, but its items do.
-    item_type_annotations = []  # type: List[intermediate.TypeAnnotationUnion]
-    stack = [
+    item_type_annotations: List[intermediate.TypeAnnotationUnion] = []
+    stack: List[intermediate.TypeAnnotationExceptOptional] = [
         intermediate.beneath_optional(prop.type_annotation)
         for cls in symbol_table.concrete_classes
         for prop in cls.properties
-    ]  # type: List[intermediate.TypeAnnotationExceptOptional]
+    ]
 
     while len(stack) > 0:
         type_anno = stack.pop()
@@ -2329,9 +2329,7 @@ def _determine_item_serializer_wrappers(
         if isinstance(
             type_anno, (intermediate.ListTypeAnnotation, intermediate.SetTypeAnnotation)
         ):
-            items = [
-                type_anno.items
-            ]  # type: Sequence[intermediate.TypeAnnotationUnion]
+            items: Sequence[intermediate.TypeAnnotationUnion] = [type_anno.items]
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
             items = type_anno.items
         else:
@@ -2414,7 +2412,7 @@ def _generate_serialize_tuple_helper(arity: int) -> Stripped:
         for i in range(arity)
     )
 
-    item_blocks = []  # type: List[Stripped]
+    item_blocks: List[Stripped] = []
     for i in range(arity):
         item_blocks.append(
             Stripped(
@@ -2633,7 +2631,7 @@ def _generate_cls_to_map(cls: intermediate.ConcreteClass) -> Stripped:
 
     The generated function will perform no dispatching.
     """
-    blocks = [Stripped("result = make(map[string]interface{})")]  # type: List[Stripped]
+    blocks: List[Stripped] = [Stripped("result = make(map[string]interface{})")]
 
     for prop in cls.properties:
         type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -2655,8 +2653,8 @@ def _generate_cls_to_map(cls: intermediate.ConcreteClass) -> Stripped:
         # yet if it is wrapped in the nil-check of an optional property.
         indention = 2 if optional else 1
 
-        function = None  # type: Optional[str]
-        arguments = None  # type: Optional[List[str]]
+        function: Optional[str] = None
+        arguments: Optional[List[str]] = None
         block: Stripped
 
         if isinstance(type_anno, intermediate.ContainerTypeAnnotationAsTuple):
@@ -2783,7 +2781,7 @@ func {function_name}(
 
 def _generate_to_jsonable(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the main entry point for the serialization."""
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         literal = golang_naming.enum_literal_name(
@@ -2872,7 +2870,7 @@ def generate(
         f"{repo_url}/stringification"
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 // Package jsonization de/serializes model instances to and from JSON.
@@ -2995,7 +2993,7 @@ func mustDeserializationError(err error) *DeserializationError {{
         _generate_model_type_from_map(),
         _generate_check_model_type(),
         _generate_parse_array(),
-    ]  # type: List[Stripped]
+    ]
 
     if len(symbol_table.enumerations) > 0:
         blocks.append(_generate_not_an_enum_text_error())
@@ -3016,7 +3014,7 @@ func mustDeserializationError(err error) *DeserializationError {{
     for nested_container in nested_containers:
         blocks.append(_generate_parse_nested_container(nested_container))
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -3205,11 +3203,11 @@ func mustSerializationError(err error) *SerializationError {{
 
     import_index = blocks.index(_IMPORT_PLACEHOLDER)
 
-    import_lines = [
+    import_lines: List[str] = [
         f'{I}"fmt"',
         f'{I}"math"',
         f'{I}b64 "encoding/base64"',
-    ]  # type: List[str]
+    ]
 
     if golang_common.names_package(blocks, "ourcommon"):
         import_lines.append(f"{I}ourcommon {ourcommon_url_literal}")

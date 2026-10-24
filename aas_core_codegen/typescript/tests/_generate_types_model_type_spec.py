@@ -26,7 +26,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test the ``modelType()`` methods."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -40,7 +40,7 @@ import * as OurTypes from "../src/types";
 import * as OurStringification from "../src/stringification";
 import * as TestCommonJsonization from "./commonJsonization";"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     from_string = typescript_naming.function_name(Identifier("model_type_from_string"))
 

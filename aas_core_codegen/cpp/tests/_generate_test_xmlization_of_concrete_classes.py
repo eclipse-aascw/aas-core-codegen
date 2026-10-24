@@ -22,7 +22,9 @@ from aas_core_codegen.cpp.common import (
 #: belong to. A recorded example has to serialize back to itself, character for
 #: character, so it can hold neither a value written in another form than it
 #: was read nor one whose written form the targets spell differently.
-_LEXICAL_CASES_BY_PRIMITIVE = {
+_LEXICAL_CASES_BY_PRIMITIVE: Mapping[
+    intermediate.PrimitiveType, List[Tuple[str, str]]
+] = {
     intermediate.PrimitiveType.FLOAT: [
         # NOTE (mristin):
         # A literal too large for a double is not an error: XSD rounds it to
@@ -57,7 +59,7 @@ _LEXICAL_CASES_BY_PRIMITIVE = {
         ("true", "true"),
         ("false", "false"),
     ],
-}  # type: Mapping[intermediate.PrimitiveType, List[Tuple[str, str]]]
+}
 
 
 def _generate_lexical_tests(
@@ -68,9 +70,7 @@ def _generate_lexical_tests(
     if cls is None:
         return []
 
-    prop_by_a_type = (
-        dict()
-    )  # type: Dict[intermediate.PrimitiveType, intermediate.Property]
+    prop_by_a_type: Dict[intermediate.PrimitiveType, intermediate.Property] = dict()
     for prop in cls.properties:
         assert isinstance(prop.type_annotation, intermediate.PrimitiveTypeAnnotation)
         prop_by_a_type.setdefault(prop.type_annotation.a_type, prop)
@@ -91,7 +91,7 @@ def _generate_lexical_tests(
     interface_name = cpp_naming.interface_name(cls.name)
     cls_name_xml = naming.xml_class_name(cls.name)
 
-    result = [
+    result: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -148,7 +148,7 @@ std::shared_ptr<our::types::{interface_name}> ReadWith(
 {I}return casted;
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     for a_type, prop in relevant:
         prop_xml_name = naming.xml_property(prop.name)
@@ -189,7 +189,7 @@ def generate_implementation(
     """Generate implementation to test the XML de/serialization of concrete classes."""
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f"""\
@@ -289,7 +289,7 @@ const std::filesystem::path& DetermineErrorDir() {{
 {I}return *result;
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         xml_class_name = naming.xml_class_name(concrete_cls.name)

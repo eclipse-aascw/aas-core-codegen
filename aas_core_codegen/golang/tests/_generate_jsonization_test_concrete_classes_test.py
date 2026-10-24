@@ -30,7 +30,7 @@ def _generate_for_class(cls: intermediate.ConcreteClass) -> List[Stripped]:
         Identifier(f"{cls.name}_from_jsonable")
     )
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     test_name = golang_naming.function_name(
         Identifier(f"Test_{cls.name}_round_trip_OK")
@@ -234,12 +234,12 @@ def _generate_serialization_failure_test(
         value_type = "float64"
         zero_literal = "0"
         what = "non_finite"
-        values_joined = ",\n".join(["math.Inf(1)", "math.Inf(-1)", "math.NaN()"])
+        values_joined = "math.Inf(1),\nmath.Inf(-1),\nmath.NaN()"
     else:
         value_type = "int64"
         zero_literal = "0"
         what = "out_of_range"
-        values_joined = ",\n".join(["9007199254740992", "-9007199254740992"])
+        values_joined = "9007199254740992,\n-9007199254740992"
 
     getter_name = golang_naming.getter_name(numeric_place.prop.name)
     setter_name = golang_naming.setter_name(numeric_place.prop.name)
@@ -330,11 +330,11 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to test the JSON de/serialization of concrete classes."""
     numeric_places = intermediate.numeric_places(symbol_table)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("package jsonization_test"),
         golang_common.WARNING,
         _IMPORT_PLACEHOLDER,
-    ]  # type: List[Stripped]
+    ]
 
     if len(numeric_places) > 0:
         blocks.extend(_generate_serialization_failure_infrastructure())
@@ -349,7 +349,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
 
     import_index = blocks.index(_IMPORT_PLACEHOLDER)
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     for module, literal in (
         ("fmt", f'{I}"fmt"'),
         ("filepath", f'{I}"path/filepath"'),

@@ -193,7 +193,7 @@ def _generate_string_helpers(
     uses_lstrip = intermediate_uses.lstrip_call(type_inference)
     uses_rstrip = intermediate_uses.rstrip_call(type_inference)
 
-    methods = []  # type: List[Stripped]
+    methods: List[Stripped] = []
 
     if uses_slicing:
         methods.append(
@@ -425,12 +425,12 @@ public final class StringHelpers {{
 }}"""
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(f"package {package}.common;"),
         code,
         java_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     return Stripped("\n\n".join(blocks))
 
@@ -460,7 +460,7 @@ def _generate_set_helpers(
     their serialized values. We rank them here, at the generation time, so that
     the generated code compares them without any stringification.
     """
-    methods = []  # type: List[Stripped]
+    methods: List[Stripped] = []
 
     if with_operations:
         methods.append(
@@ -655,7 +655,7 @@ public final class SetHelpers {{
 }}"""
     )
 
-    imports = []  # type: List[str]
+    imports: List[str] = []
     if len(ranked_enumerations) > 0:
         imports.append(f"import {package}.types.enums.*;")
     if with_sorting:
@@ -672,13 +672,13 @@ public final class SetHelpers {{
         imports.append("import java.util.List;")
     imports.append("import java.util.Set;")
 
-    blocks = [
+    blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(f"package {package}.common;"),
         Stripped("\n".join(imports)),
         code,
         java_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     return Stripped("\n\n".join(blocks))
 
@@ -701,7 +701,7 @@ def generate(
     ``startswith`` and ``endswith`` to the native methods, so they do not need
     the string helpers.
     """
-    files = []  # type: List[java_common.JavaFile]
+    files: List[java_common.JavaFile] = []
 
     if (
         intermediate_uses.string_len_call(type_inference)
@@ -756,12 +756,12 @@ public record {name}<{type_params}>({components}) {{
 }}"""
         )
 
-        blocks = [
+        blocks: List[Stripped] = [
             java_common.WARNING,
             Stripped(f"package {package}.common;"),
             record_code,
             java_common.WARNING,
-        ]  # type: List[Stripped]
+        ]
 
         code = "\n\n".join(blocks)
 

@@ -501,21 +501,21 @@ class _Needed:
 
     def __init__(self) -> None:
         """Initialize with nothing needed."""
-        self.primitive_types = set()  # type: Set[intermediate.PrimitiveType]
+        self.primitive_types: Set[intermediate.PrimitiveType] = set()
         self.enumerations = False
         self.lists = False
         self.sets = False
         self.nested_elements = False
 
         #: Content readers to emit, keyed and de-duplicated by the moniker
-        self.content_readers = (
-            dict()
-        )  # type: MutableMapping[str, intermediate.TypeAnnotationUnion]
+        self.content_readers: MutableMapping[
+            str, intermediate.TypeAnnotationUnion
+        ] = dict()
 
         #: Positional item readers to emit, keyed by their function name
-        self.at_v_readers = (
-            dict()
-        )  # type: MutableMapping[str, Tuple[intermediate.TypeAnnotationUnion, str]]
+        self.at_v_readers: MutableMapping[
+            str, Tuple[intermediate.TypeAnnotationUnion, str]
+        ] = dict()
 
         # NOTE (mristin):
         # The writers are collected separately from the readers, although both
@@ -528,18 +528,18 @@ class _Needed:
         # is derived from the moniker it is named after.
 
         #: Content writers to emit, keyed by their function name
-        self.content_writers = (
-            dict()
-        )  # type: MutableMapping[str, intermediate.ContainerTypeAnnotation]
+        self.content_writers: MutableMapping[
+            str, intermediate.ContainerTypeAnnotation
+        ] = dict()
 
         #: Positional item writers to emit, keyed by their function name
-        self.at_v_writers = (
-            dict()
-        )  # type: MutableMapping[str, Tuple[intermediate.TypeAnnotationExceptOptional, str]]
+        self.at_v_writers: MutableMapping[
+            str, Tuple[intermediate.TypeAnnotationExceptOptional, str]
+        ] = dict()
 
         #: Shared content writers which something calls, be it for
         #: a property, for a list item or for a tuple item
-        self.called_content_writers = set()  # type: Set[Identifier]
+        self.called_content_writers: Set[Identifier] = set()
 
 
 def _collect_needed(symbol_table: intermediate.SymbolTable) -> _Needed:
@@ -1063,7 +1063,7 @@ def _generate_read_text(
     primitive_types: Set[intermediate.PrimitiveType],
 ) -> List[Stripped]:
     """Generate the readers of the text content of an element."""
-    result = [
+    result: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -1098,7 +1098,7 @@ private static <T> Reporting.Result<T> readText(
 {I}}}
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if (
         intermediate.PrimitiveType.STR in primitive_types
@@ -1643,11 +1643,11 @@ private static Reporting.Result<{name}> {function_name}(
             None,
         )
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
-    init_target_var_stmts = []  # type: List[Stripped]
+    init_target_var_stmts: List[Stripped] = []
     for prop in cls.properties:
         target_type = java_common.generate_type(
             intermediate.beneath_optional(prop.type_annotation)
@@ -1657,7 +1657,7 @@ private static Reporting.Result<{name}> {function_name}(
         init_target_var_stmts.append(Stripped(f"{target_type} {target_var} = null;"))
     blocks.append(Stripped("\n".join(init_target_var_stmts)))
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for prop in cls.properties:
         case_body = _generate_deserialize_property(prop=prop, cls=cls)
 
@@ -1756,8 +1756,8 @@ if ({target_var} == null) {{
 
     # fmt: off
     assert (
-            set(prop.name for prop in cls.properties)
-            == set(arg.name for arg in cls.constructor.arguments)
+            {prop.name for prop in cls.properties}
+            == {arg.name for arg in cls.constructor.arguments}
     ), (
         f"Expected the properties to coincide with constructor arguments, "
         f"but they do not for {cls.name!r}:"
@@ -1904,7 +1904,7 @@ def _generate_deserialize_impl_interface_from_element(
     """Generate the function to de-serialize an ``interface`` from an XML element."""
     name = java_naming.interface_name(interface.name)
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for implementer in interface.implementers:
         implementer_xml_name_literal = java_common.string_literal(
             naming.xml_class_name(implementer.name)
@@ -1948,7 +1948,7 @@ def _generate_deserialize_impl_named_union_from_element(
     """
     name = java_naming.union_name(named_union.name)
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for implementer in named_union.implementers:
         implementer_xml_name_literal = java_common.string_literal(
             naming.xml_class_name(implementer.name)
@@ -2092,10 +2092,10 @@ def _generate_deserialize_impl(
     """Generate the implementation for deserialization functions."""
     needed = _collect_needed(symbol_table)
 
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_skip_start_document(),
         _generate_reader_interfaces(),
-    ]  # type: List[Stripped]
+    ]
 
     blocks.extend(_generate_content_converters(needed.primitive_types))
 
@@ -2136,7 +2136,7 @@ def _generate_deserialize_impl(
     for type_anno, v_name in needed.at_v_readers.values():
         blocks.append(_generate_at_v_reader(type_anno, v_name))
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # NOTE (empwilli):
     # Enumerations are going to be directly deserialized using
@@ -2263,7 +2263,7 @@ public static {name} deserialize{name}(
 
 def _generate_deserialize(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the public class ``Deserialize``."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # NOTE (empwilli):
     # We use stringification for de-serialization of enumerations.
@@ -2302,7 +2302,7 @@ def _generate_deserialize(symbol_table: intermediate.SymbolTable) -> Stripped:
     first_cls = symbol_table.classes[0] if len(symbol_table.classes) > 0 else None
 
     if first_cls is not None:
-        cls_name = None  # type: Optional[str]
+        cls_name: Optional[str] = None
         if isinstance(first_cls, intermediate.AbstractClass):
             cls_name = java_naming.interface_name(first_cls.name)
         elif isinstance(first_cls, intermediate.ConcreteClass):
@@ -2577,7 +2577,7 @@ def _container_type(type_anno: intermediate.ContainerTypeAnnotation) -> Stripped
         # must keep its items as precise as the sorting needs them.
         return Stripped(f"Set<{java_common.generate_type(type_anno.items)}>")
 
-    argument_types = []  # type: List[Stripped]
+    argument_types: List[Stripped] = []
     for item_type_anno in _item_type_annotations(type_anno):
         written_value_type = _written_value_type(item_type_anno)
 
@@ -2661,7 +2661,7 @@ try {{
             type_anno, intermediate.TupleTypeAnnotation
         ), f"Expected a tuple, but got: {type_anno}"
 
-        item_writes = []  # type: List[str]
+        item_writes: List[str] = []
         for i, item_type_anno in enumerate(item_type_annos):
             if i > 0:
                 item_writes.append(f"{I}index = {i};")
@@ -2823,7 +2823,7 @@ def _generate_visitor(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a visitor which serializes instances of the meta-model to XML."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # NOTE (mristin):
     # One gating pass answers for both directions, since the reading and
@@ -2835,9 +2835,9 @@ def _generate_visitor(
 
     write_classes, write_unions = _collect_dispatching_writers(symbol_table)
 
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_visitors(with_nested=write_classes),
-    ]  # type: List[Stripped]
+    ]
 
     if any(len(cls.properties) > 0 for cls in symbol_table.concrete_classes):
         blocks.append(_generate_write_property())
@@ -2912,7 +2912,7 @@ def _generate_serialize(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the static serializer."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -2952,7 +2952,7 @@ public static void to(
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     writer.write(
@@ -2963,12 +2963,12 @@ public static void to(
 """
     )
 
-    first_cls = (
+    first_cls: Optional[intermediate.ClassUnion] = (
         symbol_table.classes[0] if len(symbol_table.classes) > 0 else None
-    )  # type: Optional[intermediate.ClassUnion]
+    )
 
     if first_cls is not None:
-        cls_name = None  # type: Optional[str]
+        cls_name: Optional[str] = None
         if isinstance(first_cls, intermediate.AbstractClass):
             cls_name = java_naming.interface_name(first_cls.name)
         elif isinstance(first_cls, intermediate.ConcreteClass):
@@ -3024,9 +3024,9 @@ def generate(
     """
     Generate the code for XML de/serialization.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    imports = [
+    imports: List[Stripped] = [
         Stripped("import javax.xml.stream.events.XMLEvent;"),
         Stripped("import javax.xml.stream.XMLEventReader;"),
         Stripped("import javax.xml.stream.XMLStreamConstants;"),
@@ -3046,7 +3046,7 @@ def generate(
         Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.visitation.*;"),
         Stripped(f"import {package}.xmlcommon.XmlCommon;"),
-    ]  # type: List[Stripped]
+    ]
 
     if java_common.has_set_properties(symbol_table):
         imports.extend(
@@ -3111,7 +3111,7 @@ def generate(
 
     # endregion
 
-    xmlization_blocks = [
+    xmlization_blocks: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -3134,18 +3134,18 @@ public class Xmlization {{
 {I}{indent_but_first_line(serialization_block, I)}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if len(errors) > 0:
         return None, errors
 
-    blocks = [
+    blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(f"package {package}.xmlization;"),
         Stripped("\n".join(imports)),
         Stripped("\n\n".join(xmlization_blocks)),
         java_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     code = "\n\n".join(blocks)
 

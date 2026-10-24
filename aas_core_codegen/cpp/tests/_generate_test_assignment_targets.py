@@ -93,7 +93,7 @@ def generate_implementation(
     """
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             """\
@@ -401,7 +401,7 @@ TEST_CASE("Test TextsAreNotEmpty") {{
 }}"""
         ),
         cpp_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     return "\n\n".join(blocks) + "\n"
 

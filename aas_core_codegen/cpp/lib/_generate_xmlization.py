@@ -422,7 +422,7 @@ def _generate_element_name_to_model_type(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
     """Generate the mapping XML element name 🠒 model type."""
-    items = []  # type: List[Stripped]
+    items: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         literal_name = cpp_naming.enum_literal_name(cls.name)
 
@@ -1392,7 +1392,7 @@ std::pair<
 }}"""
         )
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for cls in concrete_classes:
         cls_from_sequence = cpp_naming.function_name(
             Identifier(f"{cls.name}_from_sequence")
@@ -1577,7 +1577,7 @@ def _generate_named_union_from_element(
         Identifier(f"{named_union.name}_from_element")
     )
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for implementer in named_union.implementers:
         model_type_enum = cpp_naming.enum_name(Identifier("Model_type"))
         model_type_literal = cpp_naming.enum_literal_name(implementer.name)
@@ -2462,7 +2462,7 @@ def _generate_deserialize_tuple_function(arity: int) -> Stripped:
         f"common::optional<T{i}> item{i};" for i in range(arity)
     )
 
-    item_blocks = []  # type: List[Stripped]
+    item_blocks: List[Stripped] = []
     for i in range(arity):
         item_blocks.append(
             Stripped(
@@ -2889,7 +2889,7 @@ def _generate_property_enums_from_strings(
         # We spell the values out, and keep them consecutive from zero, because
         # ``ReadProperties`` indexes its bit set of the properties seen so far by
         # the literal.
-        literals = []  # type: List[Stripped]
+        literals: List[Stripped] = []
         for i, prop in enumerate(cls.properties):
             literal_name = cpp_naming.enum_literal_name(prop.name)
             literals.append(Stripped(f"{literal_name} = {i}"))
@@ -2919,7 +2919,7 @@ enum class {enum_name} : std::uint32_t {{
 
         map_name = cpp_naming.constant_name(Identifier(f"map_of_{cls.name}"))
 
-        items = []  # type: List[Stripped]
+        items: List[Stripped] = []
         for prop in cls.properties:
             literal_name = cpp_naming.enum_literal_name(prop.name)
             xml_prop = prop.xml_name
@@ -3175,8 +3175,8 @@ DeserializeSet<
         )
 
     if isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        item_types = []  # type: List[Stripped]
-        item_exprs = []  # type: List[Stripped]
+        item_types: List[Stripped] = []
+        item_exprs: List[Stripped] = []
 
         for i, item_type_anno in enumerate(type_anno.items):
 
@@ -3319,8 +3319,8 @@ def _generate_deserialize_tuple_expr(
     type_anno = intermediate.beneath_optional(prop.type_annotation)
     assert isinstance(type_anno, intermediate.TupleTypeAnnotation)
 
-    item_types = []  # type: List[Stripped]
-    item_exprs = []  # type: List[Stripped]
+    item_types: List[Stripped] = []
+    item_exprs: List[Stripped] = []
 
     for i, item_type_anno in enumerate(type_anno.items):
 
@@ -3485,13 +3485,13 @@ def _generate_from_sequence(
         Identifier(f"property_count_of_{cls.name}")
     )
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Initialization
     if len(cls.properties) > 0:
         blocks.append(Stripped("// region Initialization"))
 
-        init_statements = []  # type: List[Stripped]
+        init_statements: List[Stripped] = []
 
         for prop in cls.properties:
             var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
@@ -3523,7 +3523,7 @@ common::optional<
     # endregion
 
     # region Read the properties
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
 
     for prop in cls.properties:
         read_expr = _generate_deserialize_property_expr(prop=prop)
@@ -3652,8 +3652,8 @@ if (!{var_name}.has_value()) {{
 
         # fmt: off
         assert (
-                set(prop.name for prop in cls.properties)
-                == set(arg.name for arg in cls.constructor.arguments)
+                {prop.name for prop in cls.properties}
+                == {arg.name for arg in cls.constructor.arguments}
         ), (
             f"Expected the properties to coincide with constructor arguments, "
             f"but they do not for {cls.name!r}:"
@@ -3661,7 +3661,7 @@ if (!{var_name}.has_value()) {{
         )
         # fmt: on
 
-        constructor_args = []  # type: List[Stripped]
+        constructor_args: List[Stripped] = []
         for arg in cls.constructor.arguments:
             prop = cls.properties_by_name[arg.name]
 
@@ -4785,9 +4785,9 @@ return common::nullopt;"""
         )
 
     elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        stmts = [
+        stmts: List[Stripped] = [
             Stripped(f"common::optional<xml_common::SerializationError> {error_var};")
-        ]  # type: List[Stripped]
+        ]
 
         for i, item in enumerate(type_anno.items):
             item_call = _xml_write_item_call(
@@ -4847,7 +4847,7 @@ def _xml_write_tuple_item_exprs(
     ``<v2>``, *etc.* element here, since ``WriteTuple{N}Property`` knows
     neither which items those are nor what to call them.
     """
-    item_exprs = []  # type: List[Stripped]
+    item_exprs: List[Stripped] = []
 
     for i, item_type_anno in enumerate(type_anno.items):
 
@@ -5015,7 +5015,7 @@ def _generate_serialize_cls_as_sequence_implementation(
 
     Each XML element corresponds to a property.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
     if len(cls.properties) > 0:
         blocks.append(
             Stripped("common::optional<xml_common::SerializationError> error;")
@@ -5247,7 +5247,7 @@ def _generate_dispatching_serialize_as_element(
         element is written by ``SerializeConcrete{Cls}AsElement``, since
         ``Serialize{Cls}AsElement`` is this dispatch
     """
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
 
     for concrete_cls in concrete_classes:
         model_type_enum = cpp_naming.enum_name(Identifier("Model_type"))
@@ -5376,7 +5376,7 @@ def _generate_dispatching_serialize_named_union_as_element(
     """
     union_name = cpp_naming.union_name(named_union.name)
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for i, root in enumerate(named_union.roots):
         serialize_ptr_as_element = cpp_naming.function_name(
             Identifier(f"serialize_{root.name}_ptr_as_element")
@@ -5526,9 +5526,7 @@ def _type_annotation_contains_value_in_v_element(
         if isinstance(
             type_anno, (intermediate.ListTypeAnnotation, intermediate.SetTypeAnnotation)
         ):
-            items = [
-                type_anno.items
-            ]  # type: Sequence[intermediate.TypeAnnotationUnion]
+            items: Sequence[intermediate.TypeAnnotationUnion] = [type_anno.items]
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
             items = type_anno.items
         else:

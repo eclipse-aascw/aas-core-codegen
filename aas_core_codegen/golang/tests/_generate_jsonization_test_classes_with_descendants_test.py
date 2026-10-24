@@ -28,11 +28,11 @@ _IMPORT_PLACEHOLDER = Stripped("")
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate the test code for the jsonization of classes with descendants."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("package jsonization_test"),
         golang_common.WARNING,
         _IMPORT_PLACEHOLDER,
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.classes:
         # NOTE (mristin):
@@ -58,7 +58,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
         )
 
         test_name = golang_naming.function_name(
-            (Identifier(f"test_{cls.name}_round_trip_OK_over_descendant"))
+            Identifier(f"test_{cls.name}_round_trip_OK_over_descendant")
         )
 
         model_type = naming.json_model_type(descendant_cls.name)
@@ -112,7 +112,7 @@ func {test_name}(t *testing.T) {{
         # to be already tested in another test with concrete classes.
         if isinstance(cls, intermediate.AbstractClass):
             test_name = golang_naming.function_name(
-                (Identifier(f"test_{cls.name}_deserialization_fail"))
+                Identifier(f"test_{cls.name}_deserialization_fail")
             )
 
             blocks.append(
@@ -163,7 +163,7 @@ func {test_name}(t *testing.T) {{
 
     import_index = blocks.index(_IMPORT_PLACEHOLDER)
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     for module, literal in (
         ("testing", f'{I}"testing"'),
         ("ourjsonization", f'{I}ourjsonization "{repo_url}/jsonization"'),

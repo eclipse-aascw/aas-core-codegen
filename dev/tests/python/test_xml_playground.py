@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 # NOTE (mristin):
 # This is not really test suite, but a playground to document how streaming XML
 # working in Python.

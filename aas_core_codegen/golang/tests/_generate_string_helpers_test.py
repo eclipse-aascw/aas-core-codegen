@@ -36,7 +36,7 @@ def generate(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> str:
     """Generate the unit tests for the operations on strings."""
-    test_blocks = []  # type: List[Stripped]
+    test_blocks: List[Stripped] = []
 
     if intermediate_uses.string_len_call(type_inference):
         for len_case in string_helper_cases.LEN_CASES:
@@ -239,7 +239,7 @@ func {_function_name("EndsWith", endswith_case.description)}(t *testing.T) {{
     # NOTE (mristin):
     # An unused import does not compile in Go, so we import only what the tests
     # name.
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     if golang_common.names_package(test_blocks, "strings"):
         import_lines.append(f'{I}"strings"')
 
@@ -250,7 +250,7 @@ func {_function_name("EndsWith", endswith_case.description)}(t *testing.T) {{
 
     import_lines_joined = "\n".join(import_lines)
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 // Test the operations on strings.
@@ -270,7 +270,7 @@ import (
         ),
         *test_blocks,
         golang_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

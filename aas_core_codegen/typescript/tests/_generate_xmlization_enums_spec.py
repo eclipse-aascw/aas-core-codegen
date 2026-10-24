@@ -25,7 +25,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test the XML de/serialization of enumerations."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -40,13 +40,13 @@ import * as OurTypes from "../src/types";
 
 import * as TestCommonXmlization from "./commonXmlization";"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for enumeration in symbol_table.enumerations:
         enum_name_typescript = typescript_naming.enum_name(enumeration.name)
 
-        carrier_cls = None  # type: Optional[intermediate.ConcreteClass]
-        carrier_prop = None  # type: Optional[intermediate.Property]
+        carrier_cls: Optional[intermediate.ConcreteClass] = None
+        carrier_prop: Optional[intermediate.Property] = None
         for cls in symbol_table.concrete_classes:
             for prop in cls.properties:
                 type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -128,7 +128,7 @@ test("{enum_name_typescript} XML deserializes {literal_name_typescript} OK", () 
                 )
             )
 
-        literal_value_set = set(literal.value for literal in enumeration.literals)
+        literal_value_set = {literal.value for literal in enumeration.literals}
         invalid_literal_value = "invalid-literal"
         while invalid_literal_value in literal_value_set:
             invalid_literal_value = f"very-{invalid_literal_value}"

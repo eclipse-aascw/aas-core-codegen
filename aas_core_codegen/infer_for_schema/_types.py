@@ -1,15 +1,11 @@
 """Provide data structures for the constraint inferences."""
-import sys
 from typing import Mapping, Sequence, Optional, Final, MutableMapping
 
-if sys.version_info >= (3, 10):
-    from typing import TypeAlias
-else:
-    from typing_extensions import TypeAlias
+from typing import TypeAlias
 
-from icontract import require  # pylint: disable=wrong-import-position
+from icontract import require
 
-from aas_core_codegen import intermediate  # pylint: disable=wrong-import-position
+from aas_core_codegen import intermediate
 
 
 class LenConstraint:
@@ -107,7 +103,9 @@ class SetOfPrimitivesConstraint:
             and all(
                 intermediate.runtime_id(that_literal)
                 == intermediate.runtime_id(other_literal)
-                for that_literal, other_literal in zip(self.literals, other.literals)
+                for that_literal, other_literal in zip(
+                    self.literals, other.literals, strict=True
+                )
             )
         )
 
@@ -154,7 +152,9 @@ class SetOfEnumerationLiteralsConstraint:
         return len(self.literals) == len(other.literals) and all(
             intermediate.runtime_id(that_literal)
             == intermediate.runtime_id(other_literal)
-            for that_literal, other_literal in zip(self.literals, other.literals)
+            for that_literal, other_literal in zip(
+                self.literals, other.literals, strict=True
+            )
         )
 
     def __repr__(self) -> str:

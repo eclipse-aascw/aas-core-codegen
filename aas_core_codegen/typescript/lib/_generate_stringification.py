@@ -26,7 +26,7 @@ def _generate_model_type_from_string(
     """Generate the function to de-serialize model type from a string."""
     model_type_enum = typescript_naming.enum_name(Identifier("Model_type"))
 
-    keys_values = []  # type: List[Stripped]
+    keys_values: List[Stripped] = []
     for concrete_cls in symbol_table.concrete_classes:
         json_model_type = naming.json_model_type(concrete_cls.name)
         model_type_literal = typescript_naming.enum_literal_name(concrete_cls.name)
@@ -89,7 +89,7 @@ def _generate_model_type_to_string(
     """Generate the function to serialize a runtime model type to a string."""
     model_type_enum = typescript_naming.enum_name(Identifier("Model_type"))
 
-    texts = []  # type: List[Stripped]
+    texts: List[Stripped] = []
     for i, concrete_cls in enumerate(symbol_table.concrete_classes):
         json_model_type = naming.json_model_type(concrete_cls.name)
         model_type_literal = typescript_naming.enum_literal_name(concrete_cls.name)
@@ -172,13 +172,13 @@ export function {must_to_string}(
 
 def _generate_enum_from_string(enumeration: intermediate.Enumeration) -> Stripped:
     """Generate the functions for de-serializing enumeration from strings."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     name = typescript_naming.enum_name(enumeration.name)
 
     # region From-string-map
 
-    items = []  # type: List[str]
+    items: List[str] = []
     for literal in enumeration.literals:
         literal_name = typescript_naming.enum_literal_name(literal.name)
         literal_value = typescript_common.string_literal(literal.value)
@@ -233,13 +233,13 @@ export function {from_str_name}(
 
 def _generate_enum_to_string(enumeration: intermediate.Enumeration) -> Stripped:
     """Generate the functions for serializing an enumeration literal to a string."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     name = typescript_naming.enum_name(enumeration.name)
 
     # region To-string-array
 
-    items = []  # type: List[str]
+    items: List[str] = []
     for i, literal in enumerate(enumeration.literals):
         literal_name = typescript_naming.enum_literal_name(literal.name)
         literal_value = typescript_common.string_literal(literal.value)
@@ -352,7 +352,7 @@ def _generate_rank_and_compare(enumeration: intermediate.Enumeration) -> Strippe
         Identifier(f"compare_by_rank_of_{enumeration.name}")
     )
 
-    cases = []  # type: List[str]
+    cases: List[str] = []
     for rank, literal in enumerate(
         sorted(enumeration.literals, key=lambda literal: literal.value)
     ):

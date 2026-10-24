@@ -17,7 +17,7 @@ from aas_core_codegen.python.common import (
 
 
 def _generate_test_case(symbol_table: intermediate.SymbolTable) -> Stripped:
-    test_methods = []  # type: List[Stripped]
+    test_methods: List[Stripped] = []
 
     for cls in symbol_table.classes:
         if len(cls.concrete_descendants) == 0:

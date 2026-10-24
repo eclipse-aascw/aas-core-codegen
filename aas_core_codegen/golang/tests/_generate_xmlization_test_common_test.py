@@ -26,7 +26,7 @@ from aas_core_codegen.golang.common import (
 # fmt: on
 def generate(repo_url: Stripped) -> str:
     """Generate code for common XML de/serialization shared across the tests."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 package xmlization_test"""
@@ -346,7 +346,7 @@ func assertIsDeserializationErrorAndEqualsExpectedOrRecord(
 }}"""
         ),
         golang_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

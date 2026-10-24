@@ -27,7 +27,7 @@ def generate(
 
     The ``namespace`` indicates the fully-qualified name of the base project.
     """
-    blocks = []  # type: List[str]
+    blocks: List[str] = []
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_csharp = csharp_naming.class_name(concrete_cls.name)

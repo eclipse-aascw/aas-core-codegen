@@ -35,7 +35,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
     the integers are exact only up to ``Number.MAX_SAFE_INTEGER``. Hence, we skip
     the cases with the extreme 64-bit integers which can not be exactly represented.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -56,7 +56,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
  */"""
         ),
         typescript_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     if intermediate_uses.modulo(symbol_table):
         blocks.append(Stripped('import * as OurCommon from "../src/common";'))

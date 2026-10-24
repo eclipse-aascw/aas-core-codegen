@@ -34,7 +34,7 @@ def generate_implementation(
     """Generate implementation to test ``Descent`` and ``DescentOnce`` iterations."""
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f"""\
@@ -139,7 +139,7 @@ void AssertOrRerecordDescentOnce(
 {I});
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         xml_class_name = naming.xml_class_name(concrete_cls.name)

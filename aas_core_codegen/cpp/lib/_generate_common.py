@@ -1,6 +1,5 @@
 """Generate code of common functionality."""
 
-# pylint: disable=line-too-long
 
 import io
 from typing import Final, List, Sequence
@@ -45,11 +44,11 @@ def _generate_concatenate_definitions_for_2_parts_and_above() -> List[Stripped]:
       const std::string& part1
     );
     """
-    concat_funcs = []  # type: List[Stripped]
+    concat_funcs: List[Stripped] = []
     for string_type in ["std::string", "std::wstring"]:
         for count in range(2, 65):
-            param_descriptions = []  # type: List[str]
-            for i in range(0, count):
+            param_descriptions: List[str] = []
+            for i in range(count):
                 ordinal: str
 
                 ordinal_i = i + 1
@@ -69,7 +68,7 @@ def _generate_concatenate_definitions_for_2_parts_and_above() -> List[Stripped]:
             param_description_joined = "\n".join(param_descriptions)
 
             args_definition = ",\n".join(
-                f"{I}const {string_type}& part{i}" for i in range(0, count)
+                f"{I}const {string_type}& part{i}" for i in range(count)
             )
 
             concat_funcs.append(
@@ -112,19 +111,19 @@ def _generate_concatenate_implementations_for_2_parts_and_above() -> List[Stripp
       return result;
     }
     """
-    concat_funcs = []  # type: List[Stripped]
+    concat_funcs: List[Stripped] = []
     for string_type in ["std::string", "std::wstring"]:
         for count in range(2, 65):
             args_definition = ",\n".join(
-                f"{I}const {string_type}& part{i}" for i in range(0, count)
+                f"{I}const {string_type}& part{i}" for i in range(count)
             )
 
             size_block = Stripped(
-                "\n".join(f"size += part{i}.size();" for i in range(0, count))
+                "\n".join(f"size += part{i}.size();" for i in range(count))
             )
 
             append_block = Stripped(
-                "\n".join(f"result.append(part{i});" for i in range(0, count))
+                "\n".join(f"result.append(part{i});" for i in range(count))
             )
 
             concat_funcs.append(
@@ -184,7 +183,7 @@ def _generate_string_helper_declarations(
     uses_slicing = intermediate_uses.string_slicing(type_inference)
     uses_find = intermediate_uses.string_find_call(type_inference)
 
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
 
     if intermediate_uses.string_len_call(type_inference) or uses_slicing or uses_find:
         result.append(
@@ -367,7 +366,7 @@ def _generate_string_helper_definitions(
     # not check whether ``find`` matches in the middle of a surrogate pair, as
     # that could only happen if the searched text started or ended with a lone
     # surrogate.
-    utf16_helpers = [
+    utf16_helpers: List[Stripped] = [
         Stripped(
             f"""\
 /**
@@ -383,9 +382,9 @@ bool IsSurrogatePairAt(const std::wstring& text, size_t offset) {{
 {I});
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
-    utf32_helpers = []  # type: List[Stripped]
+    utf32_helpers: List[Stripped] = []
 
     if uses_len_str:
         utf16_helpers.append(
@@ -512,7 +511,7 @@ size_t CharacterSizeBefore(const std::wstring&, size_t) {{
             )
         )
 
-    other_helpers = []  # type: List[Stripped]
+    other_helpers: List[Stripped] = []
 
     if uses_slicing:
         other_helpers.append(
@@ -598,7 +597,7 @@ bool IsAmongCharacters(
 
     other_helpers_joined = "".join(f"\n\n{helper}" for helper in other_helpers)
 
-    result = [
+    result: List[Stripped] = [
         Stripped(
             f"""\
 namespace {{
@@ -612,7 +611,7 @@ namespace {{
 
 }}  // namespace"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     if uses_len_str:
         result.append(
@@ -1228,7 +1227,7 @@ def generate_header(
 
     include_guard_var = cpp_common.include_guard_var(namespace)
 
-    make_uniques = [
+    make_uniques: List[Stripped] = [
         Stripped(
             f"""\
 template<typename T>
@@ -1238,7 +1237,7 @@ std::unique_ptr<T> make_unique() {{
 {I});
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
     for i in range(1, 16):
         typenames_joined = ",\n".join(
             ["typename T"] + [f"typename A{j + 1}" for j in range(i)]
@@ -1274,7 +1273,7 @@ std::unique_ptr<T> make_unique(
 
     vector_include = "#include <vector>\n" if has_set_properties else ""
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 #ifndef {include_guard_var}
@@ -1328,7 +1327,7 @@ std::unique_ptr<T> make_unique(
 #pragma warning(pop)
 #endif"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     # NOTE (mristin):
     # The string helpers need ``WCHAR_MAX`` to tell whether ``wchar_t`` is
@@ -1341,7 +1340,7 @@ std::unique_ptr<T> make_unique(
     # The helpers ``FloorMod`` and ``ParseSafeInt`` return ``int64_t``'s as well.
     uses_string_helpers = _uses_string_helpers(type_inference)
 
-    extra_std_includes = []  # type: List[str]
+    extra_std_includes: List[str] = []
     if (
         intermediate_uses.string_len_call(type_inference)
         or intermediate_uses.string_slicing(type_inference)
@@ -1392,7 +1391,7 @@ std::unique_ptr<T> make_unique(
             )
         )
 
-    variant_aliases = (
+    variant_aliases: List[Stripped] = (
         [
             Stripped(
                 """\
@@ -1410,7 +1409,7 @@ using mpark::in_place_index_t;
         ]
         if uses_variant
         else []
-    )  # type: List[Stripped]
+    )
 
     blocks.extend(
         [

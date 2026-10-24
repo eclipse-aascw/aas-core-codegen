@@ -333,12 +333,12 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[List[_Token]]
 
         If ``suffix`` token is defined, it will be appended to the result
         """
-        result = []  # type: List[_Token]
+        result: List[_Token] = []
 
         if prefix is not None:
             result.append(prefix)
 
-        errors = []  # type: List[str]
+        errors: List[str] = []
 
         for child in children:
             tokens, child_errors = self.transform(child)
@@ -379,9 +379,9 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[List[_Token]]
     def transform_bullet_list(
         self, element: docutils.nodes.bullet_list
     ) -> Tuple[Optional[List[_Token]], Optional[List[str]]]:
-        result = [_TokenULOpen()]  # type: List[_Token]
+        result: List[_Token] = [_TokenULOpen()]
 
-        errors = []  # type: List[str]
+        errors: List[str] = []
 
         for child in element.children:
             assert isinstance(child, docutils.nodes.list_item), (
@@ -433,10 +433,10 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[List[_Token]]
 
 def _remove_redundant_p(tokens: List[_Token]) -> List[_Token]:
     """Remove redundant chains of ``<p>`` tokens."""
-    result = []  # type: List[_Token]
+    result: List[_Token] = []
 
     # region Remove consecutive ``<p>``
-    last_token = None  # type: Optional[_Token]
+    last_token: Optional[_Token] = None
     for token in tokens:
         if (
             last_token is not None
@@ -539,7 +539,7 @@ class _IndentionMachine:
     def render(self) -> str:
         """Render the buffer as indented text."""
         level = 0
-        pending_text_blocks = []  # type: List[_TextBlock]
+        pending_text_blocks: List[_TextBlock] = []
 
         writer = io.StringIO()
 
@@ -643,11 +643,11 @@ def _generate_summary_remarks(
     description: intermediate.SummaryRemarksDescription, context: Context
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the documentation comment for a summary-remarks."""
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
     renderer = _ElementRenderer(context=context)
 
-    tokens = []  # type: List[_Token]
+    tokens: List[_Token] = []
 
     summary_tokens, summary_errors = renderer.transform(description.summary)
     if summary_errors is not None:
@@ -676,11 +676,11 @@ def _generate_summary_remarks_constraints(
     description: intermediate.SummaryRemarksConstraintsDescription, context: Context
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the documentation comment for a summary-remarks-constraints."""
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
     renderer = _ElementRenderer(context=context)
 
-    tokens = []  # type: List[_Token]
+    tokens: List[_Token] = []
 
     summary_tokens, summary_errors = renderer.transform(description.summary)
     if summary_errors is not None:
@@ -760,11 +760,11 @@ def generate_comment_for_signature(
 
     The ``extra_remarks`` are appended as plain-text paragraphs to the remarks.
     """
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
     renderer = _ElementRenderer(context=context)
 
-    tokens = []  # type: List[_Token]
+    tokens: List[_Token] = []
 
     summary_tokens, summary_errors = renderer.transform(description.summary)
     if summary_errors is not None:
@@ -785,14 +785,14 @@ def generate_comment_for_signature(
         tokens.append(_TokenP())
         tokens.append(_TokenText(extra_remark))
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     summary_remarks = _render_tokens(tokens)
 
     if len(summary_remarks) > 0:
         blocks.append(Stripped(summary_remarks))
 
-    param_and_return_blocks = []  # type: List[str]
+    param_and_return_blocks: List[str] = []
     for arg_name, arg_description in description.arguments_by_name.items():
         arg_tokens, arg_errors = renderer.transform(arg_description)
         if arg_errors is not None:
@@ -801,11 +801,13 @@ def generate_comment_for_signature(
 
         assert arg_tokens is not None
 
-        arg_description = _render_tokens(
+        rendered_arg_description = _render_tokens(
             _strip_prefix_p(_remove_redundant_p(arg_tokens))
         )
 
-        param_and_return_blocks.append(Stripped(f"@param {arg_name} {arg_description}"))
+        param_and_return_blocks.append(
+            Stripped(f"@param {arg_name} {rendered_arg_description}")
+        )
 
     if description.returns is not None:
         returns_tokens, returns_errors = renderer.transform(description.returns)

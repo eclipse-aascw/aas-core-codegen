@@ -19,7 +19,7 @@ def generate(
     """
     Generate code to test the JSON de/serialization of enumerations.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for enumeration in symbol_table.enumerations:
         enum_name = java_naming.enum_name(enumeration.name)

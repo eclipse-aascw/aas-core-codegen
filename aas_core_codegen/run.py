@@ -90,7 +90,7 @@ def load_model(
     """
     text = model_path.read_text(encoding="utf-8")
 
-    cache_path = None  # type: Optional[pathlib.Path]
+    cache_path: Optional[pathlib.Path] = None
     if cache_model:
         hasher = hashlib.sha256()
 

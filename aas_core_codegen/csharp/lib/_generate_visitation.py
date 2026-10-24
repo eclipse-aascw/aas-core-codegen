@@ -15,7 +15,7 @@ from aas_core_codegen.csharp.common import INDENT as I, INDENT2 as II
 
 def _generate_ivisitor(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the visitor interface."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # Abstract classes have no particular implementation, so we do not visit
     # them.
@@ -73,7 +73,7 @@ public interface IVisitor
 
 def _generate_visitor_through(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the visitor that simply iterates over the instances."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public virtual void Visit(IClass that)
@@ -81,7 +81,7 @@ public virtual void Visit(IClass that)
 {I}that.Accept(this);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # Abstract classes are modeled as interfaces in C#, so we do not transform
     # them.
@@ -135,7 +135,7 @@ public class VisitorThrough : IVisitor
 
 def _generate_abstract_visitor(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the visitor that performs double-dispatch."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public virtual void Visit(IClass that)
@@ -143,7 +143,7 @@ public virtual void Visit(IClass that)
 {I}that.Accept(this);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # Abstract classes have no particular implementation, so we do not transform
     # them.
@@ -185,7 +185,7 @@ public abstract class AbstractVisitor : IVisitor
 
 def _generate_ivisitor_with_context(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the interface for the visitor with context."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # Abstract classes have no particular implementation, so we do not visit
     # them.
@@ -237,7 +237,7 @@ def _generate_abstract_visitor_with_context(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the visitor with context that performs double-dispatch."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public virtual void Visit(IClass that, TContext context)
@@ -245,7 +245,7 @@ public virtual void Visit(IClass that, TContext context)
 {I}that.Accept(this, context);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # Abstract classes have no particular implementation, so we do not visit
     # them.
@@ -291,7 +291,7 @@ public abstract class AbstractVisitorWithContext<TContext>
 
 def _generate_itransformer(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the transformer interface."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # Abstract classes have no particular implementation, so we do not transform
     # them.
@@ -341,7 +341,7 @@ public interface ITransformer<out T>
 
 def _generate_abstract_transformer(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the most abstract transformer that merely double-dispatches."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public virtual T Transform(IClass that)
@@ -349,7 +349,7 @@ public virtual T Transform(IClass that)
 {I}return that.Transform(this);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # Abstract classes have no particular implementation, so we do not transform
     # them.
@@ -395,7 +395,7 @@ def _generate_itransformer_with_context(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the interface for the transformer with context."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # Abstract classes have no particular implementation, so we do not transform
     # them.
@@ -449,7 +449,7 @@ def _generate_abstract_transformer_with_context(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the most abstract transformer that merely double-dispatches."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 public virtual T Transform(IClass that, TContext context)
@@ -457,7 +457,7 @@ public virtual T Transform(IClass that, TContext context)
 {I}return that.Transform(this, context);
 }}"""
         )
-    ]  # type: List[Stripped]
+    ]
 
     # Abstract classes have no particular implementation, so we do not transform
     # them.
@@ -523,7 +523,7 @@ def generate(
 
     The ``namespace`` defines the base C# namespace of the generated code.
     """
-    blocks = [csharp_common.WARNING]  # type: List[Rstripped]
+    blocks: List[Rstripped] = [csharp_common.WARNING]
 
     writer = io.StringIO()
     writer.write(f"namespace {namespace}\n{{\n")

@@ -182,7 +182,7 @@ def compares_against_dict(entity: Entity, obj: object) -> bool:
     """
     entity_property_set = {prop.name for prop in entity.properties}
 
-    obj_property_set = {key for key in obj.__dict__.keys() if not key.startswith("_")}
+    obj_property_set = {key for key in obj.__dict__ if not key.startswith("_")}
 
     return entity_property_set == obj_property_set
 
@@ -242,12 +242,12 @@ def assert_all_public_types_listed_as_dumpables(
 ) -> None:
     """Make sure that all classes in ``types_modules`` are listed as dumpables."""
 
-    dumpable_set = set()  # type: Set[str]
+    dumpable_set: Set[str] = set()
 
     for dumpable_cls in dumpable.__args__:
         dumpable_set.add(dumpable_cls.__name__)
 
-    module_set = set()  # type: Set[str]
+    module_set: Set[str] = set()
 
     for identifier, cls in inspect.getmembers(types_module, inspect.isclass):
         module_name = getattr(cls, "__module__", None)
@@ -318,7 +318,7 @@ def assert_dispatch_exhaustive(dispatch: Mapping[Any, Any], dumpable: Any) -> No
             f"but not in Dumpable: {dispatch_diff_names}"
         )
 
-    unexpected_function_names = []  # type: List[Tuple[str, str]]
+    unexpected_function_names: List[Tuple[str, str]] = []
     for cls, func in dispatch.items():
         cls_snake_case = re.sub(r"(?<!^)(?=[A-Z])", "_", cls.__name__).lower()
         expected_func_name = f"_stringify_{cls_snake_case}"
@@ -326,7 +326,7 @@ def assert_dispatch_exhaustive(dispatch: Mapping[Any, Any], dumpable: Any) -> No
         if func.__name__ != expected_func_name:
             unexpected_function_names.append((cls.__name__, func.__name__))
 
-    if len(unexpected_function_names):
+    if unexpected_function_names:
         raise AssertionError(
             f"The following dispatch functions had unexpected names "
             f"(as a list of (class, function name)): {unexpected_function_names}"

@@ -17,7 +17,7 @@ def _generate_enum_to_and_from_string(
     enumeration: intermediate.Enumeration,
 ) -> Stripped:
     """Generate the methods for de/serializing enumeration from/to a string."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     name = csharp_naming.enum_name(enumeration.name)
 
@@ -180,7 +180,7 @@ def generate(
 
     The ``namespace`` defines the base C# namespace of the generated code.
     """
-    using_directives = []  # type: List[Stripped]
+    using_directives: List[Stripped] = []
     using_directives.extend(
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )
@@ -199,7 +199,7 @@ using System.Collections.Generic;  // can't alias"""
         Stripped("\n".join(using_directives)),
     ]
 
-    stringification_blocks = []  # type: List[Stripped]
+    stringification_blocks: List[Stripped] = []
 
     for enum in symbol_table.enumerations:
         stringification_blocks.append(

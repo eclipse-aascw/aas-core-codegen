@@ -196,22 +196,22 @@ def _collect_requirements(
     a ``read*Dispatched``, a scalar item function and a tuple writer are called only
     from a property.
     """
-    dispatched_type_ids = set()  # type: Set[intermediate.IdOfOurType]
+    dispatched_type_ids: Set[intermediate.IdOfOurType] = set()
 
-    positional_items = []  # type: List[_PositionalItem]
-    observed_positional_items = set()  # type: Set[Tuple[str, str]]
+    positional_items: List[_PositionalItem] = []
+    observed_positional_items: Set[Tuple[str, str]] = set()
 
-    list_items_type_annos = []  # type: List[intermediate.TypeAnnotationExceptOptional]
-    observed_list_writers = set()  # type: Set[str]
+    list_items_type_annos: List[intermediate.TypeAnnotationExceptOptional] = []
+    observed_list_writers: Set[str] = set()
 
-    nested_set_type_annos = []  # type: List[intermediate.SetTypeAnnotation]
-    observed_set_writers = set()  # type: Set[str]
+    nested_set_type_annos: List[intermediate.SetTypeAnnotation] = []
+    observed_set_writers: Set[str] = set()
 
-    tuple_type_annos = []  # type: List[intermediate.TupleTypeAnnotation]
-    observed_tuple_writers = set()  # type: Set[str]
+    tuple_type_annos: List[intermediate.TupleTypeAnnotation] = []
+    observed_tuple_writers: Set[str] = set()
 
-    nested_container_type_annos = []  # type: List[intermediate.ContainerTypeAnnotation]
-    observed_nested_readers = set()  # type: Set[str]
+    nested_container_type_annos: List[intermediate.ContainerTypeAnnotation] = []
+    observed_nested_readers: Set[str] = set()
 
     def require_item(
         item_type_anno: intermediate.TypeAnnotationExceptOptional, element_name: str
@@ -715,7 +715,7 @@ def _generate_read_tuple_helper(arity: int) -> Stripped:
         for i in range(arity)
     )
 
-    item_blocks = []  # type: List[Stripped]
+    item_blocks: List[Stripped] = []
     for i in range(arity):
         item_blocks.append(
             Stripped(
@@ -1139,7 +1139,7 @@ def _generate_snippet_to_switch_on_property_deserialization(
 
     The variables ``the*`` and ``found*`` will be set as well as ``valueErr``.
     """
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
 
     for prop in cls.properties:
         type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -1148,7 +1148,7 @@ def _generate_snippet_to_switch_on_property_deserialization(
 
         xml_prop_literal = golang_common.string_literal(prop.xml_name)
 
-        case_body = None  # type: Optional[Stripped]
+        case_body: Optional[Stripped] = None
 
         if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation) or (
             isinstance(type_anno, intermediate.OurTypeAnnotation)
@@ -1233,7 +1233,7 @@ def _generate_snippet_to_switch_on_property_deserialization(
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
             arity = len(type_anno.items)
 
-            item_readers = []  # type: List[Stripped]
+            item_readers: List[Stripped] = []
             for i, item in enumerate(type_anno.items):
                 item_readers.append(_item_reader_name(item, f"v{i + 1}"))
 
@@ -1359,9 +1359,9 @@ def _generate_read_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
 
     # region Initialize
 
-    initialization_blocks = []  # type: List[Stripped]
+    initialization_blocks: List[Stripped] = []
 
-    prop_var_initializations = []  # type: List[Stripped]
+    prop_var_initializations: List[Stripped] = []
     for prop in cls.properties:
         prop_var = golang_naming.variable_name(Identifier(f"the_{prop.name}"))
 
@@ -1374,7 +1374,7 @@ def _generate_read_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
     if len(prop_var_initializations) > 0:
         initialization_blocks.append(Stripped("\n".join(prop_var_initializations)))
 
-    found_var_initializations = []  # type: List[Stripped]
+    found_var_initializations: List[Stripped] = []
     for prop in cls.properties:
         found_var = golang_naming.variable_name(Identifier(f"found_{prop.name}"))
 
@@ -1400,7 +1400,7 @@ def _generate_read_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
 
     # region Construct
 
-    construct_blocks = []  # type: List[Stripped]
+    construct_blocks: List[Stripped] = []
 
     for prop in cls.properties:
         if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
@@ -1420,13 +1420,13 @@ if !{found_var} {{
             )
         )
 
-    constructing_statements = []  # type: List[Stripped]
+    constructing_statements: List[Stripped] = []
 
-    constructor_arguments = [
+    constructor_arguments: List[Stripped] = [
         golang_naming.variable_name(Identifier(f"the_{arg.name}"))
         for arg in cls.constructor.arguments
         if not isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation)
-    ]  # type: List[Stripped]
+    ]
 
     new_function = golang_naming.function_name(Identifier(f"new_{cls.name}"))
 
@@ -1530,9 +1530,7 @@ def _generate_read_dispatched(
     :py:func:`_generate_read_element_dispatched`), which every container delegates to.
     """
     if isinstance(our_type, intermediate.NamedUnion):
-        alternatives = list(
-            our_type.implementers
-        )  # type: List[intermediate.ConcreteClass]
+        alternatives: List[intermediate.ConcreteClass] = list(our_type.implementers)
         union_name = golang_naming.union_name(our_type.name)
         value_type = Stripped(f"*ourtypes.{union_name}")
         doc_reference = Stripped(f"ourtypes.{union_name}")
@@ -1566,7 +1564,7 @@ def _generate_read_dispatched(
                 f"{golang_common.string_literal(interface_name)})"
             )
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
 
     for alternative in alternatives:
         xml_class_name_literal = golang_common.string_literal(
@@ -1646,7 +1644,7 @@ func {function_name}(
 
 def _generate_read_class_dispatched(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the function to read any instance by its element name."""
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         read_as_sequence = golang_naming.private_function_name(
             Identifier(f"read_{cls.name}_as_sequence")
@@ -2020,7 +2018,7 @@ def _generate_write_tuple_helper(arity: int) -> Stripped:
         for i in range(arity)
     )
 
-    item_blocks = []  # type: List[Stripped]
+    item_blocks: List[Stripped] = []
     for i in range(arity):
         item_blocks.append(
             Stripped(
@@ -2551,8 +2549,8 @@ def _generate_write_as_sequence(
 
     interface_name = golang_naming.interface_name(cls.name)
 
-    prop_blocks = []  # type: List[Stripped]
-    errors = []  # type: List[Error]
+    prop_blocks: List[Stripped] = []
+    errors: List[Error] = []
 
     for prop in cls.properties:
         prop_block, error = _generate_snippet_to_serialize_property(prop=prop, cls=cls)
@@ -2602,7 +2600,7 @@ def _generate_write_class(symbol_table: intermediate.SymbolTable) -> Stripped:
     This is [Marshal] without the flush, so that the flush happens exactly
     once per [Marshal], and not once per instance nested in it.
     """
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         model_type_literal = golang_naming.enum_literal_name(
             enumeration_name=Identifier("Model_type"), literal_name=cls.name
@@ -2797,7 +2795,7 @@ type DeserializationError = xmlcommon.DeserializationError"""
     for arity in intermediate.tuple_arities(symbol_table):
         blocks.append(_generate_read_tuple_helper(arity))
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -2921,7 +2919,7 @@ type SerializationError = xmlcommon.SerializationError"""
 
     import_index = blocks.index(_IMPORT_PLACEHOLDER)
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     for module, literal in (
         ("xml", f'{I}"encoding/xml"'),
         ("fmt", f'{I}"fmt"'),

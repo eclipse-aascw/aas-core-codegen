@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import os
 import pathlib
 import unittest
@@ -317,9 +315,9 @@ class Test_against_recorded(unittest.TestCase):
 
         # The expected cases should have no errors.
         expected_pths = sorted((test_cases_dir / "expected").glob("**/meta_model.py"))
-        meta_model_pths_expected_errors = [
+        meta_model_pths_expected_errors: List[Tuple[pathlib.Path, bool]] = [
             (pth, False) for pth in expected_pths
-        ]  # type: List[Tuple[pathlib.Path, bool]]
+        ]
 
         unexpected_pths = sorted(
             (test_cases_dir / "unexpected").glob("**/meta_model.py")

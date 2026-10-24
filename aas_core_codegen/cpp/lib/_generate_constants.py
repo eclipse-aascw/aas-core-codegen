@@ -118,7 +118,7 @@ def _generate_constant_primitive_implementation(
                 f"The value of the constant {constant.name!r} overflows "
                 f"64-bit signed integer",
             )
-        return Stripped(f"const int64_t {constant_name} = {str(constant.value)};"), None
+        return Stripped(f"const int64_t {constant_name} = {constant.value!s};"), None
 
     elif constant.a_type is intermediate.PrimitiveType.FLOAT:
         assert isinstance(constant.value, float)
@@ -171,7 +171,7 @@ def _generate_constant_set_of_primitives_definition(
     constant: intermediate.ConstantSetOfPrimitives,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the definition of a constant set of primitives."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     writer = io.StringIO()
 
@@ -231,7 +231,7 @@ def _generate_constant_set_of_primitives_implementation(
     constant: intermediate.ConstantSetOfPrimitives,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the implementation of a constant set of primitives."""
-    literal_codes = []  # type: List[str]
+    literal_codes: List[str] = []
 
     set_type: str
 
@@ -345,7 +345,7 @@ def _generate_constant_set_of_enumeration_literals_implementation(
 
     enum_name = cpp_naming.enum_name(constant.enumeration.name)
 
-    literal_codes = []  # type: List[str]
+    literal_codes: List[str] = []
     for literal in constant.literals:
         literal_name = cpp_naming.enum_literal_name(literal.name)
 
@@ -384,7 +384,7 @@ def generate_header(
     library_namespace: Stripped,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate header to define the constants of the meta-model."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     namespace = Stripped(f"{library_namespace}::{cpp_common.CONSTANTS_NAMESPACE}")
 
@@ -495,7 +495,7 @@ def generate_implementation(
     library_namespace: Stripped,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate implementation to define the constants of the meta-model."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     namespace = Stripped(f"{library_namespace}::constants")
 

@@ -166,11 +166,11 @@ _IMPORT_PLACEHOLDER = Stripped("")
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to test the JSON de/serialization of enumerations."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("package jsonization_test"),
         golang_common.WARNING,
         _IMPORT_PLACEHOLDER,
-    ]  # type: List[Stripped]
+    ]
 
     for enumeration in symbol_table.enumerations:
         blocks.append(_generate_round_trip_test_for_enum(enumeration=enumeration))
@@ -180,7 +180,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
 
     import_index = blocks.index(_IMPORT_PLACEHOLDER)
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
     for module, literal in (
         ("fmt", f'{I}"fmt"'),
         ("testing", f'{I}"testing"'),

@@ -26,7 +26,7 @@ def main() -> int:
     their_lines_by_index = {line: i for i, line in enumerate(their_lines)}
 
     for i, line in enumerate(our_lines):
-        their_i = their_lines_by_index.get(line, None)
+        their_i = their_lines_by_index.get(line)
         if their_i is not None:
             print(f"Ours {i+1:4d} to theirs {their_i:4d}")
 

@@ -733,7 +733,7 @@ def generate(repo_url: Stripped) -> str:
         f"{repo_url}/internal/xmlcommon"
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 // Package xmlrpc de/serializes JSON-able values to and from XML.
@@ -779,7 +779,7 @@ type DeserializationError = xmlcommon.DeserializationError"""
 // See the note on [DeserializationError] on why this is an alias.
 type SerializationError = xmlcommon.SerializationError"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     blocks.extend(_generate_readers())
     blocks.extend(_generate_writers())

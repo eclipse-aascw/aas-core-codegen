@@ -48,7 +48,7 @@ def generate(
     generate the tests so that the users can inspect the same cases in all
     the SDKs.
     """
-    methods = []  # type: List[Stripped]
+    methods: List[Stripped] = []
 
     if intermediate_uses.string_len_call(type_inference):
         for len_case in string_helper_cases.LEN_CASES:
@@ -184,7 +184,7 @@ class Test_string_helpers(unittest.TestCase):
 
         writer.write(f"{I}{indent_but_first_line(method, I)}")
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             '''\
 """
@@ -209,7 +209,7 @@ if __name__ == "__main__":
     unittest.main()"""
         ),
         python_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

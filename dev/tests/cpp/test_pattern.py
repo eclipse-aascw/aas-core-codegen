@@ -1,5 +1,3 @@
-# pylint: disable=missing-docstring
-
 import unittest
 
 from aas_core_codegen.parse import retree as parse_retree

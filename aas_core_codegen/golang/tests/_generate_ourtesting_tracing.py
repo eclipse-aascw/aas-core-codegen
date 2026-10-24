@@ -20,7 +20,7 @@ from aas_core_codegen.golang.common import INDENT as I, INDENT2 as II
 # fmt: on
 def generate(repo_url: Stripped) -> str:
     """Generate the functions to trace instances for tests."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 package ourtesting"""
@@ -44,7 +44,7 @@ func TraceMark(that ourtypes.IClass) string {{
 }}"""
         ),
         golang_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

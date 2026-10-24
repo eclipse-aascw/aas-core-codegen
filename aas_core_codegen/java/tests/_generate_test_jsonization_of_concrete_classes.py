@@ -18,7 +18,7 @@ def _generate_serialization_failure_tests(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
     """Generate the tests that a number unrepresentable in JSON is refused."""
-    result = []  # type: List[Stripped]
+    result: List[Stripped] = []
 
     for numeric_place in intermediate.numeric_places(symbol_table):
         if numeric_place.a_type is intermediate.PrimitiveType.FLOAT:
@@ -162,7 +162,7 @@ def generate(
     """
     Generate code to test the JSON de/serialization of concrete classes.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 private static void assertSerializeDeserializeEqualsOriginal(JsonNode originalNode, IClass instance, Path path)
@@ -217,7 +217,7 @@ assertEquals(
 {I}}}
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_name_java = java_naming.class_name(concrete_cls.name)

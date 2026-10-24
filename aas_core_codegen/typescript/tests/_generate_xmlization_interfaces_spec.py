@@ -26,7 +26,7 @@ from aas_core_codegen.typescript.common import (
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable) -> str:
     """Generate code to test the XML de/serialization of interfaces."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -41,7 +41,7 @@ import * as OurTypes from "../src/types";
 
 import * as TestCommonXmlization from "./commonXmlization";"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.classes:
         if cls.interface is None or len(cls.interface.implementers) == 0:

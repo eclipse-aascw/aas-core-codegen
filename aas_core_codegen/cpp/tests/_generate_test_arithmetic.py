@@ -71,7 +71,7 @@ def generate_implementation(
     """
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             """\
@@ -102,7 +102,7 @@ def generate_implementation(
 
 namespace our = {library_namespace};"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if intermediate_uses.modulo(symbol_table):
         for case in tests_common.FLOOR_MOD_CASES:

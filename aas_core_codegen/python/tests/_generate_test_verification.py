@@ -21,7 +21,7 @@ def _generate_test_verification_of_valid_instances(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the test class for verifying valid instances."""
-    methods = []  # type: List[Stripped]
+    methods: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         method_name = python_naming.method_name(Identifier(f"test_{cls.name}"))
@@ -75,7 +75,7 @@ def _generate_test_verification_of_invalid_instances(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the test class for verifying invalid instances."""
-    methods = []  # type: List[Stripped]
+    methods: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         method_name = python_naming.method_name(Identifier(f"test_{cls.name}"))
@@ -154,7 +154,7 @@ def generate(
 
     The ``qualified_module_name`` indicates the fully-qualified name of the base module.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped('"""Test the verification of instances."""'),
         python_common.WARNING,
         Stripped("# pylint: disable=missing-docstring"),
@@ -177,7 +177,7 @@ if __name__ == "__main__":
 {I}unittest.main()"""
         ),
         python_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     out = io.StringIO()
     for i, block in enumerate(blocks):

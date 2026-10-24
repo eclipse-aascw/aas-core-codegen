@@ -26,7 +26,7 @@ def first_not_in_topological_order(
 
     :return: The first class which is not fitting the expected order.
     """
-    observed = set()  # type: Set[parse.Class]
+    observed: Set[parse.Class] = set()
     for cls in classes:
         for parent_name in cls.inheritances:
             # We ignore here the initial set of the constrained primitives.
@@ -114,7 +114,7 @@ class _UnverifiedOntology:
 
         # region Determine ancestors
 
-        ancestors_of = dict()  # type: MutableMapping[parse.Class, List[parse.Class]]
+        ancestors_of: MutableMapping[parse.Class, List[parse.Class]] = dict()
 
         order_of = {cls: i for i, cls in enumerate(classes)}
 
@@ -139,7 +139,7 @@ class _UnverifiedOntology:
 
             sorted_parents = sorted(parents_with_order, key=lambda item: item[0])
 
-            class_ancestors = []  # type: List[parse.Class]
+            class_ancestors: List[parse.Class] = []
             for _, parent in sorted_parents:
                 assert parent in ancestors_of, (
                     f"Expected to process all the parent's of the class {cls.name} "
@@ -159,7 +159,7 @@ class _UnverifiedOntology:
 
         # region Determine descendants
 
-        descendants_of = dict()  # type: MutableMapping[parse.Class, List[parse.Class]]
+        descendants_of: MutableMapping[parse.Class, List[parse.Class]] = dict()
 
         # Simply inverse
 
@@ -216,11 +216,11 @@ def _topologically_sort(
     # See https://en.wikipedia.org/wiki/Topological_sorting#Depth-first%20search
     # We use sorted containers to avoid non-deterministic behavior.
 
-    result = []  # type: List[parse.Class]
+    result: List[parse.Class] = []
 
-    without_permanent_marks = sortedcontainers.SortedSet(
-        key=lambda a_class: a_class.name
-    )  # type: sortedcontainers.SortedSet[parse.Class]
+    without_permanent_marks: sortedcontainers.SortedSet[
+        parse.Class
+    ] = sortedcontainers.SortedSet(key=lambda a_class: a_class.name)
 
     for our_type in parsed_symbol_table.our_types:
         if not isinstance(our_type, parse.Class):
@@ -228,15 +228,15 @@ def _topologically_sort(
 
         without_permanent_marks.add(our_type)
 
-    permanent_marks = sortedcontainers.SortedSet(
-        key=lambda a_class: a_class.name
-    )  # type: sortedcontainers.SortedSet[parse.Class]
+    permanent_marks: sortedcontainers.SortedSet[
+        parse.Class
+    ] = sortedcontainers.SortedSet(key=lambda a_class: a_class.name)
 
-    temporary_marks = sortedcontainers.SortedSet(
-        key=lambda a_class: a_class.name
-    )  # type: sortedcontainers.SortedSet[parse.Class]
+    temporary_marks: sortedcontainers.SortedSet[
+        parse.Class
+    ] = sortedcontainers.SortedSet(key=lambda a_class: a_class.name)
 
-    visited_more_than_once = None  # type: Optional[parse.Class]
+    visited_more_than_once: Optional[parse.Class] = None
 
     def visit(cls: parse.Class) -> None:
         nonlocal visited_more_than_once
@@ -315,7 +315,7 @@ def map_symbol_table_to_ontology(
 
     assert ontology is not None
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # region Check that properties and methods do not conflict among ancestors
 
@@ -325,8 +325,8 @@ def map_symbol_table_to_ontology(
 
         ancestors = ontology.list_ancestors(cls=our_type)
 
-        observed_properties = dict()  # type: MutableMapping[str, parse.Class]
-        observed_methods = dict()  # type: MutableMapping[str, parse.Class]
+        observed_properties: MutableMapping[str, parse.Class] = dict()
+        observed_methods: MutableMapping[str, parse.Class] = dict()
 
         for ancestor in ancestors:
             for prop in ancestor.properties:

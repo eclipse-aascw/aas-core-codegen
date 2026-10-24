@@ -45,7 +45,7 @@ def _check_support(
             ]
 
     elif isinstance(node, parse_tree.JoinedStr):
-        errors = []  # type: List[Error]
+        errors: List[Error] = []
 
         for value in node.values:
             # noinspection PyTypeChecker
@@ -125,7 +125,7 @@ def _evaluate(
         return value, None
 
     elif isinstance(expr, parse_tree.JoinedStr):
-        parts = []  # type: List[str]
+        parts: List[str] = []
         for joined_str_value in expr.values:
             if isinstance(joined_str_value, str):
                 parts.append(joined_str_value)
@@ -155,7 +155,7 @@ def _evaluate(
 )
 @ensure(
     lambda result:
-    not (result[2] is None)
+    result[2] is not None
     or (
         (result[0] is not None) ^ (result[1] is not None)
     ),
@@ -349,7 +349,7 @@ def try_to_understand(
 
     # region Check the support of the statements
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
     for i, stmt in enumerate(parsed.body):
         # Skip the return statement
         if i == len(parsed.body) - 1:
@@ -383,9 +383,9 @@ def try_to_understand(
 
     # region Re-execute the function to infer the pattern
 
-    state = collections.OrderedDict()  # type: MutableMapping[Identifier, str]
+    state: MutableMapping[Identifier, str] = collections.OrderedDict()
 
-    pattern = None  # type: Optional[str]
+    pattern: Optional[str] = None
     for i, stmt in enumerate(parsed.body):
         if i < len(parsed.body) - 1:
             assert isinstance(stmt, parse_tree.Assignment)

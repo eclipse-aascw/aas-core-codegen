@@ -65,7 +65,7 @@ func {test_function_name}(
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to test ``Descend*`` functions."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("package types_descend_test"),
         golang_common.WARNING,
         Stripped(
@@ -76,7 +76,7 @@ import (
 {I}ourtesting "{repo_url}/ourtesting"
 )"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         blocks.append(_generate_for_cls(cls=concrete_cls))

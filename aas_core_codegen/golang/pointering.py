@@ -294,7 +294,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_slice(self, node: parse_tree.Slice) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for child in (node.collection, node.start, node.end):
             if child is None:
                 continue
@@ -314,7 +314,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_comparison(self, node: parse_tree.Comparison) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for operand in (node.left, node.right):
             # NOTE (mristin):
             # Do not immediately return so that other arguments are processed as well.
@@ -367,7 +367,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_method_call(self, node: parse_tree.MethodCall) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for arg in node.args:
             error = self.transform(arg)
 
@@ -433,7 +433,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_function_call(self, node: parse_tree.FunctionCall) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for arg in node.args:
             error = self.transform(arg)
 
@@ -485,7 +485,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_tuple(self, node: parse_tree.Tuple) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for value in node.values:
             error = self.transform(value)
 
@@ -503,7 +503,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_list_literal(self, node: parse_tree.ListLiteral) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for item in node.items:
             error = self.transform(item)
 
@@ -562,7 +562,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_and(self, node: parse_tree.And) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for value in node.values:
             # NOTE (mristin):
             # Do not immediately return so that other arguments are processed as well.
@@ -580,7 +580,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_or(self, node: parse_tree.Or) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for value in node.values:
             # NOTE (mristin):
             # Do not immediately return so that other arguments are processed as well.
@@ -598,7 +598,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_add(self, node: parse_tree.Add) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for operand in (node.left, node.right):
             # NOTE (mristin):
             # Do not immediately return so that other arguments are processed as well.
@@ -616,7 +616,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_sub(self, node: parse_tree.Sub) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for operand in (node.left, node.right):
             # NOTE (mristin):
             # Do not immediately return so that other arguments are processed as well.
@@ -634,7 +634,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_mod(self, node: parse_tree.Mod) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for operand in (node.left, node.right):
             # NOTE (mristin):
             # Do not immediately return so that other arguments are processed as well.
@@ -674,7 +674,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_joined_str(self, node: parse_tree.JoinedStr) -> Optional[Error]:
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for value in node.values:
             if isinstance(value, str):
                 continue
@@ -712,7 +712,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
 
     def transform_for_range(self, node: parse_tree.ForRange) -> Optional[Error]:
         # noinspection PyUnusedLocal
-        error = None  # type: Optional[Error]
+        error: Optional[Error] = None
 
         variable_type_in_env = self._environment.find(node.variable.identifier)
         if variable_type_in_env is not None:
@@ -724,7 +724,7 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
             self.errors.append(error)
             return error
 
-        last_error = None  # type: Optional[Error]
+        last_error: Optional[Error] = None
         for value in (node.start, node.end):
             error = self.transform(value)
 

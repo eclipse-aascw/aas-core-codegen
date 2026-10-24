@@ -1,4 +1,3 @@
-# pylint: disable=missing-docstring
 import os
 import pathlib
 import unittest
@@ -125,7 +124,7 @@ class Test_examples(unittest.TestCase):
             for data_pth in sorted(
                 (case_dir / "examples" / "Unexpected").glob("**/*.xml")
             ):
-                schema_exception = None  # type: Optional[xmlschema.XMLSchemaException]
+                schema_exception: Optional[xmlschema.XMLSchemaException] = None
                 try:
                     schema.validate(str(data_pth))
                 except xmlschema.XMLSchemaException as err:

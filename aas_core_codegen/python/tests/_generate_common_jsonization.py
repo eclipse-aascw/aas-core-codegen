@@ -21,7 +21,7 @@ def _generate_model_type_to_from_jsonable(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
     """Generate the map from model type to the ``*_from_jsonable`` function."""
-    items = []  # type: List[Stripped]
+    items: List[Stripped] = []
 
     for cls in sorted(symbol_table.concrete_classes, key=lambda a_cls: a_cls.name):
         model_type = naming.json_model_type(cls.name)
@@ -29,9 +29,7 @@ def _generate_model_type_to_from_jsonable(
             Identifier(f"{cls.name}_from_jsonable")
         )
 
-        items.append(
-            Stripped(f"{repr(model_type)}:\n{I}our_jsonization.{from_jsonable}")
-        )
+        items.append(Stripped(f"{model_type!r}:\n{I}our_jsonization.{from_jsonable}"))
 
     items_joined = ",\n".join(items)
 
@@ -48,13 +46,13 @@ _MODEL_TYPE_TO_FROM_JSONABLE: Mapping[
 
 def _generate_model_type_to_class(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the map from the concrete class to model type."""
-    items = []  # type: List[Stripped]
+    items: List[Stripped] = []
 
     for cls in sorted(symbol_table.concrete_classes, key=lambda a_cls: a_cls.name):
         model_type = naming.json_model_type(cls.name)
         python_cls_name = python_naming.class_name(cls.name)
 
-        items.append(Stripped(f"{repr(model_type)}:\n{I}our_types.{python_cls_name}"))
+        items.append(Stripped(f"{model_type!r}:\n{I}our_types.{python_cls_name}"))
 
     items_joined = ",\n".join(items)
 

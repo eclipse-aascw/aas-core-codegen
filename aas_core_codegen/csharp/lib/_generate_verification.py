@@ -46,9 +46,9 @@ def verify(
     verification_functions: Sequence[intermediate.Verification],
 ) -> Optional[List[str]]:
     """Verify all the implementation snippets related to verification."""
-    errors = []  # type: List[str]
+    errors: List[str] = []
 
-    expected_keys = []  # type: List[specific_implementations.ImplementationKey]
+    expected_keys: List[specific_implementations.ImplementationKey] = []
 
     for func in verification_functions:
         if isinstance(func, intermediate.ImplementationSpecificVerification):
@@ -102,7 +102,7 @@ class _PatternVerificationTranspiler(
 
         needs_interpolation = False
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
         for value in values:
             if isinstance(value, str):
                 string_literal = csharp_common.string_literal(
@@ -247,7 +247,7 @@ def _transpile_pattern_verification(
         Identifier(f"construct_{verification.name}")
     )
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Construct block
 
@@ -262,7 +262,7 @@ private static Regex {construct_name}()
 """
     )
 
-    defined_variables = set()  # type: Set[Identifier]
+    defined_variables: Set[Identifier] = set()
     transpiler = _PatternVerificationTranspiler(defined_variables=defined_variables)
 
     for i, stmt in enumerate(verification.parsed.body):
@@ -447,7 +447,7 @@ def _transpile_transpilable_verification(
         verification=verification,
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in verification.parsed.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -465,8 +465,8 @@ def _transpile_transpilable_verification(
     # see :py:func:`intermediate.generic_sequence_item_class`, as the covariant
     # ``IReadOnlyList<T>``. This way, the lists of the descendants can be passed
     # without a copy, as ``List<T>`` implements ``IReadOnlyList<T>``.
-    arg_defs = []  # type: List[Stripped]
-    remarks_on_generic_sequences = []  # type: List[str]
+    arg_defs: List[Stripped] = []
+    remarks_on_generic_sequences: List[str] = []
     for arg in verification.arguments:
         arg_name = csharp_naming.argument_name(arg.name)
 
@@ -687,7 +687,7 @@ yield return new Reporting.Error(
 #: Define the helper for ``len`` on tuples.
 def _generate_enum_value_sets(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate a class that pre-computes the sets of allowed enumeration literals."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for enum in symbol_table.enumerations:
         enum_name = csharp_naming.enum_name(enum.name)
@@ -872,7 +872,7 @@ def _generate_verify_into(
     the method of its items by name. This way the verification is composed of
     plain functions, to any depth, without any delegates.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     method: str
     args: List[str]
@@ -1046,8 +1046,8 @@ def _generate_transform_for_class(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transform method to errors for the given concrete class."""
-    errors = []  # type: List[Error]
-    blocks = []  # type: List[Stripped]
+    errors: List[Error] = []
+    blocks: List[Stripped] = []
 
     name = csharp_naming.class_name(cls.name)
 
@@ -1095,8 +1095,10 @@ def _generate_transform_for_class(
             expr=source_expr,
             type_anno=type_anno,
             segments=[
-                f"new Reporting.NameSegment("
-                f"{csharp_common.string_literal(prop.json_name)})"
+                (
+                    f"new Reporting.NameSegment("
+                    f"{csharp_common.string_literal(prop.json_name)})"
+                )
             ],
         )
 
@@ -1155,9 +1157,9 @@ def _generate_transformer(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate a transformer to double-dispatch an instance to errors."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -1241,8 +1243,8 @@ def _generate_verify_constrained_primitive(
     type_inference: intermediate_type_inference.TypeInference,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the verify function for the constrained primitives."""
-    errors = []  # type: List[Error]
-    blocks = []  # type: List[Stripped]
+    errors: List[Error] = []
+    blocks: List[Stripped] = []
 
     for invariant in constrained_primitive.invariants:
         invariant_code, error = _transpile_invariant(
@@ -1355,7 +1357,7 @@ def generate(
 
     The ``namespace`` defines the base C# namespace of the generated code.
     """
-    using_directives = []  # type: List[Stripped]
+    using_directives: List[Stripped] = []
     using_directives.extend(
         csharp_common.generate_using_our_directive_if_necessary(namespace)
     )
@@ -1380,13 +1382,13 @@ using System.Linq;  // can't alias"""
         )
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         csharp_common.WARNING,
         Stripped("\n".join(using_directives)),
-    ]  # type: List[Stripped]
+    ]
 
-    verification_blocks = []  # type: List[Stripped]
-    errors = []  # type: List[Error]
+    verification_blocks: List[Stripped] = []
+    errors: List[Error] = []
 
     for verification in symbol_table.verification_functions:
         if isinstance(verification, intermediate.ImplementationSpecificVerification):
@@ -1512,7 +1514,7 @@ public static IEnumerable<Reporting.Error> Verify(Our.IClass that)
     if len(symbol_table.named_unions) > 0:
         verification_blocks.append(_generate_union_verify_helper())
 
-    observed_monikers = set()  # type: Set[str]
+    observed_monikers: Set[str] = set()
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
@@ -1551,9 +1553,9 @@ namespace {namespace}
 
     # region Write an example usage
 
-    first_cls = (
+    first_cls: Optional[intermediate.ClassUnion] = (
         symbol_table.classes[0] if len(symbol_table.classes) > 0 else None
-    )  # type: Optional[intermediate.ClassUnion]
+    )
 
     if first_cls is not None:
         cls_name: str

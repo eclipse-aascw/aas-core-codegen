@@ -243,7 +243,7 @@ def assert_statements_in(
     it is needed.
     """
     for function in functions:
-        body = ()  # type: Sequence[parse_tree.Node]
+        body: Sequence[parse_tree.Node] = ()
         if isinstance(function, _types.TranspilableVerification):
             body = function.parsed.body
         elif isinstance(function, _types.UnderstoodMethod):
@@ -413,10 +413,10 @@ def sets(symbol_table: _types.SymbolTable) -> bool:
     ):
         return True
 
-    functions = [
+    functions: List[Union[_types.Verification, _types.Method]] = [
         *symbol_table.verification_functions,
         *(method for cls in symbol_table.classes for method in cls.methods),
-    ]  # type: List[Union[_types.Verification, _types.Method]]
+    ]
 
     return sets_in(functions)
 
@@ -466,7 +466,7 @@ def enumerations_in_set_properties(
     The enumerations are listed in the order of their definition in
     the meta-model, each only once.
     """
-    ids_in_sets = set()  # type: Set[int]
+    ids_in_sets: Set[int] = set()
     for cls in symbol_table.classes:
         for prop in cls.properties:
             for set_type_anno in _nested_sets(prop.type_annotation):
@@ -544,10 +544,10 @@ def sets_of_enumeration_literals(symbol_table: _types.SymbolTable) -> bool:
     ):
         return True
 
-    functions = [
+    functions: List[Union[_types.Verification, _types.Method]] = [
         *symbol_table.verification_functions,
         *(method for cls in symbol_table.classes for method in cls.methods),
-    ]  # type: List[Union[_types.Verification, _types.Method]]
+    ]
 
     for function in functions:
         if any(

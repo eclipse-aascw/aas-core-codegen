@@ -20,7 +20,7 @@ from aas_core_codegen.java.common import INDENT as I, INDENT2 as II
 
 def _generate_shallow_equals(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the code for a static shallow ``Equals`` method."""
-    exprs = []  # type: List[str]
+    exprs: List[str] = []
     for prop in cls.properties:
         prop_name = java_naming.method_name(Identifier(f"get_{prop.name}"))
         exprs.append(f"that.{prop_name}().equals(other.{prop_name}())")
@@ -215,7 +215,7 @@ def _generate_transform_as_deep_equals(cls: intermediate.ConcreteClass) -> Strip
     """Generate the transform method that checks for deep equality."""
     cls_name = java_naming.class_name(cls.name)
 
-    exprs = []  # type: List[Stripped]
+    exprs: List[Stripped] = []
 
     for prop in cls.properties:
         getter_name = java_naming.getter_name(prop.name)
@@ -316,11 +316,11 @@ def _containers_compared_deeply(
 
     The containers are de-duplicated by their type moniker.
     """
-    result = (
-        []
-    )  # type: List[Union[intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation]]
+    result: List[
+        Union[intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation]
+    ] = []
 
-    observed_monikers = set()  # type: Set[str]
+    observed_monikers: Set[str] = set()
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
             for (
@@ -355,7 +355,7 @@ def _generate_deep_equals_transformer(
 
     The ``containers`` are compared deeply by methods of their own.
     """
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for concrete_cls in symbol_table.concrete_classes:
         blocks.append(_generate_transform_as_deep_equals(cls=concrete_cls))
@@ -406,7 +406,7 @@ def generate(
     """
     containers = _containers_compared_deeply(symbol_table)
 
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_deep_equals_transformer(
             symbol_table=symbol_table, containers=containers
         ),
@@ -414,7 +414,7 @@ def generate(
             """\
 private static final _DeepEqualiser DeepEqualiserInstance = new _DeepEqualiser();"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     for concrete_cls in symbol_table.concrete_classes:
         blocks.append(_generate_shallow_equals(cls=concrete_cls))
@@ -457,7 +457,7 @@ public void test{cls_name}DeepCopy() throws IOException {{
 
     blocks_joined = "\n\n".join(blocks)
 
-    imports = [
+    imports: List[Stripped] = [
         Stripped(f"import {package}.common.*;"),
         Stripped(f"import {package}.copying.Copying;"),
         Stripped(f"import {package}.types.enums.*;"),
@@ -469,7 +469,7 @@ public void test{cls_name}DeepCopy() throws IOException {{
         Stripped("import java.util.Arrays;"),
         Stripped("import java.util.List;"),
         Stripped("import org.junit.jupiter.api.Test;"),
-    ]  # type: List[Stripped]
+    ]
 
     # NOTE (mristin):
     # The methods comparing the containers spell out their types, so we need to

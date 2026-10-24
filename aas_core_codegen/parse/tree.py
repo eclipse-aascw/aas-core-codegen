@@ -26,12 +26,12 @@ class Node(abc.ABC):
     @abc.abstractmethod
     def transform(self, transformer: "Transformer[T]") -> T:
         """Accept the transformer."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit(self, visitor: "Visitor") -> None:
         """Accept the transformer."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def __str__(self) -> str:
         """Provide a human-readable representation of the instance."""
@@ -44,12 +44,12 @@ class Statement(Node):
     @abc.abstractmethod
     def transform(self, transformer: "Transformer[T]") -> T:
         """Accept the transformer."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit(self, visitor: "Visitor") -> None:
         """Accept the transformer."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class Expression(Node):
@@ -58,12 +58,12 @@ class Expression(Node):
     @abc.abstractmethod
     def transform(self, transformer: "Transformer[T]") -> T:
         """Accept the transformer."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit(self, visitor: "Visitor") -> None:
         """Accept the transformer."""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class Member(Expression):
@@ -1212,7 +1212,7 @@ class Visitor(DBC):
         self.visit(node.expression)
 
 
-class Transformer(Generic[T], DBC):
+class Transformer(DBC, Generic[T]):
     """Transform our AST into something."""
 
     def transform(self, node: Node) -> T:
@@ -1652,7 +1652,7 @@ class _StringifyTransformer(Transformer[stringify.Entity]):
         )
 
     def transform_joined_str(self, node: JoinedStr) -> stringify.Entity:
-        values = []  # type: List[Union[stringify.Entity, str]]
+        values: List[Union[stringify.Entity, str]] = []
         for value in node.values:
             if isinstance(value, str):
                 values.append(value)
@@ -1744,7 +1744,7 @@ class _StringifyTransformer(Transformer[stringify.Entity]):
         )
 
     def transform_switch(self, node: Switch) -> stringify.Entity:
-        cases = []  # type: List[stringify.Entity]
+        cases: List[stringify.Entity] = []
         for case in node.cases:
             cases.append(
                 stringify.Entity(
@@ -1807,7 +1807,7 @@ class _StringifyTransformer(Transformer[stringify.Entity]):
         )
 
     def transform_if(self, node: If) -> stringify.Entity:
-        branches = []  # type: List[stringify.Entity]
+        branches: List[stringify.Entity] = []
         for branch in node.branches:
             branches.append(
                 stringify.Entity(

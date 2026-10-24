@@ -1,0 +1,36 @@
+target-version = "py310"
+line-length = 120
+
+[lint]
+select = [
+    "ASYNC", "B", "C4", "DTZ", "E", "EXE", "F", "FIX", "FLY", "FURB", "G",
+    "INT", "ISC", "LOG", "N", "PGH", "PIE", "PLC", "PLE", "PLW", "PTH", "PYI",
+    "RSE", "RUF", "SIM", "SLOT", "T10", "TD", "TID", "TRY", "UP", "W", "YTT",
+]
+
+# NOTE (mristin):
+# We ignore the rules which go against our style, such as the PEP 585 and
+# PEP 604 annotations, ``dict()`` instead of ``{}``, or the lambdas in
+# the contracts, which icontract needs to inspect the arguments. Ruff confuses
+# the deliberate special characters in our texts with the ambiguous ones.
+# We format the code with black, not ruff, so we ignore the formatter comments
+# which only ruff can not handle.
+ignore = [
+    "C408", "N801", "PGH003", "PIE790", "PLW0108",
+    "PYI034", "PYI041", "RUF001", "RUF002", "RUF003", "RUF005", "RUF028",
+    "SIM102", "SIM103", "SIM105", "SIM108", "SIM114", "TRY003", "TRY004", "UP006",
+    "UP007", "UP035", "UP045",
+]
+
+[lint.per-file-ignores]
+# NOTE (mristin):
+# We set the ``Final`` attributes in ``__setstate__``, which mypy forbids otherwise.
+"aas_core_codegen/intermediate/_types.py" = ["B010"]
+
+[lint.pep8-naming]
+# NOTE (mristin):
+# icontract passes the snapshots as ``OLD`` to the postconditions.
+extend-ignore-names = ["OLD"]
+
+[lint.flake8-bugbear]
+extend-immutable-calls = ["aas_core_codegen.common.Identifier"]

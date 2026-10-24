@@ -92,10 +92,10 @@ def _verify_intra_structure_collisions(
     our_type: intermediate.OurType,
 ) -> Optional[Error]:
     """Verify that no member names collide in the Golang structure of our type."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     if isinstance(our_type, intermediate.Enumeration):
-        observed_literal_names = {}  # type: Dict[Identifier, str]
+        observed_literal_names: Dict[Identifier, str] = {}
         for literal in our_type.literals:
             name = cpp_naming.enum_literal_name(literal.name)
 
@@ -119,7 +119,7 @@ def _verify_intra_structure_collisions(
         pass
 
     elif isinstance(our_type, intermediate.Class):
-        observed_member_names = {}  # type: Dict[Identifier, str]
+        observed_member_names: Dict[Identifier, str] = {}
 
         for prop in our_type.properties:
             name = cpp_naming.getter_name(prop.name)
@@ -186,7 +186,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model property {prop.name!r}"
                 )
 
-        observed_constructor_arg_names = {}  # type: Dict[Identifier, str]
+        observed_constructor_arg_names: Dict[Identifier, str] = {}
         for constructor_arg in our_type.constructor.arguments:
             arg_name = cpp_naming.argument_name(constructor_arg.name)
 
@@ -223,7 +223,7 @@ def _verify_intra_structure_collisions(
                     f"the meta-model method {method.name!r}"
                 )
 
-            observed_method_arg_names = {}  # type: Dict[Identifier, str]
+            observed_method_arg_names: Dict[Identifier, str] = {}
             for arg in method.arguments:
                 arg_name = cpp_naming.argument_name(arg.name)
 
@@ -271,7 +271,7 @@ def _verify_structure_name_collisions(
         ],
     ] = dict()
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # region Inter-structure collisions
 
@@ -297,7 +297,7 @@ def _verify_structure_name_collisions(
             assert_never(enum_or_cls_or_union)
 
         for name in names:
-            other = observed_type_names.get(name, None)
+            other = observed_type_names.get(name)
 
             if other is not None:
                 errors.append(
@@ -332,7 +332,7 @@ def _verify_structure_name_collisions(
         else:
             function_name = cpp_naming.is_function_name(cls_or_union.name)
 
-        other = observed_type_names.get(function_name, None)
+        other = observed_type_names.get(function_name)
         if other is not None:
             errors.append(
                 Error(
@@ -364,21 +364,21 @@ def _verify_that_property_enum_literals_do_not_collide(
     symbol_table: intermediate.SymbolTable,
 ) -> Optional[List[Error]]:
     """Check that the literal names for the properties do not collied within a class."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     # NOTE (mristin):
     # We use getter name as string representation for the enum ``Property``, so we have
     # to make sure that there are no conflicts.
-    literal_name_to_getter_and_prop = (
-        dict()
-    )  # type: Dict[str, Tuple[str, intermediate.Property]]
+    literal_name_to_getter_and_prop: Dict[
+        str, Tuple[str, intermediate.Property]
+    ] = dict()
 
     for cls in symbol_table.classes:
-        observed_literal_names = dict()  # type: Dict[str, str]
+        observed_literal_names: Dict[str, str] = dict()
         for prop in cls.properties:
             literal_name = cpp_naming.enum_literal_name(prop.name)
 
-            conflicting_property_name = observed_literal_names.get(literal_name, None)
+            conflicting_property_name = observed_literal_names.get(literal_name)
 
             if conflicting_property_name is not None:
                 errors.append(
@@ -394,9 +394,7 @@ def _verify_that_property_enum_literals_do_not_collide(
 
             getter = cpp_naming.getter_name(prop.name)
 
-            another_getter_and_prop = literal_name_to_getter_and_prop.get(
-                literal_name, None
-            )
+            another_getter_and_prop = literal_name_to_getter_and_prop.get(literal_name)
             if another_getter_and_prop is not None:
                 another_getter, another_prop = another_getter_and_prop
 
@@ -439,7 +437,7 @@ def verify(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[VerifiedIntermediateSymbolTable], Optional[List[Error]]]:
     """Verify that C++ code can be generated from the ``symbol_table``."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     structure_name_collisions = _verify_structure_name_collisions(
         symbol_table=symbol_table
@@ -536,9 +534,9 @@ def _generate_enum(
     """Generate the C++ code for the enum."""
     writer = io.StringIO()
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    comment = None  # type: Optional[Stripped]
+    comment: Optional[Stripped] = None
     if enum.description is not None:
         comment, comment_errors = _generate_comment_for_cls_or_enum(cls_or_enum=enum)
 
@@ -655,7 +653,7 @@ def _generate_model_type_definition(
     """
     enum_name = cpp_naming.enum_name(Identifier("Model_type"))
 
-    literal_specs = []  # type: List[Stripped]
+    literal_specs: List[Stripped] = []
     for i, cls in enumerate(symbol_table.concrete_classes):
         literal_name = cpp_naming.enum_literal_name(cls.name)
 
@@ -712,15 +710,15 @@ def _generate_class_interface(
     cls: intermediate.ClassUnion,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the definition of an interface representing a class."""
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    members = []  # type: List[Stripped]
+    members: List[Stripped] = []
 
     for prop in cls.properties:
         if prop.specified_for is not cls:
             continue
 
-        description_comment = None  # type: Optional[Stripped]
+        description_comment: Optional[Stripped] = None
         if prop.description is not None:
             (
                 description_comment,
@@ -944,7 +942,7 @@ virtual void {setter_name}(
 
 def _generate_class_definition(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the definition of a concrete class."""
-    public_members = []  # type: List[Stripped]
+    public_members: List[Stripped] = []
 
     cls_name = cpp_naming.class_name(cls.name)
 
@@ -956,7 +954,7 @@ def _generate_class_definition(cls: intermediate.ConcreteClass) -> Stripped:
         # a re-definition error at compile time.
         public_members.append(Stripped(f"{cls_name}();"))
     else:
-        constructor_argument_specs = []  # type: List[str]
+        constructor_argument_specs: List[str] = []
         for arg in cls.constructor.arguments:
             arg_type = cpp_common.generate_type(arg.type_annotation)
             arg_name = cpp_naming.argument_name(arg.name)
@@ -1037,8 +1035,8 @@ void {setter_name}(
     # The non-public methods are not part of the interface, and serve only as
     # helpers to the other methods of the class. We keep the distinction between
     # the protected and the private methods of the meta-model.
-    protected_members = []  # type: List[Stripped]
-    private_members = []  # type: List[Stripped]
+    protected_members: List[Stripped] = []
+    private_members: List[Stripped] = []
 
     for method in cls.methods:
         # noinspection PyTypeChecker
@@ -1228,7 +1226,7 @@ def generate_header(
         else ""
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             f"""\
 #ifndef {include_guard_var}
@@ -1258,9 +1256,9 @@ def generate_header(
  */
 namespace {cpp_common.TYPES_NAMESPACE} {{"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     blocks.append(Stripped("// region Enumerations"))
 
@@ -1393,7 +1391,7 @@ def _generate_constructor_implementation(cls: intermediate.ConcreteClass) -> Str
         f"but got for class {cls.name!r}: {cls.constructor.inlined_statements}"
     )
 
-    body_statements = []  # type: List[Stripped]
+    body_statements: List[Stripped] = []
 
     for stmt in cls.constructor.inlined_statements:
         assert isinstance(stmt, intermediate_construction.AssignArgument), (
@@ -1457,7 +1455,7 @@ if ({arg_name}.has_value()) {{
 }}"""
         )
 
-    constructor_argument_specs = []  # type: List[str]
+    constructor_argument_specs: List[str] = []
     for arg in cls.constructor.arguments:
         arg_type = cpp_common.generate_type(arg.type_annotation)
         arg_name = cpp_naming.argument_name(arg.name)
@@ -1502,7 +1500,7 @@ def _generate_getters_and_setter(
     cls_name = cpp_naming.class_name(cls.name)
     member_name = cpp_naming.private_property_name(prop.name)
 
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     # region Getter
     getter_name = cpp_naming.getter_name(prop.name)
@@ -1665,7 +1663,7 @@ def _transpile_method_body(
         aliasing=aliasing,
     )
 
-    body = []  # type: List[Stripped]
+    body: List[Stripped] = []
     for node in method.body:
         stmt, error = transpiler.transform(node)
         if error is not None:
@@ -1784,15 +1782,15 @@ def _generate_class_implementation(
 
     ``type_inference`` holds the type inference of all the understood methods.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         _generate_constructor_implementation(cls=cls),
         _generate_model_type_getter_implementation(cls=cls),
-    ]  # type: List[Stripped]
+    ]
 
     for prop in cls.properties:
         blocks.extend(_generate_getters_and_setter(prop=prop, cls=cls))
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for method in cls.methods:
         code, error = _generate_method_implementation(
@@ -1840,7 +1838,7 @@ def _generate_underlying_of_named_union_implementation(
 
     union_name = cpp_naming.union_name(named_union.name)
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for i in range(len(named_union.roots)):
         case_blocks.append(
             Stripped(
@@ -1878,7 +1876,7 @@ def _generate_is_cls_implementation(
     """Generate the impl. of the function to check is-a based on model type."""
     function_name = cpp_naming.is_function_name(cls.name)
 
-    case_blocks = []  # type: List[Stripped]
+    case_blocks: List[Stripped] = []
     for concrete_cls in symbol_table.concrete_classes:
         case_body = (
             "return true;" if concrete_cls.is_subclass_of(cls) else "return false;"
@@ -1956,7 +1954,7 @@ def generate_implementation(
         else ""
     )
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f"""\
@@ -1964,9 +1962,9 @@ def generate_implementation(
 #include "{include_prefix_path}/types.hpp"{stdexcept_include}"""
         ),
         cpp_common.generate_namespace_opening(namespace),
-    ]  # type: List[Stripped]
+    ]
 
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
     for concrete_cls in symbol_table.concrete_classes:
         cls_blocks, error = _generate_class_implementation(

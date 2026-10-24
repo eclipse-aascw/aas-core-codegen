@@ -30,7 +30,7 @@ def _generate_test_round_trip_for_model_type(
     """
     enum_name = cpp_naming.enum_name(Identifier("Model_type"))
 
-    statements = []  # type: List[Stripped]
+    statements: List[Stripped] = []
 
     must_from_wstring = cpp_naming.function_name(
         Identifier("must_model_type_from_wstring")
@@ -112,7 +112,7 @@ def _generate_test_round_trip_for(enum: intermediate.Enumeration) -> Stripped:
     """Generate the test of the valid de/serialization for an enum."""
     enum_name = cpp_naming.enum_name(enum.name)
 
-    statements = []  # type: List[Stripped]
+    statements: List[Stripped] = []
 
     must_from_wstring = cpp_naming.function_name(
         Identifier(f"must_{enum.name}_from_wstring")
@@ -197,7 +197,7 @@ def generate_implementation(
     """Generate implementation to test the wstringification of enums."""
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
-    blocks = [
+    blocks: List[Stripped] = [
         cpp_common.WARNING,
         Stripped(
             f"""\
@@ -209,7 +209,7 @@ namespace our = {library_namespace};"""
         ),
         _generate_test_round_trip_for_model_type(symbol_table=symbol_table),
         _generate_test_failure_for_model_type(),
-    ]  # type: List[Stripped]
+    ]
 
     for enum in symbol_table.enumerations:
         if len(enum.literals) == 0:

@@ -27,7 +27,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
     behave the same. All the SDKs test against the very same cases, see
     :py:mod:`aas_core_codegen.tests_common`.
     """
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped(
             """\
 /**
@@ -44,7 +44,7 @@ def generate(symbol_table: intermediate.SymbolTable) -> str:
  */"""
         ),
         typescript_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     blocks.append(Stripped('import * as OurCommon from "../src/common";'))
 

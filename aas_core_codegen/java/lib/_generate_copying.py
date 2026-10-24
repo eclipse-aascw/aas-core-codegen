@@ -72,8 +72,8 @@ def _generate_shallow_copy_transform_method(
 
     # fmt: off
     assert (
-        set(prop.name for prop in cls.properties)
-        == set(arg.name for arg in cls.constructor.arguments)
+        {prop.name for prop in cls.properties}
+        == {arg.name for arg in cls.constructor.arguments}
     ), (
         f"Expected the properties to coincide with constructor arguments, "
         f"but they do not for {cls.name!r}:"
@@ -86,7 +86,7 @@ def _generate_shallow_copy_transform_method(
     if len(cls.constructor.arguments) == 0:
         return_statement = Stripped(f"return new {cls_name}();")
     else:
-        constructor_arg_exprs = []  # type: List[str]
+        constructor_arg_exprs: List[str] = []
         for arg in cls.constructor.arguments:
             if isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation):
                 getter_name = java_naming.getter_name(arg.name)
@@ -125,7 +125,7 @@ def _generate_shallow_copier(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transformer which makes shallow copies."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         blocks.append(_generate_shallow_copy_transform_method(cls=cls))
@@ -324,8 +324,8 @@ def _generate_deep_copy_transform_method(cls: intermediate.ConcreteClass) -> Str
 
     # fmt: off
     assert (
-            set(prop.name for prop in cls.properties)
-            == set(arg.name for arg in cls.constructor.arguments)
+            {prop.name for prop in cls.properties}
+            == {arg.name for arg in cls.constructor.arguments}
     ), (
         f"Expected the properties to coincide with constructor arguments, "
         f"but they do not for {cls.name!r}:"
@@ -339,7 +339,7 @@ def _generate_deep_copy_transform_method(cls: intermediate.ConcreteClass) -> Str
     if len(cls.constructor.arguments) == 0:
         return_statement = Stripped(f"return new {cls_name}();")
     else:
-        constructor_arg_exprs = []  # type: List[str]
+        constructor_arg_exprs: List[str] = []
         for arg in cls.constructor.arguments:
             getter_name = java_naming.getter_name(arg.name)
             type_anno = intermediate.beneath_optional(arg.type_annotation)
@@ -388,7 +388,7 @@ def _generate_deep_copier(
     symbol_table: intermediate.SymbolTable,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transformer which makes deep copies."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for cls in symbol_table.concrete_classes:
         blocks.append(_generate_deep_copy_transform_method(cls=cls))
@@ -421,9 +421,9 @@ def generate(
     """
     Generate code for copying instances in memory.
     """
-    errors = []  # type: List[Error]
+    errors: List[Error] = []
 
-    imports = [
+    imports: List[Stripped] = [
         Stripped("import java.util.List;"),
         Stripped("import java.util.ArrayList;"),
         Stripped(f"import {package}.common.*;"),
@@ -432,7 +432,7 @@ def generate(
         Stripped(f"import {package}.types.enums.*;"),
         Stripped(f"import {package}.types.impl.*;"),
         Stripped(f"import {package}.types.model.*;"),
-    ]  # type: List[Stripped]
+    ]
 
     if java_common.has_set_properties(symbol_table):
         imports.append(Stripped("import java.util.HashSet;"))
@@ -440,8 +440,8 @@ def generate(
     # NOTE (mristin):
     # We deeply copy the containers through methods of their own, one per
     # type moniker.
-    deep_copy_container_methods = []  # type: List[Stripped]
-    observed_monikers = set()  # type: Set[str]
+    deep_copy_container_methods: List[Stripped] = []
+    observed_monikers: Set[str] = set()
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
             for (
@@ -490,7 +490,7 @@ def generate(
     # provided the transformer, the client would always need to make the casts, which
     # is cumbersome.
 
-    copy_blocks = [
+    copy_blocks: List[Stripped] = [
         Stripped(
             """private static final _ShallowCopier shallowCopierInstance = new _ShallowCopier();"""
         ),
@@ -525,7 +525,7 @@ public static <T extends IClass> T deep(T that) {{
 {I}return (T) deepCopierInstance.transform(that);
 }}"""
         ),
-    ]  # type: List[Stripped]
+    ]
 
     if len(symbol_table.named_unions) > 0:
         copy_blocks.append(_generate_union_deep_copy_helper())
@@ -570,13 +570,13 @@ public class Copying
 
     copying_writer.write("\n}")
 
-    blocks = [
+    blocks: List[Stripped] = [
         java_common.WARNING,
         Stripped(f"package {package}.copying;"),
         Stripped("\n".join(imports)),
         Stripped(f"{copying_writer.getvalue()}"),
         java_common.WARNING,
-    ]  # type: List[Stripped]
+    ]
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

@@ -233,7 +233,7 @@ func {_deep_equal_container_name(type_anno)}(
 
 def _generate_for_cls(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate code for the deep equality function for ``cls``."""
-    blocks = []  # type: List[Stripped]
+    blocks: List[Stripped] = []
 
     for prop in cls.properties:
         that_var = golang_naming.variable_name(Identifier(f"that_{prop.name}"))
@@ -241,13 +241,13 @@ def _generate_for_cls(cls: intermediate.ConcreteClass) -> Stripped:
 
         getter_name = golang_naming.getter_name(prop.name)
 
-        subblocks = [
+        subblocks: List[Stripped] = [
             Stripped(
                 f"""\
 {that_var} := that.{getter_name}()
 {other_var} := other.{getter_name}()"""
             )
-        ]  # type: List[Stripped]
+        ]
 
         type_anno = intermediate.beneath_optional(prop.type_annotation)
 
@@ -326,7 +326,7 @@ if that.ModelType() != other.ModelType() {{
         )
     ]
 
-    cases = []  # type: List[Stripped]
+    cases: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         model_type_literal = golang_naming.enum_literal_name(
             enumeration_name=Identifier("Model_type"), literal_name=cls.name
@@ -394,11 +394,11 @@ _IMPORT_PLACEHOLDER = Stripped("")
 # fmt: on
 def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     """Generate code to perform a comparison of deep equality on instances."""
-    blocks = [
+    blocks: List[Stripped] = [
         Stripped("package ourtesting"),
         golang_common.WARNING,
         _IMPORT_PLACEHOLDER,
-    ]  # type: List[Stripped]
+    ]
 
     for cls in symbol_table.concrete_classes:
         blocks.append(_generate_for_cls(cls=cls))
@@ -406,7 +406,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
     # NOTE (mristin):
     # We compare deeply the containers through functions of their own, one per
     # type moniker.
-    observed_monikers = set()  # type: Set[str]
+    observed_monikers: Set[str] = set()
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
             for (
@@ -433,7 +433,7 @@ def generate(symbol_table: intermediate.SymbolTable, repo_url: Stripped) -> str:
 
     import_index = blocks.index(_IMPORT_PLACEHOLDER)
 
-    import_lines = []  # type: List[str]
+    import_lines: List[str] = []
 
     # NOTE (mristin):
     # ``reflect`` is named only by the comparison of a JSON-able value, which is
