@@ -617,7 +617,7 @@ def _list_from_jsonable(
 {III}f"Expected something array-like, but got: {{type(jsonable)}}"
 {II})
 
-{I}result = []  # type: List[_ValueT]
+{I}result: List[_ValueT] = []
 {I}for i, jsonable_item in enumerate(array_like):
 {II}try:
 {III}item = parse_item(jsonable_item)
@@ -653,7 +653,7 @@ def _set_from_jsonable(
 {III}f"Expected something array-like, but got: {{type(jsonable)}}"
 {II})
 
-{I}result = set()  # type: Set[_ValueT]
+{I}result: Set[_ValueT] = set()
 {I}for i, jsonable_item in enumerate(array_like):
 {II}try:
 {III}item = parse_item(jsonable_item)
@@ -731,7 +731,7 @@ def _json_value_from_jsonable(
 {II}return jsonable
 
 {I}if isinstance(jsonable, (dict, collections.abc.Mapping)):
-{II}mapping = {{}}  # type: Dict[str, Any]
+{II}mapping: Dict[str, Any] = {{}}
 {II}for key, jsonable_value in jsonable.items():
 {III}if not isinstance(key, str):
 {IIII}raise DeserializationException(
@@ -750,7 +750,7 @@ def _json_value_from_jsonable(
 
 {I}array_like = our_common.try_to_cast_to_array_like(jsonable)
 {I}if array_like is not None:
-{II}items = []  # type: List[Any]
+{II}items: List[Any] = []
 {II}for i, jsonable_item in enumerate(array_like):
 {III}try:
 {IIII}items.append(_json_value_from_jsonable(jsonable_item))
@@ -1751,7 +1751,7 @@ def _json_value_to_jsonable(
 {II}return value
 
 {I}if isinstance(value, (dict, collections.abc.Mapping)):
-{II}mapping = {{}}  # type: Dict[str, Any]
+{II}mapping: Dict[str, Any] = {{}}
 {II}for key, item_value in value.items():
 {III}if not isinstance(key, str):
 {IIII}raise SerializationException(
@@ -1770,7 +1770,7 @@ def _json_value_to_jsonable(
 
 {I}array_like = our_common.try_to_cast_to_array_like(value)
 {I}if array_like is not None:
-{II}items = []  # type: List[Any]
+{II}items: List[Any] = []
 {II}for i, item_value in enumerate(array_like):
 {III}try:
 {IIII}items.append(_json_value_to_jsonable(item_value))
@@ -2031,7 +2031,7 @@ class _SerializerRegistry:
         # a new way of failing would quietly lose the way to the culprit.
         body = Stripped(
             f"""\
-jsonable = []  # type: List[MutableJsonable]
+jsonable: List[MutableJsonable] = []
 for i, item in enumerate(that):
 {I}try:
 {II}jsonable.append(
@@ -2106,7 +2106,7 @@ def {name}(
         # is also its position in the serialized array.
         body = Stripped(
             f"""\
-jsonable = []  # type: List[MutableJsonable]
+jsonable: List[MutableJsonable] = []
 for i, item in enumerate({sorted_that}):
 {I}try:
 {II}jsonable.append(
@@ -2184,7 +2184,7 @@ except SerializationException as exception:
 
         body = Stripped(
             f"""\
-jsonable = []  # type: List[MutableJsonable]
+jsonable: List[MutableJsonable] = []
 {joined_append_statements}
 return jsonable"""
         )
@@ -2283,7 +2283,7 @@ class SerializationException(Exception):
 {I}) -> None:
 {II}"""Initialize with the given :paramref:`cause` and an empty path."""
 {II}self.cause = cause
-{II}self._segments = []  # type: List[str]
+{II}self._segments: List[str] = []
 
 {I}@property
 {I}def path(self) -> str:
@@ -2728,7 +2728,7 @@ class Path:
 
 {I}def __init__(self) -> None:
 {II}\"\"\"Initialize as an empty path.\"\"\"
-{II}self._segments = []  # type: List[Segment]
+{II}self._segments: List[Segment] = []
 
 {I}@property
 {I}def segments(self) -> Sequence[Segment]:
@@ -2743,7 +2743,7 @@ class Path:
 {II}if len(self._segments) == 0:
 {III}return ""
 
-{II}parts = []  # type: List[str]
+{II}parts: List[str] = []
 
 {II}iterator = iter(self._segments)
 {II}first = next(iterator)

@@ -66,7 +66,6 @@ def is_small_prime(
     number: int
 ) -> bool:
     """Check whether :paramref:`number` is a prime smaller than 10."""
-    # pylint: disable=all
     for prime in [2, 3, 5, 7]:
         if prime == number:
             return True
@@ -77,7 +76,6 @@ def count_and_lengths_of(
     texts: Sequence[str]
 ) -> List[int]:
     """Give the number of :paramref:`texts` followed by their lengths."""
-    # pylint: disable=all
     result = [len(texts)]
     for text in texts:
         result.append(len(text))
@@ -88,7 +86,6 @@ def positives_of(
     numbers: Sequence[int]
 ) -> List[int]:
     """Give the positive :paramref:`numbers` in the same order."""
-    # pylint: disable=all
     result: List[int] = []
     for number in numbers:
         if number > 0:
@@ -102,7 +99,6 @@ def ints_are_unique(
     """
     Check that :paramref:`numbers` are unique with a local list of the seen.
     """
-    # pylint: disable=all
     seen: List[int] = []
     for number in numbers:
         if number in seen:
@@ -123,7 +119,6 @@ def contains_by_loop(
     and 127 on purpose, as Java caches the boxed values in that range, and
     the references would be equal by chance.
     """
-    # pylint: disable=all
     for other in numbers:
         if other == number:
             return True
@@ -139,7 +134,6 @@ def floats_are_unique(
     Java boxes the items as ``Double``'s, so that ``==`` would compare their
     references.
     """
-    # pylint: disable=all
     for i in range(0, len(numbers)):
         for j in range(i + 1, len(numbers)):
             if numbers[i] == numbers[j]:
@@ -151,7 +145,6 @@ def is_separator(
     text: str
 ) -> bool:
     """Check whether :paramref:`text` is one of the separators."""
-    # pylint: disable=all
     return text in ['.', ',', ';']
 
 
@@ -160,7 +153,6 @@ def is_in_ints(
     numbers: Sequence[int]
 ) -> bool:
     """Check whether :paramref:`number` is in :paramref:`numbers`."""
-    # pylint: disable=all
     return number in numbers
 
 
@@ -171,7 +163,6 @@ def is_in_optional_strings(
     """
     Check whether :paramref:`text` is in :paramref:`texts`, if specified.
     """
-    # pylint: disable=all
     if texts is None:
         return False
     return text in texts
@@ -181,7 +172,6 @@ def contains_dot(
     text: str
 ) -> bool:
     """Check whether :paramref:`text` contains a dot."""
-    # pylint: disable=all
     return '.' in text
 
 

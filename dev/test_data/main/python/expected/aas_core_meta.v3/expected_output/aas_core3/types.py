@@ -175,9 +175,6 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class HasSemantics(Class):
     """
     Element that can have a semantic definition plus some supplemental semantic
@@ -5232,7 +5229,7 @@ class EmbeddedDataSpecification(Class):
 
 
 class DataTypeIEC61360(enum.Enum):
-    # pylint: disable=missing-class-docstring
+
 
     #: values containing a calendar date, conformant to ISO 8601:2004 Format yyyy-mm-dd
     #: Example from IEC 61360-1:2017: "1999-05-31" is the [DATE] representation of:

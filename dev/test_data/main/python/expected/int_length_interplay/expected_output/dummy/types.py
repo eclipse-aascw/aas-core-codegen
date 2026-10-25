@@ -11,7 +11,6 @@ and the indices with narrower native types, *e.g.*, ``int`` in C#, Java and Go.
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -92,11 +91,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     numbers: List[int]
 
@@ -113,7 +109,6 @@ class Something(Class):
         """
         Check a method taking an integer argument, called with a length.
         """
-        # pylint: disable=all
         return (
             (
                 0 <= index
@@ -127,7 +122,6 @@ class Something(Class):
         """
         Check reading in a method at an index which is an integer argument.
         """
-        # pylint: disable=all
         return self.texts[index]
 
     def descend_once(self) -> Iterator[Class]:

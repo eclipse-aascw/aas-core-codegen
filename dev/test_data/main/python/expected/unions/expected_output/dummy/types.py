@@ -3,7 +3,6 @@
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -85,11 +84,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class StructuralFirst(Class):
-    # pylint: disable=missing-class-docstring
+
 
     unique_to_first: str
 
@@ -162,7 +158,7 @@ class StructuralFirst(Class):
 
 
 class StructuralSecond(Class):
-    # pylint: disable=missing-class-docstring
+
 
     unique_to_second: str
 
@@ -239,12 +235,12 @@ StructuralUnion = Union['StructuralFirst', 'StructuralSecond']
 
 
 class MixedAbstractMember(Class):
-    # pylint: disable=missing-class-docstring
+
     pass
 
 
 class MixedAbstractDescendantOne(MixedAbstractMember):
-    # pylint: disable=missing-class-docstring
+
 
     unique_to_abstract_descendant_one: str
 
@@ -317,7 +313,7 @@ class MixedAbstractDescendantOne(MixedAbstractMember):
 
 
 class MixedAbstractDescendantTwo(MixedAbstractMember):
-    # pylint: disable=missing-class-docstring
+
 
     unique_to_abstract_descendant_two: str
 
@@ -390,7 +386,7 @@ class MixedAbstractDescendantTwo(MixedAbstractMember):
 
 
 class MixedConcreteWithDescendants(Class):
-    # pylint: disable=missing-class-docstring
+
 
     some_base_property: str
 
@@ -463,7 +459,7 @@ class MixedConcreteWithDescendants(Class):
 
 
 class MixedConcreteWithDescendantsChild(MixedConcreteWithDescendants):
-    # pylint: disable=missing-class-docstring
+
 
     some_child_property: str
 
@@ -544,7 +540,7 @@ class MixedConcreteWithDescendantsChild(MixedConcreteWithDescendants):
 
 
 class MixedConcreteLeaf(Class):
-    # pylint: disable=missing-class-docstring
+
 
     unique_to_concrete_leaf: str
 
@@ -625,7 +621,7 @@ MixedUnion = Union[
 
 
 class ModelTypedFirst(Class):
-    # pylint: disable=missing-class-docstring
+
 
     some_property: str
 
@@ -698,7 +694,7 @@ class ModelTypedFirst(Class):
 
 
 class ModelTypedSecond(Class):
-    # pylint: disable=missing-class-docstring
+
 
     some_property: str
 
@@ -784,7 +780,7 @@ OverlappingUnion = Union[
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     structural_property: 'StructuralUnion'
 

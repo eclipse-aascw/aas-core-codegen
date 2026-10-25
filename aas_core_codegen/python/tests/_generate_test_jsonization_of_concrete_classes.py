@@ -205,11 +205,17 @@ def generate(
     )
 
     # NOTE (mristin):
-    # Only the tests of the serialization failures need the non-finite floats and
-    # the type of a JSON-able loaded from a file.
-    extra_imports = (
-        "\nimport math\nfrom typing import Any" if serialization_failures != "" else ""
-    )
+    # Only the tests of the serialization failures need the type of a JSON-able
+    # loaded from a file, and only those over the floats need the non-finite ones.
+    extra_imports = ""
+    if serialization_failures != "":
+        if any(
+            numeric_place.a_type is intermediate.PrimitiveType.FLOAT
+            for numeric_place in intermediate.numeric_places(symbol_table)
+        ):
+            extra_imports = "\nimport math"
+
+        extra_imports += "\nfrom typing import Any"
 
     blocks = [
         Stripped(
@@ -217,10 +223,6 @@ def generate(
 """Test JSON de/serialization of concrete classes."""'''
         ),
         python_common.WARNING,
-        Stripped(
-            """\
-# pylint: disable=missing-docstring"""
-        ),
         Stripped(
             f"""\
 import json{extra_imports}

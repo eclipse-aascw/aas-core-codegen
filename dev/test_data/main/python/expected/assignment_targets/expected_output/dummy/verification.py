@@ -67,7 +67,6 @@ def set_text(
     text: str
 ) -> bool:
     """Check the assignment to a property."""
-    # pylint: disable=all
     item.text = text
     return True
 
@@ -77,7 +76,6 @@ def set_maybe_text(
     text: str
 ) -> bool:
     """Check the assignment of a value to an optional property."""
-    # pylint: disable=all
     item.maybe_text = text
     return True
 
@@ -89,7 +87,6 @@ def copy_maybe_text_and_set_maybe_kind(
     """
     Check the assignment of an optional value, and of an enumeration literal.
     """
-    # pylint: disable=all
     item.maybe_text = other.maybe_text
     item.maybe_kind = our_types.Kind.ALPHA
     return True
@@ -102,7 +99,6 @@ def set_text_through_alias(
     """
     Check the assignment to a property through a local alias of the object.
     """
-    # pylint: disable=all
     alias = item
     alias.text = text
     return True
@@ -113,7 +109,6 @@ def set_texts(
     texts: Sequence[str]
 ) -> bool:
     """Check the assignment of a copy of a list to a property."""
-    # pylint: disable=all
     item.texts = list(texts)
     return True
 
@@ -125,7 +120,6 @@ def set_first_and_last_text(
     """
     Check the assignment to the items of a list, including a negative index.
     """
-    # pylint: disable=all
     item.texts[0] = text
     item.texts[-1] = text
     return True
@@ -138,7 +132,6 @@ def set_text_through_list_alias(
     """
     Check the assignment to an item through a local alias of the list.
     """
-    # pylint: disable=all
     texts = item.texts
     texts[1] = text
     return True
@@ -149,7 +142,6 @@ def set_numbers(
     number: int
 ) -> bool:
     """Check the assignment to the items of a list parameter."""
-    # pylint: disable=all
     numbers[0] = number
     numbers[-2] = numbers[-1] + 1
     return True
@@ -160,7 +152,6 @@ def set_nested_text(
     text: str
 ) -> bool:
     """Check the assignment to the items of a list nested in a list."""
-    # pylint: disable=all
     items[0].texts[-1] = text
     items[-1].text = text
     return True
@@ -171,7 +162,6 @@ def replace_first_item(
     item: our_types.Item
 ) -> bool:
     """Check the assignment of an object to an item of a list."""
-    # pylint: disable=all
     items[0] = item
     return True
 
@@ -183,7 +173,6 @@ def set_texts_in_loops(
     """
     Check the assignment to the properties of the objects iterated over.
     """
-    # pylint: disable=all
     for item in items:
         item.text = text
     for i in range(0, len(items)):
@@ -196,7 +185,6 @@ def fill_texts(
     text: str
 ) -> bool:
     """Check the mutation of a list argument in place."""
-    # pylint: disable=all
     for i in range(0, len(texts)):
         texts[i] = text
     return True
@@ -207,7 +195,6 @@ def fill_texts_of_item(
     text: str
 ) -> bool:
     """Check passing a property as a mutable list argument."""
-    # pylint: disable=all
     return fill_texts(item.texts, text)
 
 
@@ -218,7 +205,6 @@ def fill_texts_through_alias(
     """
     Check passing a local alias of a list as a mutable list argument.
     """
-    # pylint: disable=all
     texts = item.texts
     return fill_texts(texts, text)
 
@@ -228,7 +214,6 @@ def fill_texts_of_argument(
     text: str
 ) -> bool:
     """Check passing a list argument on as a mutable list argument."""
-    # pylint: disable=all
     return fill_texts(texts, text)
 
 
@@ -237,7 +222,6 @@ def rename(
     text: str
 ) -> bool:
     """Check the mutation of an object argument."""
-    # pylint: disable=all
     item.text = text
     return True
 
@@ -247,7 +231,6 @@ def rename_all(
     text: str
 ) -> bool:
     """Check passing the loop variable as a mutable object argument."""
-    # pylint: disable=all
     result = True
     for item in items:
         result = rename(item, text)
@@ -259,7 +242,6 @@ def set_first_texts_of_lists(
     text: str
 ) -> bool:
     """Check the mutation of the inner lists through a loop variable."""
-    # pylint: disable=all
     for texts in lists:
         texts[0] = text
     return True
@@ -273,7 +255,6 @@ def set_first_texts_in_sibling_loops(
     """
     Check the same name defined in sibling loops, both as mutable aliases.
     """
-    # pylint: disable=all
     for item in items:
         texts = item.texts
         texts[0] = text
@@ -290,7 +271,6 @@ def text_copy_is_independent(
     """
     Check that a local copy of a string is not changed by the setter.
     """
-    # pylint: disable=all
     old = item.text
     item.text = text
     return old != item.text
@@ -302,7 +282,6 @@ def number_copy_is_independent(
     """
     Check that a local copy of a number is not changed by the list mutation.
     """
-    # pylint: disable=all
     first = numbers[0]
     numbers[0] = first + 1
     return (first + 1) == (numbers[0])
@@ -315,7 +294,6 @@ def set_maybe_texts(
     """
     Check the assignment of a copy of a list to an optional property.
     """
-    # pylint: disable=all
     item.maybe_texts = list(texts)
     return True
 
@@ -325,7 +303,6 @@ def set_maybe_item(
     item: our_types.Item
 ) -> bool:
     """Check the assignment of an object to an optional property."""
-    # pylint: disable=all
     something.maybe_item = item
     return True
 
@@ -336,7 +313,6 @@ def set_text_of_rebound_alias(
     text: str
 ) -> bool:
     """Check the re-assignment of a local alias of an object."""
-    # pylint: disable=all
     alias = item
     alias = other
     alias.text = text
@@ -348,7 +324,6 @@ def first_text_through_alias_is(
     text: str
 ) -> bool:
     """Check the read-only alias of a list property."""
-    # pylint: disable=all
     texts = item.texts
     return texts[0] == text
 
@@ -357,7 +332,6 @@ def texts_are_not_empty(
     items: Sequence[our_types.Item]
 ) -> bool:
     """Check that no text is empty through a read-only list argument."""
-    # pylint: disable=all
     for item in items:
         for text in item.texts:
             if text == '':

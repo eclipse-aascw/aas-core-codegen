@@ -329,19 +329,44 @@ def generate(
     blocks: List[Stripped] = [
         Stripped('"""Provide constant values of the meta-model."""'),
         python_common.WARNING,
-        Stripped(
-            f"""\
-import sys
-from typing import AbstractSet
+    ]
+
+    if len(symbol_table.constants) > 0:
+        typing_import = (
+            "\nfrom typing import AbstractSet"
+            if any(
+                isinstance(
+                    constant,
+                    (
+                        intermediate.ConstantSetOfPrimitives,
+                        intermediate.ConstantSetOfEnumerationLiterals,
+                    ),
+                )
+                for constant in symbol_table.constants
+            )
+            else ""
+        )
+
+        types_import = (
+            f"\n\nimport {qualified_module_name}.types as our_types"
+            if any(
+                isinstance(constant, intermediate.ConstantSetOfEnumerationLiterals)
+                for constant in symbol_table.constants
+            )
+            else ""
+        )
+
+        blocks.append(
+            Stripped(
+                f"""\
+import sys{typing_import}
 
 if sys.version_info >= (3, 8):
 {I}from typing import Final
 else:
-{I}from typing_extensions import Final
-
-import {qualified_module_name}.types as our_types"""
-        ),
-    ]
+{I}from typing_extensions import Final{types_import}"""
+            )
+        )
 
     for constant in symbol_table.constants:
         block: Optional[Stripped]

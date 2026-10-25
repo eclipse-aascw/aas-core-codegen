@@ -73,15 +73,17 @@ def generate(
         python_common.WARNING,
         Stripped(
             """\
-# pylint: disable=missing-docstring"""
-        ),
-        Stripped(
-            """\
 import unittest"""
         ),
-        Stripped(
-            f"""\
+        *(
+            [
+                Stripped(
+                    f"""\
 import {qualified_module_name}.jsonization as our_jsonization"""
+                )
+            ]
+            if len(symbol_table.enumerations) > 0
+            else []
         ),
         _generate_test_case(symbol_table=symbol_table),
         Stripped(

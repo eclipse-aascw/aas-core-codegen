@@ -5,13 +5,9 @@
 # Do NOT edit or append.
 
 
-# pylint: disable=missing-docstring
-
-
 import io
 import pathlib
 import tempfile
-import math
 import unittest
 import xml.etree.ElementTree as ET
 

@@ -3,7 +3,6 @@
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -84,16 +83,13 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class AbstractItem(Class):
-    # pylint: disable=missing-class-docstring
+
     pass
 
 
 class SomeItem(AbstractItem):
-    # pylint: disable=missing-class-docstring
+
 
     name: str
 
@@ -166,7 +162,7 @@ class SomeItem(AbstractItem):
 
 
 class AnotherItem(AbstractItem):
-    # pylint: disable=missing-class-docstring
+
 
     serial_number: int
 
@@ -239,7 +235,7 @@ class AnotherItem(AbstractItem):
 
 
 class Simple(Class):
-    # pylint: disable=missing-class-docstring
+
 
     name: str
 
@@ -312,7 +308,7 @@ class Simple(Class):
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     item: 'Simple'
 

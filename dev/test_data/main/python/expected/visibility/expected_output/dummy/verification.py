@@ -85,7 +85,6 @@ def _is_short(
 
     It complements :py:func:`_matches_digits`.
     """
-    # pylint: disable=all
     return len(text) <= 8
 
 
@@ -98,7 +97,6 @@ def is_short_number(
     text: str
 ) -> bool:
     """Check that :paramref:`text` is a short number."""
-    # pylint: disable=all
     return (
         (
             _matches_digits(text)

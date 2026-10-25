@@ -106,11 +106,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Kind(enum.Enum):
-    # pylint: disable=missing-class-docstring
+
 
     ALPHA = 'alpha'
 
@@ -120,7 +117,7 @@ class Kind(enum.Enum):
 
 
 class Direction(enum.Enum):
-    # pylint: disable=missing-class-docstring
+
 
     NORTH = 'up'
 
@@ -130,7 +127,7 @@ class Direction(enum.Enum):
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     text: str
 
@@ -164,7 +161,6 @@ class Something(Class):
         ignored: AbstractSet[str]
     ) -> bool:
         """Check a local set in a method with a read-only set argument."""
-        # pylint: disable=all
         if self.optional_texts is None:
             return True
         seen: Set[str] = set()
@@ -266,7 +262,7 @@ class Something(Class):
 
 
 class Collection(Class):
-    # pylint: disable=missing-class-docstring
+
 
     texts: Set[str]
 
@@ -301,7 +297,6 @@ class Collection(Class):
         others: AbstractSet[str]
     ) -> bool:
         """Check the difference of a set property and a set argument."""
-        # pylint: disable=all
         return (
             (
                 len(self.texts) == 0

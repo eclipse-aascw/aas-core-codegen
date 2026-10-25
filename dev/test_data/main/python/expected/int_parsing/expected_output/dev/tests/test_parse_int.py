@@ -14,9 +14,6 @@ The other SDKs test against the very same cases.
 # Do NOT edit or append.
 
 
-# pylint: disable=missing-docstring
-
-
 import unittest
 
 import dummy.common as our_common

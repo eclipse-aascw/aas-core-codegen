@@ -3,7 +3,7 @@ def extension_names_are_unique(extensions: Iterable[our_types.Extension]) -> boo
     Check that all :py:attr:`.types.Extension.name` are unique
     among :paramref:`extensions`.
     """
-    name_set = set()  # type: Set[str]
+    name_set: Set[str] = set()
     for extension in extensions:
         if extension.name in name_set:
             return False

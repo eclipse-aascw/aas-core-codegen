@@ -84,11 +84,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Color(enum.Enum):
-    # pylint: disable=missing-class-docstring
+
 
     RED = 'Red'
 
@@ -96,7 +93,7 @@ class Color(enum.Enum):
 
 
 class Item(Class):
-    # pylint: disable=missing-class-docstring
+
 
     label: str
 
@@ -110,7 +107,7 @@ class Item(Class):
 
 
 class Box(Item):
-    # pylint: disable=missing-class-docstring
+
 
     color: Optional['Color']
 
@@ -206,7 +203,7 @@ class Box(Item):
 
 
 class Bag(Item):
-    # pylint: disable=missing-class-docstring
+
 
     tags: List[str]
 
@@ -287,7 +284,7 @@ class Bag(Item):
 
 
 class Container(Class):
-    # pylint: disable=missing-class-docstring
+
 
     names: List[str]
 

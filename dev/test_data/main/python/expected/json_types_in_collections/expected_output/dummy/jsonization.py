@@ -151,7 +151,7 @@ class Path:
 
     def __init__(self) -> None:
         """Initialize as an empty path."""
-        self._segments = []  # type: List[Segment]
+        self._segments: List[Segment] = []
 
     @property
     def segments(self) -> Sequence[Segment]:
@@ -166,7 +166,7 @@ class Path:
         if len(self._segments) == 0:
             return ""
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
 
         iterator = iter(self._segments)
         first = next(iterator)
@@ -319,7 +319,7 @@ def _list_from_jsonable(
             f"Expected something array-like, but got: {type(jsonable)}"
         )
 
-    result = []  # type: List[_ValueT]
+    result: List[_ValueT] = []
     for i, jsonable_item in enumerate(array_like):
         try:
             item = parse_item(jsonable_item)
@@ -389,7 +389,7 @@ def _json_value_from_jsonable(
         return jsonable
 
     if isinstance(jsonable, (dict, collections.abc.Mapping)):
-        mapping = {}  # type: Dict[str, Any]
+        mapping: Dict[str, Any] = {}
         for key, jsonable_value in jsonable.items():
             if not isinstance(key, str):
                 raise DeserializationException(
@@ -408,7 +408,7 @@ def _json_value_from_jsonable(
 
     array_like = our_common.try_to_cast_to_array_like(jsonable)
     if array_like is not None:
-        items = []  # type: List[Any]
+        items: List[Any] = []
         for i, jsonable_item in enumerate(array_like):
             try:
                 items.append(_json_value_from_jsonable(jsonable_item))
@@ -685,7 +685,7 @@ class SerializationException(Exception):
     ) -> None:
         """Initialize with the given :paramref:`cause` and an empty path."""
         self.cause = cause
-        self._segments = []  # type: List[str]
+        self._segments: List[str] = []
 
     @property
     def path(self) -> str:
@@ -776,7 +776,7 @@ def _json_value_to_jsonable(
         return value
 
     if isinstance(value, (dict, collections.abc.Mapping)):
-        mapping = {}  # type: Dict[str, Any]
+        mapping: Dict[str, Any] = {}
         for key, item_value in value.items():
             if not isinstance(key, str):
                 raise SerializationException(
@@ -795,7 +795,7 @@ def _json_value_to_jsonable(
 
     array_like = our_common.try_to_cast_to_array_like(value)
     if array_like is not None:
-        items = []  # type: List[Any]
+        items: List[Any] = []
         for i, item_value in enumerate(array_like):
             try:
                 items.append(_json_value_to_jsonable(item_value))
@@ -821,7 +821,7 @@ def _list_of__json_object_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -845,7 +845,7 @@ def _list_of__json_value_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -873,7 +873,7 @@ def _tuple4_of__str__json_value__json_array__json_object_to_jsonable(
     :param that: tuple to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     try:
         jsonable.append(
             that[0]

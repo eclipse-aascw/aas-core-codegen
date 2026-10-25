@@ -5,9 +5,6 @@
 # Do NOT edit or append.
 
 
-# pylint: disable=missing-docstring
-
-
 import io
 import unittest
 import xml.etree.ElementTree
@@ -237,7 +234,7 @@ class TestReading(unittest.TestCase):
 
 class TestWriting(unittest.TestCase):
     def test_a_value_is_written_with_its_discriminator(self) -> None:
-        cases = [
+        cases: List[Tuple[our_types.JsonValue, str]] = [
             (True, '<boolean>1</boolean>'),
             (False, '<boolean>0</boolean>'),
             (1.0, '<double>1.0</double>'),
@@ -258,7 +255,7 @@ class TestWriting(unittest.TestCase):
                     '<value><double>0.0</double></value></member></struct>'
                 )
             ),
-        ]  # type: List[Tuple[our_types.JsonValue, str]]
+        ]
 
         for value, expected in cases:
             stream = io.StringIO()

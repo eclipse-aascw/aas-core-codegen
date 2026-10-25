@@ -78,7 +78,7 @@ def has_balanced_brackets(text: str) -> bool:
 
 def texts_are_unique(texts: Iterable[str]) -> bool:
     """Check that the :paramref:`texts` do not repeat."""
-    text_set = set()  # type: Set[str]
+    text_set: Set[str] = set()
     for text in texts:
         if text in text_set:
             return False
@@ -93,7 +93,7 @@ def items_have_unique_labels(items: Iterable[our_types.Item]) -> bool:
     Check that :py:attr:`.types.Item.label`'s of the :paramref:`items`
     do not repeat.
     """
-    label_set = set()  # type: Set[str]
+    label_set: Set[str] = set()
     for item in items:
         if item.label in label_set:
             return False

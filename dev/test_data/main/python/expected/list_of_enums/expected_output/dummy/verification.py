@@ -66,7 +66,6 @@ def is_known(
     result: our_types.Result
 ) -> bool:
     """Check whether :paramref:`result` is one of the known results."""
-    # pylint: disable=all
     for known in [our_types.Result.OK, our_types.Result.FAIL]:
         if known == result:
             return True
@@ -77,7 +76,6 @@ def failures_of(
     results: Sequence[our_types.Result]
 ) -> List[our_types.Result]:
     """Give the failures among :paramref:`results`."""
-    # pylint: disable=all
     failures: List[our_types.Result] = []
     for result in results:
         if result == our_types.Result.FAIL:
@@ -90,7 +88,6 @@ def is_in_results(
     results: Sequence[our_types.Result]
 ) -> bool:
     """Check whether :paramref:`result` is in :paramref:`results`."""
-    # pylint: disable=all
     return result in results
 
 

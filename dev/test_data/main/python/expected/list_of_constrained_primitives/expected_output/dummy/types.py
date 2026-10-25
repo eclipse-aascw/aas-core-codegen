@@ -15,7 +15,6 @@ of constrained primitives, a sliced string in a local list built with
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -96,11 +95,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     some_names: List[str]
 

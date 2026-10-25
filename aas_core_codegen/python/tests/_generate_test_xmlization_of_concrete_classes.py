@@ -41,9 +41,12 @@ def _slug(text: str) -> str:
 
 def _generate_lexical_test_case(
     symbol_table: intermediate.SymbolTable,
-) -> Optional[Stripped]:
+) -> Optional[Tuple[Stripped, bool]]:
     """
     Generate the tests over the lexical forms which no recorded example can hold.
+
+    Return the test case and whether it needs :py:mod:`math`, or None if there is
+    nothing to test.
 
     A recorded example under ``Xml/Expected`` has to serialize back to itself,
     character for character, so it can hold neither a value which is written
@@ -210,12 +213,15 @@ def {python_naming.method_name(
 
     body = "\n\n".join(blocks)
 
-    return Stripped(
-        f"""\
+    return (
+        Stripped(
+            f"""\
 class TestLexicalForms(unittest.TestCase):
 {I}\"\"\"Test the lexical forms which a recorded example can not hold.\"\"\"
 
 {I}{indent_but_first_line(body, I)}"""
+        ),
+        float_prop is not None,
     )
 
 
@@ -397,6 +403,20 @@ def generate(
 
     The ``qualified_module_name`` indicates the fully-qualified name of the base module.
     """
+    lexical_test_case_and_needs_math = _generate_lexical_test_case(
+        symbol_table=symbol_table
+    )
+
+    # NOTE (mristin):
+    # Only the tests of the lexical forms need the types and, for the doubles,
+    # the non-finite floats, so we import them only then.
+    maybe_import_math = ""
+    maybe_import_types = ""
+    if lexical_test_case_and_needs_math is not None:
+        maybe_import_types = f"import {qualified_module_name}.types as our_types\n"
+        if lexical_test_case_and_needs_math[1]:
+            maybe_import_math = "\nimport math"
+
     blocks = [
         Stripped(
             '''\
@@ -404,22 +424,16 @@ def generate(
         ),
         python_common.WARNING,
         Stripped(
-            """\
-# pylint: disable=missing-docstring"""
-        ),
-        Stripped(
-            """\
+            f"""\
 import io
 import pathlib
-import tempfile
-import math
+import tempfile{maybe_import_math}
 import unittest
 import xml.etree.ElementTree as ET"""
         ),
         Stripped(
             f"""\
-import {qualified_module_name}.types as our_types
-import {qualified_module_name}.xmlization as our_xmlization"""
+{maybe_import_types}import {qualified_module_name}.xmlization as our_xmlization"""
         ),
         Stripped(
             """\
@@ -435,11 +449,10 @@ if __name__ == "__main__":
         python_common.WARNING,
     ]
 
-    lexical_test_case = _generate_lexical_test_case(symbol_table=symbol_table)
-    if lexical_test_case is not None:
+    if lexical_test_case_and_needs_math is not None:
         # NOTE (mristin):
         # The class goes right after the round trips, and before the main.
-        blocks.insert(-2, lexical_test_case)
+        blocks.insert(-2, lexical_test_case_and_needs_math[0])
 
     duplicate_property_test_case = _generate_duplicate_property_test_case(
         symbol_table=symbol_table

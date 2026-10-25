@@ -84,11 +84,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Kind(enum.Enum):
-    # pylint: disable=missing-class-docstring
+
 
     ALPHA = 'alpha'
 
@@ -98,7 +95,7 @@ class Kind(enum.Enum):
 
 
 class Item(Class):
-    # pylint: disable=missing-class-docstring
+
 
     name: str
 
@@ -178,7 +175,7 @@ class Item(Class):
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     item: 'Item'
 

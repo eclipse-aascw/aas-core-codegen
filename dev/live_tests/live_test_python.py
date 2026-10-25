@@ -101,8 +101,7 @@ packages = [
     # We ignore the rules which flag the code transpiled from the meta-model, such
     # as ``not (x in y)``, ``-(-x)`` or ``range(0, n)``, since the transpiled code
     # deliberately mirrors the meta-model. We also ignore the rules which go against
-    # the style of the generated code, such as the unused imports, as the generated
-    # code imports the modules uniformly, or the version blocks for Python 3.7.
+    # the style of the generated code, such as the version blocks for Python 3.7.
     (project_dir / "dev" / "ruff.toml").write_text(
         """\
 target-version = "py38"
@@ -122,9 +121,21 @@ ignore = [
     # Text from the meta-model
     "RUF001", "RUF002", "RUF003",
     # Style of the generated code
-    "E501", "F401", "N801", "N818", "PERF203", "RET503", "RET505", "TRY003",
+    "E501", "N801", "N818", "PERF203", "RET503", "RET505", "TRY003",
     "TRY004", "TRY300", "TRY301", "UP035", "UP036",
 ]
+
+[lint.per-file-ignores]
+# NOTE (mristin):
+# The verification imports everything the transpiled verification functions
+# and the snippets might need, as we can not tell what the snippets use.
+# The JSON and XML de/serialization and the types import everything their
+# readers, writers, properties and methods might need, as which of them are
+# generated depends on the meta-model.
+"jsonization.py" = ["F401"]
+"types.py" = ["F401"]
+"verification.py" = ["F401"]
+"xmlization.py" = ["F401"]
 """,
         encoding="utf-8",
     )

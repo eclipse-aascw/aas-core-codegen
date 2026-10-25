@@ -84,11 +84,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Result(enum.Enum):
-    # pylint: disable=missing-class-docstring
+
 
     OK = 'ok'
 
@@ -96,12 +93,12 @@ class Result(enum.Enum):
 
 
 class AbstractItem(Class):
-    # pylint: disable=missing-class-docstring
+
     pass
 
 
 class SomeItem(AbstractItem):
-    # pylint: disable=missing-class-docstring
+
 
     name: str
 
@@ -174,7 +171,7 @@ class SomeItem(AbstractItem):
 
 
 class AnotherItem(AbstractItem):
-    # pylint: disable=missing-class-docstring
+
 
     serial_number: int
 
@@ -247,7 +244,7 @@ class AnotherItem(AbstractItem):
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     pair: Tuple[str, int]
 

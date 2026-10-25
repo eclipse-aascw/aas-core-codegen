@@ -3,7 +3,6 @@
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -85,11 +84,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Element(Class):
-    # pylint: disable=missing-class-docstring
+
 
     identifier: str
 
@@ -99,7 +95,7 @@ class Element(Class):
 
 
 class Leaf(Element):
-    # pylint: disable=missing-class-docstring
+
 
     text: str
 
@@ -180,7 +176,7 @@ class Leaf(Element):
 
 
 class Container(Element):
-    # pylint: disable=missing-class-docstring
+
 
     children: List['Element']
 
@@ -198,7 +194,7 @@ class Container(Element):
 
 
 class OrderedContainer(Container):
-    # pylint: disable=missing-class-docstring
+
 
     is_sorted: bool
 
@@ -276,7 +272,7 @@ class OrderedContainer(Container):
 
 
 class UnorderedContainer(Container):
-    # pylint: disable=missing-class-docstring
+
 
     def descend_once(self) -> Iterator[Class]:
         """
@@ -350,7 +346,7 @@ class UnorderedContainer(Container):
 
 
 class GlobalAttribute(Class):
-    # pylint: disable=missing-class-docstring
+
 
     kind: str
 
@@ -423,7 +419,7 @@ class GlobalAttribute(Class):
 
 
 class LocalAttribute(Class):
-    # pylint: disable=missing-class-docstring
+
 
     name: str
 
@@ -500,7 +496,7 @@ AttributeItem = Union['GlobalAttribute', 'LocalAttribute']
 
 
 class AttributeOperand(Class):
-    # pylint: disable=missing-class-docstring
+
 
     attribute: 'AttributeItem'
 
@@ -571,7 +567,7 @@ class AttributeOperand(Class):
 
 
 class StringLiteral(Class):
-    # pylint: disable=missing-class-docstring
+
 
     text: str
 
@@ -644,7 +640,7 @@ class StringLiteral(Class):
 
 
 class NumberLiteral(Class):
-    # pylint: disable=missing-class-docstring
+
 
     number: float
 
@@ -725,7 +721,7 @@ Value = Union['StringLiteral', 'AttributeOperand', 'NumberLiteral']
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     root: 'Element'
 

@@ -5,21 +5,7 @@
 # Do NOT edit or append.
 
 
-# pylint: disable=missing-docstring
-
-
-import io
-import pathlib
-import tempfile
 import unittest
-import xml.etree.ElementTree as ET
-
-
-import dummy.xmlization as our_xmlization
-
-
-import tests.common
-import tests.common_xmlization
 
 
 class TestRoundTrips(unittest.TestCase):

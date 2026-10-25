@@ -150,7 +150,7 @@ class Path:
 
     def __init__(self) -> None:
         """Initialize as an empty path."""
-        self._segments = []  # type: List[Segment]
+        self._segments: List[Segment] = []
 
     @property
     def segments(self) -> Sequence[Segment]:
@@ -165,7 +165,7 @@ class Path:
         if len(self._segments) == 0:
             return ""
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
 
         iterator = iter(self._segments)
         first = next(iterator)
@@ -435,7 +435,7 @@ class SerializationException(Exception):
     ) -> None:
         """Initialize with the given :paramref:`cause` and an empty path."""
         self.cause = cause
-        self._segments = []  # type: List[str]
+        self._segments: List[str] = []
 
     @property
     def path(self) -> str:

@@ -150,7 +150,7 @@ class Path:
 
     def __init__(self) -> None:
         """Initialize as an empty path."""
-        self._segments = []  # type: List[Segment]
+        self._segments: List[Segment] = []
 
     @property
     def segments(self) -> Sequence[Segment]:
@@ -165,7 +165,7 @@ class Path:
         if len(self._segments) == 0:
             return ""
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
 
         iterator = iter(self._segments)
         first = next(iterator)
@@ -881,7 +881,7 @@ class SerializationException(Exception):
     ) -> None:
         """Initialize with the given :paramref:`cause` and an empty path."""
         self.cause = cause
-        self._segments = []  # type: List[str]
+        self._segments: List[str] = []
 
     @property
     def path(self) -> str:
@@ -952,7 +952,7 @@ def _tuple2_of__abstract_item__abstract_item_to_jsonable(
     :param that: tuple to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     try:
         jsonable.append(
             that[0].transform(_SERIALIZER)
@@ -979,7 +979,7 @@ def _tuple2_of__str__abstract_item_to_jsonable(
     :param that: tuple to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     try:
         jsonable.append(
             that[0]
@@ -1006,7 +1006,7 @@ def _tuple2_of__str__int_to_jsonable(
     :param that: tuple to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     try:
         jsonable.append(
             that[0]
@@ -1042,7 +1042,7 @@ def _tuple6_of__int__some_item__abstract_item__some_item__int__result_to_jsonabl
     :param that: tuple to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     try:
         jsonable.append(
             _int_to_jsonable(

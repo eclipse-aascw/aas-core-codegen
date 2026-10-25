@@ -40,10 +40,6 @@ def generate(
         ),
         python_common.WARNING,
         Stripped(
-            """\
-# pylint: disable=missing-docstring"""
-        ),
-        Stripped(
             f"""\
 import io
 import unittest
@@ -277,7 +273,7 @@ class TestReading(unittest.TestCase):
             f"""\
 class TestWriting(unittest.TestCase):
 {I}def test_a_value_is_written_with_its_discriminator(self) -> None:
-{II}cases = [
+{II}cases: List[Tuple[our_types.JsonValue, str]] = [
 {III}(True, '<boolean>1</boolean>'),
 {III}(False, '<boolean>0</boolean>'),
 {III}(1.0, '<double>1.0</double>'),
@@ -298,7 +294,7 @@ class TestWriting(unittest.TestCase):
 {IIIII}'<value><double>0.0</double></value></member></struct>'
 {IIII})
 {III}),
-{II}]  # type: List[Tuple[our_types.JsonValue, str]]
+{II}]
 
 {II}for value, expected in cases:
 {III}stream = io.StringIO()

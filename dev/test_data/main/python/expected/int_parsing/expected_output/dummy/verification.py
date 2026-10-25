@@ -89,7 +89,6 @@ def is_safe_integer(
     The safe integers have at most 16 significant digits. We compare the digits
     piece-wise so that ``int`` is never given a number out of the safe range.
     """
-    # pylint: disable=all
     digits = text.lstrip('+-').lstrip('0')
     return (
         (
@@ -128,7 +127,6 @@ def is_xs_long(
     significant digits in two pieces of at most 10 digits. The smallest
     ``xs:long`` is -2^63, so the bound of the negative values is one larger.
     """
-    # pylint: disable=all
     if not matches_decimal(text):
         return False
     digits = text.lstrip('+-').lstrip('0')
@@ -169,7 +167,6 @@ def parse_number(
 
     The caller has to check that :paramref:`text` is a safe integer.
     """
-    # pylint: disable=all
     return our_common.parse_safe_int(text)
 
 

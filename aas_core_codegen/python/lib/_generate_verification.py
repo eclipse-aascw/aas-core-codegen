@@ -536,8 +536,6 @@ def {function_name}(
         writer.write("\n")
         writer.write(textwrap.indent(docstring, I))
 
-    writer.write(f"\n{I}# pylint: disable=all")
-
     if docstring is None and len(body) == 0:
         writer.write(f"\n{I}pass")
 

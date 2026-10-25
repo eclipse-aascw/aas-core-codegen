@@ -3,7 +3,6 @@
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -82,9 +81,6 @@ class Class(abc.ABC):
         :return: transformed self
         """
         raise NotImplementedError
-
-
-# pylint: disable=redefined-builtin
 
 
 class Something(Class):

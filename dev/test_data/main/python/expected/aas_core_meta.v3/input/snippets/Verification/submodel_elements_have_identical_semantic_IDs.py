@@ -5,7 +5,7 @@ def submodel_elements_have_identical_semantic_ids(
     Check that all :paramref:`elements` have the identical
     :py:attr:`.types.HasSemantics.semantic_id`.
     """
-    that_semantic_id = None  # type: Optional[our_types.Reference]
+    that_semantic_id: Optional[our_types.Reference] = None
 
     for element in elements:
         if element.semantic_id is None:

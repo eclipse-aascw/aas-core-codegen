@@ -106,11 +106,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Color(enum.Enum):
-    # pylint: disable=missing-class-docstring
+
 
     RED = 'red'
 
@@ -120,12 +117,12 @@ class Color(enum.Enum):
 
 
 class AbstractItem(Class):
-    # pylint: disable=missing-class-docstring
+
     pass
 
 
 class SomeItem(AbstractItem):
-    # pylint: disable=missing-class-docstring
+
 
     name: str
 
@@ -198,7 +195,7 @@ class SomeItem(AbstractItem):
 
 
 class AnotherItem(AbstractItem):
-    # pylint: disable=missing-class-docstring
+
 
     serial_number: int
 
@@ -275,7 +272,7 @@ SomeUnion = Union['SomeItem', 'AnotherItem']
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     grid: List[List[int]]
 

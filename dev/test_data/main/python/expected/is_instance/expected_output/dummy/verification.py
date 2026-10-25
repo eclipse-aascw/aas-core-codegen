@@ -71,7 +71,6 @@ def has_leaf_in_tree(
     This function tests the narrowing in a conjunction nested in a disjunction,
     and the self-recursion.
     """
-    # pylint: disable=all
     return (
         (
             isinstance(element, our_types.Leaf)
@@ -99,7 +98,6 @@ def leaves_in_tree_are_not_empty(
     This function tests the narrowing in a chain of implications, and
     the self-recursion.
     """
-    # pylint: disable=all
     return (
         (
             (
@@ -127,7 +125,6 @@ def is_short_leaf_or_no_leaf(
     This function tests the narrowing in a disjunction of more than two values,
     where the first value is a negated ``isinstance``.
     """
-    # pylint: disable=all
     return (
         (
             (not isinstance(element, our_types.Leaf))
@@ -144,7 +141,6 @@ def is_container(
 
     This function tests ``isinstance`` over a tuple of classes.
     """
-    # pylint: disable=all
     return (
         isinstance(element, (our_types.OrderedContainer, our_types.UnorderedContainer)))
 
@@ -157,7 +153,6 @@ def is_sorted_ordered_container(
 
     This function tests the narrowing over two levels of the class hierarchy.
     """
-    # pylint: disable=all
     return (
         (
             isinstance(element, our_types.Container)
@@ -170,7 +165,6 @@ def container_has_children(
     container: our_types.Container
 ) -> bool:
     """Check that :paramref:`container` has at least one child."""
-    # pylint: disable=all
     return len(container.children) > 0
 
 
@@ -183,7 +177,6 @@ def is_global_attribute_of_kind_name(
     This function tests the narrowing of a named union to a class, and then
     the narrowing of a property of that class from another named union to a class.
     """
-    # pylint: disable=all
     return (
         (
             isinstance(value, our_types.AttributeOperand)
@@ -200,7 +193,6 @@ def is_string_value(
 
     This function tests ``isinstance`` over a tuple of classes on a named union.
     """
-    # pylint: disable=all
     return (
         isinstance(value, (our_types.StringLiteral, our_types.AttributeOperand)))
 

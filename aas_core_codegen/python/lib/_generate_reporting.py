@@ -167,7 +167,7 @@ class Path:
 {II}# none is ever appended. A list would copy the whole path on each of them,
 {II}# which makes a path of depth *d* cost *d^2* to build, while a deque
 {II}# prepends in constant time.
-{II}self._segments = collections.deque()  # type: Deque[Segment]
+{II}self._segments: Deque[Segment] = collections.deque()
 
 {I}@property
 {I}def segments(self) -> Sequence[Segment]:

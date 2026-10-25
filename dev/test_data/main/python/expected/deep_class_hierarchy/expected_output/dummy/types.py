@@ -3,7 +3,6 @@
 
 
 import abc
-import enum
 from typing import (
     Generic,
     Iterator,
@@ -84,11 +83,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Node(Class):
-    # pylint: disable=missing-class-docstring
+
 
     identifier: str
 
@@ -98,7 +94,7 @@ class Node(Class):
 
 
 class Branch(Node):
-    # pylint: disable=missing-class-docstring
+
 
     description: str
 
@@ -179,7 +175,7 @@ class Branch(Node):
 
 
 class Leaf(Branch):
-    # pylint: disable=missing-class-docstring
+
 
     value: int
 
@@ -262,7 +258,7 @@ class Leaf(Branch):
 
 
 class Blossom(Leaf):
-    # pylint: disable=missing-class-docstring
+
 
     details: str
 
@@ -347,12 +343,12 @@ class Blossom(Leaf):
 
 
 class Marker(Class):
-    # pylint: disable=missing-class-docstring
+
     pass
 
 
 class PlainMarker(Marker):
-    # pylint: disable=missing-class-docstring
+
 
     def descend_once(self) -> Iterator[Class]:
         """
@@ -425,7 +421,7 @@ class PlainMarker(Marker):
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     some_choice: 'Node'
 
@@ -508,7 +504,7 @@ class Something(Class):
 
 
 class Container(Class):
-    # pylint: disable=missing-class-docstring
+
 
     node: 'Node'
 

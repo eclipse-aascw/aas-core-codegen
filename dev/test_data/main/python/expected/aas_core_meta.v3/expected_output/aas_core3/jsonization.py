@@ -151,7 +151,7 @@ class Path:
 
     def __init__(self) -> None:
         """Initialize as an empty path."""
-        self._segments = []  # type: List[Segment]
+        self._segments: List[Segment] = []
 
     @property
     def segments(self) -> Sequence[Segment]:
@@ -166,7 +166,7 @@ class Path:
         if len(self._segments) == 0:
             return ""
 
-        parts = []  # type: List[str]
+        parts: List[str] = []
 
         iterator = iter(self._segments)
         first = next(iterator)
@@ -398,7 +398,7 @@ def _list_from_jsonable(
             f"Expected something array-like, but got: {type(jsonable)}"
         )
 
-    result = []  # type: List[_ValueT]
+    result: List[_ValueT] = []
     for i, jsonable_item in enumerate(array_like):
         try:
             item = parse_item(jsonable_item)
@@ -4765,7 +4765,7 @@ class SerializationException(Exception):
     ) -> None:
         """Initialize with the given :paramref:`cause` and an empty path."""
         self.cause = cause
-        self._segments = []  # type: List[str]
+        self._segments: List[str] = []
 
     @property
     def path(self) -> str:
@@ -4828,7 +4828,7 @@ def _list_of__asset_administration_shell_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -4852,7 +4852,7 @@ def _list_of__concept_description_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -4876,7 +4876,7 @@ def _list_of__data_element_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -4898,7 +4898,7 @@ def _list_of__embedded_data_specification_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -4922,7 +4922,7 @@ def _list_of__extension_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -4946,7 +4946,7 @@ def _list_of__key_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -4970,7 +4970,7 @@ def _list_of__lang_string_definition_type_iec_61360_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -4994,7 +4994,7 @@ def _list_of__lang_string_name_type_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -5018,7 +5018,7 @@ def _list_of__lang_string_preferred_name_type_iec_61360_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -5042,7 +5042,7 @@ def _list_of__lang_string_short_name_type_iec_61360_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -5066,7 +5066,7 @@ def _list_of__lang_string_text_type_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -5090,7 +5090,7 @@ def _list_of__operation_variable_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -5114,7 +5114,7 @@ def _list_of__qualifier_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -5138,7 +5138,7 @@ def _list_of__reference_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -5162,7 +5162,7 @@ def _list_of__specific_asset_id_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -5186,7 +5186,7 @@ def _list_of__submodel_element_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -5208,7 +5208,7 @@ def _list_of__submodel_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(
@@ -5232,7 +5232,7 @@ def _list_of__value_reference_pair_to_jsonable(
     :param that: list to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    jsonable = []  # type: List[MutableJsonable]
+    jsonable: List[MutableJsonable] = []
     for i, item in enumerate(that):
         try:
             jsonable.append(

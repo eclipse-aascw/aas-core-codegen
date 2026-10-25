@@ -655,7 +655,7 @@ def _read_properties(
 
     raise_if_has_tail_or_attrib(element)
 
-    values = {}  # type: Dict[str, Any]
+    values: Dict[str, Any] = {}
 
     while True:
         # NOTE (mristin):

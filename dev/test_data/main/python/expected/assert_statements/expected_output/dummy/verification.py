@@ -66,7 +66,6 @@ def absolute_is_small(
     number: int
 ) -> bool:
     """Check the assertion without a message."""
-    # pylint: disable=all
     absolute = number
     if number < 0:
         absolute = -number
@@ -78,7 +77,6 @@ def optional_text_is_short(
     text: Optional[str]
 ) -> bool:
     """Check the narrowing of an optional argument by an assertion."""
-    # pylint: disable=all
     assert text is not None, 'The caller must check the text for "None" — always'
     return len(text) < 10
 
@@ -87,7 +85,6 @@ def child_a_is_small(
     parent: our_types.Parent
 ) -> bool:
     """Check the narrowing of an argument to a class by an assertion."""
-    # pylint: disable=all
     assert isinstance(parent, our_types.ChildA), 'The caller must check for Child_a'
     return parent.a_only < 100
 
@@ -99,7 +96,6 @@ def few_matches(
     """
     Check the assertion with an f-string as the message in a for-loop.
     """
-    # pylint: disable=all
     count = 0
     for other in texts:
         if other == text:
@@ -116,7 +112,6 @@ def texts_are_consistent(
     """
     Check the condition which the targets break over multiple lines.
     """
-    # pylint: disable=all
     if (
         (
             len(texts) >= 5

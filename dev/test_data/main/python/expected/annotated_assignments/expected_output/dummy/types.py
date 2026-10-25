@@ -102,11 +102,8 @@ class Class(abc.ABC):
         raise NotImplementedError
 
 
-# pylint: disable=redefined-builtin
-
-
 class Kind(enum.Enum):
-    # pylint: disable=missing-class-docstring
+
 
     ALPHA = 'alpha'
 
@@ -114,7 +111,7 @@ class Kind(enum.Enum):
 
 
 class Item(Class):
-    # pylint: disable=missing-class-docstring
+
 
     name: str
 
@@ -187,7 +184,7 @@ class Item(Class):
 
 
 class Parent(Class):
-    # pylint: disable=missing-class-docstring
+
 
     optional_text: Optional[str]
 
@@ -197,7 +194,7 @@ class Parent(Class):
 
 
 class ChildA(Parent):
-    # pylint: disable=missing-class-docstring
+
 
     a_only: int
 
@@ -278,7 +275,7 @@ class ChildA(Parent):
 
 
 class ChildB(Parent):
-    # pylint: disable=missing-class-docstring
+
 
     b_only: int
 
@@ -367,7 +364,7 @@ WideUnion = Union['Parent', 'Item', 'ChildB']
 
 
 class Something(Class):
-    # pylint: disable=missing-class-docstring
+
 
     text: str
 
@@ -417,7 +414,6 @@ class Something(Class):
         as that would be too inefficient. Please verify the instance explicitly
         once you are done with the changes.
         """
-        # pylint: disable=all
         self.optional_member = item
 
     def set_member_to_child_a(
@@ -431,7 +427,6 @@ class Something(Class):
         as that would be too inefficient. Please verify the instance explicitly
         once you are done with the changes.
         """
-        # pylint: disable=all
         if isinstance(parent, ChildA):
             self.optional_member = parent
         else:
@@ -444,7 +439,6 @@ class Something(Class):
         """
         Return the text if at most :paramref:`limit` long, and ``None`` otherwise.
         """
-        # pylint: disable=all
         if len(self.text) > limit:
             return None
         return self.text
@@ -456,7 +450,6 @@ class Something(Class):
         """
         Return the optional text, or :paramref:`alternative`, or a default.
         """
-        # pylint: disable=all
         result: Optional[str] = self.optional_text
         if result is None:
             result = alternative
@@ -471,7 +464,6 @@ class Something(Class):
         """
         Return :paramref:`alternative`, if given, and the number otherwise.
         """
-        # pylint: disable=all
         result: Optional[int] = alternative
         if result is None:
             result = self.number
@@ -479,7 +471,6 @@ class Something(Class):
 
     def first_child_b_or_none(self) -> Optional['ChildB']:
         """Return the first parent which is a :py:class:`ChildB`, if any."""
-        # pylint: disable=all
         found: Optional['ChildB'] = None
         for parent in self.parents:
             if isinstance(parent, ChildB):
@@ -489,7 +480,6 @@ class Something(Class):
 
     def text_is_not_bye(self) -> bool:
         """Check a declaration from a method returning an optional."""
-        # pylint: disable=all
         short: Optional[str] = self.text_or_none(3)
         return (
             (
@@ -499,7 +489,6 @@ class Something(Class):
 
     def texts_are_short(self) -> bool:
         """Check the immutable variables declared in a method."""
-        # pylint: disable=all
         own_texts: Final[Sequence[str]] = self.texts
         limit: Final[int] = 20
         for own_text in own_texts:
@@ -511,7 +500,6 @@ class Something(Class):
         """
         Check a declaration of a class from a method returning an optional.
         """
-        # pylint: disable=all
         first: Optional['ChildB'] = self.first_child_b_or_none()
         return (
             (

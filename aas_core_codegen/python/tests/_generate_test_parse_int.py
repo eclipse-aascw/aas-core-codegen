@@ -84,10 +84,6 @@ The other SDKs test against the very same cases.
 """'''
         ),
         python_common.WARNING,
-        Stripped(
-            """\
-# pylint: disable=missing-docstring"""
-        ),
         imports,
         Stripped(
             f"""\

@@ -138,33 +138,43 @@ def generate(
 """Test ``X_or_default`` methods."""'''
         ),
         python_common.WARNING,
-        Stripped(
-            """\
-# pylint: disable=missing-docstring"""
-        ),
-        Stripped(
-            """\
-import pathlib
-import unittest"""
-        ),
-        Stripped(
-            f"""\
-import {qualified_module_name}.types as our_types"""
-        ),
-        Stripped(
-            """\
-import tests.common
-import tests.common_xmlization"""
-        ),
     ]
 
+    test_cases: List[Stripped] = []
     for cls in symbol_table.concrete_classes:
         test_case = _generate_test_case(cls=cls)
 
         if test_case is None:
             continue
 
-        blocks.append(test_case)
+        test_cases.append(test_case)
+
+    # NOTE (mristin):
+    # We import the modules only if there is anything to test so that
+    # the imports are never unused.
+    if len(test_cases) == 0:
+        blocks.append(Stripped("import unittest"))
+    else:
+        blocks.extend(
+            [
+                Stripped(
+                    """\
+import pathlib
+import unittest"""
+                ),
+                Stripped(
+                    f"""\
+import {qualified_module_name}.types as our_types"""
+                ),
+                Stripped(
+                    """\
+import tests.common
+import tests.common_xmlization"""
+                ),
+            ]
+        )
+
+    blocks.extend(test_cases)
 
     blocks.extend(
         [

@@ -5,9 +5,6 @@
 # Do NOT edit or append.
 
 
-# pylint: disable=missing-docstring
-
-
 import math
 import unittest
 from typing import Any, cast, Iterable, List, Mapping, Sequence, Tuple

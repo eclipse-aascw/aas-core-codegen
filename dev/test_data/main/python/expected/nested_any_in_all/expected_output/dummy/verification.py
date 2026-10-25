@@ -66,7 +66,6 @@ def is_english(
     language: str
 ) -> bool:
     """Check that :paramref:`language` denotes English."""
-    # pylint: disable=all
     return language == 'en'
 
 
@@ -79,7 +78,6 @@ def lang_string_sets_have_english(
 
     This function tests a plain ``any`` nested in ``all``.
     """
-    # pylint: disable=all
     return (
         all(
             any(
@@ -100,7 +98,6 @@ def iec_contents_have_definition_in_english(
     This function tests an ``any`` nested in ``all``, where the nested ``any``
     iterates over an optional property of a value narrowed by ``isinstance``.
     """
-    # pylint: disable=all
     return (
         all(
             not isinstance(specification.content, our_types.IecContent)

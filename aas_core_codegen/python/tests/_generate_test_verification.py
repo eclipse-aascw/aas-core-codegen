@@ -157,7 +157,6 @@ def generate(
     blocks: List[Stripped] = [
         Stripped('"""Test the verification of instances."""'),
         python_common.WARNING,
-        Stripped("# pylint: disable=missing-docstring"),
         Stripped(
             """\
 import json
