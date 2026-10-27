@@ -299,8 +299,9 @@ class Transpiler(
         elif isinstance(
             instance_type, intermediate_type_inference.OurTypeAnnotation
         ) and isinstance(instance_type.our_type, intermediate.Class):
-            if node.name in instance_type.our_type.properties_by_name:
-                member_name = csharp_naming.property_name(node.name)
+            prop = instance_type.our_type.properties_by_name.get(node.name, None)
+            if prop is not None:
+                member_name = csharp_naming.property_name(prop)
             else:
                 return None, Error(
                     node.original_node,
@@ -1138,6 +1139,21 @@ new {list_type}
             func_type, intermediate_type_inference.VerificationTypeAnnotation
         ):
             method_name = csharp_naming.method_name(func_type.func.name)
+
+            # NOTE (empwilli):
+            # A narrowed nullable value type needs unwrapping only if the parameter
+            # is not optional.
+            for i, (arg_node, parameter) in enumerate(
+                zip(node.args, func_type.func.arguments, strict=True)
+            ):
+                if (
+                    not isinstance(
+                        parameter.type_annotation, intermediate.OptionalTypeAnnotation
+                    )
+                    and self._is_declared_nullable(arg_node)
+                    and _is_value_type(self.type_map[arg_node])
+                ):
+                    args[i] = Stripped(f"{args[i]}.Value")
 
             joined_args = ", ".join(args)
 

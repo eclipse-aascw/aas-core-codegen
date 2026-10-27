@@ -25,7 +25,7 @@ def generate_numeric_place_mutation(
     The generated tests of the safe integers put their values at the very same
     places, so they share this.
     """
-    prop_name = csharp_naming.property_name(numeric_place.prop.name)
+    prop_name = csharp_naming.property_name(numeric_place.prop)
 
     if numeric_place.index is None:
         return Stripped(f"instance.{prop_name} = value;")
@@ -88,7 +88,7 @@ def _generate_serialization_failure_tests(
             what = "out_of_range"
             values_literal = "{ 9007199254740992L, -9007199254740992L }"
 
-        prop_name = csharp_naming.property_name(numeric_place.prop.name)
+        prop_name = csharp_naming.property_name(numeric_place.prop)
 
         mutation = generate_numeric_place_mutation(numeric_place)
         expected_path = (

@@ -22,7 +22,7 @@ def _generate_shallow_equals(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the code for a static shallow ``Equals`` method."""
     exprs: List[str] = []
     for prop in cls.properties:
-        prop_name = csharp_naming.property_name(prop.name)
+        prop_name = csharp_naming.property_name(prop)
         exprs.append(f"that.{prop_name} == other.{prop_name}")
 
     if len(exprs) == 0:
@@ -220,7 +220,7 @@ def _generate_transform_as_check(cls: intermediate.ConcreteClass) -> Stripped:
     exprs: List[Stripped] = []
 
     for prop in cls.properties:
-        prop_name = csharp_naming.property_name(prop.name)
+        prop_name = csharp_naming.property_name(prop)
 
         if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
             exprs.append(

@@ -246,7 +246,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
             else:
                 assert_never(element.reference.cls)
 
-            prop_name = csharp_naming.property_name(element.reference.prop.name)
+            prop_name = csharp_naming.property_name(element.reference.prop)
 
             cref = f"{name_of_our_type}.{prop_name}"
         elif isinstance(
@@ -340,7 +340,9 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
     def transform_reference_to_constant_in_doc(
         self, element: intermediate_doc.ReferenceToConstant
     ) -> Tuple[Optional[_NodeUnion], Optional[List[str]]]:
-        constant_as_prop_name = csharp_naming.property_name(element.constant.name)
+        constant_as_prop_name = csharp_naming.static_property_name(
+            element.constant.name
+        )
         cref = f"Our.Constants.{constant_as_prop_name}"
 
         return (

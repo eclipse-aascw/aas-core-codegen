@@ -96,7 +96,7 @@ def _generate_shallow_copy_transform_method(
     else:
         constructor_arg_exprs: List[str] = []
         for arg in cls.constructor.arguments:
-            prop_name = csharp_naming.property_name(arg.name)
+            prop_name = csharp_naming.property_name(cls.properties_by_name[arg.name])
             constructor_arg_exprs.append(f"that.{prop_name}")
 
         # NOTE (mristin):
@@ -395,7 +395,7 @@ def _generate_deep_copy_transform_method(cls: intermediate.ConcreteClass) -> Str
     else:
         constructor_arg_exprs: List[str] = []
         for arg in cls.constructor.arguments:
-            prop_name = csharp_naming.property_name(arg.name)
+            prop_name = csharp_naming.property_name(cls.properties_by_name[arg.name])
 
             if not isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation):
                 constructor_arg_exprs.append(

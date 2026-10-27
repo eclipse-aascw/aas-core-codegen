@@ -52,7 +52,7 @@ def _generate_constant_primitive(
     constant: intermediate.ConstantPrimitive,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the definition of a constant primitive."""
-    constant_name = csharp_naming.property_name(constant.name)
+    constant_name = csharp_naming.static_property_name(constant.name)
 
     if constant.a_type is intermediate.PrimitiveType.BOOL:
         literal = "true" if constant.value else "false"
@@ -109,7 +109,7 @@ def _generate_constant_set_of_primitives(
     constant: intermediate.ConstantSetOfPrimitives,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the definition of a constant set of primitives."""
-    constant_name = csharp_naming.property_name(constant.name)
+    constant_name = csharp_naming.static_property_name(constant.name)
 
     writer = io.StringIO()
 
@@ -231,7 +231,7 @@ def _generate_constant_set_of_enumeration_literals(
     constant: intermediate.ConstantSetOfEnumerationLiterals,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the definition of a constant set of enumeration literals."""
-    constant_name = csharp_naming.property_name(constant.name)
+    constant_name = csharp_naming.static_property_name(constant.name)
     enum_name = csharp_naming.enum_name(constant.enumeration.name)
 
     writer = io.StringIO()

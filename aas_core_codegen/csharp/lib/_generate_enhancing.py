@@ -97,7 +97,7 @@ public {enhanced_name}(
 
     for prop in cls.properties:
         prop_type = csharp_common.generate_type(prop.type_annotation)
-        prop_name = csharp_naming.property_name(prop.name)
+        prop_name = csharp_naming.property_name(prop)
 
         blocks.append(
             Stripped(
@@ -119,7 +119,7 @@ public {prop_type} {prop_name}
             prop.type_annotation.value,
             (intermediate.ListTypeAnnotation, intermediate.SetTypeAnnotation),
         ):
-            prop_name = csharp_naming.property_name(prop.name)
+            prop_name = csharp_naming.property_name(prop)
             items_type = csharp_common.generate_type(
                 prop.type_annotation.value.items, our_type_qualifier=Stripped("Our")
             )
@@ -407,7 +407,7 @@ if (that is Enhanced<TEnhancement>)
             continue
 
         type_anno = intermediate.beneath_optional(prop.type_annotation)
-        prop_name = csharp_naming.property_name(prop.name)
+        prop_name = csharp_naming.property_name(prop)
 
         # NOTE (mristin):
         # An optional of a value type, such as a tuple, is a ``System.Nullable``
