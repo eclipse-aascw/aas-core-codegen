@@ -57,12 +57,12 @@ def _generate_constant_primitive(
     if constant.a_type is intermediate.PrimitiveType.BOOL:
         literal = "true" if constant.value else "false"
 
-        return Stripped(f"public static const bool {constant_name} = {literal};"), None
+        return Stripped(f"public const bool {constant_name} = {literal};"), None
 
     elif constant.a_type is intermediate.PrimitiveType.INT:
         literal = str(constant.value)
 
-        return Stripped(f"public static const long {constant_name} = {literal};"), None
+        return Stripped(f"public const long {constant_name} = {literal};"), None
 
     elif constant.a_type is intermediate.PrimitiveType.FLOAT:
         # NOTE (mristin):
@@ -73,7 +73,7 @@ def _generate_constant_primitive(
         literal = str(constant.value)
 
         return (
-            Stripped(f"public static const double {constant_name} = {literal};"),
+            Stripped(f"public const double {constant_name} = {literal};"),
             None,
         )
 
@@ -82,7 +82,7 @@ def _generate_constant_primitive(
         literal = csharp_common.string_literal(constant.value)
 
         return (
-            Stripped(f"public static const string {constant_name} = {literal};"),
+            Stripped(f"public const string {constant_name} = {literal};"),
             None,
         )
 
