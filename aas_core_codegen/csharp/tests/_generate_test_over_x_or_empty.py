@@ -39,7 +39,7 @@ def generate(
                 Identifier(f"Over_{prop.name}_or_empty")
             )
 
-            prop_name_csharp = csharp_naming.property_name(prop.name)
+            prop_name_csharp = csharp_naming.property_name(prop)
 
             if isinstance(
                 prop.type_annotation, intermediate.OptionalTypeAnnotation

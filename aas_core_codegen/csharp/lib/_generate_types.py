@@ -97,7 +97,7 @@ def _verify_intra_structure_collisions(
         observed_member_names: Dict[Identifier, str] = {}
 
         for prop in our_type.properties:
-            prop_name = csharp_naming.property_name(prop.name)
+            prop_name = csharp_naming.property_name(prop)
             if prop_name in observed_member_names:
                 errors.append(
                     Error(
@@ -566,7 +566,7 @@ def _generate_interface(
             continue
 
         prop_type = csharp_common.generate_type(type_annotation=prop.type_annotation)
-        prop_name = csharp_naming.property_name(prop.name)
+        prop_name = csharp_naming.property_name(prop)
 
         if prop.description is not None:
             (
@@ -653,7 +653,7 @@ def _generate_interface(
             prop.type_annotation.value,
             (intermediate.ListTypeAnnotation, intermediate.SetTypeAnnotation),
         ):
-            prop_name = csharp_naming.property_name(prop.name)
+            prop_name = csharp_naming.property_name(prop)
             items_type = csharp_common.generate_type(prop.type_annotation.value.items)
             blocks.append(
                 Stripped(
@@ -860,7 +860,7 @@ def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> St
 
         type_anno = intermediate.beneath_optional(prop.type_annotation)
 
-        prop_name = csharp_naming.property_name(prop.name)
+        prop_name = csharp_naming.property_name(prop)
 
         # NOTE (mristin):
         # An optional of a value type, such as a tuple, is a ``System.Nullable``,
@@ -1017,9 +1017,13 @@ def _generate_constructor(
     body: List[str] = []
     for stmt in cls.constructor.inlined_statements:
         if isinstance(stmt, intermediate_construction.AssignArgument):
+            stmt_prop_name = csharp_naming.property_name(
+                cls.properties_by_name[stmt.name]
+            )
+
             if stmt.default is None:
                 body.append(
-                    f"{csharp_naming.property_name(stmt.name)} = "
+                    f"{stmt_prop_name} = "
                     f"{csharp_naming.argument_name(stmt.argument)};"
                 )
             else:
@@ -1036,7 +1040,7 @@ def _generate_constructor(
 
                     # Write the assignment as a ternary operator
                     writer = io.StringIO()
-                    writer.write(f"{csharp_naming.property_name(stmt.name)} = ")
+                    writer.write(f"{stmt_prop_name} = ")
                     writer.write(f"({arg_name} != null)\n")
                     writer.write(textwrap.indent(f"? {arg_name}\n", I))
                     writer.write(textwrap.indent(f": new {prop_type}();", I))
@@ -1057,7 +1061,7 @@ def _generate_constructor(
                     body.append(
                         Stripped(
                             f"""\
-{csharp_naming.property_name(stmt.name)} = {arg_name} ?? {literal_code};"""
+{stmt_prop_name} = {arg_name} ?? {literal_code};"""
                         )
                     )
                 else:
@@ -1234,7 +1238,7 @@ def _generate_class(
     for prop in cls.properties:
         prop_type = csharp_common.generate_type(type_annotation=prop.type_annotation)
 
-        prop_name = csharp_naming.property_name(prop.name)
+        prop_name = csharp_naming.property_name(prop)
 
         prop_blocks: List[Stripped] = []
 
@@ -1270,7 +1274,7 @@ def _generate_class(
             prop.type_annotation.value,
             (intermediate.ListTypeAnnotation, intermediate.SetTypeAnnotation),
         ):
-            prop_name = csharp_naming.property_name(prop.name)
+            prop_name = csharp_naming.property_name(prop)
             items_type = csharp_common.generate_type(prop.type_annotation.value.items)
 
             blocks.append(

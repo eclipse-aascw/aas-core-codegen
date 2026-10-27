@@ -2538,7 +2538,7 @@ def _generate_transform_property(
     """Generate the snippet to transform a property into a JSON node."""
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
-    name = csharp_naming.property_name(prop.name)
+    name = csharp_naming.property_name(prop)
     prop_literal = csharp_common.string_literal(prop.json_name)
 
     # NOTE (mristin):

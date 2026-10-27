@@ -355,7 +355,7 @@ public void {test_name}()
 
             cls_name = csharp_naming.class_name(cls.name)
             cls_name_json = naming.json_model_type(cls.name)
-            prop_name = csharp_naming.property_name(prop.name)
+            prop_name = csharp_naming.property_name(prop)
 
             test_name_prefix = f"Test_{cls.name}_{prop.name}"
 

@@ -441,6 +441,12 @@ class Test_cpp(_TestCase):
             target=aas_core_codegen.main.Target.CPP, case_name="problematic_keywords"
         )
 
+    def test_expected_property_named_like_class(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CPP,
+            case_name="property_named_like_class",
+        )
+
     def test_expected_sets(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.CPP, case_name="sets"
@@ -683,6 +689,12 @@ class Test_csharp(_TestCase):
             target=aas_core_codegen.main.Target.CSHARP, case_name="problematic_keywords"
         )
 
+    def test_expected_property_named_like_class(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CSHARP,
+            case_name="property_named_like_class",
+        )
+
     def test_expected_sets(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.CSHARP, case_name="sets"
@@ -910,6 +922,12 @@ class Test_golang(_TestCase):
     def test_expected_problematic_keywords(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.GOLANG, case_name="problematic_keywords"
+        )
+
+    def test_expected_property_named_like_class(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.GOLANG,
+            case_name="property_named_like_class",
         )
 
     def test_expected_sets(self) -> None:
@@ -1146,6 +1164,12 @@ class Test_java(_TestCase):
     def test_expected_problematic_keywords(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.JAVA, case_name="problematic_keywords"
+        )
+
+    def test_expected_property_named_like_class(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.JAVA,
+            case_name="property_named_like_class",
         )
 
     def test_expected_sets(self) -> None:
@@ -1395,6 +1419,12 @@ class Test_jsonschema(_TestCase):
             target=aas_core_codegen.main.Target.JSONSCHEMA, case_name="primitive_types"
         )
 
+    def test_expected_property_named_like_class(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.JSONSCHEMA,
+            case_name="property_named_like_class",
+        )
+
     def test_expected_regression_when_len_constraints_on_inherited_property(
         self,
     ) -> None:
@@ -1619,6 +1649,12 @@ class Test_python(_TestCase):
     def test_expected_problematic_keywords(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.PYTHON, case_name="problematic_keywords"
+        )
+
+    def test_expected_property_named_like_class(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.PYTHON,
+            case_name="property_named_like_class",
         )
 
     def test_expected_sets(self) -> None:
@@ -1862,6 +1898,12 @@ class Test_typescript(_TestCase):
             case_name="problematic_keywords",
         )
 
+    def test_expected_property_named_like_class(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.TYPESCRIPT,
+            case_name="property_named_like_class",
+        )
+
     def test_expected_sets(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.TYPESCRIPT, case_name="sets"
@@ -2093,6 +2135,12 @@ class Test_xsd(_TestCase):
     def test_expected_primitive_types(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.XSD, case_name="primitive_types"
+        )
+
+    def test_expected_property_named_like_class(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.XSD,
+            case_name="property_named_like_class",
         )
 
     def test_expected_regression_when_len_constraints_on_inherited_property(

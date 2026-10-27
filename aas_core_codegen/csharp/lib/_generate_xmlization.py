@@ -1525,7 +1525,7 @@ if (!isEmptySequence)
     # region Check that the mandatory properties have been set
 
     for prop in cls.properties:
-        prop_csharp = csharp_naming.property_name(prop.name)
+        prop_csharp = csharp_naming.property_name(prop)
         target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
 
         if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
@@ -2894,7 +2894,7 @@ def _generate_serialize_property(
     """
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
-    prop_name = csharp_naming.property_name(prop.name)
+    prop_name = csharp_naming.property_name(prop)
     xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
 
     value_expr = f"that.{prop_name}"

@@ -150,7 +150,7 @@ private static Our.{cls_name_csharp} ReadWith(string xmlName, string text)
 
     for a_type, prop in relevant:
         prop_xml_name = naming.xml_property(prop.name)
-        prop_name = csharp_naming.property_name(prop.name)
+        prop_name = csharp_naming.property_name(prop)
 
         for a_text, expected in _LEXICAL_CASES_BY_PRIMITIVE[a_type]:
             test_name = csharp_naming.method_name(

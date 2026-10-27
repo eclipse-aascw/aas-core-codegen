@@ -193,14 +193,40 @@ def name_of(
         assert_never(something)
 
 
-def property_name(identifier: Identifier) -> Identifier:
+def _rename_to_avoid_type_name_clash(identifier: Identifier) -> Identifier:
     """
-    Generate a C# name for a public property based on its meta-model ``identifier``.
+    Rename the ``identifier`` so that it differs from the enclosing type name.
 
-    >>> property_name(Identifier("something"))
+    >>> _rename_to_avoid_type_name_clash(Identifier("Something"))
+    'Something_'
+    """
+    return Identifier(f"{identifier}_")
+
+
+def property_name(prop: intermediate.Property) -> Identifier:
+    """
+    Generate a C# name for the public property ``prop`` of a class.
+
+    C# forbids a member to have the same name as its enclosing type, so we add
+    an underscore suffix to such a property. We look at the class which specifies
+    the property so that all its descendants agree on the name.
+    """
+    prop_name = aas_core_codegen.naming.capitalized_camel_case(prop.name)
+
+    if class_name(prop.specified_for.name) == prop_name:
+        return Identifier(f"{prop_name}_")
+
+    return prop_name
+
+
+def static_property_name(identifier: Identifier) -> Identifier:
+    """
+    Generate a C# name for a static property based on its meta-model ``identifier``.
+
+    >>> static_property_name(Identifier("something"))
     'Something'
 
-    >>> property_name(Identifier("something_to_URL"))
+    >>> static_property_name(Identifier("something_to_URL"))
     'SomethingToUrl'
     """
     return aas_core_codegen.naming.capitalized_camel_case(identifier)

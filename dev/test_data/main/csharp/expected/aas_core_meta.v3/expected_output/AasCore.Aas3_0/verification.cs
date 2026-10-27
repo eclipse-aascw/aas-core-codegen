@@ -4087,7 +4087,7 @@ namespace AasCore.Aas3_0
                         (that.ValueTypeListElement != null)
                         && (
                             (that.Value == null)
-                            || Verification.PropertiesOrRangesHaveValueType(that.Value, that.ValueTypeListElement)
+                            || Verification.PropertiesOrRangesHaveValueType(that.Value, that.ValueTypeListElement.Value)
                         )
                     )))
                 {

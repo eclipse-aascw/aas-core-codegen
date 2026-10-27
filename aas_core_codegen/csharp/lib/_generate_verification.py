@@ -302,7 +302,9 @@ private static Regex {construct_name}()
 
     # NOTE (mristin):
     # We make this property look "public" since it is static and read-only.
-    regex_name = csharp_naming.property_name(Identifier(f"regex_{verification.name}"))
+    regex_name = csharp_naming.static_property_name(
+        Identifier(f"regex_{verification.name}")
+    )
 
     blocks.append(
         Stripped(f"private static readonly Regex {regex_name} = {construct_name}();")
@@ -412,7 +414,7 @@ class _TranspilableVerificationTranspiler(csharp_transpilation.Transpiler):
             return Stripped(csharp_naming.variable_name(node.identifier)), None
 
         if node.identifier in self._symbol_table.constants_by_name:
-            constant_as_prop = csharp_naming.property_name(node.identifier)
+            constant_as_prop = csharp_naming.static_property_name(node.identifier)
             return Stripped(f"Our.Constants.{constant_as_prop}"), None
 
         if node.identifier in self._symbol_table.verification_functions_by_name:
@@ -594,7 +596,7 @@ class _InvariantTranspiler(csharp_transpilation.Transpiler):
             return Stripped("that"), None
 
         if node.identifier in self._symbol_table.constants_by_name:
-            constant_as_prop = csharp_naming.property_name(node.identifier)
+            constant_as_prop = csharp_naming.static_property_name(node.identifier)
             return Stripped(f"Our.Constants.{constant_as_prop}"), None
 
         if node.identifier in self._symbol_table.verification_functions_by_name:
@@ -1112,7 +1114,7 @@ def _generate_transform_for_class(
         if not _needs_verification(type_anno):
             continue
 
-        prop_name = csharp_naming.property_name(prop.name)
+        prop_name = csharp_naming.property_name(prop)
 
         # NOTE (mristin):
         # An optional of a value type, such as an enumeration or a tuple, is
