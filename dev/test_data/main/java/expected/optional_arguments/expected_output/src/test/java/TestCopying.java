@@ -35,6 +35,36 @@ public class TestCopying {
     }
 
     @Override
+    public Boolean transformBranch(IBranch that, IClass other) {
+      if (!(other instanceof Branch)) {
+        return false;
+      }
+
+      Branch casted = (Branch) other;
+
+      return (
+        (that.getOptionalChildren().isPresent()
+          ? casted.getOptionalChildren().isPresent()
+            && deepEqualsListOf_INode(that.getOptionalChildren().get(), casted.getOptionalChildren().get())
+          : !casted.getOptionalChildren().isPresent()));
+    }
+
+    @Override
+    public Boolean transformLeaf(ILeaf that, IClass other) {
+      if (!(other instanceof Leaf)) {
+        return false;
+      }
+
+      Leaf casted = (Leaf) other;
+
+      return (
+        (that.getOptionalItem().isPresent()
+          ? casted.getOptionalItem().isPresent()
+            && transform(that.getOptionalItem().get(), casted.getOptionalItem().get())
+          : !casted.getOptionalItem().isPresent()));
+    }
+
+    @Override
     public Boolean transformSomething(ISomething that, IClass other) {
       if (!(other instanceof Something)) {
         return false;
@@ -53,6 +83,22 @@ public class TestCopying {
         && that.getOptionalTexts().equals(casted.getOptionalTexts())
         && that.getOptionalKind().equals(casted.getOptionalKind()));
     }
+
+    private Boolean deepEqualsListOf_INode(
+      List<INode> that,
+      List<INode> other) {
+      if (that.size() != other.size()) {
+        return false;
+      }
+
+      for (int i = 0; i < that.size(); i++) {
+        if (!transform(that.get(i), other.get(i))) {
+          return false;
+        }
+      }
+
+      return true;
+    }
   } // class _DeepEqualiser
 
   private static final _DeepEqualiser DeepEqualiserInstance = new _DeepEqualiser();
@@ -63,6 +109,18 @@ public class TestCopying {
     return (
       that.getName().equals(other.getName())
       && that.getNote().equals(other.getNote()));
+  }
+
+  private static Boolean BranchShallowEquals(
+    Branch that,
+    Branch other) {
+    return that.getOptionalChildren().equals(other.getOptionalChildren());
+  }
+
+  private static Boolean LeafShallowEquals(
+    Leaf that,
+    Leaf other) {
+    return that.getOptionalItem().equals(other.getOptionalItem());
   }
 
   private static Boolean SomethingShallowEquals(
@@ -78,6 +136,14 @@ public class TestCopying {
   }
 
   private static Boolean ItemDeepEquals(Item that, Item other) {
+    return DeepEqualiserInstance.transform(that, other);
+  }
+
+  private static Boolean BranchDeepEquals(Branch that, Branch other) {
+    return DeepEqualiserInstance.transform(that, other);
+  }
+
+  private static Boolean LeafDeepEquals(Leaf that, Leaf other) {
     return DeepEqualiserInstance.transform(that, other);
   }
 
@@ -104,6 +170,46 @@ public class TestCopying {
       ItemDeepEquals(instance, instanceCopy),
       "Item");
   } // public void testItemDeepCopy
+
+  @Test
+  public void testBranchShallowCopy() throws IOException {
+    final Branch instance = CommonJsonization.loadMaximalBranch();
+    final Branch instanceCopy = Copying.shallow(instance);
+
+    assertTrue(
+      BranchShallowEquals(instance, instanceCopy),
+      "Branch");
+  } // public void testBranchShallowCopy
+
+  @Test
+  public void testBranchDeepCopy() throws IOException {
+    final Branch instance = CommonJsonization.loadMaximalBranch();
+    final Branch instanceCopy = Copying.deep(instance);
+
+    assertTrue(
+      BranchDeepEquals(instance, instanceCopy),
+      "Branch");
+  } // public void testBranchDeepCopy
+
+  @Test
+  public void testLeafShallowCopy() throws IOException {
+    final Leaf instance = CommonJsonization.loadMaximalLeaf();
+    final Leaf instanceCopy = Copying.shallow(instance);
+
+    assertTrue(
+      LeafShallowEquals(instance, instanceCopy),
+      "Leaf");
+  } // public void testLeafShallowCopy
+
+  @Test
+  public void testLeafDeepCopy() throws IOException {
+    final Leaf instance = CommonJsonization.loadMaximalLeaf();
+    final Leaf instanceCopy = Copying.deep(instance);
+
+    assertTrue(
+      LeafDeepEquals(instance, instanceCopy),
+      "Leaf");
+  } // public void testLeafDeepCopy
 
   @Test
   public void testSomethingShallowCopy() throws IOException {

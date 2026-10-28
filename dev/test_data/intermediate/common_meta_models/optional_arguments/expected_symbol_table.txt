@@ -122,6 +122,206 @@ SymbolTable(
       methods_by_name=...,
       method_id_set=...,
       invariant_id_set=...),
+    AbstractClass(
+      name='Node',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      interface=Interface(
+        base='Reference to AbstractClass Node',
+        name='Node',
+        inheritances=[],
+        implementers=[
+          'Reference to ConcreteClass Branch',
+          'Reference to ConcreteClass Leaf'],
+        properties=[],
+        signatures=[],
+        description=None,
+        parsed=...,
+        properties_by_name=...,
+        property_id_set=...),
+      descendant_id_set=...,
+      descendants=[
+        'Reference to ConcreteClass Branch',
+        'Reference to ConcreteClass Leaf'],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[
+        'Reference to ConcreteClass Branch',
+        'Reference to ConcreteClass Leaf'],
+      properties=[],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=None,
+        arguments_by_name=...,
+        statements=[],
+        inlined_statements=[]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Branch',
+      inheritances=[
+        'Reference to AbstractClass Node'],
+      inheritance_id_set=...,
+      ancestors=[
+        'Reference to AbstractClass Node'],
+      ancestor_id_set=...,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='optional_children',
+          type_annotation=OptionalTypeAnnotation(
+            value=ListTypeAnnotation(
+              items=OurTypeAnnotation(
+                our_type='Reference to our type Node',
+                parsed=...),
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Branch',
+          json_name='optionalChildren',
+          xml_name='optionalChildren',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='optional_children',
+            type_annotation=OptionalTypeAnnotation(
+              value=ListTypeAnnotation(
+                items=OurTypeAnnotation(
+                  our_type='Reference to our type Node',
+                  parsed=...),
+                parsed=...),
+              parsed=...),
+            default=DefaultPrimitive(
+              value=None,
+              parsed=...),
+            mutable=True,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_children',
+              argument='optional_children',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_children',
+              argument='optional_children',
+              default=None)""")]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Leaf',
+      inheritances=[
+        'Reference to AbstractClass Node'],
+      inheritance_id_set=...,
+      ancestors=[
+        'Reference to AbstractClass Node'],
+      ancestor_id_set=...,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='optional_item',
+          type_annotation=OptionalTypeAnnotation(
+            value=OurTypeAnnotation(
+              our_type='Reference to our type Item',
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Leaf',
+          json_name='optionalItem',
+          xml_name='optionalItem',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='optional_item',
+            type_annotation=OptionalTypeAnnotation(
+              value=OurTypeAnnotation(
+                our_type='Reference to our type Item',
+                parsed=...),
+              parsed=...),
+            default=DefaultPrimitive(
+              value=None,
+              parsed=...),
+            mutable=False,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_item',
+              argument='optional_item',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_item',
+              argument='optional_item',
+              default=None)""")]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
     ConcreteClass(
       name='Something',
       inheritances=[],
@@ -455,6 +655,84 @@ SymbolTable(
                   original_node=...)],
               original_node=...)"""),
           specified_for='Reference to ConcreteClass Something',
+          parsed=...),
+        Invariant(
+          description='Narrowed item must be named',
+          body=textwrap.dedent("""\
+            Or(
+              values=[
+                IsNone(
+                  value=Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='optional_item',
+                    original_node=...),
+                  original_node=...),
+                FunctionCall(
+                  name='item_is_named',
+                  args=[
+                    Member(
+                      instance=Name(
+                        identifier='self',
+                        original_node=...),
+                      name='optional_item',
+                      original_node=...)],
+                  original_node=...)],
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Something',
+          parsed=...),
+        Invariant(
+          description='Narrowed number must be positive',
+          body=textwrap.dedent("""\
+            Or(
+              values=[
+                IsNone(
+                  value=Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='optional_number',
+                    original_node=...),
+                  original_node=...),
+                FunctionCall(
+                  name='number_is_positive',
+                  args=[
+                    Member(
+                      instance=Name(
+                        identifier='self',
+                        original_node=...),
+                      name='optional_number',
+                      original_node=...)],
+                  original_node=...)],
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Something',
+          parsed=...),
+        Invariant(
+          description='Narrowed kind must be known',
+          body=textwrap.dedent("""\
+            Or(
+              values=[
+                IsNone(
+                  value=Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='optional_kind',
+                    original_node=...),
+                  original_node=...),
+                FunctionCall(
+                  name='kind_is_known',
+                  args=[
+                    Member(
+                      instance=Name(
+                        identifier='self',
+                        original_node=...),
+                      name='optional_kind',
+                      original_node=...)],
+                  original_node=...)],
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Something',
           parsed=...)],
       serialization=Serialization(
         with_model_type=False),
@@ -466,16 +744,24 @@ SymbolTable(
       method_id_set=...,
       invariant_id_set=...)],
   our_types_topologically_sorted=[
+    'Reference to our type Node',
+    'Reference to our type Branch',
     'Reference to our type Item',
+    'Reference to our type Leaf',
     'Reference to our type Something'],
   enumerations=[
     'Reference to our type Kind'],
   constrained_primitives=[],
   classes=[
     'Reference to our type Item',
+    'Reference to our type Node',
+    'Reference to our type Branch',
+    'Reference to our type Leaf',
     'Reference to our type Something'],
   concrete_classes=[
     'Reference to our type Item',
+    'Reference to our type Branch',
+    'Reference to our type Leaf',
     'Reference to our type Something'],
   named_unions=[],
   constants=[],
@@ -732,6 +1018,114 @@ SymbolTable(
         parsed=...),
       description=DescriptionOfSignature(
         summary='<paragraph>Check the local variable holding an optional property.</paragraph>',
+        remarks=[],
+        arguments_by_name=[],
+        returns=None,
+        parsed=...),
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      parsed=...,
+      arguments_by_name=...),
+    TranspilableVerification(
+      name='kind_is_known',
+      visibility='PUBLIC',
+      arguments=[
+        Argument(
+          name='kind',
+          type_annotation=OurTypeAnnotation(
+            our_type='Reference to our type Kind',
+            parsed=...),
+          default=None,
+          mutable=False,
+          parsed=...)],
+      returns=PrimitiveTypeAnnotation(
+        a_type='BOOL',
+        parsed=...),
+      description=DescriptionOfSignature(
+        summary='<paragraph>Check the non-optional enumeration argument.</paragraph>',
+        remarks=[],
+        arguments_by_name=[],
+        returns=None,
+        parsed=...),
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      parsed=...,
+      arguments_by_name=...),
+    TranspilableVerification(
+      name='number_is_positive',
+      visibility='PUBLIC',
+      arguments=[
+        Argument(
+          name='number',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='INT',
+            parsed=...),
+          default=None,
+          mutable=False,
+          parsed=...)],
+      returns=PrimitiveTypeAnnotation(
+        a_type='BOOL',
+        parsed=...),
+      description=DescriptionOfSignature(
+        summary='<paragraph>Check the non-optional integer argument.</paragraph>',
+        remarks=[],
+        arguments_by_name=[],
+        returns=None,
+        parsed=...),
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      parsed=...,
+      arguments_by_name=...),
+    TranspilableVerification(
+      name='item_is_named',
+      visibility='PUBLIC',
+      arguments=[
+        Argument(
+          name='item',
+          type_annotation=OurTypeAnnotation(
+            our_type='Reference to our type Item',
+            parsed=...),
+          default=None,
+          mutable=False,
+          parsed=...)],
+      returns=PrimitiveTypeAnnotation(
+        a_type='BOOL',
+        parsed=...),
+      description=DescriptionOfSignature(
+        summary='<paragraph>Check the non-optional instance argument.</paragraph>',
+        remarks=[],
+        arguments_by_name=[],
+        returns=None,
+        parsed=...),
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      parsed=...,
+      arguments_by_name=...),
+    TranspilableVerification(
+      name='node_has_named_item_in_tree',
+      visibility='PUBLIC',
+      arguments=[
+        Argument(
+          name='node',
+          type_annotation=OurTypeAnnotation(
+            our_type='Reference to our type Node',
+            parsed=...),
+          default=None,
+          mutable=False,
+          parsed=...)],
+      returns=PrimitiveTypeAnnotation(
+        a_type='BOOL',
+        parsed=...),
+      description=DescriptionOfSignature(
+        summary='<paragraph>Check the optional properties narrowed after the type test.</paragraph>',
         remarks=[],
         arguments_by_name=[],
         returns=None,

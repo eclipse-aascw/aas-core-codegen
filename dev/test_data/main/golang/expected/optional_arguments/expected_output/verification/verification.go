@@ -116,6 +116,48 @@ func NoteIsShort(
 		ourcommon.LenStr(*note) <= 5
 }
 
+// Check the non-optional enumeration argument.
+func KindIsKnown(
+	kind ourtypes.Kind,
+) bool {
+	return kind == ourtypes.KindAlpha ||
+		kind == ourtypes.KindBeta
+}
+
+// Check the non-optional integer argument.
+func NumberIsPositive(
+	number int64,
+) bool {
+	return number > 0
+}
+
+// Check the non-optional instance argument.
+func ItemIsNamed(
+	item ourtypes.IItem,
+) bool {
+	return ourcommon.LenStr(item.Name()) > 0
+}
+
+// Check the optional properties narrowed after the type test.
+func NodeHasNamedItemInTree(
+	node ourtypes.INode,
+) bool {
+	if ourtypes.IsBranch(node) {
+		return (node.(ourtypes.IBranch).OptionalChildren() != nil) &&
+			ourcommon.Some(
+				func(child ourtypes.INode) bool {
+					return NodeHasNamedItemInTree(child)
+				},
+				node.(ourtypes.IBranch).OptionalChildren(),
+			)
+	}
+	if ourtypes.IsLeaf(node) {
+		return (node.(ourtypes.ILeaf).OptionalItem() != nil) &&
+			ourcommon.LenStr(node.(ourtypes.ILeaf).OptionalItem().Name()) > 0
+	}
+	return false
+}
+
 // Verify that `that` integer lies in the safe integer range of JSON, as
 // checked by [ourcommon.IsSafeInteger] in the serialization as well.
 func verifyInt64(
@@ -145,6 +187,70 @@ func VerifyItem(
 	abort = false
 
 	// No verification has been defined for IItem.
+
+	return
+}
+
+// Verify `that` instance of [ourtypes.IBranch].
+//
+// You have to supply the callback `onError` to iterate over the errors.
+// If `onError` returns abort `true`, this function will abort
+// further verification as well, and return abort `true`. Otherwise,
+// abort `false` is returned.
+func VerifyBranch(
+	that ourtypes.IBranch,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	abort = false
+
+	if that.OptionalChildren() != nil {
+		abort = verifyListOf_INode(
+			that.OptionalChildren(),
+			func(err *VerificationError) bool {
+				err.Path.PrependName(
+					&ourreporting.NameSegment{
+						Name: "OptionalChildren",
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
+// Verify `that` instance of [ourtypes.ILeaf].
+//
+// You have to supply the callback `onError` to iterate over the errors.
+// If `onError` returns abort `true`, this function will abort
+// further verification as well, and return abort `true`. Otherwise,
+// abort `false` is returned.
+func VerifyLeaf(
+	that ourtypes.ILeaf,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	abort = false
+
+	if that.OptionalItem() != nil {
+		abort = Verify(
+			that.OptionalItem(),
+			func(err *VerificationError) bool {
+				err.Path.PrependName(
+					&ourreporting.NameSegment{
+						Name: "OptionalItem",
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
+	}
 
 	return
 }
@@ -231,6 +337,42 @@ func VerifySomething(
 		}
 	}
 
+	if !(
+		(that.OptionalItem() == nil) ||
+		ItemIsNamed(that.OptionalItem())) {
+		abort = onError(
+			newVerificationError(
+				"Narrowed item must be named",),
+		)
+		if abort {
+			return
+		}
+	}
+
+	if !(
+		(that.OptionalNumber() == nil) ||
+		NumberIsPositive(*that.OptionalNumber())) {
+		abort = onError(
+			newVerificationError(
+				"Narrowed number must be positive",),
+		)
+		if abort {
+			return
+		}
+	}
+
+	if !(
+		(that.OptionalKind() == nil) ||
+		KindIsKnown(*that.OptionalKind())) {
+		abort = onError(
+			newVerificationError(
+				"Narrowed kind must be known",),
+		)
+		if abort {
+			return
+		}
+	}
+
 	if that.Item() == nil {
 		abort = onError(
 			newVerificationError(
@@ -311,6 +453,31 @@ func VerifySomething(
 	return
 }
 
+// Verify the items of `that` recursively.
+func verifyListOf_INode(
+	that []ourtypes.INode,
+	onError func(*VerificationError) bool,
+) (abort bool) {
+	for i, item := range that {
+		abort = Verify(
+			item,
+			func(err *VerificationError) bool {
+				err.Path.PrependIndex(
+					&ourreporting.IndexSegment{
+						Index: i,
+					},
+				)
+				return onError(err)
+			},
+		)
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
 // Verify that `that` is a literal in the valid range
 // of Kind.
 //
@@ -355,6 +522,16 @@ func Verify(
 	case ourtypes.ModelTypeItem:
 		abort = VerifyItem(
 			that.(ourtypes.IItem),
+			onError,
+		)
+	case ourtypes.ModelTypeBranch:
+		abort = VerifyBranch(
+			that.(ourtypes.IBranch),
+			onError,
+		)
+	case ourtypes.ModelTypeLeaf:
+		abort = VerifyLeaf(
+			that.(ourtypes.ILeaf),
 			onError,
 		)
 	case ourtypes.ModelTypeSomething:

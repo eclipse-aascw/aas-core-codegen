@@ -10,6 +10,10 @@ import * as TestCommonJsonization from "./commonJsonization";
 
 const THE_ITEM = TestCommonJsonization.loadMinimalItem();
 
+const THE_BRANCH = TestCommonJsonization.loadMinimalBranch();
+
+const THE_LEAF = TestCommonJsonization.loadMinimalLeaf();
+
 const THE_SOMETHING = TestCommonJsonization.loadMinimalSomething();
 
 test("type matches for Item", () => {
@@ -23,6 +27,80 @@ test("type matches for Item", () => {
   expect(
     OurTypes.typesMatch(
       THE_ITEM,
+      THE_BRANCH
+    )
+  ).toStrictEqual(false);
+
+  expect(
+    OurTypes.typesMatch(
+      THE_ITEM,
+      THE_LEAF
+    )
+  ).toStrictEqual(false);
+
+  expect(
+    OurTypes.typesMatch(
+      THE_ITEM,
+      THE_SOMETHING
+    )
+  ).toStrictEqual(false);
+});
+
+test("type matches for Branch", () => {
+  expect(
+    OurTypes.typesMatch(
+      THE_BRANCH,
+      THE_ITEM
+    )
+  ).toStrictEqual(false);
+
+  expect(
+    OurTypes.typesMatch(
+      THE_BRANCH,
+      THE_BRANCH
+    )
+  ).toStrictEqual(true);
+
+  expect(
+    OurTypes.typesMatch(
+      THE_BRANCH,
+      THE_LEAF
+    )
+  ).toStrictEqual(false);
+
+  expect(
+    OurTypes.typesMatch(
+      THE_BRANCH,
+      THE_SOMETHING
+    )
+  ).toStrictEqual(false);
+});
+
+test("type matches for Leaf", () => {
+  expect(
+    OurTypes.typesMatch(
+      THE_LEAF,
+      THE_ITEM
+    )
+  ).toStrictEqual(false);
+
+  expect(
+    OurTypes.typesMatch(
+      THE_LEAF,
+      THE_BRANCH
+    )
+  ).toStrictEqual(false);
+
+  expect(
+    OurTypes.typesMatch(
+      THE_LEAF,
+      THE_LEAF
+    )
+  ).toStrictEqual(true);
+
+  expect(
+    OurTypes.typesMatch(
+      THE_LEAF,
       THE_SOMETHING
     )
   ).toStrictEqual(false);
@@ -33,6 +111,20 @@ test("type matches for Something", () => {
     OurTypes.typesMatch(
       THE_SOMETHING,
       THE_ITEM
+    )
+  ).toStrictEqual(false);
+
+  expect(
+    OurTypes.typesMatch(
+      THE_SOMETHING,
+      THE_BRANCH
+    )
+  ).toStrictEqual(false);
+
+  expect(
+    OurTypes.typesMatch(
+      THE_SOMETHING,
+      THE_LEAF
     )
   ).toStrictEqual(false);
 

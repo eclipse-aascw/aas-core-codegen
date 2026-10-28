@@ -429,6 +429,146 @@ func readItemAsSequence(
 	return
 }
 
+// De-serialize an instance of [ourtypes.INode] based on the `local` name
+// of its start element.
+//
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readNodeDispatched(
+	decoder *xml.Decoder,
+	current xml.Token,
+	local string,
+) (instance ourtypes.INode,
+	next xml.Token,
+	err error,
+) {
+	switch local {
+	case "branch":
+		instance, next, err = readBranchAsSequence(decoder, current)
+	case "leaf":
+		instance, next, err = readLeafAsSequence(decoder, current)
+	default:
+		err = unexpectedDiscriminator(local, "INode")
+	}
+	return
+}
+
+// De-serialize the instance of [ourtypes.IBranch]
+// as a sequence of XML elements, each representing a property
+// of [ourtypes.IBranch].
+//
+// The reading stops as soon as we encounter a non-start element, and we return
+// that token as the `next` token.
+func readBranchAsSequence(
+	decoder *xml.Decoder,
+	current xml.Token,
+) (instance ourtypes.IBranch,
+	next xml.Token,
+	err error,
+) {
+	var theOptionalChildren []ourtypes.INode
+
+	foundOptionalChildren := false
+
+	for {
+		var local string
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IBranch")
+		if err != nil {
+			return
+		}
+		if !ok {
+			break
+		}
+
+		var valueErr error
+		switch local {
+		case "optionalChildren":
+			if foundOptionalChildren {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
+			theOptionalChildren, current, valueErr = readListOf(
+				decoder, current, readNodeDispatched,
+			)
+			foundOptionalChildren = true
+		default:
+			valueErr = xmlcommon.NewDeserializationError(
+				"Unexpected property",
+			)
+		}
+
+		current, err = concludeProperty(decoder, current, local, valueErr)
+		if err != nil {
+			return
+		}
+	}
+
+	next = current
+
+	instance = ourtypes.NewBranch()
+	instance.SetOptionalChildren(theOptionalChildren)
+	return
+}
+
+// De-serialize the instance of [ourtypes.ILeaf]
+// as a sequence of XML elements, each representing a property
+// of [ourtypes.ILeaf].
+//
+// The reading stops as soon as we encounter a non-start element, and we return
+// that token as the `next` token.
+func readLeafAsSequence(
+	decoder *xml.Decoder,
+	current xml.Token,
+) (instance ourtypes.ILeaf,
+	next xml.Token,
+	err error,
+) {
+	var theOptionalItem ourtypes.IItem
+
+	foundOptionalItem := false
+
+	for {
+		var local string
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ILeaf")
+		if err != nil {
+			return
+		}
+		if !ok {
+			break
+		}
+
+		var valueErr error
+		switch local {
+		case "optionalItem":
+			if foundOptionalItem {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
+			theOptionalItem, current, valueErr = readItemAsSequence(
+				decoder, current,
+			)
+			foundOptionalItem = true
+		default:
+			valueErr = xmlcommon.NewDeserializationError(
+				"Unexpected property",
+			)
+		}
+
+		current, err = concludeProperty(decoder, current, local, valueErr)
+		if err != nil {
+			return
+		}
+	}
+
+	next = current
+
+	instance = ourtypes.NewLeaf()
+	instance.SetOptionalItem(theOptionalItem)
+	return
+}
+
 // De-serialize the instance of [ourtypes.ISomething]
 // as a sequence of XML elements, each representing a property
 // of [ourtypes.ISomething].
@@ -569,6 +709,10 @@ func readClassDispatched(
 	switch local {
 	case "item":
 		instance, next, err = readItemAsSequence(decoder, current)
+	case "branch":
+		instance, next, err = readBranchAsSequence(decoder, current)
+	case "leaf":
+		instance, next, err = readLeafAsSequence(decoder, current)
 	case "something":
 		instance, next, err = readSomethingAsSequence(decoder, current)
 	default:
@@ -830,6 +974,18 @@ func writeAtV_string(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
+func writeListOf_INode(
+	encoder *xml.Encoder,
+	list []ourtypes.INode,
+) error {
+	return writeList(
+		encoder, list, writeInstance[ourtypes.INode],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
 func writeListOf_string(
 	encoder *xml.Encoder,
 	list []string,
@@ -891,6 +1047,56 @@ func writeItemAsSequence(
 		"Note()",
 		writeOptionalPointer(
 			encoder, "note", that.Note(), xmlcommon.WriteAsText_string,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	return
+}
+
+// Serialize the instance
+// of [ourtypes.IBranch]
+// as a sequence of properties, each represented as an XML element.
+//
+// The XML namespace is expected to be set in the one of the parent elements
+// enclosing the sequence.
+//
+// Do not flush.
+func writeBranchAsSequence(
+	encoder *xml.Encoder,
+	that ourtypes.IBranch,
+) (err error) {
+	err = finishProperty(
+		"OptionalChildren()",
+		writeOptionalSlice(
+			encoder, "optionalChildren", that.OptionalChildren(), writeListOf_INode,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	return
+}
+
+// Serialize the instance
+// of [ourtypes.ILeaf]
+// as a sequence of properties, each represented as an XML element.
+//
+// The XML namespace is expected to be set in the one of the parent elements
+// enclosing the sequence.
+//
+// Do not flush.
+func writeLeafAsSequence(
+	encoder *xml.Encoder,
+	that ourtypes.ILeaf,
+) (err error) {
+	err = finishProperty(
+		"OptionalItem()",
+		writeOptionalInstance(
+			encoder, "optionalItem", that.OptionalItem(), writeItemAsSequence,
 		),
 	)
 	if err != nil {
@@ -993,6 +1199,18 @@ func writeClass(
 	case ourtypes.ModelTypeItem:
 		err = writeClassElement(
 			encoder, "item", withNamespace, that.(ourtypes.IItem), writeItemAsSequence,
+		)
+	case ourtypes.ModelTypeBranch:
+		err = writeClassElement(
+			encoder,
+			"branch",
+			withNamespace,
+			that.(ourtypes.IBranch),
+			writeBranchAsSequence,
+		)
+	case ourtypes.ModelTypeLeaf:
+		err = writeClassElement(
+			encoder, "leaf", withNamespace, that.(ourtypes.ILeaf), writeLeafAsSequence,
 		)
 	case ourtypes.ModelTypeSomething:
 		err = writeClassElement(

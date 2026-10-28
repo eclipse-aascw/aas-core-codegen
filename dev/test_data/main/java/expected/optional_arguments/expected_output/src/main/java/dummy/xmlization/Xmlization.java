@@ -246,6 +246,12 @@ public class Xmlization {
         "");
     }
 
+    private static Reporting.Result<List<INode>> readListOf_INode(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readINodeFromElement);
+    }
+
     private static Reporting.Result<Long> readTextAs_long(
       XMLEventReader reader, boolean isEmpty) {
       final Reporting.Result<Long> result = readText(
@@ -383,6 +389,188 @@ public class Xmlization {
         reader,
         "item",
         _DeserializeImplementation::readItemFromSequence);
+    }
+
+    /**
+     * Deserialize an instance of INode from an XML element.
+     */
+    private static Reporting.Result<? extends INode> readINodeFromElement(
+      XMLEventReader reader) {
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "branch":
+          return readBranchFromElement(reader);
+        case "leaf":
+          return readLeafFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
+    }
+
+    /**
+     * Deserialize an instance of class Branch from a sequence of XML elements.
+     *
+     * <p>If {@code isEmptySequence} is set, we should try to deserialize
+     * the instance from an empty sequence. That is, the parent element
+     * was a self-closing element.
+     */
+    private static Reporting.Result<Branch> readBranchFromSequence(
+      XMLEventReader reader,
+      boolean isEmptySequence) {
+      List<INode> theOptionalChildren = null;
+
+      if (!isEmptySequence) {
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
+          if (tryElementName.isError()) {
+            return Reporting.Result.failure(tryElementName.getError());
+          }
+
+          final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = XmlCommon.isEmptyElement(reader);
+
+          Reporting.Error valueError = null;
+
+          switch (elementName) {
+            case "optionalChildren": {
+              if (theOptionalChildren != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
+              final Reporting.Result<List<INode>> value =
+                readListOf_INode(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theOptionalChildren = value.getResult();
+              }
+              break;
+            }
+            default:
+              return unexpectedProperty("Branch", elementName);
+          }
+
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
+
+          final Reporting.Result<XMLEvent> endResult = XmlCommon.consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            // NOTE (mristin):
+            // Whatever unexpected node precedes the end element still lies within
+            // the property.
+            endResult.getError().prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(endResult.getError());
+          }
+        }
+      }
+
+      return Reporting.Result.success(new Branch(
+        theOptionalChildren));
+    }
+
+    /**
+     * Deserialize an instance of class Branch from an XML element.
+     */
+    private static Reporting.Result<? extends Branch> readBranchFromElement(
+      XMLEventReader reader) {
+      return XmlCommon.readNamedElement(
+        reader,
+        "branch",
+        _DeserializeImplementation::readBranchFromSequence);
+    }
+
+    /**
+     * Deserialize an instance of class Leaf from a sequence of XML elements.
+     *
+     * <p>If {@code isEmptySequence} is set, we should try to deserialize
+     * the instance from an empty sequence. That is, the parent element
+     * was a self-closing element.
+     */
+    private static Reporting.Result<Leaf> readLeafFromSequence(
+      XMLEventReader reader,
+      boolean isEmptySequence) {
+      IItem theOptionalItem = null;
+
+      if (!isEmptySequence) {
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = XmlCommon.peekElementName(reader);
+          if (tryElementName.isError()) {
+            return Reporting.Result.failure(tryElementName.getError());
+          }
+
+          final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = XmlCommon.isEmptyElement(reader);
+
+          Reporting.Error valueError = null;
+
+          switch (elementName) {
+            case "optionalItem": {
+              if (theOptionalItem != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
+              final Reporting.Result<Item> value =
+                readItemFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theOptionalItem = value.getResult();
+              }
+              break;
+            }
+            default:
+              return unexpectedProperty("Leaf", elementName);
+          }
+
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
+
+          final Reporting.Result<XMLEvent> endResult = XmlCommon.consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            // NOTE (mristin):
+            // Whatever unexpected node precedes the end element still lies within
+            // the property.
+            endResult.getError().prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(endResult.getError());
+          }
+        }
+      }
+
+      return Reporting.Result.success(new Leaf(
+        theOptionalItem));
+    }
+
+    /**
+     * Deserialize an instance of class Leaf from an XML element.
+     */
+    private static Reporting.Result<? extends Leaf> readLeafFromElement(
+      XMLEventReader reader) {
+      return XmlCommon.readNamedElement(
+        reader,
+        "leaf",
+        _DeserializeImplementation::readLeafFromSequence);
     }
 
     /**
@@ -612,6 +800,105 @@ public class Xmlization {
     }
 
     /**
+     * Deserialize an instance of INode from {@code reader}.
+     *
+     * @param reader Initialized XML reader with reader.peek() set to the element
+     */
+    public static INode deserializeINode(
+      XMLEventReader reader) {
+
+      _DeserializeImplementation.skipStartDocument(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
+
+      // NOTE (mristin):
+      // The path starts at the root element as it is in the document, which
+      // might well be another element than the expected one.
+      final String rootElementName = (
+        XmlCommon.currentEvent(reader).isStartElement()
+          ? XmlCommon.currentEvent(reader).asStartElement().getName().getLocalPart()
+          : null);
+
+      Reporting.Result<? extends INode> result =
+        _DeserializeImplementation.readINodeFromElement(
+          reader);
+
+      return result.onError(error -> {
+        if (rootElementName != null) {
+          error.prependSegment(new Reporting.NameSegment(rootElementName));
+        }
+        throw new XmlCommon.DeserializeException(
+          Reporting.generateRelativeXPath(error.getPathSegments()),
+          error.getCause());
+      });
+    }
+
+    /**
+     * Deserialize an instance of Branch from {@code reader}.
+     *
+     * @param reader Initialized XML reader with reader.peek() set to the element
+     */
+    public static Branch deserializeBranch(
+      XMLEventReader reader) {
+
+      _DeserializeImplementation.skipStartDocument(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
+
+      // NOTE (mristin):
+      // The path starts at the root element as it is in the document, which
+      // might well be another element than the expected one.
+      final String rootElementName = (
+        XmlCommon.currentEvent(reader).isStartElement()
+          ? XmlCommon.currentEvent(reader).asStartElement().getName().getLocalPart()
+          : null);
+
+      Reporting.Result<? extends Branch> result =
+        _DeserializeImplementation.readBranchFromElement(
+          reader);
+
+      return result.onError(error -> {
+        if (rootElementName != null) {
+          error.prependSegment(new Reporting.NameSegment(rootElementName));
+        }
+        throw new XmlCommon.DeserializeException(
+          Reporting.generateRelativeXPath(error.getPathSegments()),
+          error.getCause());
+      });
+    }
+
+    /**
+     * Deserialize an instance of Leaf from {@code reader}.
+     *
+     * @param reader Initialized XML reader with reader.peek() set to the element
+     */
+    public static Leaf deserializeLeaf(
+      XMLEventReader reader) {
+
+      _DeserializeImplementation.skipStartDocument(reader);
+      XmlCommon.skipWhitespaceAndComments(reader);
+
+      // NOTE (mristin):
+      // The path starts at the root element as it is in the document, which
+      // might well be another element than the expected one.
+      final String rootElementName = (
+        XmlCommon.currentEvent(reader).isStartElement()
+          ? XmlCommon.currentEvent(reader).asStartElement().getName().getLocalPart()
+          : null);
+
+      Reporting.Result<? extends Leaf> result =
+        _DeserializeImplementation.readLeafFromElement(
+          reader);
+
+      return result.onError(error -> {
+        if (rootElementName != null) {
+          error.prependSegment(new Reporting.NameSegment(rootElementName));
+        }
+        throw new XmlCommon.DeserializeException(
+          Reporting.generateRelativeXPath(error.getPathSegments()),
+          error.getCause());
+      });
+    }
+
+    /**
      * Deserialize an instance of Something from {@code reader}.
      *
      * @param reader Initialized XML reader with reader.peek() set to the element
@@ -675,6 +962,13 @@ public class Xmlization {
       new _VisitorWithWriter(true);
 
     /**
+     * Write an element nested in another one, which never re-declares the XML
+     * namespace.
+     */
+    private static final _VisitorWithWriter NESTED =
+      new _VisitorWithWriter(false);
+
+    /**
      * Write {@code that} as the XML element of a property called
      * {@code name}.
      *
@@ -723,6 +1017,25 @@ public class Xmlization {
     }
 
     /**
+     * Write {@code that} as its own, self-describing XML element.
+     *
+     * <p>Which element that is, is decided by the run-time type of
+     * {@code that}, so this one writer serves every abstract class, every
+     * concrete class with descendants, and the item of a list or of a tuple of
+     * any class at all. The reading, which has to decide what to construct
+     * before it has read anything, needs a dispatcher per interface instead.
+     *
+     * <p>An element written from here is nested in another one by
+     * construction, so it goes through the visitor which does not re-declare
+     * the XML namespace.
+     */
+    private static void writeClass(
+      IClass that,
+      XMLStreamWriter writer) {
+      NESTED.visit(that, writer);
+    }
+
+    /**
      * Write {@code that} as XML content, provided that it is a safe integer.
      *
      * <p>This is the {@link ContentWriter} of every {@code long}-typed
@@ -755,6 +1068,22 @@ public class Xmlization {
       IEnum that,
       XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(that.literalText());
+    }
+
+    private static void writeListOf_IClass(
+      List<? extends IClass> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (IClass item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (XmlCommon.SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
     }
 
     private static void writeListOf_stringified(
@@ -811,6 +1140,52 @@ public class Xmlization {
         writer,
         withNamespace,
         _VisitorWithWriter::writeItemAsSequence);
+    }
+
+    private static void writeBranchAsSequence(
+      IBranch that,
+      XMLStreamWriter writer) {
+      writeOptionalProperty(
+        "optionalChildren",
+        "getOptionalChildren()",
+        that.getOptionalChildren(),
+        writer,
+        _VisitorWithWriter::writeListOf_IClass);
+    }
+
+    @Override
+    public void visitBranch(
+      IBranch that,
+      XMLStreamWriter writer) {
+      XmlCommon.writeElement(
+        "branch",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeBranchAsSequence);
+    }
+
+    private static void writeLeafAsSequence(
+      ILeaf that,
+      XMLStreamWriter writer) {
+      writeOptionalProperty(
+        "optionalItem",
+        "getOptionalItem()",
+        that.getOptionalItem(),
+        writer,
+        _VisitorWithWriter::writeItemAsSequence);
+    }
+
+    @Override
+    public void visitLeaf(
+      ILeaf that,
+      XMLStreamWriter writer) {
+      XmlCommon.writeElement(
+        "leaf",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeLeafAsSequence);
     }
 
     private static void writeSomethingAsSequence(

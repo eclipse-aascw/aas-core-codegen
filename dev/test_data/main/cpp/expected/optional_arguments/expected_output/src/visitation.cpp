@@ -33,6 +33,20 @@ void AbstractVisitor::Visit(
         >(that)
       );
       break;
+    case types::ModelType::kBranch:
+      VisitBranch(
+        std::dynamic_pointer_cast<
+          types::IBranch
+        >(that)
+      );
+      break;
+    case types::ModelType::kLeaf:
+      VisitLeaf(
+        std::dynamic_pointer_cast<
+          types::ILeaf
+        >(that)
+      );
+      break;
     case types::ModelType::kSomething:
       VisitSomething(
         std::dynamic_pointer_cast<
@@ -54,12 +68,72 @@ void AbstractVisitor::Visit(
 
 // endregion
 
+namespace {
+
+// region Pass-through over the containers
+
+/**
+ * Pass the \p visitor through the instances held by \p that.
+ */
+void PassThrough_listOf_Node(
+  IVisitor* visitor,
+  const std::vector<
+    std::shared_ptr<types::INode>
+  >& that
+) {
+  for (
+    const std::shared_ptr<types::INode>& item :
+    that
+  ) {
+    visitor->Visit(item);
+  }
+}
+
+// endregion Pass-through over the containers
+
+}  // namespace
+
 // region PassThroughVisitor
 
 void PassThroughVisitor::VisitItem(
   const std::shared_ptr<types::IItem>&
 ) {
   // No properties to be passed through.
+}
+
+void PassThroughVisitor::VisitBranch(
+  const std::shared_ptr<types::IBranch>& that
+) {
+  // region mutable_optional_children
+  const common::optional<
+    std::vector<
+      std::shared_ptr<types::INode>
+    >
+  >& maybe_optional_children(
+    that->mutable_optional_children()
+  );
+  if (maybe_optional_children.has_value()) {
+    PassThrough_listOf_Node(
+      this,
+      maybe_optional_children.value()
+    );
+  }
+  // endregion
+}
+
+void PassThroughVisitor::VisitLeaf(
+  const std::shared_ptr<types::ILeaf>& that
+) {
+  // region mutable_optional_item
+  const common::optional<
+    std::shared_ptr<types::IItem>
+  >& maybe_optional_item(
+    that->mutable_optional_item()
+  );
+  if (maybe_optional_item.has_value()) {
+    this->Visit(maybe_optional_item.value());
+  }
+  // endregion
 }
 
 void PassThroughVisitor::VisitSomething(

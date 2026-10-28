@@ -79,7 +79,7 @@ namespace dummy
             {
                 if (!(
                     !(that.OptionalValue != null)
-                    || Verification.IsAcceptable(that.OptionalValue)))
+                    || Verification.IsAcceptable(that.OptionalValue!)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -98,8 +98,8 @@ namespace dummy
                 if (!(
                     !(that.OptionalMapping != null)
                     || (
-                        !that.OptionalMapping.ContainsKey("type")
-                        || (that.OptionalMapping["type"] != null)
+                        !that.OptionalMapping!.ContainsKey("type")
+                        || (that.OptionalMapping!["type"] != null)
                     )))
                 {
                     yield return new Reporting.Error(
@@ -158,7 +158,7 @@ namespace dummy
 
                 if (!(
                     !(that.OptionalMapping != null)
-                    || that.OptionalMapping.ContainsKey("type")))
+                    || that.OptionalMapping!.ContainsKey("type")))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +

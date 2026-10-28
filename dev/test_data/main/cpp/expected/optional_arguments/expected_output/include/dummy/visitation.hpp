@@ -45,6 +45,12 @@ class IVisitor {
   virtual void VisitItem(
     const std::shared_ptr<types::IItem>& that
   ) = 0;
+  virtual void VisitBranch(
+    const std::shared_ptr<types::IBranch>& that
+  ) = 0;
+  virtual void VisitLeaf(
+    const std::shared_ptr<types::ILeaf>& that
+  ) = 0;
   virtual void VisitSomething(
     const std::shared_ptr<types::ISomething>& that
   ) = 0;
@@ -74,6 +80,12 @@ class PassThroughVisitor
  protected:
   void VisitItem(
     const std::shared_ptr<types::IItem>& that
+  ) override;
+  void VisitBranch(
+    const std::shared_ptr<types::IBranch>& that
+  ) override;
+  void VisitLeaf(
+    const std::shared_ptr<types::ILeaf>& that
   ) override;
   void VisitSomething(
     const std::shared_ptr<types::ISomething>& that

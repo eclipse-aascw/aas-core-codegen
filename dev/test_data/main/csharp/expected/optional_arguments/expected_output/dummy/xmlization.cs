@@ -467,6 +467,20 @@ namespace dummy
                     ItemFromSequence, "item"));
 
             /// <summary>
+            /// Read an instance of class Branch from its XML element.
+            /// </summary>
+            internal static readonly ElementReader<Our.Branch> BranchFromElement = (
+                AtElement<Our.Branch>(
+                    BranchFromSequence, "branch"));
+
+            /// <summary>
+            /// Read an instance of class Leaf from its XML element.
+            /// </summary>
+            internal static readonly ElementReader<Our.Leaf> LeafFromElement = (
+                AtElement<Our.Leaf>(
+                    LeafFromSequence, "leaf"));
+
+            /// <summary>
             /// Read an instance of class Something from its XML element.
             /// </summary>
             internal static readonly ElementReader<Our.Something> SomethingFromElement = (
@@ -475,6 +489,10 @@ namespace dummy
 
             private static readonly ContentReader<string> Read_string = (
                 AsText<string>(ReadContentAsString, ""));
+
+            private static readonly ContentReader<List<INode>> Read_ListOf_INode = (
+                AsList<INode>(
+                    INodeFromElement));
 
             private static readonly ContentReader<IItem> Read_IItem = (
                 ItemFromSequence);
@@ -599,6 +617,210 @@ namespace dummy
                             "Unexpected null, had to be handled before"),
                     theNote);
             }  // internal static Our.Item? ItemFromSequence
+
+            /// <summary>
+            /// Deserialize an instance of INode from an XML element.
+            /// </summary>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            internal static Our.INode INodeFromElement(
+                Xml.XmlReader reader,
+                out Reporting.Error? error)
+            {
+                string elementName = XmlCommon.PeekElementName(
+                    reader, out error);
+                if (error != null)
+                {
+                    return default!;
+                }
+
+                switch (elementName)
+                {
+                    case "branch":
+                        return BranchFromElement(
+                            reader, out error);
+                    case "leaf":
+                        return LeafFromElement(
+                            reader, out error);
+                    default:
+                        error = new Reporting.Error(
+                            $"Unexpected element with the name {elementName}");
+                        return default!;
+                }
+            }  // internal static Our.INode? INodeFromElement
+
+            /// <summary>
+            /// Deserialize an instance of class Branch from a sequence of XML elements.
+            /// </summary>
+            /// <remarks>
+            /// If <paramref name="isEmptySequence" /> is set, we should try to deserialize
+            /// the instance from an empty sequence. That is, the parent element
+            /// was a self-closing element.
+            /// </remarks>
+            internal static Our.Branch BranchFromSequence(
+                Xml.XmlReader reader,
+                bool isEmptySequence,
+                out Reporting.Error? error)
+            {
+                error = null;
+
+                List<INode>? theOptionalChildren = null;
+
+                if (!isEmptySequence)
+                {
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
+                    if (reader.EOF)
+                    {
+                        error = new Reporting.Error(
+                            "Expected an XML element representing " +
+                            "a property of an instance of class Branch, " +
+                            "but reached the end-of-file");
+                        return default!;
+                    }
+                    while (TryNextProperty(
+                            reader,
+                            out string elementName,
+                            out bool isEmptyProperty,
+                            out error))
+                    {
+                        switch (elementName)
+                        {
+                            case "optionalChildren":
+                                if (theOptionalChildren != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
+                                theOptionalChildren = Read_ListOf_INode(
+                                    reader, isEmptyProperty, out error);
+                                break;
+                            default:
+                                error = new Reporting.Error(
+                                    "We expected properties of the class Branch, " +
+                                    "but got an unexpected element " +
+                                    $"with the name {elementName}");
+                                return default!;
+                        }
+
+                        if (error == null)
+                        {
+                            XmlCommon.ConsumeEndElement(
+                                reader, elementName, isEmptyProperty, out error);
+                        }
+
+                        // NOTE (mristin):
+                        // Every property is read in this very loop, so we mark the error with
+                        // the property's own element name here, once, instead of at every
+                        // single case above. For a matched case, elementName *is* that name.
+                        // This covers the end element of the property as well, since whatever
+                        // unexpected node precedes it still lies within the property.
+                        if (error != null)
+                        {
+                            error.PrependSegment(
+                                new Reporting.NameSegment(
+                                    elementName));
+                            return default!;
+                        }
+                    }
+
+                    // NOTE (mristin):
+                    // The loop also ends when the next property could not be read at all,
+                    // which is the only way out of it that is a failure.
+                    if (error != null)
+                    {
+                        return default!;
+                    }
+                }
+
+                return new Our.Branch(
+                    theOptionalChildren);
+            }  // internal static Our.Branch? BranchFromSequence
+
+            /// <summary>
+            /// Deserialize an instance of class Leaf from a sequence of XML elements.
+            /// </summary>
+            /// <remarks>
+            /// If <paramref name="isEmptySequence" /> is set, we should try to deserialize
+            /// the instance from an empty sequence. That is, the parent element
+            /// was a self-closing element.
+            /// </remarks>
+            internal static Our.Leaf LeafFromSequence(
+                Xml.XmlReader reader,
+                bool isEmptySequence,
+                out Reporting.Error? error)
+            {
+                error = null;
+
+                IItem? theOptionalItem = null;
+
+                if (!isEmptySequence)
+                {
+                    XmlCommon.SkipNoneWhitespaceAndComments(reader);
+                    if (reader.EOF)
+                    {
+                        error = new Reporting.Error(
+                            "Expected an XML element representing " +
+                            "a property of an instance of class Leaf, " +
+                            "but reached the end-of-file");
+                        return default!;
+                    }
+                    while (TryNextProperty(
+                            reader,
+                            out string elementName,
+                            out bool isEmptyProperty,
+                            out error))
+                    {
+                        switch (elementName)
+                        {
+                            case "optionalItem":
+                                if (theOptionalItem != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
+                                theOptionalItem = Read_IItem(
+                                    reader, isEmptyProperty, out error);
+                                break;
+                            default:
+                                error = new Reporting.Error(
+                                    "We expected properties of the class Leaf, " +
+                                    "but got an unexpected element " +
+                                    $"with the name {elementName}");
+                                return default!;
+                        }
+
+                        if (error == null)
+                        {
+                            XmlCommon.ConsumeEndElement(
+                                reader, elementName, isEmptyProperty, out error);
+                        }
+
+                        // NOTE (mristin):
+                        // Every property is read in this very loop, so we mark the error with
+                        // the property's own element name here, once, instead of at every
+                        // single case above. For a matched case, elementName *is* that name.
+                        // This covers the end element of the property as well, since whatever
+                        // unexpected node precedes it still lies within the property.
+                        if (error != null)
+                        {
+                            error.PrependSegment(
+                                new Reporting.NameSegment(
+                                    elementName));
+                            return default!;
+                        }
+                    }
+
+                    // NOTE (mristin):
+                    // The loop also ends when the next property could not be read at all,
+                    // which is the only way out of it that is a failure.
+                    if (error != null)
+                    {
+                        return default!;
+                    }
+                }
+
+                return new Our.Leaf(
+                    theOptionalItem);
+            }  // internal static Our.Leaf? LeafFromSequence
 
             /// <summary>
             /// Deserialize an instance of class Something from a sequence of XML elements.
@@ -818,6 +1040,150 @@ namespace dummy
                 }
 
                 Our.Item result = DeserializeImplementation.ItemFromElement(
+                    reader,
+                    out Reporting.Error? error);
+                if (error != null)
+                {
+                    if (rootElementName != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(rootElementName));
+                    }
+                    throw new Xmlization.Exception(
+                        Reporting.GenerateRelativeXPath(error.PathSegments),
+                        error.Cause);
+                }
+                return result;
+            }
+
+            /// <summary>
+            /// Deserialize an instance of INode from <paramref name="reader" />.
+            /// </summary>
+            /// <param name="reader">Initialized XML reader with cursor set to the element</param>
+            /// <exception cref="Xmlization.Exception">
+            /// Thrown when the element is not a valid XML
+            /// representation of INode.
+            /// </exception>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]public static Our.INode INodeFrom(
+                Xml.XmlReader reader)
+            {
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
+
+                if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
+                {
+                    throw new Xmlization.Exception(
+                        "",
+                        "Unexpected XML declaration when reading an instance " +
+                        "of class INode, as we expect the reader " +
+                        "to be set at content with MoveToContent");
+                }
+
+                // NOTE (mristin):
+                // The path starts at the root element. The readers do not prepend their own
+                // names, so we prepend the name of the root element here, if there is any.
+                string? rootElementName = null;
+                if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.Element)
+                {
+                    rootElementName = reader.LocalName;
+                }
+
+                Our.INode result = DeserializeImplementation.INodeFromElement(
+                    reader,
+                    out Reporting.Error? error);
+                if (error != null)
+                {
+                    if (rootElementName != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(rootElementName));
+                    }
+                    throw new Xmlization.Exception(
+                        Reporting.GenerateRelativeXPath(error.PathSegments),
+                        error.Cause);
+                }
+                return result;
+            }
+
+            /// <summary>
+            /// Deserialize an instance of Branch from <paramref name="reader" />.
+            /// </summary>
+            /// <param name="reader">Initialized XML reader with cursor set to the element</param>
+            /// <exception cref="Xmlization.Exception">
+            /// Thrown when the element is not a valid XML
+            /// representation of Branch.
+            /// </exception>
+            public static Our.Branch BranchFrom(
+                Xml.XmlReader reader)
+            {
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
+
+                if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
+                {
+                    throw new Xmlization.Exception(
+                        "",
+                        "Unexpected XML declaration when reading an instance " +
+                        "of class Branch, as we expect the reader " +
+                        "to be set at content with MoveToContent");
+                }
+
+                // NOTE (mristin):
+                // The path starts at the root element. The readers do not prepend their own
+                // names, so we prepend the name of the root element here, if there is any.
+                string? rootElementName = null;
+                if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.Element)
+                {
+                    rootElementName = reader.LocalName;
+                }
+
+                Our.Branch result = DeserializeImplementation.BranchFromElement(
+                    reader,
+                    out Reporting.Error? error);
+                if (error != null)
+                {
+                    if (rootElementName != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(rootElementName));
+                    }
+                    throw new Xmlization.Exception(
+                        Reporting.GenerateRelativeXPath(error.PathSegments),
+                        error.Cause);
+                }
+                return result;
+            }
+
+            /// <summary>
+            /// Deserialize an instance of Leaf from <paramref name="reader" />.
+            /// </summary>
+            /// <param name="reader">Initialized XML reader with cursor set to the element</param>
+            /// <exception cref="Xmlization.Exception">
+            /// Thrown when the element is not a valid XML
+            /// representation of Leaf.
+            /// </exception>
+            public static Our.Leaf LeafFrom(
+                Xml.XmlReader reader)
+            {
+                XmlCommon.SkipNoneWhitespaceAndComments(reader);
+
+                if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.XmlDeclaration)
+                {
+                    throw new Xmlization.Exception(
+                        "",
+                        "Unexpected XML declaration when reading an instance " +
+                        "of class Leaf, as we expect the reader " +
+                        "to be set at content with MoveToContent");
+                }
+
+                // NOTE (mristin):
+                // The path starts at the root element. The readers do not prepend their own
+                // names, so we prepend the name of the root element here, if there is any.
+                string? rootElementName = null;
+                if (!reader.EOF && reader.NodeType == Xml.XmlNodeType.Element)
+                {
+                    rootElementName = reader.LocalName;
+                }
+
+                Our.Leaf result = DeserializeImplementation.LeafFromElement(
                     reader,
                     out Reporting.Error? error);
                 if (error != null)
@@ -1094,6 +1460,10 @@ namespace dummy
             private static readonly ContentWriter<string> Write_string = (
                 (that, writer) => writer.WriteValue(that));
 
+            private static readonly ContentWriter<List<INode>> Write_ListOf_INode = (
+                WriteList<INode>(
+                    WriteIClass));
+
             private static readonly ContentWriter<IItem> Write_IItem = (
                 ItemToSequence);
 
@@ -1140,6 +1510,58 @@ namespace dummy
                     "item",
                     NS);
                 ItemToSequence(
+                    that,
+                    writer);
+                writer.WriteEndElement();
+            }
+
+            private static void BranchToSequence(
+                Our.IBranch that,
+                Xml.XmlWriter writer)
+            {
+                if (that.OptionalChildren != null)
+                {
+                    WriteProperty(
+                        "optionalChildren",
+                        "OptionalChildren",
+                        that.OptionalChildren,
+                        writer,
+                        Write_ListOf_INode);
+                }
+            }  // private static void BranchToSequence
+
+            public override void VisitBranch(
+                Our.IBranch that,
+                Xml.XmlWriter writer)
+            {
+                writer.WriteStartElement(
+                    "branch",
+                    NS);
+                BranchToSequence(
+                    that,
+                    writer);
+                writer.WriteEndElement();
+            }
+
+            private static void LeafToSequence(
+                Our.ILeaf that,
+                Xml.XmlWriter writer)
+            {
+                if (that.OptionalItem != null)
+                {
+                    WriteProperty(
+                        "optionalItem", "OptionalItem", that.OptionalItem, writer, Write_IItem);
+                }
+            }  // private static void LeafToSequence
+
+            public override void VisitLeaf(
+                Our.ILeaf that,
+                Xml.XmlWriter writer)
+            {
+                writer.WriteStartElement(
+                    "leaf",
+                    NS);
+                LeafToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();

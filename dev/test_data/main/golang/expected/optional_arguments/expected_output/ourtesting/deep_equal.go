@@ -40,6 +40,58 @@ func deepEqualItem(
 // Perform a comparison for deep equality between `that` and `other` instance.
 //
 // The deep equality means that all the properties are checked for equality recursively.
+func deepEqualBranch(
+	that ourtypes.IBranch,
+	other ourtypes.IBranch,
+) bool {
+	thatOptionalChildren := that.OptionalChildren()
+	otherOptionalChildren := other.OptionalChildren()
+	if
+		(thatOptionalChildren == nil && otherOptionalChildren != nil) ||
+		(thatOptionalChildren != nil && otherOptionalChildren == nil) {
+		return false
+	}
+	if thatOptionalChildren != nil {
+		if !deepEqualListOf_INode(
+			thatOptionalChildren,
+			otherOptionalChildren,
+		) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Perform a comparison for deep equality between `that` and `other` instance.
+//
+// The deep equality means that all the properties are checked for equality recursively.
+func deepEqualLeaf(
+	that ourtypes.ILeaf,
+	other ourtypes.ILeaf,
+) bool {
+	thatOptionalItem := that.OptionalItem()
+	otherOptionalItem := other.OptionalItem()
+	if
+		(thatOptionalItem == nil && otherOptionalItem != nil) ||
+		(thatOptionalItem != nil && otherOptionalItem == nil) {
+		return false
+	}
+	if thatOptionalItem != nil {
+		if !DeepEqual(
+			thatOptionalItem,
+			otherOptionalItem,
+		) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Perform a comparison for deep equality between `that` and `other` instance.
+//
+// The deep equality means that all the properties are checked for equality recursively.
 func deepEqualSomething(
 	that ourtypes.ISomething,
 	other ourtypes.ISomething,
@@ -129,6 +181,28 @@ func deepEqualSomething(
 
 // Perform a comparison for deep equality between `that` and `other` container,
 // recursing into its items.
+func deepEqualListOf_INode(
+	that []ourtypes.INode,
+	other []ourtypes.INode,
+) bool {
+	if len(that) != len(other) {
+		return false
+	}
+
+	for i := range that {
+		if !DeepEqual(
+			that[i],
+			other[i],
+		) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Perform a comparison for deep equality between `that` and `other` container,
+// recursing into its items.
 func deepEqualListOf_string(
 	that []string,
 	other []string,
@@ -159,6 +233,16 @@ func DeepEqual(
 		return deepEqualItem(
 			that.(ourtypes.IItem),
 			other.(ourtypes.IItem),
+		)
+	case ourtypes.ModelTypeBranch:
+		return deepEqualBranch(
+			that.(ourtypes.IBranch),
+			other.(ourtypes.IBranch),
+		)
+	case ourtypes.ModelTypeLeaf:
+		return deepEqualLeaf(
+			that.(ourtypes.ILeaf),
+			other.(ourtypes.ILeaf),
 		)
 	case ourtypes.ModelTypeSomething:
 		return deepEqualSomething(

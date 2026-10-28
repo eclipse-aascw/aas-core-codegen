@@ -217,7 +217,7 @@ namespace dummy
 
                 if (!(
                     !(that.MaybeNumber != null)
-                    || Verification.IsSafeInteger(that.MaybeNumber)))
+                    || Verification.IsSafeInteger(that.MaybeNumber!)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +

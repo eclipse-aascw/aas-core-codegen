@@ -11,6 +11,8 @@ import (
 
 var modelTypeFromStringMap = map[string]ourtypes.ModelType {
 	"Item": ourtypes.ModelTypeItem,
+	"Branch": ourtypes.ModelTypeBranch,
+	"Leaf": ourtypes.ModelTypeLeaf,
 	"Something": ourtypes.ModelTypeSomething,
 }
 
@@ -26,6 +28,8 @@ func ModelTypeFromString(
 
 var modelTypeToStringArray = [...]string {
 	"Item",
+	"Branch",
+	"Leaf",
 	"Something",
 }
 

@@ -117,8 +117,12 @@ _MODEL_TYPE_TO_FROM_JSONABLE: Mapping[
     str,
     Callable[[our_jsonization.Jsonable], our_types.Class]
 ] = {
+    'Branch':
+        our_jsonization.branch_from_jsonable,
     'Item':
         our_jsonization.item_from_jsonable,
+    'Leaf':
+        our_jsonization.leaf_from_jsonable,
     'Something':
         our_jsonization.something_from_jsonable
 }
@@ -128,8 +132,12 @@ _MODEL_TYPE_TO_CLASS: Mapping[
     str,
     Type[our_types.Class]
 ] = {
+    'Branch':
+        our_types.Branch,
     'Item':
         our_types.Item,
+    'Leaf':
+        our_types.Leaf,
     'Something':
         our_types.Something
 }

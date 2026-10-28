@@ -119,6 +119,56 @@ namespace dummy.Tests
         }  // public void Test_Descend_against_VisitorThrough_for_Item
 
         [Test]
+        public void Test_Descend_of_Branch()
+        {
+            Our.Branch instance = (
+                Our.Tests.CommonJsonization.LoadMaximalBranch());
+
+            CompareOrRerecordTrace(
+                instance,
+                Path.Combine(
+                    Our.Tests.Common.TestDataDir,
+                    "Descend",
+                    "Branch",
+                    "maximal.json.trace"));
+        }  // public void Test_Descend_of_Branch
+
+        [Test]
+        public void Test_Descend_against_VisitorThrough_for_Branch()
+        {
+            Our.Branch instance = (
+                Our.Tests.CommonJsonization.LoadMaximalBranch());
+
+            AssertDescendAndVisitorThroughSame(
+                instance);
+        }  // public void Test_Descend_against_VisitorThrough_for_Branch
+
+        [Test]
+        public void Test_Descend_of_Leaf()
+        {
+            Our.Leaf instance = (
+                Our.Tests.CommonJsonization.LoadMaximalLeaf());
+
+            CompareOrRerecordTrace(
+                instance,
+                Path.Combine(
+                    Our.Tests.Common.TestDataDir,
+                    "Descend",
+                    "Leaf",
+                    "maximal.json.trace"));
+        }  // public void Test_Descend_of_Leaf
+
+        [Test]
+        public void Test_Descend_against_VisitorThrough_for_Leaf()
+        {
+            Our.Leaf instance = (
+                Our.Tests.CommonJsonization.LoadMaximalLeaf());
+
+            AssertDescendAndVisitorThroughSame(
+                instance);
+        }  // public void Test_Descend_against_VisitorThrough_for_Leaf
+
+        [Test]
         public void Test_Descend_of_Something()
         {
             Our.Something instance = (

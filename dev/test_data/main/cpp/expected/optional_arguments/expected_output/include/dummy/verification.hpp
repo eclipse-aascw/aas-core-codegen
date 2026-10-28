@@ -275,6 +275,26 @@ bool NoteIsShort(
   const std::shared_ptr<types::IItem>& item
 );
 
+/// \brief Check the non-optional enumeration argument.
+bool KindIsKnown(
+  types::Kind kind
+);
+
+/// \brief Check the non-optional integer argument.
+bool NumberIsPositive(
+  int64_t number
+);
+
+/// \brief Check the non-optional instance argument.
+bool ItemIsNamed(
+  const std::shared_ptr<types::IItem>& item
+);
+
+/// \brief Check the optional properties narrowed after the type test.
+bool NodeHasNamedItemInTree(
+  const std::shared_ptr<types::INode>& node
+);
+
 // endregion Verification functions
 
 }  // namespace verification

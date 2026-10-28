@@ -11,6 +11,8 @@ package types
 type ModelType int
 const (
 	ModelTypeItem ModelType = iota
+	ModelTypeBranch
+	ModelTypeLeaf
 	ModelTypeSomething
 )
 
@@ -172,6 +174,240 @@ func NewItem(
 	return &Item{
 		name: name,
 		note: nil,
+	}
+}
+
+type INode interface {
+	IClass
+}
+
+// Check whether the instance corresponds to [ourtypes.INode]
+// based on its run-time model type.
+//
+// The implementation uses a switch statements which is
+// most probably compiled as an efficient jump table by the compiler.
+func IsNode(
+	that IClass,
+) (ok bool) {
+	switch that.ModelType() {
+	case ModelTypeBranch:
+		ok = true
+	case ModelTypeLeaf:
+		ok = true
+	}
+	return
+}
+
+type IBranch interface {
+	INode
+
+	OptionalChildren() []INode;
+
+	SetOptionalChildren(
+		value []INode,
+	);
+}
+
+// Check whether the instance corresponds to [ourtypes.IBranch]
+// based on its run-time model type.
+//
+// The implementation uses a switch statements which is
+// most probably compiled as an efficient jump table by the compiler.
+func IsBranch(
+	that IClass,
+) (ok bool) {
+	ok = that.ModelType() == ModelTypeBranch
+	return
+}
+
+// Implements IBranch.
+type Branch struct {
+	optionalChildren []INode
+}
+
+func (b *Branch) OptionalChildren(
+) []INode {
+	return b.optionalChildren
+}
+
+func (b *Branch) SetOptionalChildren(
+	value []INode,
+) {
+	b.optionalChildren = value
+}
+
+func (b *Branch) ModelType(
+) ModelType {
+	return ModelTypeBranch
+}
+
+// Apply the action on the instances referenced from b.
+//
+// If any of the actions returns abort `true`, the descent is immediately
+// stopped, and abort `true` is also returned. Otherwise, return abort `false`.
+//
+// We do not recurse into the referenced instances.
+//
+// The action is not applied on b.
+func (b *Branch) DescendOnce(
+	action func(IClass) bool,
+) (abort bool) {
+	return descend_Branch(b, action, false)
+}
+
+// Apply the action recursively on the instances referenced from b.
+//
+// If any of the actions returns abort `true`, the descent is immediately
+// stopped, and abort `true` is also returned. Otherwise, return abort `false`.
+//
+// The action is not applied on b.
+func (b *Branch) Descend(
+	action func(IClass) bool,
+) (abort bool) {
+	return descend_Branch(b, action, true)
+}
+
+// Apply the action on the instances referenced from that, and recursively
+// on their descendants if recurse is set.
+//
+// If any of the actions returns abort `true`, the descent is immediately
+// stopped, and abort `true` is also returned. Otherwise, return abort `false`.
+//
+// The action is not applied on that.
+func descend_Branch(
+	that *Branch,
+	action func(IClass) bool,
+	recurse bool,
+) (abort bool) {
+	if that.optionalChildren != nil {
+		abort = descend_ListOf_INode(
+			that.optionalChildren,
+			action,
+			recurse,
+		)
+		if abort {
+			return
+		}
+	}
+
+	return
+}
+
+// Create a new instance of Branch with
+// the given properties.
+func NewBranch() *Branch {
+	return &Branch{
+		optionalChildren: nil,
+	}
+}
+
+type ILeaf interface {
+	INode
+
+	OptionalItem() IItem;
+
+	SetOptionalItem(
+		value IItem,
+	);
+}
+
+// Check whether the instance corresponds to [ourtypes.ILeaf]
+// based on its run-time model type.
+//
+// The implementation uses a switch statements which is
+// most probably compiled as an efficient jump table by the compiler.
+func IsLeaf(
+	that IClass,
+) (ok bool) {
+	ok = that.ModelType() == ModelTypeLeaf
+	return
+}
+
+// Implements ILeaf.
+type Leaf struct {
+	optionalItem IItem
+}
+
+func (l *Leaf) OptionalItem(
+) IItem {
+	return l.optionalItem
+}
+
+func (l *Leaf) SetOptionalItem(
+	value IItem,
+) {
+	l.optionalItem = value
+}
+
+func (l *Leaf) ModelType(
+) ModelType {
+	return ModelTypeLeaf
+}
+
+// Apply the action on the instances referenced from l.
+//
+// If any of the actions returns abort `true`, the descent is immediately
+// stopped, and abort `true` is also returned. Otherwise, return abort `false`.
+//
+// We do not recurse into the referenced instances.
+//
+// The action is not applied on l.
+func (l *Leaf) DescendOnce(
+	action func(IClass) bool,
+) (abort bool) {
+	return descend_Leaf(l, action, false)
+}
+
+// Apply the action recursively on the instances referenced from l.
+//
+// If any of the actions returns abort `true`, the descent is immediately
+// stopped, and abort `true` is also returned. Otherwise, return abort `false`.
+//
+// The action is not applied on l.
+func (l *Leaf) Descend(
+	action func(IClass) bool,
+) (abort bool) {
+	return descend_Leaf(l, action, true)
+}
+
+// Apply the action on the instances referenced from that, and recursively
+// on their descendants if recurse is set.
+//
+// If any of the actions returns abort `true`, the descent is immediately
+// stopped, and abort `true` is also returned. Otherwise, return abort `false`.
+//
+// The action is not applied on that.
+func descend_Leaf(
+	that *Leaf,
+	action func(IClass) bool,
+	recurse bool,
+) (abort bool) {
+	if that.optionalItem != nil {
+		abort = action(
+			that.optionalItem,
+		)
+		if abort {
+			return
+		}
+
+		if recurse {
+			abort = that.optionalItem.Descend(
+				action,
+			)
+			if abort {
+				return
+			}
+		}
+	}
+
+	return
+}
+
+// Create a new instance of Leaf with
+// the given properties.
+func NewLeaf() *Leaf {
+	return &Leaf{
+		optionalItem: nil,
 	}
 }
 
@@ -396,6 +632,37 @@ func NewSomething(
 		optionalTexts: nil,
 		optionalKind: nil,
 	}
+}
+
+// Apply the action on the instances held by that, and recursively on their
+// descendants if recurse is set.
+//
+// If any of the actions returns abort `true`, the descent is immediately
+// stopped, and abort `true` is also returned. Otherwise, return abort `false`.
+func descend_ListOf_INode(
+	that []INode,
+	action func(IClass) bool,
+	recurse bool,
+) (abort bool) {
+	for _, item := range that {
+		abort = action(
+			item,
+		)
+		if abort {
+			return
+		}
+
+		if recurse {
+			abort = item.Descend(
+				action,
+			)
+			if abort {
+				return
+			}
+		}
+	}
+
+	return
 }
 
 // This code has been automatically generated by aas-core-codegen.

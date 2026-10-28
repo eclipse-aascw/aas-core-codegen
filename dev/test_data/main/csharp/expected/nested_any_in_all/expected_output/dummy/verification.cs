@@ -74,7 +74,7 @@ namespace dummy
                     || (
                         (((Our.IIecContent)specification.Content).Definition != null)
                         && (
-                            ((Our.IIecContent)specification.Content).Definition.Any(
+                            ((Our.IIecContent)specification.Content).Definition!.Any(
                                 langString => Verification.IsEnglish(langString.Language))
                         )
                     ));
@@ -166,7 +166,7 @@ namespace dummy
             {
                 if (!(
                     !(that.Specifications != null)
-                    || Verification.IecContentsHaveDefinitionInEnglish(that.Specifications)))
+                    || Verification.IecContentsHaveDefinitionInEnglish(that.Specifications!)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +

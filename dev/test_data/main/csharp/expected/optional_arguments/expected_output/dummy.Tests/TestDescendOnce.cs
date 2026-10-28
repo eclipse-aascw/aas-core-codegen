@@ -73,6 +73,36 @@ namespace dummy.Tests
         }  // public void Test_Item
 
         [Test]
+        public void Test_Branch()
+        {
+            Our.Branch instance = (
+                Our.Tests.CommonJsonization.LoadMaximalBranch());
+
+            CompareOrRerecordTrace(
+                instance,
+                Path.Combine(
+                    Our.Tests.Common.TestDataDir,
+                    "DescendOnce",
+                    "Branch",
+                    "maximal.json.trace"));
+        }  // public void Test_Branch
+
+        [Test]
+        public void Test_Leaf()
+        {
+            Our.Leaf instance = (
+                Our.Tests.CommonJsonization.LoadMaximalLeaf());
+
+            CompareOrRerecordTrace(
+                instance,
+                Path.Combine(
+                    Our.Tests.Common.TestDataDir,
+                    "DescendOnce",
+                    "Leaf",
+                    "maximal.json.trace"));
+        }  // public void Test_Leaf
+
+        [Test]
         public void Test_Something()
         {
             Our.Something instance = (

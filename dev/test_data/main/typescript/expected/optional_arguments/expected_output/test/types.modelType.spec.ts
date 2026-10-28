@@ -38,6 +38,64 @@ test("model type to string of Item", () => {
   );
 });
 
+test("model type of Branch", () => {
+  const instance = TestCommonJsonization.loadMinimalBranch();
+
+  expect(instance.modelType()).toStrictEqual(
+    OurTypes.ModelType.Branch
+  );
+});
+
+test("model type from string of Branch", () => {
+  const text = "Branch";
+  const literal = OurStringification.modelTypeFromString(
+    text
+  );
+
+  expect(literal).toStrictEqual(
+    OurTypes.ModelType.Branch
+  );
+});
+
+test("model type to string of Branch", () => {
+  const text = OurStringification.mustModelTypeToString(
+    OurTypes.ModelType.Branch
+  );
+
+  expect(text).toStrictEqual(
+    "Branch"
+  );
+});
+
+test("model type of Leaf", () => {
+  const instance = TestCommonJsonization.loadMinimalLeaf();
+
+  expect(instance.modelType()).toStrictEqual(
+    OurTypes.ModelType.Leaf
+  );
+});
+
+test("model type from string of Leaf", () => {
+  const text = "Leaf";
+  const literal = OurStringification.modelTypeFromString(
+    text
+  );
+
+  expect(literal).toStrictEqual(
+    OurTypes.ModelType.Leaf
+  );
+});
+
+test("model type to string of Leaf", () => {
+  const text = OurStringification.mustModelTypeToString(
+    OurTypes.ModelType.Leaf
+  );
+
+  expect(text).toStrictEqual(
+    "Leaf"
+  );
+});
+
 test("model type of Something", () => {
   const instance = TestCommonJsonization.loadMinimalSomething();
 

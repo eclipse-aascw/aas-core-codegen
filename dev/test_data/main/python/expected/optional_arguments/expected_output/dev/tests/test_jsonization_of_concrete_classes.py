@@ -41,6 +41,54 @@ class TestRoundTrips(unittest.TestCase):
             )
             self.assertListEqual([], list(map(str, mismatches)))
 
+    def test_branch(self) -> None:
+        for path in sorted(
+            (
+                tests.common.TEST_DATA_DIR
+                / "Json"
+                / "Expected"
+                / 'Branch'
+            ).glob("**/*.json")
+        ):
+            with path.open("rt") as fid:
+                original_jsonable = json.load(fid)
+
+            instance = our_jsonization.branch_from_jsonable(
+                original_jsonable
+            )
+
+            another_jsonable = our_jsonization.to_jsonable(instance)
+
+            mismatches = tests.common_jsonization.check_equal(
+                original_jsonable,
+                another_jsonable
+            )
+            self.assertListEqual([], list(map(str, mismatches)))
+
+    def test_leaf(self) -> None:
+        for path in sorted(
+            (
+                tests.common.TEST_DATA_DIR
+                / "Json"
+                / "Expected"
+                / 'Leaf'
+            ).glob("**/*.json")
+        ):
+            with path.open("rt") as fid:
+                original_jsonable = json.load(fid)
+
+            instance = our_jsonization.leaf_from_jsonable(
+                original_jsonable
+            )
+
+            another_jsonable = our_jsonization.to_jsonable(instance)
+
+            mismatches = tests.common_jsonization.check_equal(
+                original_jsonable,
+                another_jsonable
+            )
+            self.assertListEqual([], list(map(str, mismatches)))
+
     def test_something(self) -> None:
         for path in sorted(
             (

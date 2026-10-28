@@ -31,7 +31,9 @@ namespace types {
  */
 enum class ModelType : std::uint32_t {
   kItem = 0,
-  kSomething = 1
+  kBranch = 1,
+  kLeaf = 2,
+  kSomething = 3
 };
 
 enum class Kind : std::uint32_t {
@@ -47,6 +49,12 @@ enum class Kind : std::uint32_t {
 // endregion Forward declaration of interfaces
 
 class IItem;
+
+class INode;
+
+class IBranch;
+
+class ILeaf;
 
 class ISomething;
 
@@ -84,6 +92,58 @@ class IItem
   ) = 0;
 
   virtual ~IItem() = default;
+};
+
+class INode
+    : virtual public IClass {
+ public:
+  virtual ~INode() = default;
+};
+
+class IBranch
+    : virtual public INode {
+ public:
+  virtual const common::optional<
+    std::vector<
+      std::shared_ptr<INode>
+    >
+  >& optional_children() const = 0;
+
+  virtual common::optional<
+    std::vector<
+      std::shared_ptr<INode>
+    >
+  >& mutable_optional_children() = 0;
+
+  virtual void set_optional_children(
+    common::optional<
+      std::vector<
+        std::shared_ptr<INode>
+      >
+    > value
+  ) = 0;
+
+  virtual ~IBranch() = default;
+};
+
+class ILeaf
+    : virtual public INode {
+ public:
+  virtual const common::optional<
+    std::shared_ptr<IItem>
+  >& optional_item() const = 0;
+
+  virtual common::optional<
+    std::shared_ptr<IItem>
+  >& mutable_optional_item() = 0;
+
+  virtual void set_optional_item(
+    common::optional<
+      std::shared_ptr<IItem>
+    > value
+  ) = 0;
+
+  virtual ~ILeaf() = default;
 };
 
 class ISomething
@@ -196,6 +256,90 @@ class Item
   std::wstring name_;
 
   common::optional<std::wstring> note_;
+};
+
+class Branch
+    : public IBranch {
+ public:
+  Branch(
+    common::optional<
+      std::vector<
+        std::shared_ptr<INode>
+      >
+    > optional_children = common::nullopt
+  );
+
+  ModelType model_type() const override;
+
+  // region Get and set optional_children_
+
+  const common::optional<
+    std::vector<
+      std::shared_ptr<INode>
+    >
+  >& optional_children() const override;
+
+  common::optional<
+    std::vector<
+      std::shared_ptr<INode>
+    >
+  >& mutable_optional_children() override;
+
+  void set_optional_children(
+    common::optional<
+      std::vector<
+        std::shared_ptr<INode>
+      >
+    > value
+  ) override;
+
+  // endregion
+
+  ~Branch() override = default;
+
+ private:
+  common::optional<
+    std::vector<
+      std::shared_ptr<INode>
+    >
+  > optional_children_;
+};
+
+class Leaf
+    : public ILeaf {
+ public:
+  Leaf(
+    common::optional<
+      std::shared_ptr<IItem>
+    > optional_item = common::nullopt
+  );
+
+  ModelType model_type() const override;
+
+  // region Get and set optional_item_
+
+  const common::optional<
+    std::shared_ptr<IItem>
+  >& optional_item() const override;
+
+  common::optional<
+    std::shared_ptr<IItem>
+  >& mutable_optional_item() override;
+
+  void set_optional_item(
+    common::optional<
+      std::shared_ptr<IItem>
+    > value
+  ) override;
+
+  // endregion
+
+  ~Leaf() override = default;
+
+ private:
+  common::optional<
+    std::shared_ptr<IItem>
+  > optional_item_;
 };
 
 class Something
@@ -336,6 +480,51 @@ class Something
  * an instance of \ref IItem
  */
 bool IsItem(
+  const IClass& that
+);
+
+/**
+ * \brief Check whether \p that instance is of runtime type
+ * \ref INode.
+ *
+ * We use `IClass::model_type` to determine the runtime type, which is
+ * a bit faster than native C++'s RTTI.
+ *
+ * \param that instance to check for runtime type
+ * \return `true` if \p that instance is indeed
+ * an instance of \ref INode
+ */
+bool IsNode(
+  const IClass& that
+);
+
+/**
+ * \brief Check whether \p that instance is of runtime type
+ * \ref IBranch.
+ *
+ * We use `IClass::model_type` to determine the runtime type, which is
+ * a bit faster than native C++'s RTTI.
+ *
+ * \param that instance to check for runtime type
+ * \return `true` if \p that instance is indeed
+ * an instance of \ref IBranch
+ */
+bool IsBranch(
+  const IClass& that
+);
+
+/**
+ * \brief Check whether \p that instance is of runtime type
+ * \ref ILeaf.
+ *
+ * We use `IClass::model_type` to determine the runtime type, which is
+ * a bit faster than native C++'s RTTI.
+ *
+ * \param that instance to check for runtime type
+ * \return `true` if \p that instance is indeed
+ * an instance of \ref ILeaf
+ */
+bool IsLeaf(
   const IClass& that
 );
 

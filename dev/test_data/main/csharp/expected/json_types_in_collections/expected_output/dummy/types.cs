@@ -104,7 +104,7 @@ namespace dummy
         {
             if (this.OptionalObject != null)
             {
-                return this.OptionalObject;
+                return this.OptionalObject!;
             }
             return this.TupleWithJson.Item4;
         }

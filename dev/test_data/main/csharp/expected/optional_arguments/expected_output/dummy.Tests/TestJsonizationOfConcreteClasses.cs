@@ -254,6 +254,326 @@ namespace dummy.Tests
         }  // public void Test_Item_verification_fail
 
         [Test]
+        public void Test_Branch_ok()
+        {
+            var paths = Directory.GetFiles(
+                Path.Combine(
+                    Our.Tests.Common.TestDataDir,
+                    "Json",
+                    "Expected",
+                    "Branch"
+                ),
+                "*.json",
+                System.IO.SearchOption.AllDirectories).ToList();
+            paths.Sort();
+
+            foreach (var path in paths)
+            {
+                var node = Our.Tests.CommonJson.ReadFromFile(path);
+
+                var instance = Our.Jsonization.Deserialize.BranchFrom(
+                    node);
+
+                var errors = Our.Verification.Verify(instance).ToList();
+                Our.Tests.Common.AssertNoVerificationErrors(errors, path);
+
+                AssertSerializeDeserializeEqualsOriginal(
+                    node, instance, path);
+            }
+        }  // public void Test_Branch_ok
+
+        [Test]
+        public void Test_Branch_deserialization_from_non_object_fail()
+        {
+            var node = Nodes.JsonValue.Create("INVALID")
+                ?? throw new System.InvalidOperationException(
+                    "Unexpected failure of the node creation");
+
+            Our.Jsonization.Exception? exception = null;
+            try
+            {
+                var _ = Our.Jsonization.Deserialize.BranchFrom(
+                    node);
+            }
+            catch (Our.Jsonization.Exception observedException)
+            {
+                exception = observedException;
+            }
+
+            if (exception == null)
+            {
+                throw new AssertionException("Expected an exception, but got none");
+            }
+
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Branch, but got "))
+            {
+                throw new AssertionException(
+                    $"Unexpected exception message: {exception.Message}");
+            }
+        }  // public void Test_Branch_deserialization_from_non_object_fail
+
+        [Test]
+        public void Test_Branch_deserialization_fail()
+        {
+            foreach (
+                string causeDir in
+                Directory.GetDirectories(
+                    Path.Combine(
+                        Our.Tests.Common.TestDataDir,
+                        "Json",
+                        "Unexpected",
+                        "Unserializable"
+                    )
+                )
+            )
+            {
+                string clsDir = Path.Combine(
+                    causeDir,
+                    "Branch"
+                );
+
+                if (!Directory.Exists(clsDir))
+                {
+                    // No examples of Branch for the failure cause.
+                    continue;
+                }
+
+                var paths = Directory.GetFiles(
+                    clsDir,
+                    "*.json",
+                    System.IO.SearchOption.AllDirectories).ToList();
+                paths.Sort();
+
+                foreach (var path in paths)
+                {
+                    var node = Our.Tests.CommonJson.ReadFromFile(path);
+
+                    Our.Jsonization.Exception? exception = null;
+                    try
+                    {
+                        var _ = Our.Jsonization.Deserialize.BranchFrom(
+                            node);
+                    }
+                    catch (Our.Jsonization.Exception observedException)
+                    {
+                        exception = observedException;
+                    }
+
+                    AssertEqualsExpectedOrRerecordDeserializationException(
+                        exception, path);
+                }
+            }
+        }  // public void Test_Branch_deserialization_fail
+
+        [Test]
+        public void Test_Branch_verification_fail()
+        {
+            foreach (
+                string causeDir in
+                Directory.GetDirectories(
+                    Path.Combine(
+                        Our.Tests.Common.TestDataDir,
+                        "Json",
+                        "Unexpected",
+                        "Invalid"
+                    )
+                )
+            )
+            {
+                string clsDir = Path.Combine(
+                    causeDir,
+                    "Branch"
+                );
+
+                if (!Directory.Exists(clsDir))
+                {
+                    // No examples of Branch for the failure cause.
+                    continue;
+                }
+
+                var paths = Directory.GetFiles(
+                    clsDir,
+                    "*.json",
+                    System.IO.SearchOption.AllDirectories).ToList();
+                paths.Sort();
+
+                foreach (var path in paths)
+                {
+                    var node = Our.Tests.CommonJson.ReadFromFile(path);
+
+                    var instance = Our.Jsonization.Deserialize.BranchFrom(
+                        node);
+
+                    var errors = Our.Verification.Verify(instance).ToList();
+                    Our.Tests.Common.AssertEqualsExpectedOrRerecordVerificationErrors(
+                        errors, path);
+                }
+            }
+        }  // public void Test_Branch_verification_fail
+
+        [Test]
+        public void Test_Leaf_ok()
+        {
+            var paths = Directory.GetFiles(
+                Path.Combine(
+                    Our.Tests.Common.TestDataDir,
+                    "Json",
+                    "Expected",
+                    "Leaf"
+                ),
+                "*.json",
+                System.IO.SearchOption.AllDirectories).ToList();
+            paths.Sort();
+
+            foreach (var path in paths)
+            {
+                var node = Our.Tests.CommonJson.ReadFromFile(path);
+
+                var instance = Our.Jsonization.Deserialize.LeafFrom(
+                    node);
+
+                var errors = Our.Verification.Verify(instance).ToList();
+                Our.Tests.Common.AssertNoVerificationErrors(errors, path);
+
+                AssertSerializeDeserializeEqualsOriginal(
+                    node, instance, path);
+            }
+        }  // public void Test_Leaf_ok
+
+        [Test]
+        public void Test_Leaf_deserialization_from_non_object_fail()
+        {
+            var node = Nodes.JsonValue.Create("INVALID")
+                ?? throw new System.InvalidOperationException(
+                    "Unexpected failure of the node creation");
+
+            Our.Jsonization.Exception? exception = null;
+            try
+            {
+                var _ = Our.Jsonization.Deserialize.LeafFrom(
+                    node);
+            }
+            catch (Our.Jsonization.Exception observedException)
+            {
+                exception = observedException;
+            }
+
+            if (exception == null)
+            {
+                throw new AssertionException("Expected an exception, but got none");
+            }
+
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Leaf, but got "))
+            {
+                throw new AssertionException(
+                    $"Unexpected exception message: {exception.Message}");
+            }
+        }  // public void Test_Leaf_deserialization_from_non_object_fail
+
+        [Test]
+        public void Test_Leaf_deserialization_fail()
+        {
+            foreach (
+                string causeDir in
+                Directory.GetDirectories(
+                    Path.Combine(
+                        Our.Tests.Common.TestDataDir,
+                        "Json",
+                        "Unexpected",
+                        "Unserializable"
+                    )
+                )
+            )
+            {
+                string clsDir = Path.Combine(
+                    causeDir,
+                    "Leaf"
+                );
+
+                if (!Directory.Exists(clsDir))
+                {
+                    // No examples of Leaf for the failure cause.
+                    continue;
+                }
+
+                var paths = Directory.GetFiles(
+                    clsDir,
+                    "*.json",
+                    System.IO.SearchOption.AllDirectories).ToList();
+                paths.Sort();
+
+                foreach (var path in paths)
+                {
+                    var node = Our.Tests.CommonJson.ReadFromFile(path);
+
+                    Our.Jsonization.Exception? exception = null;
+                    try
+                    {
+                        var _ = Our.Jsonization.Deserialize.LeafFrom(
+                            node);
+                    }
+                    catch (Our.Jsonization.Exception observedException)
+                    {
+                        exception = observedException;
+                    }
+
+                    AssertEqualsExpectedOrRerecordDeserializationException(
+                        exception, path);
+                }
+            }
+        }  // public void Test_Leaf_deserialization_fail
+
+        [Test]
+        public void Test_Leaf_verification_fail()
+        {
+            foreach (
+                string causeDir in
+                Directory.GetDirectories(
+                    Path.Combine(
+                        Our.Tests.Common.TestDataDir,
+                        "Json",
+                        "Unexpected",
+                        "Invalid"
+                    )
+                )
+            )
+            {
+                string clsDir = Path.Combine(
+                    causeDir,
+                    "Leaf"
+                );
+
+                if (!Directory.Exists(clsDir))
+                {
+                    // No examples of Leaf for the failure cause.
+                    continue;
+                }
+
+                var paths = Directory.GetFiles(
+                    clsDir,
+                    "*.json",
+                    System.IO.SearchOption.AllDirectories).ToList();
+                paths.Sort();
+
+                foreach (var path in paths)
+                {
+                    var node = Our.Tests.CommonJson.ReadFromFile(path);
+
+                    var instance = Our.Jsonization.Deserialize.LeafFrom(
+                        node);
+
+                    var errors = Our.Verification.Verify(instance).ToList();
+                    Our.Tests.Common.AssertEqualsExpectedOrRerecordVerificationErrors(
+                        errors, path);
+                }
+            }
+        }  // public void Test_Leaf_verification_fail
+
+        [Test]
         public void Test_Something_ok()
         {
             var paths = Directory.GetFiles(

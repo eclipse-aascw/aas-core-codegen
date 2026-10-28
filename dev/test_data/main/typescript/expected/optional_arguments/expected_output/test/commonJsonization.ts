@@ -77,6 +77,134 @@ export function loadMinimalItem(
 }
 
 /**
+ * Load a maximal example of {@link types.Branch} from
+ * the test data directory.
+ */
+export function loadMaximalBranch(
+): OurTypes.Branch {
+  const aPath = path.join(
+    TestCommon.TEST_DATA_DIR,
+    "Json",
+    "Expected",
+    "Branch",
+    "maximal.json"
+  );
+
+  const jsonable = TestCommon.readJsonFromFileSync(aPath);
+
+  const instanceOrError = OurJsonization.branchFromJsonable(
+    jsonable
+  );
+  expect(instanceOrError.error).toBeNull();
+  const instance = instanceOrError.mustValue();
+
+  const casted = OurTypes.asBranch(instance);
+  if (casted === null) {
+    throw new Error(
+      `Expected instance of Branch in ${aPath}, ` +
+      `but got: ${typeof instance}`
+    );
+  }
+  return casted;
+}
+
+/**
+ * Load a minimal example of {@link types.Branch} from
+ * the test data directory.
+ */
+export function loadMinimalBranch(
+): OurTypes.Branch {
+  const aPath = path.join(
+    TestCommon.TEST_DATA_DIR,
+    "Json",
+    "Expected",
+    "Branch",
+    "minimal.json"
+  );
+
+  const jsonable = TestCommon.readJsonFromFileSync(aPath);
+
+  const instanceOrError = OurJsonization.branchFromJsonable(
+    jsonable
+  );
+  expect(instanceOrError.error).toBeNull();
+  const instance = instanceOrError.mustValue();
+
+  const casted = OurTypes.asBranch(instance);
+  if (casted === null) {
+    throw new Error(
+      `Expected instance of Branch in ${aPath}, ` +
+      `but got: ${typeof instance}`
+    );
+  }
+  return casted;
+}
+
+/**
+ * Load a maximal example of {@link types.Leaf} from
+ * the test data directory.
+ */
+export function loadMaximalLeaf(
+): OurTypes.Leaf {
+  const aPath = path.join(
+    TestCommon.TEST_DATA_DIR,
+    "Json",
+    "Expected",
+    "Leaf",
+    "maximal.json"
+  );
+
+  const jsonable = TestCommon.readJsonFromFileSync(aPath);
+
+  const instanceOrError = OurJsonization.leafFromJsonable(
+    jsonable
+  );
+  expect(instanceOrError.error).toBeNull();
+  const instance = instanceOrError.mustValue();
+
+  const casted = OurTypes.asLeaf(instance);
+  if (casted === null) {
+    throw new Error(
+      `Expected instance of Leaf in ${aPath}, ` +
+      `but got: ${typeof instance}`
+    );
+  }
+  return casted;
+}
+
+/**
+ * Load a minimal example of {@link types.Leaf} from
+ * the test data directory.
+ */
+export function loadMinimalLeaf(
+): OurTypes.Leaf {
+  const aPath = path.join(
+    TestCommon.TEST_DATA_DIR,
+    "Json",
+    "Expected",
+    "Leaf",
+    "minimal.json"
+  );
+
+  const jsonable = TestCommon.readJsonFromFileSync(aPath);
+
+  const instanceOrError = OurJsonization.leafFromJsonable(
+    jsonable
+  );
+  expect(instanceOrError.error).toBeNull();
+  const instance = instanceOrError.mustValue();
+
+  const casted = OurTypes.asLeaf(instance);
+  if (casted === null) {
+    throw new Error(
+      `Expected instance of Leaf in ${aPath}, ` +
+      `but got: ${typeof instance}`
+    );
+  }
+  return casted;
+}
+
+/**
  * Load a maximal example of {@link types.Something} from
  * the test data directory.
  */

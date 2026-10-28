@@ -130,6 +130,60 @@ namespace dummy
         }  // public static bool NoteIsShort
 
         /// <summary>
+        /// Check the non-optional enumeration argument.
+        /// </summary>
+        public static bool KindIsKnown(
+            Kind kind
+        )
+        {
+            return kind == Kind.Alpha
+            || kind == Kind.Beta;
+        }  // public static bool KindIsKnown
+
+        /// <summary>
+        /// Check the non-optional integer argument.
+        /// </summary>
+        public static bool NumberIsPositive(
+            long number
+        )
+        {
+            return number > 0;
+        }  // public static bool NumberIsPositive
+
+        /// <summary>
+        /// Check the non-optional instance argument.
+        /// </summary>
+        public static bool ItemIsNamed(
+            IItem item
+        )
+        {
+            return Common.StringHelpers.Len(item.Name) > 0;
+        }  // public static bool ItemIsNamed
+
+        /// <summary>
+        /// Check the optional properties narrowed after the type test.
+        /// </summary>
+        public static bool NodeHasNamedItemInTree(
+            INode node
+        )
+        {
+            if (node is Our.IBranch)
+            {
+                return (((Our.IBranch)node).OptionalChildren != null)
+                && (
+                    ((Our.IBranch)node).OptionalChildren!.Any(
+                        child => Verification.NodeHasNamedItemInTree(child))
+                );
+            }
+            if (node is Our.ILeaf)
+            {
+                return (((Our.ILeaf)node).OptionalItem != null)
+                && Common.StringHelpers.Len(((Our.ILeaf)node).OptionalItem!.Name) > 0;
+            }
+            return false;
+        }  // public static bool NodeHasNamedItemInTree
+
+        /// <summary>
         /// Hash allowed enum values for efficient validation of enums.
         /// </summary>
         internal static class EnumValueSet
@@ -157,6 +211,40 @@ namespace dummy
             {
                 // No verification has been defined for Item.
                 yield break;
+            }
+
+            [CodeAnalysis.SuppressMessage("ReSharper", "NegativeEqualityExpression")]
+            public override IEnumerable<Reporting.Error> TransformBranch(
+                Our.IBranch that
+            )
+            {
+                if (that.OptionalChildren != null)
+                {
+                    foreach (
+                        var error in Verification.Verify_ListOf_INode(
+                            that.OptionalChildren))
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment("optionalChildren"));
+                        yield return error;
+                    }
+                }
+            }
+
+            [CodeAnalysis.SuppressMessage("ReSharper", "NegativeEqualityExpression")]
+            public override IEnumerable<Reporting.Error> TransformLeaf(
+                Our.ILeaf that
+            )
+            {
+                if (that.OptionalItem != null)
+                {
+                    foreach (var error in Verification.Verify(that.OptionalItem))
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment("optionalItem"));
+                        yield return error;
+                    }
+                }
             }
 
             [CodeAnalysis.SuppressMessage("ReSharper", "NegativeEqualityExpression")]
@@ -211,6 +299,33 @@ namespace dummy
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
                         "Text must be short");
+                }
+
+                if (!(
+                    (that.OptionalItem == null)
+                    || Verification.ItemIsNamed(that.OptionalItem!)))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "Narrowed item must be named");
+                }
+
+                if (!(
+                    (that.OptionalNumber == null)
+                    || Verification.NumberIsPositive(that.OptionalNumber!.Value)))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "Narrowed number must be positive");
+                }
+
+                if (!(
+                    (that.OptionalKind == null)
+                    || Verification.KindIsKnown(that.OptionalKind!.Value)))
+                {
+                    yield return new Reporting.Error(
+                        "Invariant violated:\n" +
+                        "Narrowed kind must be known");
                 }
 
                 foreach (var error in Verification.Verify(that.Item))
@@ -311,6 +426,25 @@ namespace dummy
             {
                 yield return new Reporting.Error(
                     UnsafeIntegerMessage(that));
+            }
+        }
+
+        /// <summary>
+        /// Verify the items of <paramref name="that" /> recursively.
+        /// </summary>
+        private static IEnumerable<Reporting.Error> Verify_ListOf_INode(
+            List<Our.INode> that)
+        {
+            int index = 0;
+            foreach (var item in that)
+            {
+                foreach (var error in Verification.Verify(item))
+                {
+                    error.PrependSegment(
+                        new Reporting.IndexSegment(index));
+                    yield return error;
+                }
+                index++;
             }
         }
     }  // public static class Verification

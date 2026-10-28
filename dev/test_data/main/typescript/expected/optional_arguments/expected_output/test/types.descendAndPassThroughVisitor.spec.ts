@@ -114,6 +114,46 @@ test("descend against PassThroughVisitor", () => {
   expectDescendAndPassThroughVisitorSame(instance);
 });
 
+test("descend of Branch", () => {
+  const instance = TestCommonJsonization.loadMaximalBranch();
+
+  compareOrRecordTrace(
+    instance,
+    path.join(
+      TestCommon.TEST_DATA_DIR,
+      "descend",
+      "Branch",
+      "maximal.json.trace"
+    )
+  );
+});
+
+test("descend against PassThroughVisitor", () => {
+  const instance = TestCommonJsonization.loadMaximalBranch();
+
+  expectDescendAndPassThroughVisitorSame(instance);
+});
+
+test("descend of Leaf", () => {
+  const instance = TestCommonJsonization.loadMaximalLeaf();
+
+  compareOrRecordTrace(
+    instance,
+    path.join(
+      TestCommon.TEST_DATA_DIR,
+      "descend",
+      "Leaf",
+      "maximal.json.trace"
+    )
+  );
+});
+
+test("descend against PassThroughVisitor", () => {
+  const instance = TestCommonJsonization.loadMaximalLeaf();
+
+  expectDescendAndPassThroughVisitorSame(instance);
+});
+
 test("descend of Something", () => {
   const instance = TestCommonJsonization.loadMaximalSomething();
 

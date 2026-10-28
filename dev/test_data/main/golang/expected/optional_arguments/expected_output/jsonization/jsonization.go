@@ -504,6 +504,151 @@ func itemFromMapWithoutDispatch(
 	return
 }
 
+// Parse `jsonable` as an instance of [ourtypes.INode],
+// or return an error.
+func NodeFromJsonable(
+	jsonable interface{},
+) (
+	result ourtypes.INode,
+	err error,
+) {
+	m, ok := jsonable.(map[string]interface{})
+	if !ok {
+		err = notAMapError(jsonable)
+		return
+	}
+
+	return nodeFromMap(m)
+}
+
+// Parse `jsonable` as an instance of [ourtypes.IBranch],
+// or return an error.
+func BranchFromJsonable(
+	jsonable interface{},
+) (
+	result ourtypes.IBranch,
+	err error,
+) {
+	m, ok := jsonable.(map[string]interface{})
+	if !ok {
+		err = notAMapError(jsonable)
+		return
+	}
+
+	err = checkModelType(m, "Branch")
+	if err != nil {
+		return
+	}
+
+	return branchFromMapWithoutDispatch(m)
+}
+
+// Parse [ourtypes.IBranch] from a map,
+// or return an error, if any.
+func branchFromMapWithoutDispatch(
+	m map[string]interface{},
+) (
+	result ourtypes.IBranch,
+	err error,
+) {
+	var theOptionalChildren []ourtypes.INode
+
+	for k, v := range m {
+		switch k {
+		case "optionalChildren":
+			theOptionalChildren, err = parseArray(v, NodeFromJsonable)
+
+		case "modelType":
+			// The model type has already been checked before the loop.
+
+		default:
+			err = newDeserializationError(
+				fmt.Sprintf(
+					"Unexpected property: %s",
+					k,
+				),
+			)
+			return
+		}
+
+		if err != nil {
+			mustDeserializationError(err).prependName(k)
+			return
+		}
+	}
+
+	result = ourtypes.NewBranch()
+	result.SetOptionalChildren(
+		theOptionalChildren,
+	)
+
+	return
+}
+
+// Parse `jsonable` as an instance of [ourtypes.ILeaf],
+// or return an error.
+func LeafFromJsonable(
+	jsonable interface{},
+) (
+	result ourtypes.ILeaf,
+	err error,
+) {
+	m, ok := jsonable.(map[string]interface{})
+	if !ok {
+		err = notAMapError(jsonable)
+		return
+	}
+
+	err = checkModelType(m, "Leaf")
+	if err != nil {
+		return
+	}
+
+	return leafFromMapWithoutDispatch(m)
+}
+
+// Parse [ourtypes.ILeaf] from a map,
+// or return an error, if any.
+func leafFromMapWithoutDispatch(
+	m map[string]interface{},
+) (
+	result ourtypes.ILeaf,
+	err error,
+) {
+	var theOptionalItem ourtypes.IItem
+
+	for k, v := range m {
+		switch k {
+		case "optionalItem":
+			theOptionalItem, err = ItemFromJsonable(v)
+
+		case "modelType":
+			// The model type has already been checked before the loop.
+
+		default:
+			err = newDeserializationError(
+				fmt.Sprintf(
+					"Unexpected property: %s",
+					k,
+				),
+			)
+			return
+		}
+
+		if err != nil {
+			mustDeserializationError(err).prependName(k)
+			return
+		}
+	}
+
+	result = ourtypes.NewLeaf()
+	result.SetOptionalItem(
+		theOptionalItem,
+	)
+
+	return
+}
+
 // Parse `jsonable` as an instance of [ourtypes.ISomething],
 // or return an error.
 func SomethingFromJsonable(
@@ -600,6 +745,38 @@ func somethingFromMapWithoutDispatch(
 	result.SetOptionalKind(
 		theOptionalKind,
 	)
+
+	return
+}
+
+// De-serialize an instance of [ourtypes.INode]
+// from a map by dispatching to the concrete `*FromMapWithoutDispatch` function.
+func nodeFromMap(
+	m map[string]interface{},
+) (
+	result ourtypes.INode,
+	err error,
+) {
+	var modelType string
+	modelType, err = modelTypeFromMap(m)
+	if err != nil {
+		return
+	}
+
+	switch modelType {
+	case "Branch":
+		result, err = branchFromMapWithoutDispatch(m)
+	case "Leaf":
+		result, err = leafFromMapWithoutDispatch(m)
+	default:
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Unexpected model type " +
+				"for INode: %s",
+				modelType,
+			),
+		)
+	}
 
 	return
 }
@@ -787,6 +964,23 @@ func directToJsonable[T any](item T) (interface{}, error) {
 	return item, nil
 }
 
+// Serialize `that` to a JSON-able value, or return an error.
+//
+// `ToJsonable` takes an `ourtypes.IClass`, but a list or a tuple item's own
+// (more specific) interface type, e.g., `ourtypes.ISomeItem`, can not be
+// unified with that when passing `ToJsonable` itself as a
+// `func(item T) (interface{}, error)` value -- Go function values are
+// invariant in their parameter type (no contravariance, unlike, say, a C#
+// delegate). Making this wrapper itself generic (instead of fixing its
+// parameter to `ourtypes.IClass`) lets the very same one be passed on bare,
+// uninstantiated, for every class-typed item regardless of its
+// concrete interface: Go infers both the item's type and this
+// wrapper's own type parameter together from the context of the
+// `serializeArray`/`serializeTupleN` call.
+func classAsJsonableInterface[T ourtypes.IClass](that T) (interface{}, error) {
+	return ToJsonable(that)
+}
+
 // Serialize `that` to a string, or return an error.
 func KindToJsonable(
 	that ourtypes.Kind,
@@ -824,6 +1018,56 @@ func itemToMap(
 	if that.Note() != nil {
 		result["note"] = *that.Note()
 	}
+
+	return
+}
+
+// Serialize [ourtypes.IBranch] as a JSON-able map.
+//
+// This function performs no dispatch! It is only used to serialize
+// the properties. If you want to serialize an instance of
+// [ourtypes.IBranch] with proper dispatch, call
+// [ToJsonable].
+func branchToMap(
+	that ourtypes.IBranch,
+) (result map[string]interface{}, err error) {
+	result = make(map[string]interface{})
+
+	if that.OptionalChildren() != nil {
+		result["optionalChildren"], err = serializeArray(
+			that.OptionalChildren(), classAsJsonableInterface[ourtypes.INode],
+		)
+		if err != nil {
+			mustSerializationError(err).prependName("OptionalChildren()")
+			return
+		}
+	}
+
+	result["modelType"] = "Branch"
+
+	return
+}
+
+// Serialize [ourtypes.ILeaf] as a JSON-able map.
+//
+// This function performs no dispatch! It is only used to serialize
+// the properties. If you want to serialize an instance of
+// [ourtypes.ILeaf] with proper dispatch, call
+// [ToJsonable].
+func leafToMap(
+	that ourtypes.ILeaf,
+) (result map[string]interface{}, err error) {
+	result = make(map[string]interface{})
+
+	if that.OptionalItem() != nil {
+		result["optionalItem"], err = ToJsonable(that.OptionalItem())
+		if err != nil {
+			mustSerializationError(err).prependName("OptionalItem()")
+			return
+		}
+	}
+
+	result["modelType"] = "Leaf"
 
 	return
 }
@@ -897,6 +1141,14 @@ func ToJsonable(
 	case ourtypes.ModelTypeItem:
 		result, err = itemToMap(
 			that.(ourtypes.IItem),
+		)
+	case ourtypes.ModelTypeBranch:
+		result, err = branchToMap(
+			that.(ourtypes.IBranch),
+		)
+	case ourtypes.ModelTypeLeaf:
+		result, err = leafToMap(
+			that.(ourtypes.ILeaf),
 		)
 	case ourtypes.ModelTypeSomething:
 		result, err = somethingToMap(

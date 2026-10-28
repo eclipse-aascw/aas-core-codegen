@@ -464,8 +464,8 @@ namespace dummy
                 if (!(
                     !(that.SpecialItems != null)
                     || (
-                        that.SpecialItems.All(
-                            specialItem => Verification.ContainsSpecialItem(specialItem, that.SpecialItems))
+                        that.SpecialItems!.All(
+                            specialItem => Verification.ContainsSpecialItem(specialItem, that.SpecialItems!))
                     )))
                 {
                     yield return new Reporting.Error(
@@ -551,7 +551,7 @@ namespace dummy
 
                 if (!(
                     !(that.SpecialItems != null)
-                    || Verification.FirstIsSpecial(that.SpecialItems)))
+                    || Verification.FirstIsSpecial(that.SpecialItems!)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -560,7 +560,7 @@ namespace dummy
 
                 if (!(
                     !(that.SpecialItems != null)
-                    || Verification.LevelsArePositive(that.SpecialItems)))
+                    || Verification.LevelsArePositive(that.SpecialItems!)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +

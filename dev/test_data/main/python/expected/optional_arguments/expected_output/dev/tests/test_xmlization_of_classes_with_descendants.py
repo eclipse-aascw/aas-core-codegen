@@ -5,12 +5,71 @@
 # Do NOT edit or append.
 
 
+import io
+import pathlib
+import tempfile
 import unittest
+import xml.etree.ElementTree as ET
+
+
+import dummy.xmlization as our_xmlization
+
+
+import tests.common
+import tests.common_xmlization
 
 
 class TestRoundTrips(unittest.TestCase):
-    # There are no classes with concrete descendants.
-    pass
+    def test_node(self) -> None:
+        for xml_class_name_of_descendant in [
+            'branch',
+            'leaf'
+        ]:
+            for path in sorted(
+                (
+                    tests.common.TEST_DATA_DIR
+                    / "Xml"
+                    / "Expected"
+                    / xml_class_name_of_descendant
+                ).glob("**/*.xml")
+            ):
+                text = path.read_text(encoding="utf-8")
+                et_concrete = ET.fromstring(text)
+                tests.common_xmlization.remove_redundant_whitespace(et_concrete)
+
+                # region From iterparse
+                iterator = ET.iterparse(source=io.StringIO(text), events=["start", "end"])
+                got_from_iterparse = our_xmlization.node_from_iterparse(iterator)
+
+                et_from_iterparse = ET.fromstring(our_xmlization.to_str(got_from_iterparse))
+                tests.common_xmlization.remove_redundant_whitespace(et_from_iterparse)
+                tests.common_xmlization.assert_elements_equal(et_concrete, et_from_iterparse)
+                # endregion
+
+                # region From stream
+                got_from_stream = our_xmlization.node_from_stream(io.StringIO(text))
+                et_from_stream = ET.fromstring(our_xmlization.to_str(got_from_stream))
+                tests.common_xmlization.remove_redundant_whitespace(et_from_stream)
+                tests.common_xmlization.assert_elements_equal(et_concrete, et_from_stream)
+                # endregion
+
+                # region From file
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                    tmp_path.write_text(text, encoding="utf-8")
+
+                    got_from_file = our_xmlization.node_from_file(tmp_path)
+                et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
+                tests.common_xmlization.remove_redundant_whitespace(et_from_file)
+                tests.common_xmlization.assert_elements_equal(et_concrete, et_from_file)
+                # endregion
+
+                # region From string
+                got_from_str = our_xmlization.node_from_str(text)
+                et_from_str = ET.fromstring(our_xmlization.to_str(got_from_str))
+                tests.common_xmlization.remove_redundant_whitespace(et_from_str)
+                tests.common_xmlization.assert_elements_equal(et_concrete, et_from_str)
+                # endregion
 
 
 if __name__ == "__main__":

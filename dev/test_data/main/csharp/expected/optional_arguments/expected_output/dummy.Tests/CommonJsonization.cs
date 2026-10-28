@@ -48,6 +48,74 @@ namespace dummy.Tests
             return instance;
         }  // public static Our.Item LoadMinimalItem
 
+        public static Our.Branch LoadMaximalBranch()
+        {
+            string path = Path.Combine(
+                Our.Tests.Common.TestDataDir,
+                "Json",
+                "Expected",
+                "Branch",
+                "maximal.json");
+
+            var node = Our.Tests.CommonJson.ReadFromFile(path);
+
+            var instance = Our.Jsonization.Deserialize.BranchFrom(
+                node);
+
+            return instance;
+        }  // public static Our.Branch LoadMaximalBranch
+
+        public static Our.Branch LoadMinimalBranch()
+        {
+            string path = Path.Combine(
+                Our.Tests.Common.TestDataDir,
+                "Json",
+                "Expected",
+                "Branch",
+                "minimal.json");
+
+            var node = Our.Tests.CommonJson.ReadFromFile(path);
+
+            var instance = Our.Jsonization.Deserialize.BranchFrom(
+                node);
+
+            return instance;
+        }  // public static Our.Branch LoadMinimalBranch
+
+        public static Our.Leaf LoadMaximalLeaf()
+        {
+            string path = Path.Combine(
+                Our.Tests.Common.TestDataDir,
+                "Json",
+                "Expected",
+                "Leaf",
+                "maximal.json");
+
+            var node = Our.Tests.CommonJson.ReadFromFile(path);
+
+            var instance = Our.Jsonization.Deserialize.LeafFrom(
+                node);
+
+            return instance;
+        }  // public static Our.Leaf LoadMaximalLeaf
+
+        public static Our.Leaf LoadMinimalLeaf()
+        {
+            string path = Path.Combine(
+                Our.Tests.Common.TestDataDir,
+                "Json",
+                "Expected",
+                "Leaf",
+                "minimal.json");
+
+            var node = Our.Tests.CommonJson.ReadFromFile(path);
+
+            var instance = Our.Jsonization.Deserialize.LeafFrom(
+                node);
+
+            return instance;
+        }  // public static Our.Leaf LoadMinimalLeaf
+
         public static Our.Something LoadMaximalSomething()
         {
             string path = Path.Combine(

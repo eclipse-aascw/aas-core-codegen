@@ -15,6 +15,20 @@ import org.junit.jupiter.api.Test;
 
 public class TestOverXOrEmpty {
   @Test
+  public void testBranchOverOptionalChildrenOrEmpty() throws IOException {
+    for (Branch instance : new Branch[]
+    {
+      CommonJsonization.loadMinimalBranch(),
+      CommonJsonization.loadMaximalBranch()
+    }) {
+      int length = instance.getOptionalChildren().map(elem -> elem.size()).orElse(0);
+      AtomicInteger count = new AtomicInteger();
+      instance.overOptionalChildrenOrEmpty().forEach(i -> count.getAndIncrement());
+      assertEquals(length , count.get());
+    }
+  } // public void testBranchoverOptionalChildrenOrEmpty
+
+  @Test
   public void testSomethingOverOptionalTextsOrEmpty() throws IOException {
     for (Something instance : new Something[]
     {

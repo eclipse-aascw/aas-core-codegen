@@ -39,6 +39,48 @@ std::shared_ptr<
 
 template <typename E>
 std::shared_ptr<
+  types::INode
+> Wrap(
+  const std::shared_ptr<
+    types::INode
+  >& that,
+  const std::function<
+    std::shared_ptr<E>(
+      const std::shared_ptr<types::IClass>&
+    )
+  >& factory
+);
+
+template <typename E>
+std::shared_ptr<
+  types::IBranch
+> Wrap(
+  const std::shared_ptr<
+    types::IBranch
+  >& that,
+  const std::function<
+    std::shared_ptr<E>(
+      const std::shared_ptr<types::IClass>&
+    )
+  >& factory
+);
+
+template <typename E>
+std::shared_ptr<
+  types::ILeaf
+> Wrap(
+  const std::shared_ptr<
+    types::ILeaf
+  >& that,
+  const std::function<
+    std::shared_ptr<E>(
+      const std::shared_ptr<types::IClass>&
+    )
+  >& factory
+);
+
+template <typename E>
+std::shared_ptr<
   types::ISomething
 > Wrap(
   const std::shared_ptr<
@@ -134,6 +176,130 @@ class EnhancedItem
 
  private:
   std::shared_ptr<types::IItem> instance_;
+  std::shared_ptr<E> enhancement_;
+};
+
+template<class E>
+class EnhancedBranch
+    : virtual public types::IBranch,
+    virtual public IEnhanced<E> {
+ public:
+  types::ModelType model_type() const override {
+    return types::ModelType::kBranch;
+  }
+
+  const common::optional<
+    std::vector<
+      std::shared_ptr<types::INode>
+    >
+  >& optional_children() const override {
+    return instance_->optional_children();
+  }
+
+  common::optional<
+    std::vector<
+      std::shared_ptr<types::INode>
+    >
+  >& mutable_optional_children() override {
+    return instance_->mutable_optional_children();
+  }
+
+  void set_optional_children(
+    common::optional<
+      std::vector<
+        std::shared_ptr<types::INode>
+      >
+    > value
+  ) override {
+    instance_->set_optional_children(value);
+  }
+
+  const std::shared_ptr<E>& enhancement() const {
+    return enhancement_;
+  }
+
+  std::shared_ptr<E>& mutable_enhancement() {
+    return enhancement_;
+  }
+
+  void set_enhancement(
+    std::shared_ptr<E> value
+  ) {
+    enhancement_ = std::move(value);
+  }
+
+  EnhancedBranch(
+    std::shared_ptr<types::IBranch> instance,
+    std::shared_ptr<E> enhancement
+  ) :
+    instance_(instance),
+    enhancement_(enhancement) {
+    // Intentionally empty.
+  }
+
+  virtual ~EnhancedBranch() = default;
+
+ private:
+  std::shared_ptr<types::IBranch> instance_;
+  std::shared_ptr<E> enhancement_;
+};
+
+template<class E>
+class EnhancedLeaf
+    : virtual public types::ILeaf,
+    virtual public IEnhanced<E> {
+ public:
+  types::ModelType model_type() const override {
+    return types::ModelType::kLeaf;
+  }
+
+  const common::optional<
+    std::shared_ptr<types::IItem>
+  >& optional_item() const override {
+    return instance_->optional_item();
+  }
+
+  common::optional<
+    std::shared_ptr<types::IItem>
+  >& mutable_optional_item() override {
+    return instance_->mutable_optional_item();
+  }
+
+  void set_optional_item(
+    common::optional<
+      std::shared_ptr<types::IItem>
+    > value
+  ) override {
+    instance_->set_optional_item(value);
+  }
+
+  const std::shared_ptr<E>& enhancement() const {
+    return enhancement_;
+  }
+
+  std::shared_ptr<E>& mutable_enhancement() {
+    return enhancement_;
+  }
+
+  void set_enhancement(
+    std::shared_ptr<E> value
+  ) {
+    enhancement_ = std::move(value);
+  }
+
+  EnhancedLeaf(
+    std::shared_ptr<types::ILeaf> instance,
+    std::shared_ptr<E> enhancement
+  ) :
+    instance_(instance),
+    enhancement_(enhancement) {
+    // Intentionally empty.
+  }
+
+  virtual ~EnhancedLeaf() = default;
+
+ private:
+  std::shared_ptr<types::ILeaf> instance_;
   std::shared_ptr<E> enhancement_;
 };
 
@@ -273,6 +439,43 @@ class EnhancedSomething
 };
 
 /**
+ * Wrap recursively the instances held by \p that.
+ *
+ * \param that container of the instances to be wrapped
+ * \param factory to produce an enhancement based on an instance
+ * \return a copy of \p that with the wrapped instances
+ *
+ * \tparam E type of the enhancement
+ */
+template<typename E>
+std::vector<
+  std::shared_ptr<types::INode>
+> Wrap_listOf_Node(
+  const std::vector<
+    std::shared_ptr<types::INode>
+  >& that,
+  const std::function<
+    std::shared_ptr<E>(
+      const std::shared_ptr<types::IClass>&
+    )
+  >& factory
+) {
+  std::vector<
+    std::shared_ptr<types::INode>
+  > result;
+  result.reserve(that.size());
+
+  for (
+    const std::shared_ptr<types::INode>& item :
+    that
+  ) {
+    result.emplace_back(Wrap<E>(item, factory));
+  }
+
+  return result;
+}
+
+/**
  * Wrap \p that with an enhanced instance.
  *
  * \param that instance to be wrapped and enhanced
@@ -302,6 +505,93 @@ std::shared_ptr<types::IItem> WrapItem(
     ? that
     : std::shared_ptr<types::IItem>(
       new EnhancedItem<E>(
+        that,
+        enh
+      )
+    );
+}
+
+/**
+ * Wrap \p that with an enhanced instance.
+ *
+ * \param that instance to be wrapped and enhanced
+ * \param factory to produce an enhancement based on an instance
+ * \return Enhanced instance, or `that` if no enhancement produced
+ *
+ * \tparam E type of the enhancement
+ */
+template<typename E>
+std::shared_ptr<types::IBranch> WrapBranch(
+  const std::shared_ptr<types::IBranch>& that,
+  const std::function<
+    std::shared_ptr<E>(
+      const std::shared_ptr<types::IClass>&
+    )
+  >& factory
+) {
+  // We assume that we already checked whether `that` has been enhanced
+  // in the caller.
+
+  if (that->optional_children().has_value()) {
+    that->set_optional_children(
+      common::make_optional(
+        Wrap_listOf_Node<E>(
+          that->optional_children().value(),
+          factory
+        )
+      )
+    );
+  }
+
+  std::shared_ptr<E> enh(
+    factory(that)
+  );
+  return (enh == nullptr)
+    ? that
+    : std::shared_ptr<types::IBranch>(
+      new EnhancedBranch<E>(
+        that,
+        enh
+      )
+    );
+}
+
+/**
+ * Wrap \p that with an enhanced instance.
+ *
+ * \param that instance to be wrapped and enhanced
+ * \param factory to produce an enhancement based on an instance
+ * \return Enhanced instance, or `that` if no enhancement produced
+ *
+ * \tparam E type of the enhancement
+ */
+template<typename E>
+std::shared_ptr<types::ILeaf> WrapLeaf(
+  const std::shared_ptr<types::ILeaf>& that,
+  const std::function<
+    std::shared_ptr<E>(
+      const std::shared_ptr<types::IClass>&
+    )
+  >& factory
+) {
+  // We assume that we already checked whether `that` has been enhanced
+  // in the caller.
+
+  if (that->optional_item().has_value()) {
+    that->set_optional_item(
+      common::make_optional(
+        Wrap<E>(that->optional_item().value(), factory)
+      )
+    );
+  }
+
+  std::shared_ptr<E> enh(
+    factory(that)
+  );
+  return (enh == nullptr)
+    ? that
+    : std::shared_ptr<types::ILeaf>(
+      new EnhancedLeaf<E>(
         that,
         enh
       )
@@ -434,6 +724,22 @@ std::shared_ptr<
         factory
       );
       break;
+    case types::ModelType::kBranch:
+      return impl::WrapBranch<E>(
+        std::dynamic_pointer_cast<
+          types::IBranch
+        >(that),
+        factory
+      );
+      break;
+    case types::ModelType::kLeaf:
+      return impl::WrapLeaf<E>(
+        std::dynamic_pointer_cast<
+          types::ILeaf
+        >(that),
+        factory
+      );
+      break;
     case types::ModelType::kSomething:
       return impl::WrapSomething<E>(
         std::dynamic_pointer_cast<
@@ -478,6 +784,136 @@ std::shared_ptr<
   switch (that->model_type()) {
     case types::ModelType::kItem:
       return impl::WrapItem<E>(
+        that,
+        factory
+      );
+      break;
+    default:
+      throw std::invalid_argument(
+        common::Concat(
+          "Unexpected model type: ",
+          std::to_string(
+            static_cast<std::uint32_t>(
+              that->model_type()
+            )
+          )
+        )
+      );
+      break;
+  }
+}
+
+template <typename E>
+std::shared_ptr<
+  types::INode
+> Wrap(
+  const std::shared_ptr<
+    types::INode
+  >& that,
+  const std::function<
+    std::shared_ptr<E>(
+      const std::shared_ptr<types::IClass>&
+    )
+  >& factory
+) {
+  impl::AssertNotEnhanced<
+    E,
+    types::INode
+  >(that);
+
+  switch (that->model_type()) {
+    case types::ModelType::kBranch:
+      return impl::WrapBranch<E>(
+        std::dynamic_pointer_cast<
+          types::IBranch
+        >(that),
+        factory
+      );
+      break;
+    case types::ModelType::kLeaf:
+      return impl::WrapLeaf<E>(
+        std::dynamic_pointer_cast<
+          types::ILeaf
+        >(that),
+        factory
+      );
+      break;
+    default:
+      throw std::invalid_argument(
+        common::Concat(
+          "Unexpected model type: ",
+          std::to_string(
+            static_cast<std::uint32_t>(
+              that->model_type()
+            )
+          )
+        )
+      );
+      break;
+  }
+}
+
+template <typename E>
+std::shared_ptr<
+  types::IBranch
+> Wrap(
+  const std::shared_ptr<
+    types::IBranch
+  >& that,
+  const std::function<
+    std::shared_ptr<E>(
+      const std::shared_ptr<types::IClass>&
+    )
+  >& factory
+) {
+  impl::AssertNotEnhanced<
+    E,
+    types::IBranch
+  >(that);
+
+  switch (that->model_type()) {
+    case types::ModelType::kBranch:
+      return impl::WrapBranch<E>(
+        that,
+        factory
+      );
+      break;
+    default:
+      throw std::invalid_argument(
+        common::Concat(
+          "Unexpected model type: ",
+          std::to_string(
+            static_cast<std::uint32_t>(
+              that->model_type()
+            )
+          )
+        )
+      );
+      break;
+  }
+}
+
+template <typename E>
+std::shared_ptr<
+  types::ILeaf
+> Wrap(
+  const std::shared_ptr<
+    types::ILeaf
+  >& that,
+  const std::function<
+    std::shared_ptr<E>(
+      const std::shared_ptr<types::IClass>&
+    )
+  >& factory
+) {
+  impl::AssertNotEnhanced<
+    E,
+    types::ILeaf
+  >(that);
+
+  switch (that->model_type()) {
+    case types::ModelType::kLeaf:
+      return impl::WrapLeaf<E>(
         that,
         factory
       );

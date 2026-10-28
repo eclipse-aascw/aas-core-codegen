@@ -301,6 +301,192 @@ public class TestXmlizationOfConcreteClasses {
   } // public void testItemVerificationFail
 
   @Test
+  public void testBranchOk() throws IOException, XMLStreamException {
+    final Path searchPath =
+      Paths.get(Common.TEST_DATA_DIR, "Xml", "Expected", "branch");
+    final List<Path> paths = Common.findPaths(searchPath, ".xml");
+
+    for (Path path : paths) {
+      final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+      final XMLEventReader xmlReader =
+        xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
+
+      final Branch instance =
+        Xmlization.Deserialize.deserializeBranch(xmlReader);
+
+      final Iterable<Reporting.Error> errorIter = Verification.verify(instance);
+      final List<Reporting.Error> errors = Common.asList(errorIter);
+      Common.assertNoVerificationErrors(errors, path);
+
+      assertSerializeDeserializeEqualsOriginal(instance, path);
+    }
+  } // public void testBranchOk
+
+  @Test
+  public void testBranchDeserializationFail() throws IOException, XMLStreamException {
+    for (
+      Path causeDir :
+      Common.findDirs(
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Xml",
+          "Unexpected",
+          "Unserializable"))) {
+      final Path clsDir =
+        causeDir.resolve("branch");
+
+      if (!Files.exists(clsDir)) {
+        // No examples of Branch for the failure cause.
+        continue;
+      }
+
+      final List<Path> paths = Common.findPaths(clsDir, ".xml");
+      for (Path path : paths) {
+        final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+        final XMLEventReader xmlReader =
+          xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
+
+        XmlCommon.DeserializeException exception = null;
+
+        try {
+          Xmlization.Deserialize.deserializeBranch(xmlReader);
+        } catch (XmlCommon.DeserializeException observedException) {
+          exception = observedException;
+        }
+
+        assertEqualsExpectedOrRerecordDeserializationException(exception, path);
+      }
+    }
+  }  // public void testBranchDeserializationFail
+
+  @Test
+  public void testBranchVerificationFail() throws IOException, XMLStreamException {
+    for (
+      Path causeDir :
+      Common.findDirs(
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Xml",
+          "Unexpected",
+          "Invalid"))) {
+      final Path clsDir = causeDir.resolve(
+        "branch");
+
+      if (!Files.exists(clsDir)) {
+        // No examples of Branch for the failure cause.
+        continue;
+      }
+
+      final List<Path> paths = Common.findPaths(clsDir, ".xml");
+      for (Path path : paths) {
+        final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+        final XMLEventReader xmlReader =
+          xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
+
+        final Branch instance =
+          Xmlization.Deserialize.deserializeBranch(xmlReader);
+
+        final Iterable<Reporting.Error> errorIter = Verification.verify(instance);
+        final List<Reporting.Error> errors = Common.asList(errorIter);
+        Common.assertEqualsExpectedOrRerecordVerificationErrors(errors, path);
+      }
+    }
+  } // public void testBranchVerificationFail
+
+  @Test
+  public void testLeafOk() throws IOException, XMLStreamException {
+    final Path searchPath =
+      Paths.get(Common.TEST_DATA_DIR, "Xml", "Expected", "leaf");
+    final List<Path> paths = Common.findPaths(searchPath, ".xml");
+
+    for (Path path : paths) {
+      final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+      final XMLEventReader xmlReader =
+        xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
+
+      final Leaf instance =
+        Xmlization.Deserialize.deserializeLeaf(xmlReader);
+
+      final Iterable<Reporting.Error> errorIter = Verification.verify(instance);
+      final List<Reporting.Error> errors = Common.asList(errorIter);
+      Common.assertNoVerificationErrors(errors, path);
+
+      assertSerializeDeserializeEqualsOriginal(instance, path);
+    }
+  } // public void testLeafOk
+
+  @Test
+  public void testLeafDeserializationFail() throws IOException, XMLStreamException {
+    for (
+      Path causeDir :
+      Common.findDirs(
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Xml",
+          "Unexpected",
+          "Unserializable"))) {
+      final Path clsDir =
+        causeDir.resolve("leaf");
+
+      if (!Files.exists(clsDir)) {
+        // No examples of Leaf for the failure cause.
+        continue;
+      }
+
+      final List<Path> paths = Common.findPaths(clsDir, ".xml");
+      for (Path path : paths) {
+        final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+        final XMLEventReader xmlReader =
+          xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
+
+        XmlCommon.DeserializeException exception = null;
+
+        try {
+          Xmlization.Deserialize.deserializeLeaf(xmlReader);
+        } catch (XmlCommon.DeserializeException observedException) {
+          exception = observedException;
+        }
+
+        assertEqualsExpectedOrRerecordDeserializationException(exception, path);
+      }
+    }
+  }  // public void testLeafDeserializationFail
+
+  @Test
+  public void testLeafVerificationFail() throws IOException, XMLStreamException {
+    for (
+      Path causeDir :
+      Common.findDirs(
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Xml",
+          "Unexpected",
+          "Invalid"))) {
+      final Path clsDir = causeDir.resolve(
+        "leaf");
+
+      if (!Files.exists(clsDir)) {
+        // No examples of Leaf for the failure cause.
+        continue;
+      }
+
+      final List<Path> paths = Common.findPaths(clsDir, ".xml");
+      for (Path path : paths) {
+        final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+        final XMLEventReader xmlReader =
+          xmlInputFactory.createXMLEventReader(Files.newInputStream(path));
+
+        final Leaf instance =
+          Xmlization.Deserialize.deserializeLeaf(xmlReader);
+
+        final Iterable<Reporting.Error> errorIter = Verification.verify(instance);
+        final List<Reporting.Error> errors = Common.asList(errorIter);
+        Common.assertEqualsExpectedOrRerecordVerificationErrors(errors, path);
+      }
+    }
+  } // public void testLeafVerificationFail
+
+  @Test
   public void testSomethingOk() throws IOException, XMLStreamException {
     final Path searchPath =
       Paths.get(Common.TEST_DATA_DIR, "Xml", "Expected", "something");

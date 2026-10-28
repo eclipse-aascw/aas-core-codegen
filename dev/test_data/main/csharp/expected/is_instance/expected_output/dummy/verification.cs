@@ -318,9 +318,9 @@ namespace dummy
                 if (!(
                     !(
                         (that.OptionalElement != null)
-                        && that.OptionalElement is Our.ILeaf
+                        && that.OptionalElement! is Our.ILeaf
                     )
-                    || (Common.StringHelpers.Len(((Our.ILeaf)that.OptionalElement).Text) > 0)))
+                    || (Common.StringHelpers.Len(((Our.ILeaf)that.OptionalElement!).Text) > 0)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +

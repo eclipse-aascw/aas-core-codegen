@@ -44,6 +44,55 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
   }
 
   @Override
+  public IClass transformBranch(
+    IBranch that
+  ) {
+    if (that instanceof Enhanced)
+    {
+      throw new IllegalArgumentException(
+        "The instance has been already enhanced: " + that
+      );
+    }
+
+    if (that.getOptionalChildren().isPresent()) {
+      that.setOptionalChildren(
+        wrapListOf_INode(that.getOptionalChildren().get()));
+    }
+
+    Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
+    return !enhancement.isPresent()
+      ? that
+      : new EnhancedBranch<>(
+        that,
+        enhancement.get()
+      );
+  }
+
+  @Override
+  public IClass transformLeaf(
+    ILeaf that
+  ) {
+    if (that instanceof Enhanced)
+    {
+      throw new IllegalArgumentException(
+        "The instance has been already enhanced: " + that
+      );
+    }
+
+    if (that.getOptionalItem().isPresent()) {
+      that.setOptionalItem(wrap(that.getOptionalItem().get()));
+    }
+
+    Optional<EnhancementT> enhancement = enhancementFactory.apply(that);
+    return !enhancement.isPresent()
+      ? that
+      : new EnhancedLeaf<>(
+        that,
+        enhancement.get()
+      );
+  }
+
+  @Override
   public IClass transformSomething(
     ISomething that
   ) {
@@ -72,6 +121,18 @@ class _Wrapper<EnhancementT> extends AbstractTransformer<IClass> {
   @SuppressWarnings("unchecked")
   private <T extends IClass> T wrap(T that) {
     return (T) transform(that);
+  }
+
+  /**
+   * Wrap the instances held by {@code that} recursively in a new container.
+   */
+  private List<INode> wrapListOf_INode(
+    List<INode> that) {
+    List<INode> result = new ArrayList<>(that.size());
+    for (INode item : that) {
+      result.add(wrap(item));
+    }
+    return result;
   }
 }
 

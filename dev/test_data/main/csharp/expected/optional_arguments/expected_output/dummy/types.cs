@@ -148,6 +148,195 @@ namespace dummy
         }
     }
 
+    public interface INode : IClass
+    {
+        // Intentionally empty.
+    }
+
+    public interface IBranch : INode
+    {
+        public List<INode>? OptionalChildren { get; set; }
+
+        /// <summary>
+        /// Iterate over OptionalChildren, if set, and otherwise return an empty enumerable.
+        /// </summary>
+        public IEnumerable<INode> OverOptionalChildrenOrEmpty();
+    }
+
+    public class Branch : IBranch
+    {
+        public List<INode>? OptionalChildren { get; set; }
+
+        /// <summary>
+        /// Iterate over OptionalChildren, if set, and otherwise return an empty enumerable.
+        /// </summary>
+        public IEnumerable<INode> OverOptionalChildrenOrEmpty()
+        {
+            return OptionalChildren
+                ?? System.Linq.Enumerable.Empty<INode>();
+        }
+
+        /// <summary>
+        /// Iterate over all the class instances referenced from this instance
+        /// without further recursion.
+        /// </summary>
+        public IEnumerable<IClass> DescendOnce()
+        {
+            if (OptionalChildren != null)
+            {
+                foreach (
+                    var anItem in Descent.DescendOnce_ListOf_INode(
+                        OptionalChildren))
+                {
+                    yield return anItem;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Iterate recursively over all the class instances referenced from this instance.
+        /// </summary>
+        public IEnumerable<IClass> Descend()
+        {
+            if (OptionalChildren != null)
+            {
+                foreach (var anItem in Descent.Descend_ListOf_INode(OptionalChildren))
+                {
+                    yield return anItem;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Accept the <paramref name="visitor" /> to visit this instance
+        /// for double dispatch.
+        /// </summary>
+        public void Accept(Visitation.IVisitor visitor)
+        {
+            visitor.VisitBranch(this);
+        }
+
+        /// <summary>
+        /// Accept the visitor to visit this instance for double dispatch
+        /// with the <paramref name="context" />.
+        /// </summary>
+        public void Accept<TContext>(
+            Visitation.IVisitorWithContext<TContext> visitor,
+            TContext context)
+        {
+            visitor.VisitBranch(this, context);
+        }
+
+        /// <summary>
+        /// Accept the <paramref name="transformer" /> to transform this instance
+        /// for double dispatch.
+        /// </summary>
+        public T Transform<T>(Visitation.ITransformer<T> transformer)
+        {
+            return transformer.TransformBranch(this);
+        }
+
+        /// <summary>
+        /// Accept the <paramref name="transformer" /> to visit this instance
+        /// for double dispatch with the <paramref name="context" />.
+        /// </summary>
+        public T Transform<TContext, T>(
+            Visitation.ITransformerWithContext<TContext, T> transformer,
+            TContext context)
+        {
+            return transformer.TransformBranch(this, context);
+        }
+
+        public Branch(List<INode>? optionalChildren = null)
+        {
+            OptionalChildren = optionalChildren;
+        }
+    }
+
+    public interface ILeaf : INode
+    {
+        public IItem? OptionalItem { get; set; }
+    }
+
+    public class Leaf : ILeaf
+    {
+        public IItem? OptionalItem { get; set; }
+
+        /// <summary>
+        /// Iterate over all the class instances referenced from this instance
+        /// without further recursion.
+        /// </summary>
+        public IEnumerable<IClass> DescendOnce()
+        {
+            if (OptionalItem != null)
+            {
+                yield return OptionalItem;
+            }
+        }
+
+        /// <summary>
+        /// Iterate recursively over all the class instances referenced from this instance.
+        /// </summary>
+        public IEnumerable<IClass> Descend()
+        {
+            if (OptionalItem != null)
+            {
+                yield return OptionalItem;
+
+                // Recurse
+                foreach (var anItem in OptionalItem.Descend())
+                {
+                    yield return anItem;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Accept the <paramref name="visitor" /> to visit this instance
+        /// for double dispatch.
+        /// </summary>
+        public void Accept(Visitation.IVisitor visitor)
+        {
+            visitor.VisitLeaf(this);
+        }
+
+        /// <summary>
+        /// Accept the visitor to visit this instance for double dispatch
+        /// with the <paramref name="context" />.
+        /// </summary>
+        public void Accept<TContext>(
+            Visitation.IVisitorWithContext<TContext> visitor,
+            TContext context)
+        {
+            visitor.VisitLeaf(this, context);
+        }
+
+        /// <summary>
+        /// Accept the <paramref name="transformer" /> to transform this instance
+        /// for double dispatch.
+        /// </summary>
+        public T Transform<T>(Visitation.ITransformer<T> transformer)
+        {
+            return transformer.TransformLeaf(this);
+        }
+
+        /// <summary>
+        /// Accept the <paramref name="transformer" /> to visit this instance
+        /// for double dispatch with the <paramref name="context" />.
+        /// </summary>
+        public T Transform<TContext, T>(
+            Visitation.ITransformerWithContext<TContext, T> transformer,
+            TContext context)
+        {
+            return transformer.TransformLeaf(this, context);
+        }
+
+        public Leaf(IItem? optionalItem = null)
+        {
+            OptionalItem = optionalItem;
+        }
+    }
+
     public interface ISomething : IClass
     {
         public IItem Item { get; set; }
@@ -286,6 +475,48 @@ namespace dummy
             OptionalKind = optionalKind;
         }
     }
+
+    /// <summary>
+    /// Descend into the containers which hold class instances.
+    /// </summary>
+    /// <remarks>
+    /// Each method descends only one level, and calls the method of the items
+    /// by name, so that the descent is composed of plain functions to any depth.
+    /// </remarks>
+    internal static class Descent
+    {
+        /// <summary>
+        /// Iterate recursively over all the class instances held by
+        /// <paramref name="that" />.
+        /// </summary>
+        internal static IEnumerable<IClass> Descend_ListOf_INode(
+            List<INode> that)
+        {
+            foreach (var item in that)
+            {
+                yield return item;
+
+                // Recurse
+                foreach (var anItem in item.Descend())
+                {
+                    yield return anItem;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Iterate over the class instances held by <paramref name="that" />
+        /// without further recursion.
+        /// </summary>
+        internal static IEnumerable<IClass> DescendOnce_ListOf_INode(
+            List<INode> that)
+        {
+            foreach (var item in that)
+            {
+                yield return item;
+            }
+        }
+    }  // internal static class Descent
 }  // namespace dummy
 
 /*

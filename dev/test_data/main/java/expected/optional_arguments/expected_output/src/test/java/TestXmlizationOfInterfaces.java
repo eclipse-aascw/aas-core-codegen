@@ -17,7 +17,69 @@ import javax.xml.stream.*;
 import org.junit.jupiter.api.Test;
 
 public class TestXmlizationOfInterfaces {
-  
+  @Test
+  public void testRoundTripINodeFromBranch()
+    throws IOException, XMLStreamException {
+    // We load from JSON here just to jump-start the round trip.
+    // The round-trip goes then over XML.
+    final INode instance =
+      CommonJsonization.loadMaximalBranch();
+
+    // The round-trip starts here.
+    final StringWriter stringOut = new StringWriter();
+    final XMLOutputFactory outputFactory = XMLOutputFactory.newFactory();
+    final XMLStreamWriter xmlWriter = outputFactory.createXMLStreamWriter(stringOut);
+
+    Xmlization.Serialize.to(instance, xmlWriter);
+    String outputText = stringOut.toString();
+
+    // De-serialize from XML
+    final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+    final XMLEventReader xmlReader =
+      xmlInputFactory.createXMLEventReader(new StringReader(outputText));
+    final INode anotherInstance =
+      Xmlization.Deserialize.deserializeINode(xmlReader);
+
+    // Serialize back to XML
+    final StringWriter anotherStringOut = new StringWriter();
+    final XMLStreamWriter anotherXmlWriter = outputFactory.createXMLStreamWriter(anotherStringOut);
+    Xmlization.Serialize.to(anotherInstance, anotherXmlWriter);
+
+    // Compare
+    assertEquals(outputText, anotherStringOut.toString());
+  } // void testRoundTripINodeFromBranch
+
+  @Test
+  public void testRoundTripINodeFromLeaf()
+    throws IOException, XMLStreamException {
+    // We load from JSON here just to jump-start the round trip.
+    // The round-trip goes then over XML.
+    final INode instance =
+      CommonJsonization.loadMaximalLeaf();
+
+    // The round-trip starts here.
+    final StringWriter stringOut = new StringWriter();
+    final XMLOutputFactory outputFactory = XMLOutputFactory.newFactory();
+    final XMLStreamWriter xmlWriter = outputFactory.createXMLStreamWriter(stringOut);
+
+    Xmlization.Serialize.to(instance, xmlWriter);
+    String outputText = stringOut.toString();
+
+    // De-serialize from XML
+    final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+    final XMLEventReader xmlReader =
+      xmlInputFactory.createXMLEventReader(new StringReader(outputText));
+    final INode anotherInstance =
+      Xmlization.Deserialize.deserializeINode(xmlReader);
+
+    // Serialize back to XML
+    final StringWriter anotherStringOut = new StringWriter();
+    final XMLStreamWriter anotherXmlWriter = outputFactory.createXMLStreamWriter(anotherStringOut);
+    Xmlization.Serialize.to(anotherInstance, anotherXmlWriter);
+
+    // Compare
+    assertEquals(outputText, anotherStringOut.toString());
+  } // void testRoundTripINodeFromLeaf
 } // class TestXmlizationOfInterfaces
 
 // package dummy.tests

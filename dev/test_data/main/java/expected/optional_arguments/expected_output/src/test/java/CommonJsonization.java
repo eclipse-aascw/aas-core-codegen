@@ -42,6 +42,58 @@ public final class CommonJsonization {
     return Jsonization.Deserialize.deserializeItem(node);
   } // public static Item loadMinimalItem
 
+  public static Branch loadMaximalBranch() throws IOException {
+    final Path path = Paths.get(
+      Common.TEST_DATA_DIR,
+      "Json",
+      "Expected",
+      "Branch",
+      "maximal.json");
+
+    final JsonNode node = CommonJson.readFromFile(path);
+
+    return Jsonization.Deserialize.deserializeBranch(node);
+  } // public static Branch loadMaximalBranch
+
+  public static Branch loadMinimalBranch() throws IOException {
+    final Path path = Paths.get(
+      Common.TEST_DATA_DIR,
+      "Json",
+      "Expected",
+      "Branch",
+      "minimal.json");
+
+    final JsonNode node = CommonJson.readFromFile(path);
+
+    return Jsonization.Deserialize.deserializeBranch(node);
+  } // public static Branch loadMinimalBranch
+
+  public static Leaf loadMaximalLeaf() throws IOException {
+    final Path path = Paths.get(
+      Common.TEST_DATA_DIR,
+      "Json",
+      "Expected",
+      "Leaf",
+      "maximal.json");
+
+    final JsonNode node = CommonJson.readFromFile(path);
+
+    return Jsonization.Deserialize.deserializeLeaf(node);
+  } // public static Leaf loadMaximalLeaf
+
+  public static Leaf loadMinimalLeaf() throws IOException {
+    final Path path = Paths.get(
+      Common.TEST_DATA_DIR,
+      "Json",
+      "Expected",
+      "Leaf",
+      "minimal.json");
+
+    final JsonNode node = CommonJson.readFromFile(path);
+
+    return Jsonization.Deserialize.deserializeLeaf(node);
+  } // public static Leaf loadMinimalLeaf
+
   public static Something loadMaximalSomething() throws IOException {
     final Path path = Paths.get(
       Common.TEST_DATA_DIR,

@@ -53,6 +53,40 @@ namespace dummy.Tests
                         : that.Note == null && casted.Note == null));
             }
 
+            public override bool TransformBranch(
+                Our.IBranch that,
+                Our.IClass other)
+            {
+                if (!(other is Our.Branch casted) || ReferenceEquals(that, other))
+                {
+                    return false;
+                }
+
+                return (
+                    ((that.OptionalChildren != null && casted.OptionalChildren != null)
+                        ? Check_ListOf_INode(
+                            that.OptionalChildren,
+                            casted.OptionalChildren)
+                        : that.OptionalChildren == null && casted.OptionalChildren == null));
+            }
+
+            public override bool TransformLeaf(
+                Our.ILeaf that,
+                Our.IClass other)
+            {
+                if (!(other is Our.Leaf casted) || ReferenceEquals(that, other))
+                {
+                    return false;
+                }
+
+                return (
+                    ((that.OptionalItem != null && casted.OptionalItem != null)
+                        ? Transform(
+                            that.OptionalItem,
+                            casted.OptionalItem)
+                        : that.OptionalItem == null && casted.OptionalItem == null));
+            }
+
             public override bool TransformSomething(
                 Our.ISomething that,
                 Our.IClass other)
@@ -81,6 +115,29 @@ namespace dummy.Tests
                             casted.OptionalTexts)
                         : that.OptionalTexts == null && casted.OptionalTexts == null)
                     && that.OptionalKind == casted.OptionalKind);
+            }
+
+            private bool Check_ListOf_INode(
+                List<Our.INode> that,
+                List<Our.INode> other)
+            {
+                if (ReferenceEquals(that, other) || that.Count != other.Count)
+                {
+                    return false;
+                }
+
+                for (int i = 0; i < that.Count; i++)
+                {
+                    if (!(
+                        Transform(
+                            that[i],
+                            other[i])))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
             }
 
             private bool Check_ListOf_string(
@@ -113,6 +170,20 @@ namespace dummy.Tests
             Our.Item other)
         {
             return that.Name == other.Name && that.Note == other.Note;
+        }
+
+        private static bool BranchShallowEquals(
+            Our.Branch that,
+            Our.Branch other)
+        {
+            return that.OptionalChildren == other.OptionalChildren;
+        }
+
+        private static bool LeafShallowEquals(
+            Our.Leaf that,
+            Our.Leaf other)
+        {
+            return that.OptionalItem == other.OptionalItem;
         }
 
         private static bool SomethingShallowEquals(
@@ -155,6 +226,62 @@ namespace dummy.Tests
                     instance, instanceCopy),
                 "Item");
         }  // public void Test_Item_deep_copy
+
+        [Test]
+        public void Test_Branch_shallow_copy()
+        {
+            Our.Branch instance = (
+                Our.Tests.CommonJsonization.LoadMaximalBranch());
+
+            var instanceCopy = Our.Copying.Shallow(instance);
+
+            Assert.IsTrue(
+                BranchShallowEquals(
+                    instance, instanceCopy),
+                "Branch");
+        }  // public void Test_Branch_shallow_copy
+
+        [Test]
+        public void Test_Branch_deep_copy()
+        {
+            Our.Branch instance = (
+                Our.Tests.CommonJsonization.LoadMaximalBranch());
+
+            var instanceCopy = Our.Copying.Deep(instance);
+
+            Assert.IsTrue(
+                DeepCopyCheckerInstance.Transform(
+                    instance, instanceCopy),
+                "Branch");
+        }  // public void Test_Branch_deep_copy
+
+        [Test]
+        public void Test_Leaf_shallow_copy()
+        {
+            Our.Leaf instance = (
+                Our.Tests.CommonJsonization.LoadMaximalLeaf());
+
+            var instanceCopy = Our.Copying.Shallow(instance);
+
+            Assert.IsTrue(
+                LeafShallowEquals(
+                    instance, instanceCopy),
+                "Leaf");
+        }  // public void Test_Leaf_shallow_copy
+
+        [Test]
+        public void Test_Leaf_deep_copy()
+        {
+            Our.Leaf instance = (
+                Our.Tests.CommonJsonization.LoadMaximalLeaf());
+
+            var instanceCopy = Our.Copying.Deep(instance);
+
+            Assert.IsTrue(
+                DeepCopyCheckerInstance.Transform(
+                    instance, instanceCopy),
+                "Leaf");
+        }  // public void Test_Leaf_deep_copy
 
         [Test]
         public void Test_Something_shallow_copy()

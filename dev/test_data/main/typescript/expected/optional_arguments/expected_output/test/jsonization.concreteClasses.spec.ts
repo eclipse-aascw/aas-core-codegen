@@ -276,6 +276,292 @@ test("Item verification fail", () => {
   }
 });
 
+test("Branch round-trip OK", () => {
+  const pths = Array.from(
+    TestCommon.findFilesBySuffixRecursively(
+      path.join(
+        TestCommon.TEST_DATA_DIR,
+        "Json",
+        "Expected",
+        "Branch"
+      ),
+      ".json"
+    )
+  );
+  pths.sort();
+
+  for (const pth of pths) {
+    const jsonable = TestCommon.readJsonFromFileSync(pth);
+
+    const instanceOrError = OurJsonization.branchFromJsonable(
+      jsonable
+    );
+    expect(instanceOrError.error).toBeNull();
+    const instance = instanceOrError.mustValue();
+
+    TestCommon.assertNoVerificationErrors(OurVerification.verify(instance), pth);
+
+    assertSerializeDeserializeEqualsOriginal(
+      jsonable,
+      instance,
+      pth
+    );
+  }
+});
+
+test("Branch deserialization fail", () => {
+  for (
+    const causeDir of
+    TestCommon.findImmediateSubdirectories(
+      path.join(
+        TestCommon.TEST_DATA_DIR,
+        "Json",
+        "Unexpected",
+        "Unserializable"
+      )
+    )
+  ) {
+    // NOTE (mristin):
+    // Unlike other SDKs, we can not be really sure what additional properties
+    // JavaScript might bring about. Therefore, we leave out the tests with
+    // the validation of additional properties.
+    if (path.basename(causeDir) == "UnexpectedAdditionalProperty") {
+      continue;
+    }
+
+    const clsDir = path.join(
+      causeDir,
+      "Branch"
+    );
+    if (!fs.existsSync(clsDir)) {
+      // NOTE (mristin):
+      // Some classes indeed lack the invalid examples.
+      continue;
+    }
+
+    const pths = Array.from(
+      TestCommon.findFilesBySuffixRecursively(
+        clsDir,
+        ".json"
+      )
+    );
+    pths.sort();
+
+    for (const pth of pths) {
+      const jsonable = TestCommon.readJsonFromFileSync(pth);
+
+      const instanceOrError = OurJsonization.branchFromJsonable(
+        jsonable
+      );
+      if (instanceOrError.error === null) {
+        throw new Error(`Expected a de-serialization error for ${pth}, but got none`);
+      }
+
+      assertDeserializationErrorEqualsExpectedOrRecord(
+        instanceOrError.error,
+        pth
+      );
+    }
+  }
+});
+
+test("Branch verification fail", () => {
+  for (
+    const causeDir of
+    TestCommon.findImmediateSubdirectories(
+      path.join(
+        TestCommon.TEST_DATA_DIR,
+        "Json",
+        "Unexpected",
+        "Invalid"
+      )
+    )
+  ) {
+    const clsDir = path.join(
+      causeDir,
+      "Branch"
+    );
+    if (!fs.existsSync(clsDir)) {
+      // NOTE (mristin):
+      // Some classes indeed lack the invalid examples.
+      continue;
+    }
+
+    const pths = Array.from(
+      TestCommon.findFilesBySuffixRecursively(
+        clsDir,
+        ".json"
+      )
+    );
+    pths.sort();
+
+    for (const pth of pths) {
+      const jsonable = TestCommon.readJsonFromFileSync(pth);
+
+      const instanceOrError = OurJsonization.branchFromJsonable(
+        jsonable
+      );
+      if (instanceOrError.error !== null) {
+        throw new Error(
+          `Expected no de-serialization error for ${pth}, ` +
+          `but got: ${instanceOrError.error.message}: ${instanceOrError.error.path}`
+        );
+      }
+
+      const instance = instanceOrError.mustValue();
+
+      const verificationErrors = Array.from(OurVerification.verify(instance));
+      assertVerificationErrorsEqualExpectedOrRecord(
+        verificationErrors,
+        pth
+      );
+    }
+  }
+});
+
+test("Leaf round-trip OK", () => {
+  const pths = Array.from(
+    TestCommon.findFilesBySuffixRecursively(
+      path.join(
+        TestCommon.TEST_DATA_DIR,
+        "Json",
+        "Expected",
+        "Leaf"
+      ),
+      ".json"
+    )
+  );
+  pths.sort();
+
+  for (const pth of pths) {
+    const jsonable = TestCommon.readJsonFromFileSync(pth);
+
+    const instanceOrError = OurJsonization.leafFromJsonable(
+      jsonable
+    );
+    expect(instanceOrError.error).toBeNull();
+    const instance = instanceOrError.mustValue();
+
+    TestCommon.assertNoVerificationErrors(OurVerification.verify(instance), pth);
+
+    assertSerializeDeserializeEqualsOriginal(
+      jsonable,
+      instance,
+      pth
+    );
+  }
+});
+
+test("Leaf deserialization fail", () => {
+  for (
+    const causeDir of
+    TestCommon.findImmediateSubdirectories(
+      path.join(
+        TestCommon.TEST_DATA_DIR,
+        "Json",
+        "Unexpected",
+        "Unserializable"
+      )
+    )
+  ) {
+    // NOTE (mristin):
+    // Unlike other SDKs, we can not be really sure what additional properties
+    // JavaScript might bring about. Therefore, we leave out the tests with
+    // the validation of additional properties.
+    if (path.basename(causeDir) == "UnexpectedAdditionalProperty") {
+      continue;
+    }
+
+    const clsDir = path.join(
+      causeDir,
+      "Leaf"
+    );
+    if (!fs.existsSync(clsDir)) {
+      // NOTE (mristin):
+      // Some classes indeed lack the invalid examples.
+      continue;
+    }
+
+    const pths = Array.from(
+      TestCommon.findFilesBySuffixRecursively(
+        clsDir,
+        ".json"
+      )
+    );
+    pths.sort();
+
+    for (const pth of pths) {
+      const jsonable = TestCommon.readJsonFromFileSync(pth);
+
+      const instanceOrError = OurJsonization.leafFromJsonable(
+        jsonable
+      );
+      if (instanceOrError.error === null) {
+        throw new Error(`Expected a de-serialization error for ${pth}, but got none`);
+      }
+
+      assertDeserializationErrorEqualsExpectedOrRecord(
+        instanceOrError.error,
+        pth
+      );
+    }
+  }
+});
+
+test("Leaf verification fail", () => {
+  for (
+    const causeDir of
+    TestCommon.findImmediateSubdirectories(
+      path.join(
+        TestCommon.TEST_DATA_DIR,
+        "Json",
+        "Unexpected",
+        "Invalid"
+      )
+    )
+  ) {
+    const clsDir = path.join(
+      causeDir,
+      "Leaf"
+    );
+    if (!fs.existsSync(clsDir)) {
+      // NOTE (mristin):
+      // Some classes indeed lack the invalid examples.
+      continue;
+    }
+
+    const pths = Array.from(
+      TestCommon.findFilesBySuffixRecursively(
+        clsDir,
+        ".json"
+      )
+    );
+    pths.sort();
+
+    for (const pth of pths) {
+      const jsonable = TestCommon.readJsonFromFileSync(pth);
+
+      const instanceOrError = OurJsonization.leafFromJsonable(
+        jsonable
+      );
+      if (instanceOrError.error !== null) {
+        throw new Error(
+          `Expected no de-serialization error for ${pth}, ` +
+          `but got: ${instanceOrError.error.message}: ${instanceOrError.error.path}`
+        );
+      }
+
+      const instance = instanceOrError.mustValue();
+
+      const verificationErrors = Array.from(OurVerification.verify(instance));
+      assertVerificationErrorsEqualExpectedOrRecord(
+        verificationErrors,
+        pth
+      );
+    }
+  }
+});
+
 test("Something round-trip OK", () => {
   const pths = Array.from(
     TestCommon.findFilesBySuffixRecursively(

@@ -95,6 +95,48 @@ public class TestDescendAndVisitorThrough {
     } // public void testDescendAgainstVisitorThroughForItem
 
     @Test
+    public void testDescendOfBranch() throws IOException {
+      final Branch instance = CommonJsonization.loadMaximalBranch();
+
+      compareOrRerecordTrace(
+        instance,
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Descend",
+          "Branch",
+          "maximal.json.trace"));
+    } // public void testDescendOfBranch
+
+    @Test
+    public void testDescendAgainstVisitorThroughForBranch() throws IOException {
+      Branch instance = (
+        CommonJsonization.loadMaximalBranch());
+
+      assertDescendAndVisitorThroughSame(instance);
+    } // public void testDescendAgainstVisitorThroughForBranch
+
+    @Test
+    public void testDescendOfLeaf() throws IOException {
+      final Leaf instance = CommonJsonization.loadMaximalLeaf();
+
+      compareOrRerecordTrace(
+        instance,
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Descend",
+          "Leaf",
+          "maximal.json.trace"));
+    } // public void testDescendOfLeaf
+
+    @Test
+    public void testDescendAgainstVisitorThroughForLeaf() throws IOException {
+      Leaf instance = (
+        CommonJsonization.loadMaximalLeaf());
+
+      assertDescendAndVisitorThroughSame(instance);
+    } // public void testDescendAgainstVisitorThroughForLeaf
+
+    @Test
     public void testDescendOfSomething() throws IOException {
       final Something instance = CommonJsonization.loadMaximalSomething();
 

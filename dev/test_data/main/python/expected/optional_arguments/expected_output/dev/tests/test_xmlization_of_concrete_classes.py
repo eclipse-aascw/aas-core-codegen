@@ -80,6 +80,126 @@ class TestRoundTrips(unittest.TestCase):
             tests.common_xmlization.assert_elements_equal(et_concrete, et_from_str)
             # endregion
 
+    def test_branch(self) -> None:
+        for path in sorted(
+            (
+                tests.common.TEST_DATA_DIR
+                / "Xml"
+                / "Expected"
+                / 'branch'
+            ).glob("**/*.xml")
+        ):
+            text = path.read_text(encoding="utf-8")
+            et_concrete = ET.fromstring(text)
+            tests.common_xmlization.remove_redundant_whitespace(et_concrete)
+
+            # region From iterparse
+            iterator = ET.iterparse(source=io.StringIO(text), events=["start", "end"])
+            got_from_iterparse = (
+                our_xmlization.branch_from_iterparse(iterator)
+            )
+
+            et_from_iterparse = ET.fromstring(our_xmlization.to_str(got_from_iterparse))
+            tests.common_xmlization.remove_redundant_whitespace(et_from_iterparse)
+            tests.common_xmlization.assert_elements_equal(et_concrete, et_from_iterparse)
+            # endregion
+
+            # region From stream
+            got_from_stream = (
+                our_xmlization
+                .branch_from_stream(
+                    io.StringIO(text)
+                )
+            )
+            et_from_stream = ET.fromstring(our_xmlization.to_str(got_from_stream))
+            tests.common_xmlization.remove_redundant_whitespace(et_from_stream)
+            tests.common_xmlization.assert_elements_equal(et_concrete, et_from_stream)
+            # endregion
+
+            # region From file
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
+
+                got_from_file = (
+                    our_xmlization
+                    .branch_from_file(tmp_path)
+                )
+            et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
+            tests.common_xmlization.remove_redundant_whitespace(et_from_file)
+            tests.common_xmlization.assert_elements_equal(et_concrete, et_from_file)
+            # endregion
+
+            # region From string
+            got_from_str = (
+                our_xmlization
+                .branch_from_str(text)
+            )
+            et_from_str = ET.fromstring(our_xmlization.to_str(got_from_str))
+            tests.common_xmlization.remove_redundant_whitespace(et_from_str)
+            tests.common_xmlization.assert_elements_equal(et_concrete, et_from_str)
+            # endregion
+
+    def test_leaf(self) -> None:
+        for path in sorted(
+            (
+                tests.common.TEST_DATA_DIR
+                / "Xml"
+                / "Expected"
+                / 'leaf'
+            ).glob("**/*.xml")
+        ):
+            text = path.read_text(encoding="utf-8")
+            et_concrete = ET.fromstring(text)
+            tests.common_xmlization.remove_redundant_whitespace(et_concrete)
+
+            # region From iterparse
+            iterator = ET.iterparse(source=io.StringIO(text), events=["start", "end"])
+            got_from_iterparse = (
+                our_xmlization.leaf_from_iterparse(iterator)
+            )
+
+            et_from_iterparse = ET.fromstring(our_xmlization.to_str(got_from_iterparse))
+            tests.common_xmlization.remove_redundant_whitespace(et_from_iterparse)
+            tests.common_xmlization.assert_elements_equal(et_concrete, et_from_iterparse)
+            # endregion
+
+            # region From stream
+            got_from_stream = (
+                our_xmlization
+                .leaf_from_stream(
+                    io.StringIO(text)
+                )
+            )
+            et_from_stream = ET.fromstring(our_xmlization.to_str(got_from_stream))
+            tests.common_xmlization.remove_redundant_whitespace(et_from_stream)
+            tests.common_xmlization.assert_elements_equal(et_concrete, et_from_stream)
+            # endregion
+
+            # region From file
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_path = pathlib.Path(tmp_dir) / "something.xml"
+                tmp_path.write_text(text, encoding="utf-8")
+
+                got_from_file = (
+                    our_xmlization
+                    .leaf_from_file(tmp_path)
+                )
+            et_from_file = ET.fromstring(our_xmlization.to_str(got_from_file))
+            tests.common_xmlization.remove_redundant_whitespace(et_from_file)
+            tests.common_xmlization.assert_elements_equal(et_concrete, et_from_file)
+            # endregion
+
+            # region From string
+            got_from_str = (
+                our_xmlization
+                .leaf_from_str(text)
+            )
+            et_from_str = ET.fromstring(our_xmlization.to_str(got_from_str))
+            tests.common_xmlization.remove_redundant_whitespace(et_from_str)
+            tests.common_xmlization.assert_elements_equal(et_concrete, et_from_str)
+            # endregion
+
     def test_something(self) -> None:
         for path in sorted(
             (

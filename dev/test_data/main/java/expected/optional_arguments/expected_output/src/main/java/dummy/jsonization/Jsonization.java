@@ -243,6 +243,60 @@ public class Jsonization {
       }
 
       /**
+       * Extract the {@code modelType} property of {@code node} as a string.
+       *
+       * <p>This is the only place which knows how the model type is spelled on
+       * the wire. Both the dispatch on the model type and its check in a concrete
+       * class go through it.
+       *
+       * @param node JSON object to be inspected
+       */
+      private static Reporting.Result<String> tryModelTypeFrom(JsonNode node) {
+        final JsonNode modelTypeNode = node.get("modelType");
+        if (modelTypeNode == null) {
+          return missingRequiredProperty("modelType");
+        }
+
+        final Reporting.Result<String> result = tryStringFrom(modelTypeNode);
+        if (result.isError()) {
+          return prependName(result, "modelType");
+        }
+
+        return result;
+      }
+
+      /**
+       * Check that {@code node} gives the {@code expected} model type, and return
+       * the error if it does not.
+       *
+       * <p>The model type is checked before the properties are read, so that a wrong
+       * one is reported without de-serializing any of them first, and so that
+       * the property loop carries nothing but the properties.
+       *
+       * @param node JSON object to be inspected
+       * @param expected model type of the class being de-serialized
+       */
+      private static Reporting.Error checkModelType(JsonNode node, String expected) {
+        final Reporting.Result<String> result = tryModelTypeFrom(node);
+        if (result.isError()) {
+          return result.getError();
+        }
+
+        final String modelType = result.getResult();
+        if (!modelType.equals(expected)) {
+          final Reporting.Error error = new Reporting.Error(
+            "Expected the model type '" + expected + "', " +
+            "but got '" + modelType + "'");
+          // NOTE (mristin):
+          // A wrong model type is reported at the instance, as an unknown one is,
+          // and as in the other SDKs.
+          return error;
+        }
+
+        return null;
+      }
+
+      /**
        * Parse {@code node} as a literal of the enumeration {@code enumType},
        * converted from its text by {@code fromString}.
        *
@@ -302,6 +356,15 @@ public class Jsonization {
         }
 
         return Reporting.Result.success(result);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code INode}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<INode>> parseListOf_INode(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryINodeFrom);
       }
 
       /**
@@ -369,6 +432,141 @@ public class Jsonization {
         return Reporting.Result.success(new Item(
           theName,
           theNote));
+      }
+
+      /**
+       * Deserialize an instance of INode by dispatching
+       * based on {@code modelType} property of the {@code node}.
+       *
+       * @param node JSON node to be parsed
+       */
+      public static Reporting.Result<? extends INode> tryINodeFrom(JsonNode node) {
+        if (node == null || !node.isObject()) {
+          return notAJsonObject(node);
+        }
+
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
+        if (modelTypeResult.isError()) {
+          return modelTypeResult.castTo(INode.class);
+        }
+
+        switch (modelTypeResult.getResult()) {
+          case "Branch":
+            return tryBranchFromObject(node);
+          case "Leaf":
+            return tryLeafFromObject(node);
+          default: {
+            final Reporting.Error error = new Reporting.Error(
+              "Unexpected model type for INode: " + modelTypeResult.getResult());
+            return Reporting.Result.failure(error);
+          }
+        }
+      }
+
+      /**
+       * Deserialize an instance of Branch from {@code node}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<Branch> tryBranchFrom(JsonNode node) {
+        if (node == null || !node.isObject()) {
+          return notAJsonObject(node);
+        }
+
+        final Reporting.Error modelTypeError = checkModelType(node, "Branch");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryBranchFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of Branch from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<Branch> tryBranchFromObject(JsonNode node) {
+        List<INode> theOptionalChildren = null;
+
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
+
+          switch (key) {
+            case "optionalChildren": {
+              final Reporting.Result<List<INode>> parsed = parseListOf_INode(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
+              }
+              theOptionalChildren = parsed.getResult();
+              break;
+            }
+            case "modelType":
+              // The model type has already been checked before the loop.
+              break;
+            default:
+              return unexpectedProperty(key);
+          }
+        }
+
+        return Reporting.Result.success(new Branch(
+          theOptionalChildren));
+      }
+
+      /**
+       * Deserialize an instance of Leaf from {@code node}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<Leaf> tryLeafFrom(JsonNode node) {
+        if (node == null || !node.isObject()) {
+          return notAJsonObject(node);
+        }
+
+        final Reporting.Error modelTypeError = checkModelType(node, "Leaf");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryLeafFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of Leaf from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<Leaf> tryLeafFromObject(JsonNode node) {
+        IItem theOptionalItem = null;
+
+        for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
+
+          switch (key) {
+            case "optionalItem": {
+              final Reporting.Result<? extends IItem> parsed = tryItemFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
+              }
+              theOptionalItem = parsed.getResult();
+              break;
+            }
+            case "modelType":
+              // The model type has already been checked before the loop.
+              break;
+            default:
+              return unexpectedProperty(key);
+          }
+        }
+
+        return Reporting.Result.success(new Leaf(
+          theOptionalItem));
       }
 
       /**
@@ -580,6 +778,57 @@ public class Jsonization {
       }
 
       /**
+       * Deserialize an instance of INode from {@code node}.
+       *
+       * @param node JSON node to be parsed
+       */
+      public static INode deserializeINode(JsonNode node) {
+        final Reporting.Result<? extends INode> result =
+          _DeserializeImplementation.tryINodeFrom(
+            node);
+
+        return result.onError(error -> {
+          throw new DeserializeException(
+            Reporting.generateJsonPath(error.getPathSegments()),
+            error.getCause());
+        });
+      }
+
+      /**
+       * Deserialize an instance of Branch from {@code node}.
+       *
+       * @param node JSON node to be parsed
+       */
+      public static Branch deserializeBranch(JsonNode node) {
+        final Reporting.Result<? extends Branch> result =
+          _DeserializeImplementation.tryBranchFrom(
+            node);
+
+        return result.onError(error -> {
+          throw new DeserializeException(
+            Reporting.generateJsonPath(error.getPathSegments()),
+            error.getCause());
+        });
+      }
+
+      /**
+       * Deserialize an instance of Leaf from {@code node}.
+       *
+       * @param node JSON node to be parsed
+       */
+      public static Leaf deserializeLeaf(JsonNode node) {
+        final Reporting.Result<? extends Leaf> result =
+          _DeserializeImplementation.tryLeafFrom(
+            node);
+
+        return result.onError(error -> {
+          throw new DeserializeException(
+            Reporting.generateJsonPath(error.getPathSegments()),
+            error.getCause());
+        });
+      }
+
+      /**
        * Deserialize an instance of Something from {@code node}.
        *
        * @param node JSON node to be parsed
@@ -707,6 +956,28 @@ public class Jsonization {
        *
        * @param that to be serialized
        */
+      private static ArrayNode serializeListOf_IClass(
+        List<? extends IClass> that) {
+        final ArrayNode result = JsonNodeFactory.instance.arrayNode();
+        int i = 0;
+        for (IClass item : that) {
+          try {
+            result.add(transformClass(item));
+          } catch (_SerializeFailure failure) {
+            failure.getError().prependSegment(
+              new Reporting.IndexSegment(i));
+            throw failure;
+          }
+          i++;
+        }
+        return result;
+      }
+
+      /**
+       * Serialize every item of {@code that} into a JSON array.
+       *
+       * @param that to be serialized
+       */
       private static ArrayNode serializeListOf_string(
         List<String> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
@@ -735,6 +1006,36 @@ public class Jsonization {
         setOptionalProperty(
           result, "note", "getNote()",
           that.getNote(), _Transformer::stringToJsonNode);
+
+        return result;
+      }
+
+      @Override
+      public JsonNode transformBranch(
+        IBranch that
+      ) {
+        final ObjectNode result = JsonNodeFactory.instance.objectNode();
+
+        setOptionalProperty(
+          result, "optionalChildren", "getOptionalChildren()",
+          that.getOptionalChildren(), _Transformer::serializeListOf_IClass);
+
+        result.put("modelType", "Branch");
+
+        return result;
+      }
+
+      @Override
+      public JsonNode transformLeaf(
+        ILeaf that
+      ) {
+        final ObjectNode result = JsonNodeFactory.instance.objectNode();
+
+        setOptionalProperty(
+          result, "optionalItem", "getOptionalItem()",
+          that.getOptionalItem(), _Transformer::transformClass);
+
+        result.put("modelType", "Leaf");
 
         return result;
       }

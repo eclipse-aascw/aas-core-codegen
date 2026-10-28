@@ -31,6 +31,38 @@ std::shared_ptr<
 > LoadMaxItem();
 
 /**
+ * Load a minimal example of IBranch by
+ * de-serializing it from an XML file.
+ */
+std::shared_ptr<
+  dummy::types::IBranch
+> LoadMinBranch();
+
+/**
+ * Load a maximal example of IBranch by
+ * de-serializing it from an XML file.
+ */
+std::shared_ptr<
+  dummy::types::IBranch
+> LoadMaxBranch();
+
+/**
+ * Load a minimal example of ILeaf by
+ * de-serializing it from an XML file.
+ */
+std::shared_ptr<
+  dummy::types::ILeaf
+> LoadMinLeaf();
+
+/**
+ * Load a maximal example of ILeaf by
+ * de-serializing it from an XML file.
+ */
+std::shared_ptr<
+  dummy::types::ILeaf
+> LoadMaxLeaf();
+
+/**
  * Load a minimal example of ISomething by
  * de-serializing it from an XML file.
  */

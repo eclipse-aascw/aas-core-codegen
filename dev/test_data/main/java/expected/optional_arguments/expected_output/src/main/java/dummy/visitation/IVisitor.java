@@ -20,6 +20,12 @@ public interface IVisitor
   void visitItem(
     IItem that
   );
+  void visitBranch(
+    IBranch that
+  );
+  void visitLeaf(
+    ILeaf that
+  );
   void visitSomething(
     ISomething that
   );

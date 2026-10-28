@@ -20,10 +20,111 @@ test("casts over an instance of Item", () => {
   ).toStrictEqual(theItem);
 
   expect(
+    OurTypes.isNode(theItem)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asNode(theItem)
+  ).toBeNull();
+
+  expect(
+    OurTypes.isBranch(theItem)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asBranch(theItem)
+  ).toBeNull();
+
+  expect(
+    OurTypes.isLeaf(theItem)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asLeaf(theItem)
+  ).toBeNull();
+
+  expect(
     OurTypes.isSomething(theItem)
   ).toStrictEqual(false);
   expect(
     OurTypes.asSomething(theItem)
+  ).toBeNull();
+});
+
+test("casts over an instance of Branch", () => {
+  const theBranch =
+    TestCommonJsonization.loadMinimalBranch();
+
+  expect(
+    OurTypes.isItem(theBranch)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asItem(theBranch)
+  ).toBeNull();
+
+  expect(
+    OurTypes.isNode(theBranch)
+  ).toStrictEqual(true);
+  expect(
+    OurTypes.asNode(theBranch)
+  ).toStrictEqual(theBranch);
+
+  expect(
+    OurTypes.isBranch(theBranch)
+  ).toStrictEqual(true);
+  expect(
+    OurTypes.asBranch(theBranch)
+  ).toStrictEqual(theBranch);
+
+  expect(
+    OurTypes.isLeaf(theBranch)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asLeaf(theBranch)
+  ).toBeNull();
+
+  expect(
+    OurTypes.isSomething(theBranch)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asSomething(theBranch)
+  ).toBeNull();
+});
+
+test("casts over an instance of Leaf", () => {
+  const theLeaf =
+    TestCommonJsonization.loadMinimalLeaf();
+
+  expect(
+    OurTypes.isItem(theLeaf)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asItem(theLeaf)
+  ).toBeNull();
+
+  expect(
+    OurTypes.isNode(theLeaf)
+  ).toStrictEqual(true);
+  expect(
+    OurTypes.asNode(theLeaf)
+  ).toStrictEqual(theLeaf);
+
+  expect(
+    OurTypes.isBranch(theLeaf)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asBranch(theLeaf)
+  ).toBeNull();
+
+  expect(
+    OurTypes.isLeaf(theLeaf)
+  ).toStrictEqual(true);
+  expect(
+    OurTypes.asLeaf(theLeaf)
+  ).toStrictEqual(theLeaf);
+
+  expect(
+    OurTypes.isSomething(theLeaf)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asSomething(theLeaf)
   ).toBeNull();
 });
 
@@ -36,6 +137,27 @@ test("casts over an instance of Something", () => {
   ).toStrictEqual(false);
   expect(
     OurTypes.asItem(theSomething)
+  ).toBeNull();
+
+  expect(
+    OurTypes.isNode(theSomething)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asNode(theSomething)
+  ).toBeNull();
+
+  expect(
+    OurTypes.isBranch(theSomething)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asBranch(theSomething)
+  ).toBeNull();
+
+  expect(
+    OurTypes.isLeaf(theSomething)
+  ).toStrictEqual(false);
+  expect(
+    OurTypes.asLeaf(theSomething)
   ).toBeNull();
 
   expect(

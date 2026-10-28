@@ -12,6 +12,27 @@ namespace dummy.Tests
     public class TestOverXOrEmpty
     {
         [Test]
+        public void Test_Branch_OverOptionalChildrenOrEmpty()
+        {
+            foreach (Our.Branch instance in new[]
+            {
+                Our.Tests.CommonJsonization.LoadMinimalBranch(),
+                Our.Tests.CommonJsonization.LoadMaximalBranch()
+            })
+            {
+                int count = 0;
+                foreach (var _ in instance.OverOptionalChildrenOrEmpty())
+                {
+                    count++;
+                }
+
+                Assert.AreEqual(
+                    instance.OptionalChildren?.Count ?? 0,
+                    count);
+            }
+        }  // public void Test_Branch_OverOptionalChildrenOrEmpty
+
+        [Test]
         public void Test_Something_OverOptionalTextsOrEmpty()
         {
             foreach (Our.Something instance in new[]

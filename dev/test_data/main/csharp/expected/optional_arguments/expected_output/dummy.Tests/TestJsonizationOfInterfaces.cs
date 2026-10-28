@@ -11,7 +11,63 @@ namespace dummy.Tests
 {
     public class TestJsonizationOfInterfaces
     {
-        
+        [Test]
+        public void Test_round_trip_INode_from_Branch()
+        {
+            var instance = Our.Tests.CommonJsonization.LoadMaximalBranch();
+
+            var jsonObject = Our.Jsonization.Serialize.ToJsonObject(instance);
+
+            var anotherInstance = Our.Jsonization.Deserialize.INodeFrom(
+                jsonObject);
+
+            var anotherJsonObject = Our.Jsonization.Serialize.ToJsonObject(
+                anotherInstance);
+
+            Our.Tests.CommonJson.CheckJsonNodesEqual(
+                jsonObject,
+                anotherJsonObject,
+                out Our.Reporting.Error? error);
+
+            if (error != null)
+            {
+                Assert.Fail(
+                    "When we serialize the complete instance of Branch " +
+                    "as INode, we get an error in the round trip: " +
+                    $"{Reporting.GenerateJsonPath(error.PathSegments)}: " +
+                    error.Cause
+                );
+            }
+        }  // void Test_round_trip_INode_from_Branch
+
+        [Test]
+        public void Test_round_trip_INode_from_Leaf()
+        {
+            var instance = Our.Tests.CommonJsonization.LoadMaximalLeaf();
+
+            var jsonObject = Our.Jsonization.Serialize.ToJsonObject(instance);
+
+            var anotherInstance = Our.Jsonization.Deserialize.INodeFrom(
+                jsonObject);
+
+            var anotherJsonObject = Our.Jsonization.Serialize.ToJsonObject(
+                anotherInstance);
+
+            Our.Tests.CommonJson.CheckJsonNodesEqual(
+                jsonObject,
+                anotherJsonObject,
+                out Our.Reporting.Error? error);
+
+            if (error != null)
+            {
+                Assert.Fail(
+                    "When we serialize the complete instance of Leaf " +
+                    "as INode, we get an error in the round trip: " +
+                    $"{Reporting.GenerateJsonPath(error.PathSegments)}: " +
+                    error.Cause
+                );
+            }
+        }  // void Test_round_trip_INode_from_Leaf
     }  // class TestJsonizationOfInterfaces
 }  // namespace dummy.Tests
 

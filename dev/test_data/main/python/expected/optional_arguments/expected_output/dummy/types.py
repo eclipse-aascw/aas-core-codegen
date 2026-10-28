@@ -174,6 +174,159 @@ class Item(Class):
         self.note = note
 
 
+class Node(Class):
+
+    pass
+
+
+class Branch(Node):
+
+
+    optional_children: Optional[List['Node']]
+
+    def over_optional_children_or_empty(
+            self
+    ) -> Iterator['Node']:
+        """Yield from :py:attr:`.optional_children` if set."""
+        if self.optional_children is not None:
+            yield from self.optional_children
+
+    def descend_once(self) -> Iterator[Class]:
+        """
+        Iterate over the instances referenced from this instance.
+
+        We do not recurse into the referenced instance.
+
+        :yield: instances directly referenced from this instance
+        """
+        return self._descend(recurse=False)
+
+    def descend(self) -> Iterator[Class]:
+        """
+        Iterate recursively over the instances referenced from this one.
+
+        :yield: instances recursively referenced from this instance
+        """
+        return self._descend(recurse=True)
+
+    def _descend(self, recurse: bool) -> Iterator[Class]:
+        """
+        Iterate over the instances referenced from this one, and recursively
+        over their descendants if :paramref:`recurse` is set.
+
+        :param recurse: if set, descend recursively into the referenced instances
+        :yield: instances referenced from this instance
+        """
+        if self.optional_children is not None:
+            yield from _descend_list_of__node(self.optional_children, recurse)
+
+    def accept(self, visitor: "AbstractVisitor") -> None:
+        """Dispatch the :paramref:`visitor` on this instance."""
+        visitor.visit_branch(self)
+
+    def accept_with_context(
+            self,
+            visitor: "AbstractVisitorWithContext[ContextT]",
+            context: ContextT
+    ) -> None:
+        """Dispatch the :paramref:`visitor` on this instance in :paramref:`context`."""
+        visitor.visit_branch_with_context(self, context)
+
+    def transform(
+            self,
+            transformer: "AbstractTransformer[T]"
+    ) -> T:
+        """Dispatch the :paramref:`transformer` on this instance."""
+        return transformer.transform_branch(self)
+
+    def transform_with_context(
+            self,
+            transformer: "AbstractTransformerWithContext[ContextT, T]",
+            context: ContextT
+    ) -> T:
+        """
+        Dispatch the :paramref:`transformer` on this instance in :paramref:`context`.
+        """
+        return transformer.transform_branch_with_context(
+            self, context)
+
+    def __init__(self, optional_children: Optional[List['Node']] = None) -> None:
+        """Initialize with the given values."""
+        self.optional_children = optional_children
+
+
+class Leaf(Node):
+
+
+    optional_item: Optional['Item']
+
+    def descend_once(self) -> Iterator[Class]:
+        """
+        Iterate over the instances referenced from this instance.
+
+        We do not recurse into the referenced instance.
+
+        :yield: instances directly referenced from this instance
+        """
+        return self._descend(recurse=False)
+
+    def descend(self) -> Iterator[Class]:
+        """
+        Iterate recursively over the instances referenced from this one.
+
+        :yield: instances recursively referenced from this instance
+        """
+        return self._descend(recurse=True)
+
+    def _descend(self, recurse: bool) -> Iterator[Class]:
+        """
+        Iterate over the instances referenced from this one, and recursively
+        over their descendants if :paramref:`recurse` is set.
+
+        :param recurse: if set, descend recursively into the referenced instances
+        :yield: instances referenced from this instance
+        """
+        if self.optional_item is not None:
+            yield self.optional_item
+
+            if recurse:
+                yield from self.optional_item.descend()
+
+    def accept(self, visitor: "AbstractVisitor") -> None:
+        """Dispatch the :paramref:`visitor` on this instance."""
+        visitor.visit_leaf(self)
+
+    def accept_with_context(
+            self,
+            visitor: "AbstractVisitorWithContext[ContextT]",
+            context: ContextT
+    ) -> None:
+        """Dispatch the :paramref:`visitor` on this instance in :paramref:`context`."""
+        visitor.visit_leaf_with_context(self, context)
+
+    def transform(
+            self,
+            transformer: "AbstractTransformer[T]"
+    ) -> T:
+        """Dispatch the :paramref:`transformer` on this instance."""
+        return transformer.transform_leaf(self)
+
+    def transform_with_context(
+            self,
+            transformer: "AbstractTransformerWithContext[ContextT, T]",
+            context: ContextT
+    ) -> T:
+        """
+        Dispatch the :paramref:`transformer` on this instance in :paramref:`context`.
+        """
+        return transformer.transform_leaf_with_context(
+            self, context)
+
+    def __init__(self, optional_item: Optional['Item'] = None) -> None:
+        """Initialize with the given values."""
+        self.optional_item = optional_item
+
+
 class Something(Class):
 
 
@@ -281,6 +434,26 @@ class Something(Class):
         self.optional_kind = optional_kind
 
 
+def _descend_list_of__node(
+        that: List['Node'],
+        recurse: bool
+) -> Iterator[Class]:
+    """
+    Iterate over the instances held by :paramref:`that`.
+
+    If :paramref:`recurse` is set, descend recursively into the instances
+    as well.
+    """
+    if not recurse:
+        yield from that
+        return
+
+    for item in that:
+        yield item
+
+        yield from item.descend()
+
+
 class AbstractVisitor:
     """Visit the instances of the model."""
     def visit(
@@ -294,6 +467,22 @@ class AbstractVisitor:
     def visit_item(
             self,
             that: Item
+    ) -> None:
+        """Visit :paramref:`that`."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def visit_branch(
+            self,
+            that: Branch
+    ) -> None:
+        """Visit :paramref:`that`."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def visit_leaf(
+            self,
+            that: Leaf
     ) -> None:
         """Visit :paramref:`that`."""
         raise NotImplementedError
@@ -327,6 +516,24 @@ class AbstractVisitorWithContext(Generic[ContextT]):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def visit_branch_with_context(
+            self,
+            that: Branch,
+            context: ContextT
+    ) -> None:
+        """Visit :paramref:`that` in :paramref:`context`."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def visit_leaf_with_context(
+            self,
+            that: Leaf,
+            context: ContextT
+    ) -> None:
+        """Visit :paramref:`that` in :paramref:`context`."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def visit_something_with_context(
             self,
             that: Something,
@@ -353,6 +560,22 @@ class PassThroughVisitor(AbstractVisitor):
     def visit_item(
             self,
             that: Item
+    ) -> None:
+        """Visit :paramref:`that`."""
+        for another in that.descend_once():
+            self.visit(another)
+
+    def visit_branch(
+            self,
+            that: Branch
+    ) -> None:
+        """Visit :paramref:`that`."""
+        for another in that.descend_once():
+            self.visit(another)
+
+    def visit_leaf(
+            self,
+            that: Leaf
     ) -> None:
         """Visit :paramref:`that`."""
         for another in that.descend_once():
@@ -393,6 +616,24 @@ class PassThroughVisitorWithContext(
         for another in that.descend_once():
             self.visit_with_context(another, context)
 
+    def visit_branch_with_context(
+            self,
+            that: Branch,
+            context: ContextT
+    ) -> None:
+        """Visit :paramref:`that` in :paramref:`context`."""
+        for another in that.descend_once():
+            self.visit_with_context(another, context)
+
+    def visit_leaf_with_context(
+            self,
+            that: Leaf,
+            context: ContextT
+    ) -> None:
+        """Visit :paramref:`that` in :paramref:`context`."""
+        for another in that.descend_once():
+            self.visit_with_context(another, context)
+
     def visit_something_with_context(
             self,
             that: Something,
@@ -416,6 +657,22 @@ class AbstractTransformer(Generic[T]):
     def transform_item(
             self,
             that: Item
+    ) -> T:
+        """Transform :paramref:`that`."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def transform_branch(
+            self,
+            that: Branch
+    ) -> T:
+        """Transform :paramref:`that`."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def transform_leaf(
+            self,
+            that: Leaf
     ) -> T:
         """Transform :paramref:`that`."""
         raise NotImplementedError
@@ -445,6 +702,24 @@ class AbstractTransformerWithContext(
     def transform_item_with_context(
             self,
             that: Item,
+            context: ContextT
+    ) -> T:
+        """Transform :paramref:`that` in :paramref:`context`."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def transform_branch_with_context(
+            self,
+            that: Branch,
+            context: ContextT
+    ) -> T:
+        """Transform :paramref:`that` in :paramref:`context`."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def transform_leaf_with_context(
+            self,
+            that: Leaf,
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""
@@ -488,6 +763,20 @@ class TransformerWithDefault(AbstractTransformer[T]):
         """Transform :paramref:`that`."""
         return self.default
 
+    def transform_branch(
+            self,
+            that: Branch
+    ) -> T:
+        """Transform :paramref:`that`."""
+        return self.default
+
+    def transform_leaf(
+            self,
+            that: Leaf
+    ) -> T:
+        """Transform :paramref:`that`."""
+        return self.default
+
     def transform_something(
             self,
             that: Something
@@ -523,6 +812,22 @@ class TransformerWithDefaultAndContext(
     def transform_item_with_context(
             self,
             that: Item,
+            context: ContextT
+    ) -> T:
+        """Transform :paramref:`that` in :paramref:`context`."""
+        return self.default
+
+    def transform_branch_with_context(
+            self,
+            that: Branch,
+            context: ContextT
+    ) -> T:
+        """Transform :paramref:`that` in :paramref:`context`."""
+        return self.default
+
+    def transform_leaf_with_context(
+            self,
+            that: Leaf,
             context: ContextT
     ) -> T:
         """Transform :paramref:`that` in :paramref:`context`."""

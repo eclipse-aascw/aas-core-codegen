@@ -192,6 +192,204 @@ public class TestJsonizationOfConcreteClasses {
   } // public void testItemVerificationFail
 
   @Test
+  public void testBranchOk() throws IOException {
+    final ObjectMapper objectMapper = new ObjectMapper();
+
+    final Path searchPath = Paths.get(
+      Common.TEST_DATA_DIR,
+      "Json",
+      "Expected",
+      "Branch");
+    final List<Path> paths = Common.findPaths(searchPath, ".json");
+
+    for (Path path : paths) {
+      final JsonNode node = objectMapper.readTree(path.toFile());
+      final Branch instance = Jsonization.Deserialize.deserializeBranch(node);
+
+      final Iterable<Reporting.Error> errorIter = Verification.verify(instance);
+      final List<Reporting.Error> errors = Common.asList(errorIter);
+      Common.assertNoVerificationErrors(errors, path);
+    }
+  } // public void testBranchOk
+
+  @Test
+  public void testBranchDeserializationFromNonObjectFail() throws IOException {
+    final JsonNode node = JsonNodeFactory.instance.textNode("INVALID");
+
+    Jsonization.DeserializeException exception = null;
+    try {
+      final Branch unused = Jsonization.Deserialize.deserializeBranch(node);
+    } catch (Jsonization.DeserializeException observedException) {
+      exception = observedException;
+    }
+
+    assert exception != null : "Expected an exception, but got none";
+    assert exception.getMessage().startsWith("Expected a JsonObject, but got ") :
+      "Unexpected exception message: " + exception.getMessage();
+  } // public void testBranchDeserializationFromNonObjectFail
+
+  @Test
+  public void testBranchDeserializationFail() throws IOException {
+    for (Path causeDir :
+      Common.findDirs(
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Json",
+          "Unexpected",
+          "Unserializable"))) {
+      final Path clsDir = causeDir.resolve("Branch");
+
+      if (!Files.exists(clsDir)) {
+        // No examples of Branch for the failure cause.
+        continue;
+      }
+
+      final List<Path> paths = Common.findPaths(clsDir, ".json");
+      for (Path path : paths) {
+        final JsonNode node = CommonJson.readFromFile(path);
+
+        Jsonization.DeserializeException exception = null;
+        try {
+          final Branch var = Jsonization.Deserialize.deserializeBranch(node);
+        } catch (Jsonization.DeserializeException observedException) {
+          exception = observedException;
+        }
+
+        assertEqualsExpectedOrRerecordDeserializationException(
+          exception, path);
+      }
+    }
+  } // public void testBranchDeserializationFail
+
+  @Test
+  public void testBranchVerificationFail() throws IOException {
+    for (Path causeDir :
+      Common.findDirs(
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Json",
+          "Unexpected",
+          "Invalid"))) {
+      final Path clsDir = causeDir.resolve("Branch");
+
+      if (!Files.exists(clsDir)) {
+        // No examples of Branch for the failure cause.
+        continue;
+      }
+
+      final List<Path> paths = Common.findPaths(clsDir, ".json");
+      for (Path path : paths) {
+        final JsonNode node = CommonJson.readFromFile(path);
+
+        final Branch instance = Jsonization.Deserialize.deserializeBranch(node);
+
+        final Iterable<Reporting.Error> errorIter = Verification.verify(instance);
+        final List<Reporting.Error> errors = Common.asList(errorIter);
+        Common.assertEqualsExpectedOrRerecordVerificationErrors(errors, path);
+      }
+    }
+  } // public void testBranchVerificationFail
+
+  @Test
+  public void testLeafOk() throws IOException {
+    final ObjectMapper objectMapper = new ObjectMapper();
+
+    final Path searchPath = Paths.get(
+      Common.TEST_DATA_DIR,
+      "Json",
+      "Expected",
+      "Leaf");
+    final List<Path> paths = Common.findPaths(searchPath, ".json");
+
+    for (Path path : paths) {
+      final JsonNode node = objectMapper.readTree(path.toFile());
+      final Leaf instance = Jsonization.Deserialize.deserializeLeaf(node);
+
+      final Iterable<Reporting.Error> errorIter = Verification.verify(instance);
+      final List<Reporting.Error> errors = Common.asList(errorIter);
+      Common.assertNoVerificationErrors(errors, path);
+    }
+  } // public void testLeafOk
+
+  @Test
+  public void testLeafDeserializationFromNonObjectFail() throws IOException {
+    final JsonNode node = JsonNodeFactory.instance.textNode("INVALID");
+
+    Jsonization.DeserializeException exception = null;
+    try {
+      final Leaf unused = Jsonization.Deserialize.deserializeLeaf(node);
+    } catch (Jsonization.DeserializeException observedException) {
+      exception = observedException;
+    }
+
+    assert exception != null : "Expected an exception, but got none";
+    assert exception.getMessage().startsWith("Expected a JsonObject, but got ") :
+      "Unexpected exception message: " + exception.getMessage();
+  } // public void testLeafDeserializationFromNonObjectFail
+
+  @Test
+  public void testLeafDeserializationFail() throws IOException {
+    for (Path causeDir :
+      Common.findDirs(
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Json",
+          "Unexpected",
+          "Unserializable"))) {
+      final Path clsDir = causeDir.resolve("Leaf");
+
+      if (!Files.exists(clsDir)) {
+        // No examples of Leaf for the failure cause.
+        continue;
+      }
+
+      final List<Path> paths = Common.findPaths(clsDir, ".json");
+      for (Path path : paths) {
+        final JsonNode node = CommonJson.readFromFile(path);
+
+        Jsonization.DeserializeException exception = null;
+        try {
+          final Leaf var = Jsonization.Deserialize.deserializeLeaf(node);
+        } catch (Jsonization.DeserializeException observedException) {
+          exception = observedException;
+        }
+
+        assertEqualsExpectedOrRerecordDeserializationException(
+          exception, path);
+      }
+    }
+  } // public void testLeafDeserializationFail
+
+  @Test
+  public void testLeafVerificationFail() throws IOException {
+    for (Path causeDir :
+      Common.findDirs(
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Json",
+          "Unexpected",
+          "Invalid"))) {
+      final Path clsDir = causeDir.resolve("Leaf");
+
+      if (!Files.exists(clsDir)) {
+        // No examples of Leaf for the failure cause.
+        continue;
+      }
+
+      final List<Path> paths = Common.findPaths(clsDir, ".json");
+      for (Path path : paths) {
+        final JsonNode node = CommonJson.readFromFile(path);
+
+        final Leaf instance = Jsonization.Deserialize.deserializeLeaf(node);
+
+        final Iterable<Reporting.Error> errorIter = Verification.verify(instance);
+        final List<Reporting.Error> errors = Common.asList(errorIter);
+        Common.assertEqualsExpectedOrRerecordVerificationErrors(errors, path);
+      }
+    }
+  } // public void testLeafVerificationFail
+
+  @Test
   public void testSomethingOk() throws IOException {
     final ObjectMapper objectMapper = new ObjectMapper();
 
