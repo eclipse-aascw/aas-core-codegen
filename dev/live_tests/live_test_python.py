@@ -343,7 +343,7 @@ def main() -> int:
                 )
 
             if case_test_data_dir.exists():
-                target_test_data = project_dir / "test_data"
+                target_test_data = project_dir / "dev" / "test_data"
 
                 print(
                     f"Copying test data from {case_test_data_dir} "
