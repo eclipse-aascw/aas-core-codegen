@@ -24,7 +24,7 @@ _REPO_ROOT = pathlib.Path(os.path.realpath(__file__)).parent.parent.parent
 
 
 #: Path to the directory which contains input and golden files
-TEST_DATA_DIR = _REPO_ROOT / "test_data"
+TEST_DATA_DIR = _REPO_ROOT / "dev" / "test_data"
 
 
 #: If set, the golden files in the tests should be re-recorded instead
