@@ -463,7 +463,7 @@ namespace dummy
 
                 if (!(
                     !(that.OptionalKind != null)
-                    || (!Our.Constants.SpecialKinds.Contains(that.OptionalKind.Value))))
+                    || (!Our.Constants.SpecialKinds.Contains(that.OptionalKind!.Value))))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -569,7 +569,7 @@ namespace dummy
 
                 if (!(
                     !(that.OptionalTexts != null)
-                    || (new HashSet<string>(that.OptionalTexts.Intersect(that.Texts)).Count == 0)))
+                    || (new HashSet<string>(that.OptionalTexts!.Intersect(that.Texts)).Count == 0)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +

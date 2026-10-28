@@ -1,0 +1,11 @@
+{
+  "optionalChildren": [
+    {
+      "optionalItem": {
+        "name": "a"
+      },
+      "modelType": "Leaf"
+    }
+  ],
+  "modelType": "Branch"
+}

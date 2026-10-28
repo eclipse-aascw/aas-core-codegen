@@ -48,6 +48,18 @@ public class Copying
     }
 
     /**
+     * Make a deep copy of {@code that}, copying its items recursively.
+     */
+    private static List<INode> deepListOf_INode(
+        List<INode> that) {
+        List<INode> result = new ArrayList<>(that.size());
+        for (INode item : that) {
+            result.add(deep(item));
+        }
+        return result;
+    }
+
+    /**
      * Dispatch the making of shallow copies.
      */
     private static class _ShallowCopier extends AbstractTransformer<IClass> {
@@ -56,6 +68,20 @@ public class Copying
             IItem that
         ) {
             return new Item(that.getName(), that.getNote().orElse(null));
+        }
+
+        @Override
+        public IClass transformBranch(
+            IBranch that
+        ) {
+            return new Branch(that.getOptionalChildren().orElse(null));
+        }
+
+        @Override
+        public IClass transformLeaf(
+            ILeaf that
+        ) {
+            return new Leaf(that.getOptionalItem().orElse(null));
         }
 
         @Override
@@ -81,6 +107,28 @@ public class Copying
             return new Item(
                 that.getName(),
                 that.getNote().orElse(null)
+            );
+        }
+
+        @Override
+        public IClass transformBranch (
+            IBranch that
+        ) {
+            return new Branch(
+                that.getOptionalChildren().isPresent()
+                    ? deepListOf_INode(that.getOptionalChildren().get())
+                    : null
+            );
+        }
+
+        @Override
+        public IClass transformLeaf (
+            ILeaf that
+        ) {
+            return new Leaf(
+                that.getOptionalItem().isPresent()
+                    ? deep(that.getOptionalItem().get())
+                    : null
             );
         }
 

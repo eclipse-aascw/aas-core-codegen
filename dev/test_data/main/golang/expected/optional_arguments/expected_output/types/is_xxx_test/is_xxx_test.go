@@ -20,10 +20,98 @@ func TestIsXxxOnAnInstanceOfItem(t *testing.T) {
 		)
 	}
 
+	if ourtypes.IsBranch(instance) {
+		t.Errorf(
+			"Expected IsBranch to be false on an instance " +
+			"of IItem with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+
+	if ourtypes.IsLeaf(instance) {
+		t.Errorf(
+			"Expected IsLeaf to be false on an instance " +
+			"of IItem with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+
 	if ourtypes.IsSomething(instance) {
 		t.Errorf(
 			"Expected IsSomething to be false on an instance " +
 			"of IItem with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+}
+
+func TestIsXxxOnAnInstanceOfBranch(t *testing.T) {
+	instance := ourtesting.MustLoadMinimalBranch()
+
+	if ourtypes.IsItem(instance) {
+		t.Errorf(
+			"Expected IsItem to be false on an instance " +
+			"of IBranch with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+
+	if !ourtypes.IsBranch(instance) {
+		t.Errorf(
+			"Expected IsBranch to be true on an instance " +
+			"of IBranch with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+
+	if ourtypes.IsLeaf(instance) {
+		t.Errorf(
+			"Expected IsLeaf to be false on an instance " +
+			"of IBranch with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+
+	if ourtypes.IsSomething(instance) {
+		t.Errorf(
+			"Expected IsSomething to be false on an instance " +
+			"of IBranch with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+}
+
+func TestIsXxxOnAnInstanceOfLeaf(t *testing.T) {
+	instance := ourtesting.MustLoadMinimalLeaf()
+
+	if ourtypes.IsItem(instance) {
+		t.Errorf(
+			"Expected IsItem to be false on an instance " +
+			"of ILeaf with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+
+	if ourtypes.IsBranch(instance) {
+		t.Errorf(
+			"Expected IsBranch to be false on an instance " +
+			"of ILeaf with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+
+	if !ourtypes.IsLeaf(instance) {
+		t.Errorf(
+			"Expected IsLeaf to be true on an instance " +
+			"of ILeaf with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+
+	if ourtypes.IsSomething(instance) {
+		t.Errorf(
+			"Expected IsSomething to be false on an instance " +
+			"of ILeaf with runtime type %T and with model type %v",
 			instance, instance.ModelType(),
 		)
 	}
@@ -35,6 +123,22 @@ func TestIsXxxOnAnInstanceOfSomething(t *testing.T) {
 	if ourtypes.IsItem(instance) {
 		t.Errorf(
 			"Expected IsItem to be false on an instance " +
+			"of ISomething with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+
+	if ourtypes.IsBranch(instance) {
+		t.Errorf(
+			"Expected IsBranch to be false on an instance " +
+			"of ISomething with runtime type %T and with model type %v",
+			instance, instance.ModelType(),
+		)
+	}
+
+	if ourtypes.IsLeaf(instance) {
+		t.Errorf(
+			"Expected IsLeaf to be false on an instance " +
 			"of ISomething with runtime type %T and with model type %v",
 			instance, instance.ModelType(),
 		)

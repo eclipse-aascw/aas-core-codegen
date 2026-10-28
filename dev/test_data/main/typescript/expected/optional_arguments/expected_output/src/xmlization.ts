@@ -36,6 +36,7 @@ import {
   parseList,
   parseNamedElement,
   parseTextContent,
+  readNextOpenTag,
   readRequiredRootOpenTag,
   removeWhitespace,
   tokenizeXml,
@@ -54,6 +55,80 @@ export {
   SerializationError
 } from "./xmlcommon";
 export type { Segment } from "./xmlcommon";
+
+/**
+ * Read the next XML element from `cursor` and parse it with the parser which
+ * `parsersByLocalName` gives for the element's local name.
+ *
+ * An abstract class, a concrete class with descendants and a named union all
+ * prescribe no element tag of their own, so the tag is what tells us which
+ * parser to use. The set of local names which are accepted is the only thing
+ * which distinguishes one such dispatch from another, so it is the only thing
+ * which is generated -- the reading itself lives here.
+ *
+ * @param cursor - to read from
+ * @param expectedWhat - what we expected to read, for the error message
+ * @param parsersByLocalName - parser of the content, by the element's local name
+ * @returns parsed instance, or an error
+ * @typeParam T - type of the parsed instance
+ */
+function dispatchParseElement<T>(
+  cursor: XmlCursor,
+  expectedWhat: string,
+  parsersByLocalName: ReadonlyMap<string, ContentParser<T>>
+): OurCommon.Either<T, DeserializationError> {
+  const startTagOrError = readNextOpenTag(cursor);
+  if (startTagOrError.error !== null) {
+    return new OurCommon.Either<T, DeserializationError>(
+      null,
+      startTagOrError.error
+    );
+  }
+
+  const localName = localNameOfTag(startTagOrError.mustValue().tag);
+
+  const parseContent = parsersByLocalName.get(localName);
+  if (parseContent === undefined) {
+    return newDeserializationError<T>(
+      `Expected an instance of ${expectedWhat}, but got: ${localName}`
+    );
+  }
+
+  cursor.advance();
+
+  return parseElementContent(cursor, localName, parseContent);
+}
+
+/**
+ * Wrap `parseElement` so that its errors are reported at the element it parses.
+ *
+ * We use it where an instance is its own element, at the root or nested in
+ * a property, so that the path names the element of the instance, *e.g.*,
+ * `someRoot/property/someClass/someProperty`, as in the other SDKs. The items of
+ * a list and of a tuple are not wrapped, as their index already selects
+ * the element of the instance.
+ *
+ * @param parseElement - to parse the element whole, the tags included
+ * @returns the wrapped parser
+ * @typeParam T - type of the parsed instance
+ */
+function namingElement<T>(
+  parseElement: ContentParser<T>
+): ContentParser<T> {
+  return (cursor: XmlCursor) => {
+    const startTagOrError = readNextOpenTag(cursor);
+    const localName =
+      startTagOrError.error === null
+        ? localNameOfTag(startTagOrError.mustValue().tag)
+        : null;
+
+    const valueOrError = parseElement(cursor);
+    if (valueOrError.error !== null && localName !== null) {
+      valueOrError.error.path.prepend(new ElementSegment(localName));
+    }
+    return valueOrError;
+  };
+}
 
 /**
  * Parse the content of an XML element as a literal of the enumeration called
@@ -258,6 +333,15 @@ function parseAtV_str(
   );
 }
 
+function parse_ListOf_INode(
+  cursor: XmlCursor
+): OurCommon.Either<Array<OurTypes.INode>, DeserializationError> {
+  return parseList<OurTypes.INode>(
+    cursor,
+    dispatchParseNodeElement
+  );
+}
+
 function parse_ListOf_str(
   cursor: XmlCursor
 ): OurCommon.Either<Array<string>, DeserializationError> {
@@ -388,6 +472,168 @@ function parseItemFromSequence(
     theNote
   );
   return new OurCommon.Either<OurTypes.Item, DeserializationError>(
+    instance,
+    null
+  );
+}
+
+/**
+ * Parse the sequence of properties of an instance
+ * of {@link types!Branch}.
+ *
+ * The opening tag is expected to have been already read by the caller, and
+ * the caller is expected to read and verify the corresponding closing tag
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Branch} is embedded.
+ */
+function parseBranchFromSequence(
+  cursor: XmlCursor
+): OurCommon.Either<OurTypes.Branch, DeserializationError> {
+  let theOptionalChildren: Array<OurTypes.INode> | null = null;
+
+  const className = OurTypes.Branch.name;
+
+  cursor.skipIgnorable();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
+      break;
+    }
+    if (nextTagOrError instanceof DeserializationError) {
+      return new OurCommon.Either<OurTypes.Branch, DeserializationError>(
+        null,
+        nextTagOrError
+      );
+    }
+
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
+
+    let propertyError: DeserializationError | null = null;
+    switch (propertyLocalName) {
+      case "optionalChildren": {
+        if (theOptionalChildren !== null) {
+          propertyError = duplicatePropertyError(propertyLocalName);
+          break;
+        }
+
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parse_ListOf_INode
+        );
+        propertyError = parsed.error;
+        theOptionalChildren = parsed.value;
+        break;
+      }
+
+      default: {
+        propertyError = new DeserializationError(
+          `Unexpected XML property: ${propertyLocalName}`
+        );
+        break;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(new ElementSegment(propertyLocalName));
+      return new OurCommon.Either<OurTypes.Branch, DeserializationError>(
+        null,
+        propertyError
+      );
+    }
+
+    cursor.skipIgnorable();
+  }
+
+  // No required properties
+
+  const instance = new OurTypes.Branch(
+    theOptionalChildren
+  );
+  return new OurCommon.Either<OurTypes.Branch, DeserializationError>(
+    instance,
+    null
+  );
+}
+
+/**
+ * Parse the sequence of properties of an instance
+ * of {@link types!Leaf}.
+ *
+ * The opening tag is expected to have been already read by the caller, and
+ * the caller is expected to read and verify the corresponding closing tag
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Leaf} is embedded.
+ */
+function parseLeafFromSequence(
+  cursor: XmlCursor
+): OurCommon.Either<OurTypes.Leaf, DeserializationError> {
+  let theOptionalItem: OurTypes.Item | null = null;
+
+  const className = OurTypes.Leaf.name;
+
+  cursor.skipIgnorable();
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
+      break;
+    }
+    if (nextTagOrError instanceof DeserializationError) {
+      return new OurCommon.Either<OurTypes.Leaf, DeserializationError>(
+        null,
+        nextTagOrError
+      );
+    }
+
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
+
+    let propertyError: DeserializationError | null = null;
+    switch (propertyLocalName) {
+      case "optionalItem": {
+        if (theOptionalItem !== null) {
+          propertyError = duplicatePropertyError(propertyLocalName);
+          break;
+        }
+
+        const parsed = parseElementContent(
+          cursor,
+          propertyLocalName,
+          parseItemFromSequence
+        );
+        propertyError = parsed.error;
+        theOptionalItem = parsed.value;
+        break;
+      }
+
+      default: {
+        propertyError = new DeserializationError(
+          `Unexpected XML property: ${propertyLocalName}`
+        );
+        break;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(new ElementSegment(propertyLocalName));
+      return new OurCommon.Either<OurTypes.Leaf, DeserializationError>(
+        null,
+        propertyError
+      );
+    }
+
+    cursor.skipIgnorable();
+  }
+
+  // No required properties
+
+  const instance = new OurTypes.Leaf(
+    theOptionalItem
+  );
+  return new OurCommon.Either<OurTypes.Leaf, DeserializationError>(
     instance,
     null
   );
@@ -594,6 +840,42 @@ function writeItemAsSequence(
 
 /**
  * Write the properties of an instance
+ * of {@link types!Branch}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeBranchAsSequence(
+  parts: Array<string>,
+  that: OurTypes.Branch
+): void {
+  writeOptionalProperty(
+    parts,
+    "optionalChildren",
+    that.optionalChildren,
+    writeListOfInstances
+  );
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Leaf}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeLeafAsSequence(
+  parts: Array<string>,
+  that: OurTypes.Leaf
+): void {
+  writeOptionalProperty(
+    parts,
+    "optionalItem",
+    that.optionalItem,
+    writeItemAsSequence
+  );
+}
+
+/**
+ * Write the properties of an instance
  * of {@link types!Something}, and neither the opening
  * nor the closing tag of the element which holds them -- which is the contract of
  * a `ContentWriter`, so this function is used as one.
@@ -640,11 +922,81 @@ function writeSomethingAsSequence(
   );
 }
 
+const PARSERS_OF_NODE = new Map<
+  string,
+  ContentParser<OurTypes.INode>
+>([
+  ["branch", parseBranchFromSequence],
+  ["leaf", parseLeafFromSequence]
+]);
+
+/**
+ * Dispatch-parse an instance
+ * of {@link types!INode} from the next
+ * XML element in `cursor`, based on the element's local name.
+ *
+ * @param cursor - to read from
+ * @returns the parsed instance, or an error
+ */
+function dispatchParseNodeElement(
+  cursor: XmlCursor
+): OurCommon.Either<OurTypes.INode, DeserializationError> {
+  return dispatchParseElement(
+    cursor,
+    "INode",
+    PARSERS_OF_NODE
+  );
+}
+
+/**
+ * Parse an XML string as an instance
+ * of {@link types!INode}.
+ *
+ * @param xml - XML string to parse
+ * @returns parsed instance, or an error
+ */
+export function nodeFromXmlString(
+  xml: string
+): OurCommon.Either<OurTypes.INode, DeserializationError> {
+  if (xml.length === 0) {
+    return newDeserializationError<OurTypes.INode>(
+      "Expected an XML document, but got an empty string"
+    );
+  }
+
+  const tokensOrError = tokenizeXml(xml);
+  if (tokensOrError.error !== null) {
+    return new OurCommon.Either<OurTypes.INode, DeserializationError>(
+      null,
+      tokensOrError.error
+    );
+  }
+
+  const cursor = new XmlCursor(tokensOrError.mustValue());
+
+  const instanceOrError = namingElement(dispatchParseNodeElement)(cursor);
+  if (instanceOrError.error !== null) {
+    return instanceOrError;
+  }
+
+  cursor.skipIgnorable();
+  if (cursor.current() !== null) {
+    return newDeserializationError<OurTypes.INode>(
+      "Expected no tokens after the root XML element, but got token kind: " +
+        currentTokenKind(cursor)
+    );
+  }
+
+  return instanceOrError;
+}
+
 const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
   string,
   ContentParser<OurTypes.Class>
 >([
   ["item", parseItemFromSequence],
+  ["branch", parseBranchFromSequence],
+  ["leaf", parseLeafFromSequence],
   ["something", parseSomethingFromSequence]
 ]);
 
@@ -860,6 +1212,30 @@ class Serializer extends OurTypes.AbstractVisitorWithContext<Array<string>> {
       "item",
       that,
       writeItemAsSequence
+    );
+  }
+
+  visitBranchWithContext(
+    that: OurTypes.Branch,
+    parts: Array<string>
+  ): void {
+    writeElement(
+      parts,
+      "branch",
+      that,
+      writeBranchAsSequence
+    );
+  }
+
+  visitLeafWithContext(
+    that: OurTypes.Leaf,
+    parts: Array<string>
+  ): void {
+    writeElement(
+      parts,
+      "leaf",
+      that,
+      writeLeafAsSequence
     );
   }
 

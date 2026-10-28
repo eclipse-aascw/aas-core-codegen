@@ -284,6 +284,48 @@ def _as_mapping(
     return jsonable
 
 
+def _dispatch_from_jsonable(
+    jsonable: Jsonable,
+    dispatch: Mapping[str, _Parser[_ValueT]],
+    name: str
+) -> _ValueT:
+    """
+    Parse :paramref:`jsonable` by dispatching on its ``modelType``.
+
+    :param jsonable: JSON-able structure to be parsed
+    :param dispatch: to parse a concrete instance, by its model type
+    :param name: of the parsed type, for the error message
+    :return: parsed instance
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    mapping = _as_mapping(jsonable)
+
+    model_type = mapping.get("modelType")
+    if model_type is None:
+        raise DeserializationException(
+            "Expected the property modelType, but found none"
+        )
+
+    if not isinstance(model_type, str):
+        # NOTE (mristin):
+        # A model type of a wrong type is reported at the property, as the type
+        # errors of all the other properties are.
+        exception = DeserializationException(
+            f"Expected the property modelType to be a str, "
+            f"but got: {type(model_type)}"
+        )
+        exception.path._prepend(PropertySegment(mapping, "modelType"))
+        raise exception
+
+    parse = dispatch.get(model_type)
+    if parse is None:
+        raise DeserializationException(
+            f"Unexpected model type for {name}: {model_type}"
+        )
+
+    return parse(mapping)
+
+
 def _int_from_jsonable(
     jsonable: Jsonable
 ) -> int:
@@ -380,6 +422,23 @@ def _list_from_jsonable(
     return result
 
 
+def _list_of__node_from_jsonable(
+    jsonable: Jsonable
+) -> List[our_types.Node]:
+    """
+    Parse :paramref:`jsonable` as a list of
+    :py:class:`.types.Node`.
+
+    :param jsonable: JSON-able structure to be parsed
+    :return: parsed list
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    return _list_from_jsonable(
+        jsonable,
+        node_from_jsonable
+    )
+
+
 def _list_of__str_from_jsonable(
     jsonable: Jsonable
 ) -> List[str]:
@@ -472,6 +531,146 @@ def item_from_jsonable(
     )
 
 
+def node_from_jsonable(
+        jsonable: Jsonable
+) -> our_types.Node:
+    """
+    Parse an instance of :py:class:`.types.Node` from the JSON-able
+    structure :paramref:`jsonable`.
+
+    :param jsonable: structure to be parsed
+    :return: Concrete instance of :py:class:`.types.Node`
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    return _dispatch_from_jsonable(
+        jsonable,
+        _NODE_FROM_JSONABLE_DISPATCH,
+        'Node'
+    )
+
+
+def branch_from_jsonable(
+        jsonable: Jsonable
+) -> our_types.Branch:
+    """
+    Parse an instance of :py:class:`.types.Branch` from the JSON-able
+    structure :paramref:`jsonable`.
+
+    :param jsonable: structure to be parsed
+    :return: Parsed instance of :py:class:`.types.Branch`
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    mapping = _as_mapping(jsonable)
+
+    model_type = mapping.get('modelType', None)
+    if model_type is not None and not isinstance(model_type, str):
+        # NOTE (mristin):
+        # A model type of a wrong type is reported at the property, as the type
+        # errors of all the other properties are.
+        exception = DeserializationException(
+            f"Expected the property modelType to be a str, "
+            f"but got: {type(model_type)}"
+        )
+        exception.path._prepend(PropertySegment(mapping, 'modelType'))
+        raise exception
+
+    if model_type != 'Branch':
+        raise DeserializationException(
+            f"Expected modelType to be 'Branch', "
+            f"but got: {model_type!r}"
+        )
+
+    the_optional_children: Optional[List[our_types.Node]] = None
+
+    unexpected_key: Optional[str] = None
+
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type has already been checked above.
+                pass
+            elif key == 'optionalChildren':
+                the_optional_children = _list_of__node_from_jsonable(jsonable_value)
+            else:
+                unexpected_key = key
+                break
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
+
+    if unexpected_key is not None:
+        raise DeserializationException(
+            f"Unexpected property: {unexpected_key}"
+        )
+
+    return our_types.Branch(
+        the_optional_children
+    )
+
+
+def leaf_from_jsonable(
+        jsonable: Jsonable
+) -> our_types.Leaf:
+    """
+    Parse an instance of :py:class:`.types.Leaf` from the JSON-able
+    structure :paramref:`jsonable`.
+
+    :param jsonable: structure to be parsed
+    :return: Parsed instance of :py:class:`.types.Leaf`
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    mapping = _as_mapping(jsonable)
+
+    model_type = mapping.get('modelType', None)
+    if model_type is not None and not isinstance(model_type, str):
+        # NOTE (mristin):
+        # A model type of a wrong type is reported at the property, as the type
+        # errors of all the other properties are.
+        exception = DeserializationException(
+            f"Expected the property modelType to be a str, "
+            f"but got: {type(model_type)}"
+        )
+        exception.path._prepend(PropertySegment(mapping, 'modelType'))
+        raise exception
+
+    if model_type != 'Leaf':
+        raise DeserializationException(
+            f"Expected modelType to be 'Leaf', "
+            f"but got: {model_type!r}"
+        )
+
+    the_optional_item: Optional[our_types.Item] = None
+
+    unexpected_key: Optional[str] = None
+
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type has already been checked above.
+                pass
+            elif key == 'optionalItem':
+                the_optional_item = item_from_jsonable(jsonable_value)
+            else:
+                unexpected_key = key
+                break
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
+
+    if unexpected_key is not None:
+        raise DeserializationException(
+            f"Unexpected property: {unexpected_key}"
+        )
+
+    return our_types.Leaf(
+        the_optional_item
+    )
+
+
 def something_from_jsonable(
         jsonable: Jsonable
 ) -> our_types.Something:
@@ -535,6 +734,17 @@ def something_from_jsonable(
         the_optional_texts,
         the_optional_kind
     )
+
+
+#: De-serialize a concrete instance of
+#: :py:class:`.types.Node`, by its model type
+_NODE_FROM_JSONABLE_DISPATCH: Mapping[
+    str,
+    _Parser[our_types.Node]
+] = {
+    'Branch': branch_from_jsonable,
+    'Leaf': leaf_from_jsonable,
+}
 
 
 # endregion
@@ -615,6 +825,28 @@ def _int_to_jsonable(
     return that
 
 
+def _list_of__node_to_jsonable(
+    that: List[our_types.Node]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.Node`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    jsonable: List[MutableJsonable] = []
+    for i, item in enumerate(that):
+        try:
+            jsonable.append(
+                item.transform(_SERIALIZER)
+            )
+        except SerializationException as exception:
+            exception._prepend_index(i)
+            raise
+    return jsonable
+
+
 def _item_to_jsonable(
     that: our_types.Item
 ) -> MutableMapping[str, MutableJsonable]:
@@ -631,6 +863,40 @@ def _item_to_jsonable(
         except SerializationException as exception:
             exception._prepend_property('note')
             raise
+    return jsonable
+
+
+def _branch_to_jsonable(
+    that: our_types.Branch
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = {}
+    if that.optional_children is not None:
+        try:
+            jsonable['optionalChildren'] = _list_of__node_to_jsonable(
+                that.optional_children
+            )
+        except SerializationException as exception:
+            exception._prepend_property('optional_children')
+            raise
+    jsonable['modelType'] = 'Branch'
+    return jsonable
+
+
+def _leaf_to_jsonable(
+    that: our_types.Leaf
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = {}
+    if that.optional_item is not None:
+        try:
+            jsonable['optionalItem'] = _item_to_jsonable(
+                that.optional_item
+            )
+        except SerializationException as exception:
+            exception._prepend_property('optional_item')
+            raise
+    jsonable['modelType'] = 'Leaf'
     return jsonable
 
 
@@ -699,6 +965,12 @@ class _Serializer(
 
     transform_item = staticmethod(
         _item_to_jsonable
+    )
+    transform_branch = staticmethod(
+        _branch_to_jsonable
+    )
+    transform_leaf = staticmethod(
+        _leaf_to_jsonable
     )
     transform_something = staticmethod(
         _something_to_jsonable

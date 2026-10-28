@@ -6,7 +6,9 @@
  */
 export enum ModelType {
   Item = 0,
-  Something = 1
+  Branch = 1,
+  Leaf = 2,
+  Something = 3
 }
 
 /**
@@ -24,7 +26,9 @@ export function *overModelType (
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <ModelType>0;  // Item
-  yield <ModelType>1;  // Something
+  yield <ModelType>1;  // Branch
+  yield <ModelType>2;  // Leaf
+  yield <ModelType>3;  // Something
 }
 
 /**
@@ -210,6 +214,237 @@ export class Item extends Class {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface INode extends Class {
+  // Intentionally empty.
+}
+
+export class Branch
+  extends Class
+  implements INode {
+  /**
+   * Indicate the runtime model type of the instance.
+   */
+  modelType(): ModelType {
+    // NOTE (mristin):
+    // We yield numbers instead of literals to avoid name lookups on platforms
+    // which do not provide JIT compilation of hot paths.
+    return <ModelType>1;  // Branch
+  }
+
+  optionalChildren: Array<INode> | null;
+
+  /**
+   * Yield from {@link optionalChildren} if it is set, or yield nothing.
+   */
+  *overOptionalChildrenOrEmpty(): IterableIterator<INode> {
+    if (this.optionalChildren !== null) {
+      yield * this.optionalChildren;
+    }
+    return;
+  }
+
+  /**
+   * Iterate over the instances referenced from this instance.
+   *
+   * We do not recurse into the referenced instances.
+   *
+   * @returns Iterator over the referenced instances
+   */
+  *descendOnce(): IterableIterator<Class> {
+    yield * descend_Branch(this, false);
+  }
+
+  /**
+   * Iterate recursively over the instances referenced from this instance.
+   *
+   * @returns Iterator over the referenced instances
+   */
+  *descend(): IterableIterator<Class> {
+    yield * descend_Branch(this, true);
+  }
+
+  /**
+   * Dispatch `visitor` on this instance.
+   *
+   * @param visitor - to visit this instance
+   */
+  accept(visitor: AbstractVisitor): void {
+    visitor.visitBranch(this);
+  }
+
+  /**
+   * Dispatch `visitor` with `context` on this instance.
+   *
+   * @param visitor - to visit this instance
+   * @param context - to be passed along to the dispatched visitor method
+   * @typeParam ContextT - type of the context
+   */
+  acceptWithContext<ContextT>(
+    visitor: AbstractVisitorWithContext<ContextT>,
+    context: ContextT
+  ) {
+    visitor.visitBranchWithContext(this, context);
+  }
+
+  /**
+   * Dispatch the `transformer` on this instance.
+   *
+   * @param transformer - to transform this instance
+   * @returns transformation of this instance
+   * @paramType T - type of the transformation result
+   */
+  transform<T>(transformer: AbstractTransformer<T>): T {
+    return transformer.transformBranch(this);
+  }
+
+  /**
+   * Dispatch the `transformer` on this instance in `context`.
+   *
+   * @param transformer - to transform this instance
+   * @param context - to be passed along to the `transformer`
+   * @returns transformation of this instance
+   * @paramType T - type of the transformation result
+   * @paramType ContextT - type of the transformation context
+   */
+  transformWithContext<ContextT, T>(
+    transformer: AbstractTransformerWithContext<ContextT, T>,
+    context: ContextT
+  ): T {
+    return transformer.transformBranchWithContext(
+      this, context
+    );
+  }
+
+  constructor(optionalChildren: Array<INode> | null = null) {
+    super();
+    this.optionalChildren = optionalChildren;
+  }
+}
+
+/**
+ * Iterate over the instances referenced from `that`, and recursively
+ * over their descendants if `recurse` is set.
+ */
+function *descend_Branch(
+  that: Branch,
+  recurse: boolean
+): IterableIterator<Class> {
+  if (that.optionalChildren !== null) {
+    yield * descend_ListOf_INode(that.optionalChildren, recurse);
+  }
+}
+
+export class Leaf
+  extends Class
+  implements INode {
+  /**
+   * Indicate the runtime model type of the instance.
+   */
+  modelType(): ModelType {
+    // NOTE (mristin):
+    // We yield numbers instead of literals to avoid name lookups on platforms
+    // which do not provide JIT compilation of hot paths.
+    return <ModelType>2;  // Leaf
+  }
+
+  optionalItem: Item | null;
+
+  /**
+   * Iterate over the instances referenced from this instance.
+   *
+   * We do not recurse into the referenced instances.
+   *
+   * @returns Iterator over the referenced instances
+   */
+  *descendOnce(): IterableIterator<Class> {
+    yield * descend_Leaf(this, false);
+  }
+
+  /**
+   * Iterate recursively over the instances referenced from this instance.
+   *
+   * @returns Iterator over the referenced instances
+   */
+  *descend(): IterableIterator<Class> {
+    yield * descend_Leaf(this, true);
+  }
+
+  /**
+   * Dispatch `visitor` on this instance.
+   *
+   * @param visitor - to visit this instance
+   */
+  accept(visitor: AbstractVisitor): void {
+    visitor.visitLeaf(this);
+  }
+
+  /**
+   * Dispatch `visitor` with `context` on this instance.
+   *
+   * @param visitor - to visit this instance
+   * @param context - to be passed along to the dispatched visitor method
+   * @typeParam ContextT - type of the context
+   */
+  acceptWithContext<ContextT>(
+    visitor: AbstractVisitorWithContext<ContextT>,
+    context: ContextT
+  ) {
+    visitor.visitLeafWithContext(this, context);
+  }
+
+  /**
+   * Dispatch the `transformer` on this instance.
+   *
+   * @param transformer - to transform this instance
+   * @returns transformation of this instance
+   * @paramType T - type of the transformation result
+   */
+  transform<T>(transformer: AbstractTransformer<T>): T {
+    return transformer.transformLeaf(this);
+  }
+
+  /**
+   * Dispatch the `transformer` on this instance in `context`.
+   *
+   * @param transformer - to transform this instance
+   * @param context - to be passed along to the `transformer`
+   * @returns transformation of this instance
+   * @paramType T - type of the transformation result
+   * @paramType ContextT - type of the transformation context
+   */
+  transformWithContext<ContextT, T>(
+    transformer: AbstractTransformerWithContext<ContextT, T>,
+    context: ContextT
+  ): T {
+    return transformer.transformLeafWithContext(
+      this, context
+    );
+  }
+
+  constructor(optionalItem: Item | null = null) {
+    super();
+    this.optionalItem = optionalItem;
+  }
+}
+
+/**
+ * Iterate over the instances referenced from `that`, and recursively
+ * over their descendants if `recurse` is set.
+ */
+function *descend_Leaf(
+  that: Leaf,
+  recurse: boolean
+): IterableIterator<Class> {
+  if (that.optionalItem !== null) {
+    yield that.optionalItem;
+
+    if (recurse) {
+      yield * that.optionalItem.descend();
+    }
+  }
+}
+
 export class Something extends Class {
   /**
    * Indicate the runtime model type of the instance.
@@ -218,7 +453,7 @@ export class Something extends Class {
     // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
-    return <ModelType>1;  // Something
+    return <ModelType>3;  // Something
   }
 
   item: Item;
@@ -357,6 +592,27 @@ function *descend_Something(
 }
 
 /**
+ * Iterate over the class instances held by `that`.
+ *
+ * If `recurse` is set, descend recursively into the instances as well.
+ */
+function *descend_ListOf_INode(
+  that: Array<INode>,
+  recurse: boolean
+): IterableIterator<Class> {
+  if (!recurse) {
+    yield * that;
+    return;
+  }
+
+  for (const item of that) {
+    yield item;
+
+    yield * item.descend();
+  }
+}
+
+/**
  * Visit the instances of the model.
  */
 export abstract class AbstractVisitor {
@@ -374,6 +630,24 @@ export abstract class AbstractVisitor {
    */
   abstract visitItem(
     that: Item
+  ): void;
+
+  /**
+   * Visit `that`.
+   *
+   * @param that - instance to be visited
+   */
+  abstract visitBranch(
+    that: Branch
+  ): void;
+
+  /**
+   * Visit `that`.
+   *
+   * @param that - instance to be visited
+   */
+  abstract visitLeaf(
+    that: Leaf
   ): void;
 
   /**
@@ -422,6 +696,28 @@ export abstract class AbstractVisitorWithContext<ContextT> {
    * @param that - instance to be visited
    * @param context - of the visitation
    */
+  abstract visitBranchWithContext(
+    that: Branch,
+    context: ContextT
+  ): void;
+
+  /**
+   * Visit `that` in `context`.
+   *
+   * @param that - instance to be visited
+   * @param context - of the visitation
+   */
+  abstract visitLeafWithContext(
+    that: Leaf,
+    context: ContextT
+  ): void;
+
+  /**
+   * Visit `that` in `context`.
+   *
+   * @param that - instance to be visited
+   * @param context - of the visitation
+   */
   abstract visitSomethingWithContext(
     that: Something,
     context: ContextT
@@ -443,6 +739,32 @@ export class PassThroughVisitor extends AbstractVisitor {
    */
   visitItem(
     that: Item
+  ): void {
+    for (const another of that.descendOnce()) {
+      this.visit(another);
+    }
+  }
+
+  /**
+   * Visit `that`.
+   *
+   * @param that - instance to be visited
+   */
+  visitBranch(
+    that: Branch
+  ): void {
+    for (const another of that.descendOnce()) {
+      this.visit(another);
+    }
+  }
+
+  /**
+   * Visit `that`.
+   *
+   * @param that - instance to be visited
+   */
+  visitLeaf(
+    that: Leaf
   ): void {
     for (const another of that.descendOnce()) {
       this.visit(another);
@@ -503,6 +825,36 @@ export class PassThroughVisitorWithContext<ContextT>
    * @param that - instance to be visited
    * @param context - of the visitation
    */
+  visitBranchWithContext(
+    that: Branch,
+    context: ContextT
+  ): void {
+    for (const another of that.descendOnce()) {
+      this.visitWithContext(another, context);
+    }
+  }
+
+  /**
+   * Visit `that` in `context`.
+   *
+   * @param that - instance to be visited
+   * @param context - of the visitation
+   */
+  visitLeafWithContext(
+    that: Leaf,
+    context: ContextT
+  ): void {
+    for (const another of that.descendOnce()) {
+      this.visitWithContext(another, context);
+    }
+  }
+
+  /**
+   * Visit `that` in `context`.
+   *
+   * @param that - instance to be visited
+   * @param context - of the visitation
+   */
   visitSomethingWithContext(
     that: Something,
     context: ContextT
@@ -534,6 +886,26 @@ export abstract class AbstractTransformer<T> {
    */
   abstract transformItem(
     that: Item
+  ): T;
+
+  /**
+   * Transform `that`.
+   *
+   * @param that - instance to be transformed
+   * @returns transformed `that`
+   */
+  abstract transformBranch(
+    that: Branch
+  ): T;
+
+  /**
+   * Transform `that`.
+   *
+   * @param that - instance to be transformed
+   * @returns transformed `that`
+   */
+  abstract transformLeaf(
+    that: Leaf
   ): T;
 
   /**
@@ -587,6 +959,30 @@ export abstract class AbstractTransformerWithContext<ContextT, T> {
    * @param context - of the transformation
    * @returns transformed `that`
    */
+  abstract transformBranchWithContext(
+    that: Branch,
+    context: ContextT
+  ): T;
+
+  /**
+   * Transform `that` in `context`.
+   *
+   * @param that - instance to be transformed
+   * @param context - of the transformation
+   * @returns transformed `that`
+   */
+  abstract transformLeafWithContext(
+    that: Leaf,
+    context: ContextT
+  ): T;
+
+  /**
+   * Transform `that` in `context`.
+   *
+   * @param that - instance to be transformed
+   * @param context - of the transformation
+   * @returns transformed `that`
+   */
   abstract transformSomethingWithContext(
     that: Something,
     context: ContextT
@@ -627,6 +1023,34 @@ export class TransformerWithDefault<T> extends AbstractTransformer<T> {
   /* eslint-disable @typescript-eslint/no-unused-vars */
   transformItem(
     that: Item
+  ): T {
+    return this.defaultResult;
+  }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+
+  /**
+   * Transform `that`.
+   *
+   * @param that - instance to be transformed
+   * @returns transformed `that`
+   */
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  transformBranch(
+    that: Branch
+  ): T {
+    return this.defaultResult;
+  }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+
+  /**
+   * Transform `that`.
+   *
+   * @param that - instance to be transformed
+   * @returns transformed `that`
+   */
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  transformLeaf(
+    that: Leaf
   ): T {
     return this.defaultResult;
   }
@@ -698,6 +1122,38 @@ export class TransformerWithDefaultAndContext<ContextT, T>
    * @returns transformed `that`
    */
   /* eslint-disable @typescript-eslint/no-unused-vars */
+  transformBranchWithContext(
+    that: Branch,
+    context: ContextT
+  ): T {
+    return this.defaultResult;
+  }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+
+  /**
+   * Transform `that` in `context`.
+   *
+   * @param that - instance to be transformed
+   * @param context - of the visitation
+   * @returns transformed `that`
+   */
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  transformLeafWithContext(
+    that: Leaf,
+    context: ContextT
+  ): T {
+    return this.defaultResult;
+  }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+
+  /**
+   * Transform `that` in `context`.
+   *
+   * @param that - instance to be transformed
+   * @param context - of the visitation
+   * @returns transformed `that`
+   */
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   transformSomethingWithContext(
     that: Something,
     context: ContextT
@@ -732,6 +1188,122 @@ export function isItem(
   that: Class
 ): that is Item {
   return that instanceof Item;
+}
+
+/**
+ * Try to cast an instance of the model to {@link INode}.
+ */
+class AsNodeTransformer
+    extends AbstractTransformer<INode | null> {
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  transformItem(
+    that: Item
+  ): INode | null {
+    return null;
+  }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+
+  transformBranch(
+    that: Branch
+  ): INode | null {
+    return that as INode;
+  }
+
+  transformLeaf(
+    that: Leaf
+  ): INode | null {
+    return that as INode;
+  }
+
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  transformSomething(
+    that: Something
+  ): INode | null {
+    return null;
+  }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+}
+
+const AS_NODE_TRANSFORMER =
+  new AsNodeTransformer();
+
+/**
+ * Try to cast `that` instance to
+ * the interface {@link INode}.
+ *
+ * @param that - instance to be casted
+ * @returns - casted `that` if cast successful, or `null`
+ */
+export function asNode(
+  that: Class
+): INode | null {
+  return AS_NODE_TRANSFORMER.transform(that);
+}
+
+/**
+ * Check the type of `that` instance.
+ *
+ * @param that - instance to be type-checked
+ * @returns `true` if the type check is successful
+ */
+export function isNode(
+  that: Class
+): that is INode {
+  return asNode(that) !== null;
+}
+
+/**
+ * Try to cast `that` instance to
+ * the class {@link Branch}.
+ *
+ * @param that - instance to be casted
+ * @returns - casted `that` if cast successful, or `null`
+ */
+export function asBranch(
+  that: Class
+): Branch | null {
+  return (that instanceof Branch)
+    ? <Branch>that
+    : null;
+}
+
+/**
+ * Check the type of `that` instance.
+ *
+ * @param that - instance to be type-checked
+ * @returns `true` if the type check is successful
+ */
+export function isBranch(
+  that: Class
+): that is Branch {
+  return that instanceof Branch;
+}
+
+/**
+ * Try to cast `that` instance to
+ * the class {@link Leaf}.
+ *
+ * @param that - instance to be casted
+ * @returns - casted `that` if cast successful, or `null`
+ */
+export function asLeaf(
+  that: Class
+): Leaf | null {
+  return (that instanceof Leaf)
+    ? <Leaf>that
+    : null;
+}
+
+/**
+ * Check the type of `that` instance.
+ *
+ * @param that - instance to be type-checked
+ * @returns `true` if the type check is successful
+ */
+export function isLeaf(
+  that: Class
+): that is Leaf {
+  return that instanceof Leaf;
 }
 
 /**
@@ -771,6 +1343,24 @@ class TypeMatcher extends AbstractTransformerWithContext<
     other: Class
   ): boolean {
     return isItem(other);
+  }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  transformBranchWithContext(
+    that: Branch,
+    other: Class
+  ): boolean {
+    return isBranch(other);
+  }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
+
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  transformLeafWithContext(
+    that: Leaf,
+    other: Class
+  ): boolean {
+    return isLeaf(other);
   }
   /* eslint-enable @typescript-eslint/no-unused-vars */
 

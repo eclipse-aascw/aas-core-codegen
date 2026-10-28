@@ -285,7 +285,7 @@ namespace dummy
             if (
                 (optionalPair != null)
                 && (optionalPair.Value.Item2.OptionalText != null)
-                && optionalPair.Value.Item2.OptionalText == "forbidden"
+                && optionalPair.Value.Item2.OptionalText! == "forbidden"
             )
             {
                 return false;

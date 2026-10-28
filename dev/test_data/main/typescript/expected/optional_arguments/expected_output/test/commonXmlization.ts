@@ -78,6 +78,134 @@ export function loadMinimalItem(
 }
 
 /**
+ * Load a maximal XML example of {@link types.Branch}
+ * from the test data directory.
+ */
+export function loadMaximalBranch(
+): OurTypes.Branch {
+  const aPath = path.join(
+    TestCommon.TEST_DATA_DIR,
+    "Xml",
+    "Expected",
+    "branch",
+    "maximal.xml"
+  );
+
+  const text = fs.readFileSync(aPath, "utf-8");
+
+  const instanceOrError = OurXmlization.fromXmlString(
+    text
+  );
+  expect(instanceOrError.error).toBeNull();
+  const instance = instanceOrError.mustValue();
+
+  const casted = OurTypes.asBranch(instance);
+  if (casted === null) {
+    throw new Error(
+      `Expected instance of Branch in ${aPath}, ` +
+      `but got: ${typeof instance}`
+    );
+  }
+  return casted;
+}
+
+/**
+ * Load a minimal XML example of {@link types.Branch}
+ * from the test data directory.
+ */
+export function loadMinimalBranch(
+): OurTypes.Branch {
+  const aPath = path.join(
+    TestCommon.TEST_DATA_DIR,
+    "Xml",
+    "Expected",
+    "branch",
+    "minimal.xml"
+  );
+
+  const text = fs.readFileSync(aPath, "utf-8");
+
+  const instanceOrError = OurXmlization.fromXmlString(
+    text
+  );
+  expect(instanceOrError.error).toBeNull();
+  const instance = instanceOrError.mustValue();
+
+  const casted = OurTypes.asBranch(instance);
+  if (casted === null) {
+    throw new Error(
+      `Expected instance of Branch in ${aPath}, ` +
+      `but got: ${typeof instance}`
+    );
+  }
+  return casted;
+}
+
+/**
+ * Load a maximal XML example of {@link types.Leaf}
+ * from the test data directory.
+ */
+export function loadMaximalLeaf(
+): OurTypes.Leaf {
+  const aPath = path.join(
+    TestCommon.TEST_DATA_DIR,
+    "Xml",
+    "Expected",
+    "leaf",
+    "maximal.xml"
+  );
+
+  const text = fs.readFileSync(aPath, "utf-8");
+
+  const instanceOrError = OurXmlization.fromXmlString(
+    text
+  );
+  expect(instanceOrError.error).toBeNull();
+  const instance = instanceOrError.mustValue();
+
+  const casted = OurTypes.asLeaf(instance);
+  if (casted === null) {
+    throw new Error(
+      `Expected instance of Leaf in ${aPath}, ` +
+      `but got: ${typeof instance}`
+    );
+  }
+  return casted;
+}
+
+/**
+ * Load a minimal XML example of {@link types.Leaf}
+ * from the test data directory.
+ */
+export function loadMinimalLeaf(
+): OurTypes.Leaf {
+  const aPath = path.join(
+    TestCommon.TEST_DATA_DIR,
+    "Xml",
+    "Expected",
+    "leaf",
+    "minimal.xml"
+  );
+
+  const text = fs.readFileSync(aPath, "utf-8");
+
+  const instanceOrError = OurXmlization.fromXmlString(
+    text
+  );
+  expect(instanceOrError.error).toBeNull();
+  const instance = instanceOrError.mustValue();
+
+  const casted = OurTypes.asLeaf(instance);
+  if (casted === null) {
+    throw new Error(
+      `Expected instance of Leaf in ${aPath}, ` +
+      `but got: ${typeof instance}`
+    );
+  }
+  return casted;
+}
+
+/**
  * Load a maximal XML example of {@link types.Something}
  * from the test data directory.
  */

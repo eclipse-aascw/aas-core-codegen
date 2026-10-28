@@ -31,6 +31,26 @@ const char* StaticTypeName<
 
 template<>
 struct StaticTypeName<
+  our::types::IBranch
+> {
+  static const char* name;
+};
+const char* StaticTypeName<
+  our::types::IBranch
+>::name = "IBranch";
+
+template<>
+struct StaticTypeName<
+  our::types::ILeaf
+> {
+  static const char* name;
+};
+const char* StaticTypeName<
+  our::types::ILeaf
+>::name = "ILeaf";
+
+template<>
+struct StaticTypeName<
   our::types::ISomething
 > {
   static const char* name;
@@ -102,6 +122,140 @@ std::shared_ptr<
   );
 
   return LoadItem(
+    path
+  );
+}
+
+std::shared_ptr<
+  our::types::IBranch
+> LoadBranch(
+  const std::filesystem::path& path
+) {
+  
+
+  std::shared_ptr<
+    our::types::IClass
+  > abstract = test::common::xmlization::MustReadInstance(
+    path
+  );
+
+  std::shared_ptr<
+    our::types::IBranch
+  > instance(
+    std::dynamic_pointer_cast<
+      our::types::IBranch
+    >(
+      abstract
+    )
+  );
+
+  if (instance == nullptr) {
+    throw std::runtime_error(
+      our::common::Concat(
+        "Failed to cast the instance to IBranch from ",
+        path.string()
+      )
+    );
+  }
+
+  return instance;
+}
+
+std::shared_ptr<
+  our::types::IBranch
+> LoadMinBranch() {
+  const std::filesystem::path path(
+    test::common::DetermineTestDataDir()
+      / "Xml"
+      / "Expected"
+      / "branch"
+      / "minimal.xml"
+  );
+
+  return LoadBranch(
+    path
+  );
+}
+
+std::shared_ptr<
+  our::types::IBranch
+> LoadMaxBranch() {
+  const std::filesystem::path path(
+    test::common::DetermineTestDataDir()
+      / "Xml"
+      / "Expected"
+      / "branch"
+      / "maximal.xml"
+  );
+
+  return LoadBranch(
+    path
+  );
+}
+
+std::shared_ptr<
+  our::types::ILeaf
+> LoadLeaf(
+  const std::filesystem::path& path
+) {
+  
+
+  std::shared_ptr<
+    our::types::IClass
+  > abstract = test::common::xmlization::MustReadInstance(
+    path
+  );
+
+  std::shared_ptr<
+    our::types::ILeaf
+  > instance(
+    std::dynamic_pointer_cast<
+      our::types::ILeaf
+    >(
+      abstract
+    )
+  );
+
+  if (instance == nullptr) {
+    throw std::runtime_error(
+      our::common::Concat(
+        "Failed to cast the instance to ILeaf from ",
+        path.string()
+      )
+    );
+  }
+
+  return instance;
+}
+
+std::shared_ptr<
+  our::types::ILeaf
+> LoadMinLeaf() {
+  const std::filesystem::path path(
+    test::common::DetermineTestDataDir()
+      / "Xml"
+      / "Expected"
+      / "leaf"
+      / "minimal.xml"
+  );
+
+  return LoadLeaf(
+    path
+  );
+}
+
+std::shared_ptr<
+  our::types::ILeaf
+> LoadMaxLeaf() {
+  const std::filesystem::path path(
+    test::common::DetermineTestDataDir()
+      / "Xml"
+      / "Expected"
+      / "leaf"
+      / "maximal.xml"
+  );
+
+  return LoadLeaf(
     path
   );
 }

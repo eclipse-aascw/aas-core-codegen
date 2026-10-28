@@ -13,6 +13,14 @@ const MODEL_TYPE_FROM_STRING = new Map<string, OurTypes.ModelType>([
     OurTypes.ModelType.Item
   ],
   [
+    "Branch",
+    OurTypes.ModelType.Branch
+  ],
+  [
+    "Leaf",
+    OurTypes.ModelType.Leaf
+  ],
+  [
     "Something",
     OurTypes.ModelType.Something
   ]
@@ -36,6 +44,8 @@ export function modelTypeFromString(
 // so we index into an array instead of looking the text up in a map.
 const MODEL_TYPE_TO_STRING: readonly string[] = [
   "Item",
+  "Branch",
+  "Leaf",
   "Something"
 ];
 

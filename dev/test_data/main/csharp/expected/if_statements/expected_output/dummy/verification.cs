@@ -165,7 +165,7 @@ namespace dummy
         {
             if (
                 (item.OptionalText != null)
-                && Common.StringHelpers.Len(item.OptionalText) > 5
+                && Common.StringHelpers.Len(item.OptionalText!) > 5
             )
             {
                 return false;
@@ -248,7 +248,7 @@ namespace dummy
             else if (!(parent is Our.IChildB))
             {
                 return (parent.OptionalText == null)
-                || parent.OptionalText != "forbidden";
+                || parent.OptionalText! != "forbidden";
             }
             else
             {
@@ -313,7 +313,7 @@ namespace dummy
                 {
                     return false;
                 }
-                if (Common.StringHelpers.Len(((Our.IChildA)parent).OptionalText) < 1)
+                if (Common.StringHelpers.Len(((Our.IChildA)parent).OptionalText!) < 1)
                 {
                     return false;
                 }
@@ -343,7 +343,7 @@ namespace dummy
                     continue;
                 }
                 total = (
-                    total + Common.StringHelpers.Len(parent.OptionalText));
+                    total + Common.StringHelpers.Len(parent.OptionalText!));
             }
             return total < 20;
         }  // public static bool TextsBeforeContainerAreShort
@@ -398,7 +398,7 @@ namespace dummy
         {
             if (
                 (parent.OptionalText != null)
-                && parent.OptionalText == "marker"
+                && parent.OptionalText! == "marker"
             )
             {
                 return true;
@@ -407,7 +407,7 @@ namespace dummy
             {
                 return (((Our.IContainer)parent).Children != null)
                 && (
-                    ((Our.IContainer)parent).Children.Any(
+                    ((Our.IContainer)parent).Children!.Any(
                         child => Verification.HasMarkerInTree(child))
                 );
             }
@@ -553,7 +553,7 @@ namespace dummy
 
                 if (!(
                     !(that.OptionalParent != null)
-                    || (!Verification.HasMarkerInTree(that.OptionalParent))))
+                    || (!Verification.HasMarkerInTree(that.OptionalParent!))))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -565,7 +565,7 @@ namespace dummy
                         (that.OptionalParent != null)
                         && (that.Parents != null)
                     )
-                    || Verification.LastChildAIsSmall(that.OptionalParent, that.Parents)))
+                    || Verification.LastChildAIsSmall(that.OptionalParent!, that.Parents!)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -574,7 +574,7 @@ namespace dummy
 
                 if (!(
                     !(that.OptionalParent != null)
-                    || Verification.TextOrDefaultIsShort(that.OptionalParent)))
+                    || Verification.TextOrDefaultIsShort(that.OptionalParent!)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -583,7 +583,7 @@ namespace dummy
 
                 if (!(
                     !(that.Parents != null)
-                    || Verification.TextsBeforeContainerAreShort(that.Parents)))
+                    || Verification.TextsBeforeContainerAreShort(that.Parents!)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +
@@ -592,7 +592,7 @@ namespace dummy
 
                 if (!(
                     !(that.Parents != null)
-                    || Verification.ChildAsHaveTexts(that.Parents)))
+                    || Verification.ChildAsHaveTexts(that.Parents!)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +

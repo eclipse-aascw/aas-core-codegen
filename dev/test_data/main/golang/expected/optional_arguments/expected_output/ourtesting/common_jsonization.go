@@ -94,6 +94,174 @@ func MustLoadMinimalItem(
 	return
 }
 
+// Load a maximal example of [ourtypes.IBranch] from
+// the test data directory.
+//
+// If there is any error, panic.
+func MustLoadMaximalBranch(
+) (result ourtypes.IBranch) {
+	pth := path.Join(
+		TestDataDir,
+		"Json",
+		"Expected",
+		"Branch",
+		"maximal.json",
+	)
+
+	jsonable := MustReadJsonable(pth)
+
+	instance, err := ourjsonization.BranchFromJsonable(
+		jsonable,
+	)
+	if err != nil {
+		panic(
+			fmt.Sprintf(
+				"Failed to de-serialize an instance of IBranch " +
+				"from %s: %s",
+				pth, err.Error(),
+			),
+		)
+	}
+	var ok bool
+	result, ok = instance.(ourtypes.IBranch)
+	if !ok {
+		panic(
+			fmt.Sprintf(
+				"Expected to find an instance of IBranch at %s, " +
+				"but got an instance of %T: %v",
+				pth, instance, instance,
+			),
+		)
+	}
+	return
+}
+
+// Load a minimal example of [ourtypes.IBranch] from
+// the test data directory.
+//
+// If there is any error, panic.
+func MustLoadMinimalBranch(
+) (result ourtypes.IBranch) {
+	pth := path.Join(
+		TestDataDir,
+		"Json",
+		"Expected",
+		"Branch",
+		"minimal.json",
+	)
+
+	jsonable := MustReadJsonable(pth)
+
+	instance, err := ourjsonization.BranchFromJsonable(
+		jsonable,
+	)
+	if err != nil {
+		panic(
+			fmt.Sprintf(
+				"Failed to de-serialize an instance of IBranch " +
+				"from %s: %s",
+				pth, err.Error(),
+			),
+		)
+	}
+	var ok bool
+	result, ok = instance.(ourtypes.IBranch)
+	if !ok {
+		panic(
+			fmt.Sprintf(
+				"Expected to find an instance of IBranch at %s, " +
+				"but got an instance of %T: %v",
+				pth, instance, instance,
+			),
+		)
+	}
+	return
+}
+
+// Load a maximal example of [ourtypes.ILeaf] from
+// the test data directory.
+//
+// If there is any error, panic.
+func MustLoadMaximalLeaf(
+) (result ourtypes.ILeaf) {
+	pth := path.Join(
+		TestDataDir,
+		"Json",
+		"Expected",
+		"Leaf",
+		"maximal.json",
+	)
+
+	jsonable := MustReadJsonable(pth)
+
+	instance, err := ourjsonization.LeafFromJsonable(
+		jsonable,
+	)
+	if err != nil {
+		panic(
+			fmt.Sprintf(
+				"Failed to de-serialize an instance of ILeaf " +
+				"from %s: %s",
+				pth, err.Error(),
+			),
+		)
+	}
+	var ok bool
+	result, ok = instance.(ourtypes.ILeaf)
+	if !ok {
+		panic(
+			fmt.Sprintf(
+				"Expected to find an instance of ILeaf at %s, " +
+				"but got an instance of %T: %v",
+				pth, instance, instance,
+			),
+		)
+	}
+	return
+}
+
+// Load a minimal example of [ourtypes.ILeaf] from
+// the test data directory.
+//
+// If there is any error, panic.
+func MustLoadMinimalLeaf(
+) (result ourtypes.ILeaf) {
+	pth := path.Join(
+		TestDataDir,
+		"Json",
+		"Expected",
+		"Leaf",
+		"minimal.json",
+	)
+
+	jsonable := MustReadJsonable(pth)
+
+	instance, err := ourjsonization.LeafFromJsonable(
+		jsonable,
+	)
+	if err != nil {
+		panic(
+			fmt.Sprintf(
+				"Failed to de-serialize an instance of ILeaf " +
+				"from %s: %s",
+				pth, err.Error(),
+			),
+		)
+	}
+	var ok bool
+	result, ok = instance.(ourtypes.ILeaf)
+	if !ok {
+		panic(
+			fmt.Sprintf(
+				"Expected to find an instance of ILeaf at %s, " +
+				"but got an instance of %T: %v",
+				pth, instance, instance,
+			),
+		)
+	}
+	return
+}
+
 // Load a maximal example of [ourtypes.ISomething] from
 // the test data directory.
 //

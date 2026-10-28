@@ -339,6 +339,543 @@ def item_from_str(
     )
 
 
+def node_from_iterparse(
+    iterator: Iterator[Tuple[str, Element]]
+) -> our_types.Node:
+    """
+    Read an instance of :py:class:`.types.Node` from
+    the :paramref:`iterator`.
+
+    Example usage:
+
+    .. code-block::
+
+        import pathlib
+        import xml.etree.ElementTree as ET
+
+        import dummy.xmlization as our_xmlization
+
+        path = pathlib.Path(...)
+        with path.open("rt") as fid:
+            iterator = ET.iterparse(
+                source=fid,
+                events=['start', 'end']
+            )
+            instance = our_xmlization.node_from_iterparse(
+                iterator
+            )
+
+        # Do something with the ``instance``
+
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Node` read from
+        :paramref:`iterator`
+    """
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_node_as_element,
+        'Node'
+    )
+
+
+def node_from_stream(
+    stream: TextIO,
+    has_iterparse: HasIterparse = xml.etree.ElementTree
+) -> our_types.Node:
+    """
+    Read an instance of :py:class:`.types.Node` from
+    the :paramref:`stream`.
+
+    Example usage:
+
+    .. code-block::
+
+        import dummy.xmlization as our_xmlization
+
+        with open_some_stream_over_network(...) as stream:
+            instance = our_xmlization.node_from_stream(
+                stream
+            )
+
+        # Do something with the ``instance``
+
+    :param stream:
+        representing an instance of
+        :py:class:`.types.Node` in XML
+    :param has_iterparse:
+        Module containing ``iterparse`` function.
+
+        Default is to use :py:mod:`xml.etree.ElementTree` from the standard
+        library. If you have to deal with malicious input, consider using
+        a library such as `defusedxml.ElementTree`_.
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Node` read from
+        :paramref:`stream`
+    """
+    iterator = has_iterparse.iterparse(
+        stream,
+        ['start', 'end']
+    )
+    return node_from_iterparse(
+        _with_elements_cleared_after_yield(iterator)
+    )
+
+
+def node_from_file(
+    path: PathLike,
+    has_iterparse: HasIterparse = xml.etree.ElementTree
+) -> our_types.Node:
+    """
+    Read an instance of :py:class:`.types.Node` from
+    the :paramref:`path`.
+
+    Example usage:
+
+    .. code-block::
+
+        import pathlib
+        import dummy.xmlization as our_xmlization
+
+        path = pathlib.Path(...)
+        instance = our_xmlization.node_from_file(
+            path
+        )
+
+        # Do something with the ``instance``
+
+    :param path:
+        to the file representing an instance of
+        :py:class:`.types.Node` in XML
+    :param has_iterparse:
+        Module containing ``iterparse`` function.
+
+        Default is to use :py:mod:`xml.etree.ElementTree` from the standard
+        library. If you have to deal with malicious input, consider using
+        a library such as `defusedxml.ElementTree`_.
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Node` read from
+        :paramref:`path`
+    """
+    with open(os.fspath(path), encoding='utf-8') as fid:
+        iterator = has_iterparse.iterparse(
+            fid,
+            ['start', 'end']
+        )
+        return node_from_iterparse(
+            _with_elements_cleared_after_yield(iterator)
+        )
+
+
+def node_from_str(
+    text: str,
+    has_iterparse: HasIterparse = xml.etree.ElementTree
+) -> our_types.Node:
+    """
+    Read an instance of :py:class:`.types.Node` from
+    the :paramref:`text`.
+
+    Example usage:
+
+    .. code-block::
+
+        import pathlib
+        import dummy.xmlization as our_xmlization
+
+        text = "<...>...</...>"
+        instance = our_xmlization.node_from_str(
+            text
+        )
+
+        # Do something with the ``instance``
+
+    :param text:
+        representing an instance of
+        :py:class:`.types.Node` in XML
+    :param has_iterparse:
+        Module containing ``iterparse`` function.
+
+        Default is to use :py:mod:`xml.etree.ElementTree` from the standard
+        library. If you have to deal with malicious input, consider using
+        a library such as `defusedxml.ElementTree`_.
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Node` read from
+        :paramref:`text`
+    """
+    iterator = has_iterparse.iterparse(
+        io.StringIO(text),
+        ['start', 'end']
+    )
+    return node_from_iterparse(
+        _with_elements_cleared_after_yield(iterator)
+    )
+
+
+def branch_from_iterparse(
+    iterator: Iterator[Tuple[str, Element]]
+) -> our_types.Branch:
+    """
+    Read an instance of :py:class:`.types.Branch` from
+    the :paramref:`iterator`.
+
+    Example usage:
+
+    .. code-block::
+
+        import pathlib
+        import xml.etree.ElementTree as ET
+
+        import dummy.xmlization as our_xmlization
+
+        path = pathlib.Path(...)
+        with path.open("rt") as fid:
+            iterator = ET.iterparse(
+                source=fid,
+                events=['start', 'end']
+            )
+            instance = our_xmlization.branch_from_iterparse(
+                iterator
+            )
+
+        # Do something with the ``instance``
+
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Branch` read from
+        :paramref:`iterator`
+    """
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_branch_as_element,
+        'Branch'
+    )
+
+
+def branch_from_stream(
+    stream: TextIO,
+    has_iterparse: HasIterparse = xml.etree.ElementTree
+) -> our_types.Branch:
+    """
+    Read an instance of :py:class:`.types.Branch` from
+    the :paramref:`stream`.
+
+    Example usage:
+
+    .. code-block::
+
+        import dummy.xmlization as our_xmlization
+
+        with open_some_stream_over_network(...) as stream:
+            instance = our_xmlization.branch_from_stream(
+                stream
+            )
+
+        # Do something with the ``instance``
+
+    :param stream:
+        representing an instance of
+        :py:class:`.types.Branch` in XML
+    :param has_iterparse:
+        Module containing ``iterparse`` function.
+
+        Default is to use :py:mod:`xml.etree.ElementTree` from the standard
+        library. If you have to deal with malicious input, consider using
+        a library such as `defusedxml.ElementTree`_.
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Branch` read from
+        :paramref:`stream`
+    """
+    iterator = has_iterparse.iterparse(
+        stream,
+        ['start', 'end']
+    )
+    return branch_from_iterparse(
+        _with_elements_cleared_after_yield(iterator)
+    )
+
+
+def branch_from_file(
+    path: PathLike,
+    has_iterparse: HasIterparse = xml.etree.ElementTree
+) -> our_types.Branch:
+    """
+    Read an instance of :py:class:`.types.Branch` from
+    the :paramref:`path`.
+
+    Example usage:
+
+    .. code-block::
+
+        import pathlib
+        import dummy.xmlization as our_xmlization
+
+        path = pathlib.Path(...)
+        instance = our_xmlization.branch_from_file(
+            path
+        )
+
+        # Do something with the ``instance``
+
+    :param path:
+        to the file representing an instance of
+        :py:class:`.types.Branch` in XML
+    :param has_iterparse:
+        Module containing ``iterparse`` function.
+
+        Default is to use :py:mod:`xml.etree.ElementTree` from the standard
+        library. If you have to deal with malicious input, consider using
+        a library such as `defusedxml.ElementTree`_.
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Branch` read from
+        :paramref:`path`
+    """
+    with open(os.fspath(path), encoding='utf-8') as fid:
+        iterator = has_iterparse.iterparse(
+            fid,
+            ['start', 'end']
+        )
+        return branch_from_iterparse(
+            _with_elements_cleared_after_yield(iterator)
+        )
+
+
+def branch_from_str(
+    text: str,
+    has_iterparse: HasIterparse = xml.etree.ElementTree
+) -> our_types.Branch:
+    """
+    Read an instance of :py:class:`.types.Branch` from
+    the :paramref:`text`.
+
+    Example usage:
+
+    .. code-block::
+
+        import pathlib
+        import dummy.xmlization as our_xmlization
+
+        text = "<...>...</...>"
+        instance = our_xmlization.branch_from_str(
+            text
+        )
+
+        # Do something with the ``instance``
+
+    :param text:
+        representing an instance of
+        :py:class:`.types.Branch` in XML
+    :param has_iterparse:
+        Module containing ``iterparse`` function.
+
+        Default is to use :py:mod:`xml.etree.ElementTree` from the standard
+        library. If you have to deal with malicious input, consider using
+        a library such as `defusedxml.ElementTree`_.
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Branch` read from
+        :paramref:`text`
+    """
+    iterator = has_iterparse.iterparse(
+        io.StringIO(text),
+        ['start', 'end']
+    )
+    return branch_from_iterparse(
+        _with_elements_cleared_after_yield(iterator)
+    )
+
+
+def leaf_from_iterparse(
+    iterator: Iterator[Tuple[str, Element]]
+) -> our_types.Leaf:
+    """
+    Read an instance of :py:class:`.types.Leaf` from
+    the :paramref:`iterator`.
+
+    Example usage:
+
+    .. code-block::
+
+        import pathlib
+        import xml.etree.ElementTree as ET
+
+        import dummy.xmlization as our_xmlization
+
+        path = pathlib.Path(...)
+        with path.open("rt") as fid:
+            iterator = ET.iterparse(
+                source=fid,
+                events=['start', 'end']
+            )
+            instance = our_xmlization.leaf_from_iterparse(
+                iterator
+            )
+
+        # Do something with the ``instance``
+
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Leaf` read from
+        :paramref:`iterator`
+    """
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_leaf_as_element,
+        'Leaf'
+    )
+
+
+def leaf_from_stream(
+    stream: TextIO,
+    has_iterparse: HasIterparse = xml.etree.ElementTree
+) -> our_types.Leaf:
+    """
+    Read an instance of :py:class:`.types.Leaf` from
+    the :paramref:`stream`.
+
+    Example usage:
+
+    .. code-block::
+
+        import dummy.xmlization as our_xmlization
+
+        with open_some_stream_over_network(...) as stream:
+            instance = our_xmlization.leaf_from_stream(
+                stream
+            )
+
+        # Do something with the ``instance``
+
+    :param stream:
+        representing an instance of
+        :py:class:`.types.Leaf` in XML
+    :param has_iterparse:
+        Module containing ``iterparse`` function.
+
+        Default is to use :py:mod:`xml.etree.ElementTree` from the standard
+        library. If you have to deal with malicious input, consider using
+        a library such as `defusedxml.ElementTree`_.
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Leaf` read from
+        :paramref:`stream`
+    """
+    iterator = has_iterparse.iterparse(
+        stream,
+        ['start', 'end']
+    )
+    return leaf_from_iterparse(
+        _with_elements_cleared_after_yield(iterator)
+    )
+
+
+def leaf_from_file(
+    path: PathLike,
+    has_iterparse: HasIterparse = xml.etree.ElementTree
+) -> our_types.Leaf:
+    """
+    Read an instance of :py:class:`.types.Leaf` from
+    the :paramref:`path`.
+
+    Example usage:
+
+    .. code-block::
+
+        import pathlib
+        import dummy.xmlization as our_xmlization
+
+        path = pathlib.Path(...)
+        instance = our_xmlization.leaf_from_file(
+            path
+        )
+
+        # Do something with the ``instance``
+
+    :param path:
+        to the file representing an instance of
+        :py:class:`.types.Leaf` in XML
+    :param has_iterparse:
+        Module containing ``iterparse`` function.
+
+        Default is to use :py:mod:`xml.etree.ElementTree` from the standard
+        library. If you have to deal with malicious input, consider using
+        a library such as `defusedxml.ElementTree`_.
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Leaf` read from
+        :paramref:`path`
+    """
+    with open(os.fspath(path), encoding='utf-8') as fid:
+        iterator = has_iterparse.iterparse(
+            fid,
+            ['start', 'end']
+        )
+        return leaf_from_iterparse(
+            _with_elements_cleared_after_yield(iterator)
+        )
+
+
+def leaf_from_str(
+    text: str,
+    has_iterparse: HasIterparse = xml.etree.ElementTree
+) -> our_types.Leaf:
+    """
+    Read an instance of :py:class:`.types.Leaf` from
+    the :paramref:`text`.
+
+    Example usage:
+
+    .. code-block::
+
+        import pathlib
+        import dummy.xmlization as our_xmlization
+
+        text = "<...>...</...>"
+        instance = our_xmlization.leaf_from_str(
+            text
+        )
+
+        # Do something with the ``instance``
+
+    :param text:
+        representing an instance of
+        :py:class:`.types.Leaf` in XML
+    :param has_iterparse:
+        Module containing ``iterparse`` function.
+
+        Default is to use :py:mod:`xml.etree.ElementTree` from the standard
+        library. If you have to deal with malicious input, consider using
+        a library such as `defusedxml.ElementTree`_.
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return:
+        Instance of :py:class:`.types.Leaf` read from
+        :paramref:`text`
+    """
+    iterator = has_iterparse.iterparse(
+        io.StringIO(text),
+        ['start', 'end']
+    )
+    return leaf_from_iterparse(
+        _with_elements_cleared_after_yield(iterator)
+    )
+
+
 def something_from_iterparse(
     iterator: Iterator[Tuple[str, Element]]
 ) -> our_types.Something:
@@ -1098,6 +1635,21 @@ def _read_enum_from_element_text(
     return literal
 
 
+def _read_list_of__node(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> List[our_types.Node]:
+    """
+    Read the items of :paramref:`element` as a list of
+    :py:class:`.types.Node`.
+    """
+    return _read_list_of_items(
+        element,
+        iterator,
+        _read_node_as_element
+    )
+
+
 def _read_list_of__str(
     element: Element,
     iterator: Iterator[Tuple[str, Element]]
@@ -1217,6 +1769,142 @@ def _read_item_as_element(
     )
 
 
+def _read_node_as_element(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> our_types.Node:
+    """
+    Read an instance of :py:class:`.types.Node` from
+    :paramref:`iterator`, including the end element.
+
+    :param element: start element
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed instance
+    """
+    return _read_dispatched(
+        element,
+        iterator,
+        _DISPATCH_FOR_NODE,
+        "a concrete instance of 'Node'"
+    )
+
+
+def _read_branch_as_sequence(
+        element: Element,
+        iterator: Iterator[Tuple[str, Element]]
+) -> our_types.Branch:
+    """
+    Read an instance of :py:class:`.types.Branch`
+    as a sequence of XML-encoded properties.
+
+    The end element corresponding to the :paramref:`element` will be
+    read as well.
+
+    :param element: start element, parent of the sequence
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed instance
+    """
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_BRANCH
+    )
+
+    the_optional_children: Optional[List[our_types.Node]] = values.get('optionalChildren')
+
+    return our_types.Branch(
+        the_optional_children
+    )
+
+
+def _read_branch_as_element(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> our_types.Branch:
+    """
+    Read an instance of :py:class:`.types.Branch` from
+    :paramref:`iterator`, including the end element.
+
+    :param element: start element
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed instance
+    """
+    return _read_named_element(
+        element,
+        iterator,
+        'branch',
+        _read_branch_as_sequence
+    )
+
+
+def _read_leaf_as_sequence(
+        element: Element,
+        iterator: Iterator[Tuple[str, Element]]
+) -> our_types.Leaf:
+    """
+    Read an instance of :py:class:`.types.Leaf`
+    as a sequence of XML-encoded properties.
+
+    The end element corresponding to the :paramref:`element` will be
+    read as well.
+
+    :param element: start element, parent of the sequence
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed instance
+    """
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_LEAF
+    )
+
+    the_optional_item: Optional[our_types.Item] = values.get('optionalItem')
+
+    return our_types.Leaf(
+        the_optional_item
+    )
+
+
+def _read_leaf_as_element(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> our_types.Leaf:
+    """
+    Read an instance of :py:class:`.types.Leaf` from
+    :paramref:`iterator`, including the end element.
+
+    :param element: start element
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed instance
+    """
+    return _read_named_element(
+        element,
+        iterator,
+        'leaf',
+        _read_leaf_as_sequence
+    )
+
+
 def _read_something_as_sequence(
         element: Element,
         iterator: Iterator[Tuple[str, Element]]
@@ -1312,6 +2000,23 @@ def _read_as_element(
 
 
 #: Dispatch XML class names to read-as-sequence functions
+#: corresponding to concrete descendants of Node
+_DISPATCH_FOR_NODE: Mapping[
+    str,
+    Callable[
+        [
+            Element,
+            Iterator[Tuple[str, Element]]
+        ],
+        our_types.Node
+    ]
+] = {
+    'branch': _read_branch_as_sequence,
+    'leaf': _read_leaf_as_sequence,
+}
+
+
+#: Dispatch XML class names to read-as-sequence functions
 #: corresponding to the concrete classes
 _GENERAL_DISPATCH: Mapping[
     str,
@@ -1324,6 +2029,8 @@ _GENERAL_DISPATCH: Mapping[
     ]
 ] = {
     'item': _read_item_as_sequence,
+    'branch': _read_branch_as_sequence,
+    'leaf': _read_leaf_as_sequence,
     'something': _read_something_as_sequence,
 }
 
@@ -1336,6 +2043,26 @@ _READERS_FOR_ITEM: Mapping[
 ] = {
     'name': read_str_from_element_text,
     'note': read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.Branch`, by the XML name of the property
+_READERS_FOR_BRANCH: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'optionalChildren': _read_list_of__node,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.Leaf`, by the XML name of the property
+_READERS_FOR_LEAF: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'optionalItem': _read_item_as_sequence,
 }
 
 
@@ -1553,6 +2280,44 @@ def _write_enum_as_element(
         _attribute_to_property(exception, prop_name)
 
 
+def _write_list_of_instances(
+    name: str,
+    prop_name: Optional[str],
+    items: Sequence[our_types.Class],
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`items` enclosed in the :paramref:`name` element.
+
+    Every item writes the element which designates its model type, so no positional
+    tag is necessary. If there are no items, the enclosing element is collapsed to
+    an empty one.
+
+    :param name: of the enclosing element
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
+    :param items: to be serialized
+    :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
+    """
+    try:
+        if len(items) == 0:
+            serializer.writer.write_empty_element(name)
+        else:
+            serializer.writer.write_start_element(name)
+
+            for index, item in enumerate(items):
+                try:
+                    serializer.visit(item)
+                except Exception as exception:
+                    _attribute_to_item(exception, index)
+
+            serializer.writer.write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
+
+
 def _write_list_of_items(
     name: str,
     prop_name: Optional[str],
@@ -1615,6 +2380,87 @@ def _write_item_as_element(
         _write_str_as_element('name', 'name', that.name, serializer)
         if that.note is not None:
             _write_str_as_element('note', 'note', that.note, serializer)
+        serializer.writer.write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
+
+
+def _write_branch_as_element(
+    name: str,
+    prop_name: Optional[str],
+    that: our_types.Branch,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    All the properties are optional, so the element is collapsed to an empty one
+    if none of them is set.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
+    :param that: instance to be serialized
+    :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
+    """
+    try:
+        # We optimize for the case where all the optional properties are not set,
+        # so that we can simply output an empty element.
+        if (
+                that.optional_children is None
+        ):
+            serializer.writer.write_empty_element(name)
+            return
+
+        serializer.writer.write_start_element(name)
+        if that.optional_children is not None:
+            _write_list_of_instances(
+                'optionalChildren',
+                'optional_children',
+                that.optional_children,
+                serializer
+            )
+        serializer.writer.write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
+
+
+def _write_leaf_as_element(
+    name: str,
+    prop_name: Optional[str],
+    that: our_types.Leaf,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    All the properties are optional, so the element is collapsed to an empty one
+    if none of them is set.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
+    :param that: instance to be serialized
+    :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
+    """
+    try:
+        # We optimize for the case where all the optional properties are not set,
+        # so that we can simply output an empty element.
+        if (
+                that.optional_item is None
+        ):
+            serializer.writer.write_empty_element(name)
+            return
+
+        serializer.writer.write_start_element(name)
+        if that.optional_item is not None:
+            _write_item_as_element(
+                'optionalItem', 'optional_item', that.optional_item, serializer
+            )
         serializer.writer.write_end_element(name)
     except Exception as exception:
         _attribute_to_property(exception, prop_name)
@@ -1702,6 +2548,34 @@ class _Serializer(our_types.AbstractVisitor):
         :param that: instance to be serialized
         """
         _write_item_as_element('item', None, that, self)
+
+    def visit_branch(
+        self,
+        that: our_types.Branch
+    ) -> None:
+        """
+        Serialize :paramref:`that` to :py:attr:`~stream` as an XML element.
+
+        The enclosing XML element designates the class of the instance, where its
+        children correspond to the properties of the instance.
+
+        :param that: instance to be serialized
+        """
+        _write_branch_as_element('branch', None, that, self)
+
+    def visit_leaf(
+        self,
+        that: our_types.Leaf
+    ) -> None:
+        """
+        Serialize :paramref:`that` to :py:attr:`~stream` as an XML element.
+
+        The enclosing XML element designates the class of the instance, where its
+        children correspond to the properties of the instance.
+
+        :param that: instance to be serialized
+        """
+        _write_leaf_as_element('leaf', None, that, self)
 
     def visit_something(
         self,

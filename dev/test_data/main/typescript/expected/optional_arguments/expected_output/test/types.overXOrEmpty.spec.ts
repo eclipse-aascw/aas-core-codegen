@@ -7,6 +7,32 @@
 
 import * as TestCommonJsonization from "./commonJsonization";
 
+test("Branch.overOptionalChildrenOrEmpty on maximal", () => {
+  const instance = TestCommonJsonization.loadMaximalBranch();
+
+  let count = 0;
+  for (const _ of instance.overOptionalChildrenOrEmpty()) {
+    count++;
+  }
+
+  expect(count).toStrictEqual(
+    instance.optionalChildren?.length ?? 0,
+  );
+});
+
+test("Branch.overOptionalChildrenOrEmpty on minimal", () => {
+  const instance = TestCommonJsonization.loadMinimalBranch();
+
+  let count = 0;
+  for (const _ of instance.overOptionalChildrenOrEmpty()) {
+    count++;
+  }
+
+  expect(count).toStrictEqual(
+    instance.optionalChildren?.length ?? 0,
+  );
+});
+
 test("Something.overOptionalTextsOrEmpty on maximal", () => {
   const instance = TestCommonJsonization.loadMaximalSomething();
 

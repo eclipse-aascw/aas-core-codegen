@@ -224,7 +224,7 @@ namespace dummy
 
                 if (!(
                     !(that.OptionalText != null)
-                    || Verification.OptionalTextIsShort(that.OptionalText)))
+                    || Verification.OptionalTextIsShort(that.OptionalText!)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +

@@ -18,7 +18,37 @@ import java.io.IOException;
 import org.junit.jupiter.api.Test;
 
 public class TestJsonizationOfInterfaces {
-  
+  @Test
+  public void testRoundTripINodeFromBranch()
+    throws IOException, JsonProcessingException {
+    final ObjectMapper objectMapper = new ObjectMapper();
+
+    Branch instance = CommonJsonization.loadMaximalBranch();
+    final JsonNode jsonObject = Jsonization.Serialize.toJsonObject(instance);
+
+    INode anotherInstance = Jsonization.Deserialize.deserializeINode(
+      jsonObject);
+    final JsonNode anotherJsonObject = Jsonization.Serialize.toJsonObject(anotherInstance);
+
+    assertEquals(
+      objectMapper.readTree(jsonObject.toString()), objectMapper.readTree(anotherJsonObject.toString()));
+  } // void testRoundTripINodeFromBranch
+
+  @Test
+  public void testRoundTripINodeFromLeaf()
+    throws IOException, JsonProcessingException {
+    final ObjectMapper objectMapper = new ObjectMapper();
+
+    Leaf instance = CommonJsonization.loadMaximalLeaf();
+    final JsonNode jsonObject = Jsonization.Serialize.toJsonObject(instance);
+
+    INode anotherInstance = Jsonization.Deserialize.deserializeINode(
+      jsonObject);
+    final JsonNode anotherJsonObject = Jsonization.Serialize.toJsonObject(anotherInstance);
+
+    assertEquals(
+      objectMapper.readTree(jsonObject.toString()), objectMapper.readTree(anotherJsonObject.toString()));
+  } // void testRoundTripINodeFromLeaf
 } // class TestJsonizationOfInterfaces
 
 // package dummy.tests

@@ -22,6 +22,12 @@ public interface ITransformer<T> {
   T transformItem(
     IItem that
   );
+  T transformBranch(
+    IBranch that
+  );
+  T transformLeaf(
+    ILeaf that
+  );
   T transformSomething(
     ISomething that
   );

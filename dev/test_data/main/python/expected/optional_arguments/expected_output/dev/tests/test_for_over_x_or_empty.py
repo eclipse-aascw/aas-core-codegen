@@ -16,6 +16,43 @@ import tests.common
 import tests.common_xmlization
 
 
+class TestBranch(unittest.TestCase):
+    def test_over_optional_children_or_empty_against_recorded(self) -> None:
+        for minimal_or_maximal in ["minimal", "maximal"]:
+            instance = tests.common_xmlization.must_load(
+                pathlib.Path(
+                    tests.common.TEST_DATA_DIR
+                    / "Xml"
+                    / "Expected"
+                    / 'branch'
+                    / f"{minimal_or_maximal}.xml"
+                )
+            )
+
+            assert isinstance(
+                instance,
+                our_types.Branch
+            )
+
+            log = [
+                tests.common.trace(
+                    list(instance.over_optional_children_or_empty())
+                )
+            ]
+
+            got_text = tests.common.trace_log_as_text_file_content(log)
+
+            expected_path = pathlib.Path(
+                tests.common.TEST_DATA_DIR
+                / "test_over_X_or_empty"
+                / 'branch'
+                / f"on_{minimal_or_maximal}.xml"
+                / 'over_optional_children_or_empty.trace'
+            )
+
+            tests.common.record_or_check(expected_path, got_text)
+
+
 class TestSomething(unittest.TestCase):
     def test_over_optional_texts_or_empty_against_recorded(self) -> None:
         for minimal_or_maximal in ["minimal", "maximal"]:

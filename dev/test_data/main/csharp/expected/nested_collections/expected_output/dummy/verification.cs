@@ -160,7 +160,7 @@ namespace dummy
                 if (!(
                     !(that.OptionalGridOfItems != null)
                     || (
-                        that.OptionalGridOfItems.All(
+                        that.OptionalGridOfItems!.All(
                             row => row.Count > 0)
                     )))
                 {

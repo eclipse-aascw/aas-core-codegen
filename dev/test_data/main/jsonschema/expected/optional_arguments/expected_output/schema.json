@@ -9,6 +9,26 @@
   ],
   "$id": "https://dummy.com",
   "definitions": {
+    "Branch": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Node"
+        },
+        {
+          "properties": {
+            "optionalChildren": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Node_choice"
+              }
+            },
+            "modelType": {
+              "const": "Branch"
+            }
+          }
+        }
+      ]
+    },
     "Item": {
       "type": "object",
       "properties": {
@@ -31,9 +51,50 @@
         "gamma"
       ]
     },
+    "Leaf": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Node"
+        },
+        {
+          "properties": {
+            "optionalItem": {
+              "$ref": "#/definitions/Item"
+            },
+            "modelType": {
+              "const": "Leaf"
+            }
+          }
+        }
+      ]
+    },
     "ModelType": {
       "type": "string",
-      "enum": []
+      "enum": [
+        "Branch",
+        "Leaf"
+      ]
+    },
+    "Node": {
+      "type": "object",
+      "properties": {
+        "modelType": {
+          "$ref": "#/definitions/ModelType"
+        }
+      },
+      "required": [
+        "modelType"
+      ]
+    },
+    "Node_choice": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/Branch"
+        },
+        {
+          "$ref": "#/definitions/Leaf"
+        }
+      ]
     },
     "Something": {
       "type": "object",

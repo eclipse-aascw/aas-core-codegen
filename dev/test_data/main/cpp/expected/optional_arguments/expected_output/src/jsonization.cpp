@@ -681,6 +681,42 @@ std::pair<
 }
 
 /**
+ * Map JSON \c modelType strings to model types.
+ */
+const std::unordered_map<
+  std::string,
+  types::ModelType
+> kModelTypeStringToModelType = {
+  {
+    "Item",
+    types::ModelType::kItem
+  },
+  {
+    "Branch",
+    types::ModelType::kBranch
+  },
+  {
+    "Leaf",
+    types::ModelType::kLeaf
+  },
+  {
+    "Something",
+    types::ModelType::kSomething
+  }
+};
+
+common::optional<types::ModelType> ModelTypeFromModelTypeString(
+  const std::string& model_type_str
+) {
+  auto it = kModelTypeStringToModelType.find(model_type_str);
+  if (it == kModelTypeStringToModelType.end()) {
+    return common::nullopt;
+  }
+
+  return it->second;
+}
+
+/**
  * \brief De-serialize a list of items from \p json.
  *
  * \param json value expected to be an array
@@ -858,6 +894,16 @@ enum class OfItem : std::uint32_t {
   kNote
 };  // enum class OfItem
 
+enum class OfBranch : std::uint32_t {
+  kOptionalChildren,
+  kModelType
+};  // enum class OfBranch
+
+enum class OfLeaf : std::uint32_t {
+  kOptionalItem,
+  kModelType
+};  // enum class OfLeaf
+
 enum class OfSomething : std::uint32_t {
   kItem,
   kOptionalText,
@@ -878,6 +924,34 @@ const std::unordered_map<
   {
     "note",
     OfItem::kNote
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfBranch
+> kMapOfBranch = {
+  {
+    "optionalChildren",
+    OfBranch::kOptionalChildren
+  },
+  {
+    "modelType",
+    OfBranch::kModelType
+  }
+};
+
+const std::unordered_map<
+  std::string,
+  OfLeaf
+> kMapOfLeaf = {
+  {
+    "optionalItem",
+    OfLeaf::kOptionalItem
+  },
+  {
+    "modelType",
+    OfLeaf::kModelType
   }
 };
 
@@ -1053,6 +1127,47 @@ common::optional<DeserializationError> CheckJsonObject(
 }
 
 /**
+ * \brief Check that \p json is an object whose model type is \p expected.
+ *
+ * The model type is compared as the string which came on the wire. That refuses
+ * a value of the wrong type just as well as parsing it would, and costs neither
+ * a conversion to a wide string nor the allocation which goes with it.
+ *
+ * \param json value expected to be an object carrying a model type
+ * \param expected model type of the class
+ * \return the error, if \p json does not bear \p expected
+ */
+common::optional<DeserializationError> CheckModelType(
+  const nlohmann::json& json,
+  const char* expected
+) {
+  const std::string* model_type;
+  common::optional<DeserializationError> error;
+
+  std::tie(
+    model_type,
+    error
+  ) = GetModelTypeFrom(json);
+
+  if (error.has_value()) {
+    return error;
+  }
+
+  if (*model_type != expected) {
+    return DeserializationError(
+      common::Concat(
+        L"Expected model type '",
+        common::Utf8ToWstring(expected),
+        L"', but got: ",
+        common::Utf8ToWstring(*model_type)
+      )
+    );
+  }
+
+  return common::nullopt;
+}
+
+/**
  * \brief Assign the value parsed to \p target, or give out the error of the parse.
  *
  * We deliberately take the *result* of a parse instead of the JSON value and
@@ -1119,6 +1234,125 @@ std::pair<
   >,
   common::optional<DeserializationError>
 > DeserializeItem(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Dispatch the deserialization for an instance
+ * of types::INode.
+ *
+ * \param json value to be de-serialized
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the deserialized instance, or an error, if any
+ */
+std::pair<
+  common::optional<
+    std::shared_ptr<types::INode>
+  >,
+  common::optional<DeserializationError>
+> DeserializeNode(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Parse the properties of an instance of types::IBranch.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IBranch>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfBranch(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::IBranch.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
+ *
+ * \param json value to be de-serialized
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IBranch>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeBranch(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Parse the properties of an instance of types::ILeaf.
+ *
+ * The model type, if the class carries one, is expected to have been verified
+ * by the caller, which is what lets a dispatcher avoid verifying it twice.
+ *
+ * \param json object whose properties are to be parsed
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILeaf>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfLeaf(
+  const nlohmann::json& json,
+  bool additional_properties
+);
+
+/**
+ * \brief Deserialize \p json to an instance of types::ILeaf.
+ *
+ * No dispatch is performed. The model type, if the class carries one, is
+ * verified here, since the caller has not read it.
+ *
+ * \param json value to be de-serialized
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return the de-serialized instance, or an error, if any
+ */
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILeaf>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeLeaf(
   const nlohmann::json& json,
   bool additional_properties
 );
@@ -1262,6 +1496,288 @@ std::pair<
   }
 
   return ParsePropertiesOfItem(json, additional_properties);
+}
+
+std::pair<
+  common::optional<
+    std::shared_ptr<types::INode>
+  >,
+  common::optional<DeserializationError>
+> DeserializeNode(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  const std::string* model_type_str;
+  common::optional<DeserializationError> error;
+
+  std::tie(
+    model_type_str,
+    error
+  ) = GetModelTypeFrom(json);
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<types::INode>
+    >(
+      std::move(*error)
+    );
+  }
+
+  common::optional<types::ModelType> model_type(
+    ModelTypeFromModelTypeString(*model_type_str)
+  );
+
+  if (!model_type.has_value()) {
+    return NoInstanceAndDeserializationErrorWithCause<
+      std::shared_ptr<types::INode>
+    >(
+      common::Concat(
+        L"The model type does not correspond to any known class: ",
+        common::Utf8ToWstring(*model_type_str)
+      )
+    );
+  }
+
+  switch (*model_type) {
+    case types::ModelType::kBranch:
+      return ParsePropertiesOfBranch<
+        types::INode
+      >(json, additional_properties);
+    case types::ModelType::kLeaf:
+      return ParsePropertiesOfLeaf<
+        types::INode
+      >(json, additional_properties);
+    default:
+      return NoInstanceAndDeserializationErrorWithCause<
+        std::shared_ptr<types::INode>
+      >(
+        common::Concat(
+          L"The dispatch to the JSON de-serialization of "
+          L"types::INode "
+          L"is not defined for model type: ",
+          common::Utf8ToWstring(*model_type_str)
+        )
+      );
+  }
+}
+
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IBranch>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfBranch(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<
+    std::vector<
+      std::shared_ptr<types::INode>
+    >
+  > the_optional_children;
+
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfBranch,
+      additional_properties,
+      [&](
+        properties::OfBranch property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfBranch::kOptionalChildren:
+            return ParseInto(
+              the_optional_children,
+              DeserializeList<
+                std::shared_ptr<types::INode>
+              >(
+                value,
+                additional_properties,
+                DeserializeNode
+              )
+            );
+          case properties::OfBranch::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfBranch",
+              property
+            );
+        }
+      }
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return std::make_pair(
+    common::make_optional<
+      std::shared_ptr<T>
+    >(
+      // NOTE (mristin):
+      // We deliberately do not use std::make_shared here to avoid an unnecessary
+      // upcast.
+      new types::Branch(
+        std::move(the_optional_children)
+      )
+    ),
+    common::nullopt
+  );
+}
+
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IBranch>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeBranch(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "Branch"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfBranch<T>(
+    json,
+    additional_properties
+  );
+}
+
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILeaf>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> ParsePropertiesOfLeaf(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<
+    std::shared_ptr<types::IItem>
+  > the_optional_item;
+
+  common::optional<DeserializationError> error(
+    ParseProperties(
+      json,
+      properties::kMapOfLeaf,
+      additional_properties,
+      [&](
+        properties::OfLeaf property,
+        const nlohmann::json& value
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfLeaf::kOptionalItem:
+            return ParseInto(
+              the_optional_item,
+              DeserializeItem(
+                value,
+                additional_properties
+              )
+            );
+          case properties::OfLeaf::kModelType:
+            // NOTE (mristin):
+            // The model type has been verified before the loop, so there is nothing
+            // left to do with it here.
+            return common::nullopt;
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfLeaf",
+              property
+            );
+        }
+      }
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return std::make_pair(
+    common::make_optional<
+      std::shared_ptr<T>
+    >(
+      // NOTE (mristin):
+      // We deliberately do not use std::make_shared here to avoid an unnecessary
+      // upcast.
+      new types::Leaf(
+        std::move(the_optional_item)
+      )
+    ),
+    common::nullopt
+  );
+}
+
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILeaf>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> DeserializeLeaf(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  common::optional<DeserializationError> error(
+    CheckModelType(
+      json,
+      "Leaf"
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return ParsePropertiesOfLeaf<T>(
+    json,
+    additional_properties
+  );
 }
 
 std::pair<
@@ -1464,6 +1980,58 @@ common::expected<
     json,
     additional_properties,
     DeserializeItem
+  );
+}
+
+common::expected<
+  std::shared_ptr<types::INode>,
+  DeserializationError
+> NodeFrom(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  return DeserializeFrom<
+    std::shared_ptr<types::INode>
+  >(
+    json,
+    additional_properties,
+    DeserializeNode
+  );
+}
+
+common::expected<
+  std::shared_ptr<types::IBranch>,
+  DeserializationError
+> BranchFrom(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  return DeserializeFrom<
+    std::shared_ptr<types::IBranch>
+  >(
+    json,
+    additional_properties,
+    DeserializeBranch<
+      types::IBranch
+    >
+  );
+}
+
+common::expected<
+  std::shared_ptr<types::ILeaf>,
+  DeserializationError
+> LeafFrom(
+  const nlohmann::json& json,
+  bool additional_properties
+) {
+  return DeserializeFrom<
+    std::shared_ptr<types::ILeaf>
+  >(
+    json,
+    additional_properties,
+    DeserializeLeaf<
+      types::ILeaf
+    >
   );
 }
 
@@ -1736,6 +2304,92 @@ nlohmann::json SerializeListWithInfallible(
 }
 
 /**
+ * Serialize the given list of instances to a JSON array where item
+ * serialization might fail.
+ *
+ * The items are pointers, which we dereference for the item serializer.
+ */
+template<typename T, typename FallibleSerializeItemT>
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> SerializeListOfInstancesWithFallible(
+  const std::vector<std::shared_ptr<T> >& list,
+  FallibleSerializeItemT&& fallible_serialize_item
+) {
+  nlohmann::json serialized = nlohmann::json::array();
+
+  serialized.get_ptr<nlohmann::json::array_t*>()->reserve(
+    list.size()
+  );
+
+  size_t index = 0;
+
+  for (const std::shared_ptr<T>& item : list) {
+    common::optional<nlohmann::json> json_item;
+    common::optional<SerializationError> error;
+
+    std::tie(
+      json_item,
+      error
+    ) = fallible_serialize_item(*item);
+
+    if (error.has_value()) {
+      error->path.segments.emplace_front(
+        common::make_unique<iteration::IndexSegment>(
+          index
+        )
+      );
+
+      return std::make_pair<
+        common::optional<nlohmann::json>,
+        common::optional<SerializationError>
+      >(
+        common::nullopt,
+        std::move(error)
+      );
+    }
+
+    serialized.emplace_back(
+      std::move(*json_item)
+    );
+
+    ++index;
+  }
+
+  return std::make_pair(
+    std::move(serialized),
+    common::nullopt
+  );
+}
+
+/**
+ * Serialize the given list of instances to a JSON array where item
+ * serialization can not fail.
+ *
+ * The items are pointers, which we dereference for the item serializer.
+ */
+template<typename T, typename InfallibleSerializeItemT>
+nlohmann::json SerializeListOfInstancesWithInfallible(
+  const std::vector<std::shared_ptr<T> >& list,
+  InfallibleSerializeItemT&& infallible_serialize_item
+) {
+  nlohmann::json serialized = nlohmann::json::array();
+
+  serialized.get_ptr<nlohmann::json::array_t*>()->reserve(
+    list.size()
+  );
+
+  for (const std::shared_ptr<T>& item : list) {
+    serialized.emplace_back(
+      infallible_serialize_item(*item)
+    );
+  }
+
+  return serialized;
+}
+
+/**
  * \brief Give out a failed serialization with \p cause as its message.
  *
  * \param cause human-readable description of the failure
@@ -1893,6 +2547,26 @@ nlohmann::json SerializeItem(
 );
 
 /**
+ * \brief Serialize \p that instance of types::IBranch to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeBranch(
+  const types::IBranch& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::ILeaf to a JSON value.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeLeaf(
+  const types::ILeaf& that
+);
+
+/**
  * \brief Serialize \p that instance of types::ISomething to a JSON value.
  *
  * \param that instance to be serialized
@@ -1903,6 +2577,17 @@ std::pair<
   common::optional<SerializationError>
 > SerializeSomething(
   const types::ISomething& that
+);
+
+/**
+ * \brief Serialize \p that instance of types::INode to a JSON value,
+ * dispatching on its model type.
+ *
+ * \param that instance to be serialized
+ * \return the JSON value
+ */
+nlohmann::json SerializeNode(
+  const types::INode& that
 );
 
 nlohmann::json SerializeItem(
@@ -1922,6 +2607,51 @@ nlohmann::json SerializeItem(
       *maybe_note
     );
   }
+
+  return result;
+}
+
+nlohmann::json SerializeBranch(
+  const types::IBranch& that
+) {
+  nlohmann::json result = nlohmann::json::object();
+
+  const common::optional<
+    std::vector<
+      std::shared_ptr<types::INode>
+    >
+  >& maybe_optional_children(
+    that.optional_children()
+  );
+  if (maybe_optional_children.has_value()) {
+    result["optionalChildren"] = SerializeListOfInstancesWithInfallible(
+      *maybe_optional_children,
+      SerializeNode
+    );
+  }
+
+  result["modelType"] = "Branch";
+
+  return result;
+}
+
+nlohmann::json SerializeLeaf(
+  const types::ILeaf& that
+) {
+  nlohmann::json result = nlohmann::json::object();
+
+  const common::optional<
+    std::shared_ptr<types::IItem>
+  >& maybe_optional_item(
+    that.optional_item()
+  );
+  if (maybe_optional_item.has_value()) {
+    result["optionalItem"] = SerializeItem(
+      *(*maybe_optional_item)
+    );
+  }
+
+  result["modelType"] = "Leaf";
 
   return result;
 }
@@ -2009,6 +2739,37 @@ std::pair<
   );
 }
 
+nlohmann::json SerializeNode(
+  const types::INode& that
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kBranch:
+      return SerializeBranch(
+        dynamic_cast<const types::IBranch&>(that)
+      );
+    case types::ModelType::kLeaf:
+      return SerializeLeaf(
+        dynamic_cast<const types::ILeaf&>(that)
+      );
+    default: {
+      std::string message = common::Concat(
+        "Unexpected model type: ",
+        std::to_string(
+          static_cast<std::uint32_t>(
+            that.model_type()
+          )
+        )
+      );
+
+      throw std::invalid_argument(message);
+    }
+  };
+}
+
 std::pair<
   common::optional<nlohmann::json>,
   common::optional<SerializationError>
@@ -2020,6 +2781,18 @@ std::pair<
       return AsFallible(
         SerializeItem(
           dynamic_cast<const types::IItem&>(that)
+        )
+      );
+    case types::ModelType::kBranch:
+      return AsFallible(
+        SerializeBranch(
+          dynamic_cast<const types::IBranch&>(that)
+        )
+      );
+    case types::ModelType::kLeaf:
+      return AsFallible(
+        SerializeLeaf(
+          dynamic_cast<const types::ILeaf&>(that)
         )
       );
     case types::ModelType::kSomething:

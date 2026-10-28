@@ -26,6 +26,8 @@ std::wstring PropertyToWstring(
       return L"name";
     case Property::kNote:
       return L"note";
+    case Property::kOptionalChildren:
+      return L"optional_children";
     case Property::kOptionalItem:
       return L"optional_item";
     case Property::kOptionalKind:
@@ -409,6 +411,117 @@ std::unique_ptr<impl::IIterator> InProperty(
 }
 
 /**
+ * \brief Iterate over the instances of every item of a list, one item after another.
+ *
+ * The iterator over an item is built only once the iteration reaches the item.
+ */
+template<typename T>
+class EachIterator : public impl::IIterator {
+ public:
+  /**
+   * Build the iterator over the instances of an item
+   */
+  typedef std::unique_ptr<impl::IIterator> (*OverItem)(
+    const T& item,
+    bool recursive
+  );
+
+  EachIterator(
+    const std::vector<T>* items,
+    OverItem over_item,
+    bool recursive
+  ) :
+    items_(items),
+    over_item_(over_item),
+    recursive_(recursive),
+    index_(0) {
+    // Intentionally empty.
+  }
+
+  EachIterator(const EachIterator<T>& other) :
+    items_(other.items_),
+    over_item_(other.over_item_),
+    recursive_(other.recursive_),
+    index_(other.index_),
+    item_(other.item_ == nullptr ? nullptr : other.item_->Clone()) {
+    // Intentionally empty.
+  }
+
+  void Start() override {
+    index_ = 0;
+    item_ = nullptr;
+    SkipDoneItems();
+  }
+
+  void Next() override {
+    item_->Next();
+    SkipDoneItems();
+  }
+
+  bool Done() const override {
+    return index_ >= items_->size();
+  }
+
+  const std::shared_ptr<types::IClass>& Get() const override {
+    return item_->Get();
+  }
+
+  void AppendToPath(Path& path) const override {
+    path.segments.emplace_back(
+      common::make_unique<IndexSegment>(index_)
+    );
+    item_->AppendToPath(path);
+  }
+
+  std::unique_ptr<impl::IIterator> Clone() const override {
+    return common::make_unique<EachIterator<T> >(*this);
+  }
+
+ private:
+  const std::vector<T>* items_;
+  OverItem over_item_;
+  bool recursive_;
+
+  /**
+   * Index of the item we currently iterate over
+   */
+  std::size_t index_;
+
+  /**
+   * Iterator over the current item, built once we reached the item
+   */
+  std::unique_ptr<impl::IIterator> item_;
+
+  /**
+   * Move on to the next items, and build their iterators, until one is not done.
+   */
+  void SkipDoneItems() {
+    while (index_ < items_->size()) {
+      if (item_ == nullptr) {
+        item_ = over_item_((*items_)[index_], recursive_);
+        item_->Start();
+      }
+
+      if (!item_->Done()) {
+        return;
+      }
+
+      item_ = nullptr;
+      ++index_;
+    }
+  }
+};  // class EachIterator
+
+template<typename T>
+std::unique_ptr<impl::IIterator> Each(
+  const std::vector<T>& items,
+  std::unique_ptr<impl::IIterator> (*over_item)(const T& item, bool recursive),
+  bool recursive
+) {
+  return common::make_unique<EachIterator<T> >(&items, over_item, recursive);
+}
+
+/**
  * \brief Iterate over a single instance.
  *
  * We keep a copy of the shared pointer, upcast to types::IClass, so that
@@ -549,6 +662,41 @@ std::unique_ptr<impl::IIterator> OneThenOver(
   return Chain(One(instance), Over(*instance, recursive));
 }
 
+using listOf_Node = std::vector<
+  std::shared_ptr<types::INode>
+>;
+
+std::unique_ptr<impl::IIterator> Over_listOf_Node(
+  const listOf_Node& value,
+  bool recursive
+) {
+  return Each(value, &OneThenOver<types::INode>, recursive);
+}
+
+std::unique_ptr<impl::IIterator> Over_Branch(
+  const types::IBranch& that,
+  bool recursive
+) {
+  return InProperty(
+    Property::kOptionalChildren,
+    that.optional_children().has_value()
+      ? Over_listOf_Node((*that.optional_children()), recursive)
+      : Empty()
+  );
+}
+
+std::unique_ptr<impl::IIterator> Over_Leaf(
+  const types::ILeaf& that,
+  bool recursive
+) {
+  return InProperty(
+    Property::kOptionalItem,
+    that.optional_item().has_value()
+      ? OneThenOver((*that.optional_item()), recursive)
+      : Empty()
+  );
+}
+
 std::unique_ptr<impl::IIterator> Over_Something(
   const types::ISomething& that,
   bool recursive
@@ -579,6 +727,16 @@ std::unique_ptr<impl::IIterator> DispatchOnModelType(
   bool recursive
 ) {
   switch (instance.model_type()) {
+    case types::ModelType::kBranch:
+      return Over_Branch(
+        dynamic_cast<const types::IBranch&>(instance),
+        recursive
+      );
+    case types::ModelType::kLeaf:
+      return Over_Leaf(
+        dynamic_cast<const types::ILeaf&>(instance),
+        recursive
+      );
     case types::ModelType::kSomething:
       return Over_Something(
         dynamic_cast<const types::ISomething&>(instance),

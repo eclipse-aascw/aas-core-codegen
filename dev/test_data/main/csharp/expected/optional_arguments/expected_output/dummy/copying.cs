@@ -44,6 +44,21 @@ namespace dummy
             return (T)DeepCopierInstance.Transform(that);
         }
 
+        /// <summary>
+        /// Make a deep copy of <paramref name="that" />.
+        /// </summary>
+        private static List<INode> Deep_ListOf_INode(
+            List<INode> that)
+        {
+            var result = new List<INode>(that.Count);
+            foreach (var item in that)
+            {
+                result.Add(Deep(item));
+            }
+
+            return result;
+        }
+
         /// <summary>Dispatch the making of shallow copies.</summary>
         internal class ShallowCopier : Visitation.AbstractTransformer<Our.IClass>
         {
@@ -52,6 +67,20 @@ namespace dummy
             )
             {
                 return new Our.Item(that.Name, that.Note);
+            }
+
+            public override Our.IClass TransformBranch(
+                Our.IBranch that
+            )
+            {
+                return new Our.Branch(that.OptionalChildren);
+            }
+
+            public override Our.IClass TransformLeaf(
+                Our.ILeaf that
+            )
+            {
+                return new Our.Leaf(that.OptionalItem);
             }
 
             public override Our.IClass TransformSomething(
@@ -77,6 +106,28 @@ namespace dummy
                 return new Our.Item(
                     that.Name,
                     that.Note
+                );
+            }
+
+            public override Our.IClass TransformBranch(
+                Our.IBranch that
+            )
+            {
+                return new Our.Branch(
+                    (that.OptionalChildren != null)
+                        ? Deep_ListOf_INode(that.OptionalChildren)
+                        : null
+                );
+            }
+
+            public override Our.IClass TransformLeaf(
+                Our.ILeaf that
+            )
+            {
+                return new Our.Leaf(
+                    (that.OptionalItem != null)
+                        ? Deep(that.OptionalItem)
+                        : null
                 );
             }
 

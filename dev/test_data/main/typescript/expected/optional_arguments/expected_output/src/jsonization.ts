@@ -690,6 +690,283 @@ export function itemFromJsonable(
 }
 
 /**
+ * Parse `jsonable` as an instance
+ * of {@link types!INode}.
+ *
+ * @param jsonable - to be parsed
+ * @returns parsed instance, or error if `jsonable` is invalid
+ */
+export function nodeFromJsonable(
+  jsonable: JsonValue
+): OurCommon.Either<
+  OurTypes.INode,
+  DeserializationError
+> {
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new OurCommon.Either<
+      OurTypes.INode,
+      DeserializationError
+    >(
+      null,
+      objectError
+    );
+  }
+  const jsonObject = <JsonObject>jsonable;
+
+  const modelTypeOrError = extractModelType(jsonObject);
+  if (modelTypeOrError.error !== null) {
+    return new OurCommon.Either<
+      OurTypes.INode,
+      DeserializationError
+    >(
+      null,
+      modelTypeOrError.error
+    );
+  }
+
+  const modelType = modelTypeOrError.mustValue();
+
+  switch (modelType) {
+    case "Branch":
+      return parsePropertiesOfBranch(jsonObject);
+
+    case "Leaf":
+      return parsePropertiesOfLeaf(jsonObject);
+
+    default:
+      return newDeserializationError<OurTypes.INode>(
+        `Unexpected model type for INode: ${modelType}`
+      );
+  }
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!Branch} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Branch},
+ * or an error if any
+ */
+function parsePropertiesOfBranch(
+  jsonObject: JsonObject
+): OurCommon.Either<
+  OurTypes.Branch,
+  DeserializationError
+> {
+  let theOptionalChildren: Array<OurTypes.INode> | null = null;
+
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
+
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "optionalChildren": {
+        const parsed = parseArray(
+          jsonableValue,
+          nodeFromJsonable
+        );
+        propertyError = parsed.error;
+        theOptionalChildren = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new OurCommon.Either<
+        OurTypes.Branch,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
+    }
+  }
+
+  return new OurCommon.Either<
+    OurTypes.Branch,
+    DeserializationError
+  >(
+    new OurTypes.Branch(
+      theOptionalChildren
+    ),
+    null
+  );
+}
+
+/**
+ * Parse an instance of {@link types!Branch} from the JSON-able
+ * structure `jsonable`.
+ *
+ * @param jsonable - structure to be parsed
+ * @returns parsed instance of {@link types!Branch},
+ * or an error if any
+ */
+export function branchFromJsonable(
+  jsonable: JsonValue
+): OurCommon.Either<
+  OurTypes.Branch,
+  DeserializationError
+> {
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new OurCommon.Either<
+      OurTypes.Branch,
+      DeserializationError
+    >(
+      null,
+      objectError
+    );
+  }
+  const jsonObject = <JsonObject>jsonable;
+
+  const modelTypeError = checkModelType(jsonObject, "Branch");
+  if (modelTypeError !== null) {
+    return new OurCommon.Either<
+      OurTypes.Branch,
+      DeserializationError
+    >(
+      null,
+      modelTypeError
+    );
+  }
+
+  return parsePropertiesOfBranch(jsonObject);
+}
+
+/**
+ * Parse the properties of an instance
+ * of {@link types!Leaf} from `jsonObject`.
+ *
+ * The `modelType` is expected to have been already verified by the caller,
+ * and is therefore skipped here.
+ *
+ * @param jsonObject - JSON object to be parsed
+ * @returns parsed instance of {@link types!Leaf},
+ * or an error if any
+ */
+function parsePropertiesOfLeaf(
+  jsonObject: JsonObject
+): OurCommon.Either<
+  OurTypes.Leaf,
+  DeserializationError
+> {
+  let theOptionalItem: OurTypes.Item | null = null;
+
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
+
+    let propertyError: DeserializationError | null = null;
+    switch (key) {
+      case "optionalItem": {
+        const parsed = itemFromJsonable(
+          jsonableValue
+        );
+        propertyError = parsed.error;
+        theOptionalItem = parsed.value;
+        break;
+      }
+
+      case "modelType": {
+        // The model type has already been verified by the caller.
+        break;
+      }
+
+      // NOTE (mristin):
+      // Since we conflate here a JavaScript object with a JSON object, we ignore
+      // properties which we do not know how to de-serialize and assume they are
+      // related to the *JavaScript* properties of the object or `Object` prototype.
+      default: {
+        continue;
+      }
+    }
+
+    if (propertyError !== null) {
+      propertyError.path.prepend(
+        new PropertySegment(jsonObject, key)
+      );
+      return new OurCommon.Either<
+        OurTypes.Leaf,
+        DeserializationError
+      >(
+        null,
+        propertyError
+      );
+    }
+  }
+
+  return new OurCommon.Either<
+    OurTypes.Leaf,
+    DeserializationError
+  >(
+    new OurTypes.Leaf(
+      theOptionalItem
+    ),
+    null
+  );
+}
+
+/**
+ * Parse an instance of {@link types!Leaf} from the JSON-able
+ * structure `jsonable`.
+ *
+ * @param jsonable - structure to be parsed
+ * @returns parsed instance of {@link types!Leaf},
+ * or an error if any
+ */
+export function leafFromJsonable(
+  jsonable: JsonValue
+): OurCommon.Either<
+  OurTypes.Leaf,
+  DeserializationError
+> {
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new OurCommon.Either<
+      OurTypes.Leaf,
+      DeserializationError
+    >(
+      null,
+      objectError
+    );
+  }
+  const jsonObject = <JsonObject>jsonable;
+
+  const modelTypeError = checkModelType(jsonObject, "Leaf");
+  if (modelTypeError !== null) {
+    return new OurCommon.Either<
+      OurTypes.Leaf,
+      DeserializationError
+    >(
+      null,
+      modelTypeError
+    );
+  }
+
+  return parsePropertiesOfLeaf(jsonObject);
+}
+
+/**
  * Parse the properties of an instance
  * of {@link types!Something} from `jsonObject`.
  *
@@ -983,6 +1260,68 @@ function serializeItem(
  * @param that - instance to be serialized
  * @returns JSON-able representation
  */
+function serializeBranch(
+  that: OurTypes.Branch
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    if (that.optionalChildren !== null) {
+      prop = "optionalChildren";
+      jsonable["optionalChildren"] =
+        serialize_ListOf_INode(that.optionalChildren);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
+
+  jsonable["modelType"] = "Branch";
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeLeaf(
+  that: OurTypes.Leaf
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // The property being serialized, for the path of a failure.
+  let prop = "";
+  try {
+    if (that.optionalItem !== null) {
+      prop = "optionalItem";
+      jsonable["optionalItem"] =
+        serializeItem(that.optionalItem);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
+
+  jsonable["modelType"] = "Leaf";
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
 function serializeSomething(
   that: OurTypes.Something
 ): JsonObject {
@@ -1035,6 +1374,30 @@ function serializeSomething(
 }
 
 /**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_INode(
+  that: ReadonlyArray<OurTypes.INode>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  let i = 0;
+  try {
+    for (; i < that.length; i++) {
+      result[i] = serializeClass(that[i]);
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependIndex(i);
+    }
+    throw error;
+  }
+  return result;
+}
+
+/**
  * Dispatch the serialization on the run-time type of an instance.
  */
 class Serializer extends OurTypes.AbstractTransformer<JsonObject> {
@@ -1042,6 +1405,18 @@ class Serializer extends OurTypes.AbstractTransformer<JsonObject> {
     that: OurTypes.Item
   ): JsonObject {
     return serializeItem(that);
+  }
+
+  transformBranch(
+    that: OurTypes.Branch
+  ): JsonObject {
+    return serializeBranch(that);
+  }
+
+  transformLeaf(
+    that: OurTypes.Leaf
+  ): JsonObject {
+    return serializeLeaf(that);
   }
 
   transformSomething(

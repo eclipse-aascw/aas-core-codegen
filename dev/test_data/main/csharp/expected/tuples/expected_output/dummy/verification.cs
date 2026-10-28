@@ -128,7 +128,7 @@ namespace dummy
 
                 if (!(
                     !(that.OptionalPair != null)
-                    || (Common.TupleHelpers.Len(that.OptionalPair) == 2)))
+                    || (Common.TupleHelpers.Len(that.OptionalPair!) == 2)))
                 {
                     yield return new Reporting.Error(
                         "Invariant violated:\n" +

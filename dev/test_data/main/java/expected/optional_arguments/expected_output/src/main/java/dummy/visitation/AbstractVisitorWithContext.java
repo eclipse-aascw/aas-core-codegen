@@ -25,6 +25,14 @@ public abstract class AbstractVisitorWithContext<ContextT>
     IItem that,
     ContextT context
   );
+  public abstract void visitBranch(
+    IBranch that,
+    ContextT context
+  );
+  public abstract void visitLeaf(
+    ILeaf that,
+    ContextT context
+  );
   public abstract void visitSomething(
     ISomething that,
     ContextT context

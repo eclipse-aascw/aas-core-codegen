@@ -196,8 +196,8 @@ namespace dummy
                 if (!(
                     !(that.OptionalNumber != null)
                     || (
-                        (Common.FloorMod(that.OptionalNumber.Value, 5)) == (4)
-                        && System.Math.Abs(that.OptionalNumber.Value) < 100
+                        (Common.FloorMod(that.OptionalNumber!.Value, 5)) == (4)
+                        && System.Math.Abs(that.OptionalNumber!.Value) < 100
                     )))
                 {
                     yield return new Reporting.Error(
@@ -209,8 +209,8 @@ namespace dummy
                 if (!(
                     !(that.OptionalRatio != null)
                     || (
-                        (-that.OptionalRatio) < (0.5)
-                        && System.Math.Abs(that.OptionalRatio.Value) < 2.0
+                        (-that.OptionalRatio!) < (0.5)
+                        && System.Math.Abs(that.OptionalRatio!.Value) < 2.0
                     )))
                 {
                     yield return new Reporting.Error(

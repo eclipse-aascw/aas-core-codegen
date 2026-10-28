@@ -92,6 +92,146 @@ func wrapItem[E any](
 	return
 }
 
+type enhancedBranch[E any] struct {
+	instance ourtypes.IBranch
+	enhancement E
+}
+
+func (eb *enhancedBranch[E]) ModelType(
+) ourtypes.ModelType {
+	return eb.instance.ModelType()
+}
+
+func (eb *enhancedBranch[E]) DescendOnce(
+	action func(ourtypes.IClass)bool,
+) bool {
+	return eb.instance.DescendOnce(action)
+}
+
+func (eb *enhancedBranch[E]) Descend(
+	action func(ourtypes.IClass) bool,
+) bool {
+	return eb.instance.Descend(action)
+}
+
+func (eb *enhancedBranch[E]) OptionalChildren(
+) []ourtypes.INode {
+	return eb.instance.OptionalChildren()
+}
+
+func (eb *enhancedBranch[E]) SetOptionalChildren(
+	value []ourtypes.INode,
+) {
+	eb.instance.SetOptionalChildren(value)
+}
+
+func (eb *enhancedBranch[E]) getEnhancement(
+) E {
+	return eb.enhancement
+}
+
+func (eb *enhancedBranch[E]) setEnhancement(
+	value E,
+) {
+	eb.enhancement = value
+}
+
+func wrapBranch[E any](
+	that ourtypes.IBranch,
+	factory func(ourtypes.IClass) (E, bool),
+) (result ourtypes.IBranch) {
+	// We assume that we already checked whether `that` has been enhanced
+	// in the caller.
+
+	enh, shouldEnhance := factory(that)
+	if shouldEnhance {
+		result = &enhancedBranch[E]{
+			instance: that,
+			enhancement: enh,
+		}
+	} else {
+		result = that
+	}
+
+	theOptionalChildren := that.OptionalChildren()
+	if theOptionalChildren != nil {
+		wrap_ListOf_INode_inPlace[E](theOptionalChildren, factory)
+	}
+
+	return
+}
+
+type enhancedLeaf[E any] struct {
+	instance ourtypes.ILeaf
+	enhancement E
+}
+
+func (el *enhancedLeaf[E]) ModelType(
+) ourtypes.ModelType {
+	return el.instance.ModelType()
+}
+
+func (el *enhancedLeaf[E]) DescendOnce(
+	action func(ourtypes.IClass)bool,
+) bool {
+	return el.instance.DescendOnce(action)
+}
+
+func (el *enhancedLeaf[E]) Descend(
+	action func(ourtypes.IClass) bool,
+) bool {
+	return el.instance.Descend(action)
+}
+
+func (el *enhancedLeaf[E]) OptionalItem(
+) ourtypes.IItem {
+	return el.instance.OptionalItem()
+}
+
+func (el *enhancedLeaf[E]) SetOptionalItem(
+	value ourtypes.IItem,
+) {
+	el.instance.SetOptionalItem(value)
+}
+
+func (el *enhancedLeaf[E]) getEnhancement(
+) E {
+	return el.enhancement
+}
+
+func (el *enhancedLeaf[E]) setEnhancement(
+	value E,
+) {
+	el.enhancement = value
+}
+
+func wrapLeaf[E any](
+	that ourtypes.ILeaf,
+	factory func(ourtypes.IClass) (E, bool),
+) (result ourtypes.ILeaf) {
+	// We assume that we already checked whether `that` has been enhanced
+	// in the caller.
+
+	enh, shouldEnhance := factory(that)
+	if shouldEnhance {
+		result = &enhancedLeaf[E]{
+			instance: that,
+			enhancement: enh,
+		}
+	} else {
+		result = that
+	}
+
+	theOptionalItem := that.OptionalItem()
+	if theOptionalItem != nil {
+		that.SetOptionalItem(
+			wrapClass[E](theOptionalItem, factory),
+		)
+	}
+
+	return
+}
+
 type enhancedSomething[E any] struct {
 	instance ourtypes.ISomething
 	enhancement E
@@ -231,6 +371,16 @@ func wrapClass[E any, T ourtypes.IClass](
 	return Wrap[E](that, factory).(T)
 }
 
+// Wrap recursively the instances held by `that` in-situ.
+func wrap_ListOf_INode_inPlace[E any](
+	that []ourtypes.INode,
+	factory func(ourtypes.IClass) (E, bool),
+) {
+	for i := range that {
+		that[i] = wrapClass[E](that[i], factory)
+	}
+}
+
 // Wrap `that` instance recursively with the enhancement produced by the `factory`.
 //
 // The factory returns the enhancement, and a boolean "should-enhance". If
@@ -257,6 +407,16 @@ func Wrap[E any](
 	case ourtypes.ModelTypeItem:
 		result = wrapItem[E](
 			that.(ourtypes.IItem),
+			factory,
+		)
+	case ourtypes.ModelTypeBranch:
+		result = wrapBranch[E](
+			that.(ourtypes.IBranch),
+			factory,
+		)
+	case ourtypes.ModelTypeLeaf:
+		result = wrapLeaf[E](
+			that.(ourtypes.ILeaf),
 			factory,
 		)
 	case ourtypes.ModelTypeSomething:

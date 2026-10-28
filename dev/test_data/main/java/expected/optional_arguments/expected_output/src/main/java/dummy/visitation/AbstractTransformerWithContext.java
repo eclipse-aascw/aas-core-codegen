@@ -32,6 +32,16 @@ public abstract class AbstractTransformerWithContext<ContextT, T>
     ContextT context
   );
 
+  public abstract T transformBranch(
+    IBranch that,
+    ContextT context
+  );
+
+  public abstract T transformLeaf(
+    ILeaf that,
+    ContextT context
+  );
+
   public abstract T transformSomething(
     ISomething that,
     ContextT context

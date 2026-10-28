@@ -147,6 +147,58 @@ bool NoteIsShort(
   );
 }
 
+bool KindIsKnown(
+  types::Kind kind
+) {
+  return (
+    (
+      kind == types::Kind::kAlpha
+      || kind == types::Kind::kBeta
+    )
+  );
+}
+
+bool NumberIsPositive(
+  int64_t number
+) {
+  return number > 0;
+}
+
+bool ItemIsNamed(
+  const std::shared_ptr<types::IItem>& item
+) {
+  return common::LenStr(item->name()) > 0;
+}
+
+bool NodeHasNamedItemInTree(
+  const std::shared_ptr<types::INode>& node
+) {
+  if (types::IsBranch(*node)) {
+    return (
+      (
+        (std::dynamic_pointer_cast<types::IBranch>(node)->optional_children().has_value())
+        && common::Some(
+          [&](const std::shared_ptr<types::INode>& child) -> bool {
+            return NodeHasNamedItemInTree(
+              child
+            );
+          },
+          (*(std::dynamic_pointer_cast<types::IBranch>(node)->optional_children()))
+        )
+      )
+    );
+  }
+  if (types::IsLeaf(*node)) {
+    return (
+      (
+        (std::dynamic_pointer_cast<types::ILeaf>(node)->optional_item().has_value())
+        && common::LenStr((*(std::dynamic_pointer_cast<types::ILeaf>(node)->optional_item()))->name()) > 0
+      )
+    );
+  }
+  return false;
+}
+
 // endregion Verification functions
 
 namespace {
@@ -257,6 +309,48 @@ bool Something_6(
   );
 }
 
+bool Something_7(
+  const void* value
+) {
+  const types::ISomething* that = (
+    static_cast<const types::ISomething*>(value)
+  );
+  return (
+    (!(that->optional_item().has_value()))
+    || verification::ItemIsNamed(
+      (*(that->optional_item()))
+    )
+  );
+}
+
+bool Something_8(
+  const void* value
+) {
+  const types::ISomething* that = (
+    static_cast<const types::ISomething*>(value)
+  );
+  return (
+    (!(that->optional_number().has_value()))
+    || verification::NumberIsPositive(
+      (*(that->optional_number()))
+    )
+  );
+}
+
+bool Something_9(
+  const void* value
+) {
+  const types::ISomething* that = (
+    static_cast<const types::ISomething*>(value)
+  );
+  return (
+    (!(that->optional_kind().has_value()))
+    || verification::KindIsKnown(
+      (*(that->optional_kind()))
+    )
+  );
+}
+
 /**
  * Give out the checks of the values of the \p shape.
  */
@@ -293,6 +387,18 @@ const std::vector<Check>& ChecksOf(Shape shape) {
         {
           &Something_6,
           L"Text must be short"
+        },
+        {
+          &Something_7,
+          L"Narrowed item must be named"
+        },
+        {
+          &Something_8,
+          L"Narrowed number must be positive"
+        },
+        {
+          &Something_9,
+          L"Narrowed kind must be known"
         }
       };
       return checks;

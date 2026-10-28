@@ -3,6 +3,8 @@ from typing import List, Optional, Sequence
 
 from icontract import DBC, invariant
 
+from aas_core_meta.marker import abstract, serialization, verification
+
 
 class Kind(Enum):
     Alpha = "alpha"
@@ -17,6 +19,28 @@ class Item(DBC):
     def __init__(self, name: str, note: Optional[str] = None) -> None:
         self.name = name
         self.note = note
+
+
+@abstract
+@serialization(with_model_type=True)
+class Node(DBC):
+    pass
+
+
+@serialization(with_model_type=True)
+class Branch(Node):
+    optional_children: Optional[List["Node"]]
+
+    def __init__(self, optional_children: Optional[List["Node"]] = None) -> None:
+        self.optional_children = optional_children
+
+
+@serialization(with_model_type=True)
+class Leaf(Node):
+    optional_item: Optional[Item]
+
+    def __init__(self, optional_item: Optional[Item] = None) -> None:
+        self.optional_item = optional_item
 
 
 @verification
@@ -74,6 +98,51 @@ def note_is_short(item: Item) -> bool:
     return note is None or len(note) <= 5
 
 
+@verification
+def kind_is_known(kind: Kind) -> bool:
+    """Check the non-optional enumeration argument."""
+    return kind == Kind.Alpha or kind == Kind.Beta
+
+
+@verification
+def number_is_positive(number: int) -> bool:
+    """Check the non-optional integer argument."""
+    return number > 0
+
+
+@verification
+def item_is_named(item: Item) -> bool:
+    """Check the non-optional instance argument."""
+    return len(item.name) > 0
+
+
+@verification
+def node_has_named_item_in_tree(node: "Node") -> bool:
+    """Check the optional properties narrowed after the type test."""
+    if isinstance(node, Branch):
+        return node.optional_children is not None and any(
+            node_has_named_item_in_tree(child) for child in node.optional_children
+        )
+
+    if isinstance(node, Leaf):
+        return node.optional_item is not None and len(node.optional_item.name) > 0
+
+    return False
+
+
+@invariant(
+    lambda self: self.optional_kind is None or kind_is_known(self.optional_kind),
+    "Narrowed kind must be known",
+)
+@invariant(
+    lambda self: self.optional_number is None
+    or number_is_positive(self.optional_number),
+    "Narrowed number must be positive",
+)
+@invariant(
+    lambda self: self.optional_item is None or item_is_named(self.optional_item),
+    "Narrowed item must be named",
+)
 @invariant(lambda self: text_is_short(self.optional_text), "Text must be short")
 @invariant(lambda self: forwards_text(self.optional_text), "Text must not be banned")
 @invariant(lambda self: number_is_small(self.optional_number), "Number must be small")

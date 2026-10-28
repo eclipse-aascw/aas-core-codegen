@@ -293,6 +293,65 @@ export function noteIsShort(
 }
 
 /**
+ * Check the non-optional enumeration argument.
+ */
+export function kindIsKnown(
+  kind: OurTypes.Kind
+): boolean {
+  return (
+    kind == OurTypes.Kind.Alpha
+    || kind == OurTypes.Kind.Beta
+  );
+}
+
+/**
+ * Check the non-optional integer argument.
+ */
+export function numberIsPositive(
+  number: number
+): boolean {
+  return number > 0;
+}
+
+/**
+ * Check the non-optional instance argument.
+ */
+export function itemIsNamed(
+  item: OurTypes.Item
+): boolean {
+  return OurCommon.lenStr(item.name) > 0;
+}
+
+/**
+ * Check the optional properties narrowed after the type test.
+ */
+export function nodeHasNamedItemInTree(
+  node: OurTypes.INode
+): boolean {
+  if (OurTypes.isBranch(node)) {
+    return (
+      ((node as OurTypes.Branch).optionalChildren !== null)
+      && (
+        OurCommon.some(
+          OurCommon.map(
+            (node as OurTypes.Branch).optionalChildren,
+            child =>
+              nodeHasNamedItemInTree(child)
+          )
+        )
+      )
+    );
+  }
+  if (OurTypes.isLeaf(node)) {
+    return (
+      ((node as OurTypes.Leaf).optionalItem !== null)
+      && OurCommon.lenStr((node as OurTypes.Leaf).optionalItem.name) > 0
+    );
+  }
+  return false;
+}
+
+/**
  * Verify that `that` is a safe integer so that it can be serialized to JSON.
  *
  * @param that - to be verified
@@ -305,6 +364,25 @@ export function *verifyInteger(
     yield new VerificationError(OurCommon.notWholeIntegerMessage(that));
   } else if (!Number.isSafeInteger(that)) {
     yield new VerificationError(OurCommon.unsafeIntegerMessage(that));
+  }
+}
+
+/**
+ * Verify the items of `that` recursively.
+ */
+function *verify_ListOf_class(
+  that: ReadonlyArray<OurTypes.Class>
+): IterableIterator<VerificationError> {
+  for (let i = 0; i < that.length; i++) {
+    for (const error of verify(that[i])) {
+      error.path.prepend(
+        new IndexSegment(
+          that,
+          i
+        )
+      );
+      yield error;
+    }
   }
 }
 
@@ -322,6 +400,44 @@ class Verifier
     context: boolean
   ): IterableIterator<VerificationError> {
     // No verification has been defined for Item.
+  }
+
+  *transformBranchWithContext(
+    that: OurTypes.Branch,
+    context: boolean
+  ): IterableIterator<VerificationError> {
+    if (context === true) {
+      if (that.optionalChildren !== null) {
+        for (const error of verify_ListOf_class(that.optionalChildren)) {
+          error.path.prepend(
+            new PropertySegment(
+              that,
+              "optionalChildren"
+            )
+          );
+          yield error;
+        }
+      }
+    }
+  }
+
+  *transformLeafWithContext(
+    that: OurTypes.Leaf,
+    context: boolean
+  ): IterableIterator<VerificationError> {
+    if (context === true) {
+      if (that.optionalItem !== null) {
+        for (const error of verify(that.optionalItem)) {
+          error.path.prepend(
+            new PropertySegment(
+              that,
+              "optionalItem"
+            )
+          );
+          yield error;
+        }
+      }
+    }
   }
 
   *transformSomethingWithContext(
@@ -367,6 +483,39 @@ class Verifier
     if (!textIsShort(that.optionalText)) {
       yield new VerificationError(
         "Text must be short"
+      )
+    }
+
+    if (!(
+      (
+        (that.optionalItem === null)
+        || itemIsNamed(that.optionalItem)
+      )
+    )) {
+      yield new VerificationError(
+        "Narrowed item must be named"
+      )
+    }
+
+    if (!(
+      (
+        (that.optionalNumber === null)
+        || numberIsPositive(that.optionalNumber)
+      )
+    )) {
+      yield new VerificationError(
+        "Narrowed number must be positive"
+      )
+    }
+
+    if (!(
+      (
+        (that.optionalKind === null)
+        || kindIsKnown(that.optionalKind)
+      )
+    )) {
+      yield new VerificationError(
+        "Narrowed kind must be known"
       )
     }
 

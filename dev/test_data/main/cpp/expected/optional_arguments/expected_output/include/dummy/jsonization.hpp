@@ -154,6 +154,57 @@ common::expected<
 
 /**
  * \brief Deserialize \p json value to an instance
+ * of types::INode.
+ *
+ * \param json value to be de-serialized
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return The deserialized instance, or a de-serialization error, if any.
+ */
+common::expected<
+  std::shared_ptr<types::INode>,
+  DeserializationError
+> NodeFrom(
+  const nlohmann::json& json,
+  bool additional_properties = false
+);
+
+/**
+ * \brief Deserialize \p json value to an instance
+ * of types::IBranch.
+ *
+ * \param json value to be de-serialized
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return The deserialized instance, or a de-serialization error, if any.
+ */
+common::expected<
+  std::shared_ptr<types::IBranch>,
+  DeserializationError
+> BranchFrom(
+  const nlohmann::json& json,
+  bool additional_properties = false
+);
+
+/**
+ * \brief Deserialize \p json value to an instance
+ * of types::ILeaf.
+ *
+ * \param json value to be de-serialized
+ * \param additional_properties if not set, check that \p json contains
+ * no additional properties
+ * \return The deserialized instance, or a de-serialization error, if any.
+ */
+common::expected<
+  std::shared_ptr<types::ILeaf>,
+  DeserializationError
+> LeafFrom(
+  const nlohmann::json& json,
+  bool additional_properties = false
+);
+
+/**
+ * \brief Deserialize \p json value to an instance
  * of types::ISomething.
  *
  * \param json value to be de-serialized

@@ -33,6 +33,54 @@ func TestDescendOnAnInstanceOfItem(
 	}
 }
 
+func TestDescendOnAnInstanceOfBranch(
+	t *testing.T,
+) {
+	instance := ourtesting.MustLoadMaximalBranch()
+
+	expectedPth := filepath.Join(
+		ourtesting.TestDataDir,
+		"Descend",
+		"Branch",
+		"maximal.json.trace",
+	)
+
+	onlyOnce := false
+
+	message := compareOrRerecordTrace(
+		instance,
+		expectedPth,
+		onlyOnce,
+	)
+	if message != nil {
+		t.Fatal(*message)
+	}
+}
+
+func TestDescendOnAnInstanceOfLeaf(
+	t *testing.T,
+) {
+	instance := ourtesting.MustLoadMaximalLeaf()
+
+	expectedPth := filepath.Join(
+		ourtesting.TestDataDir,
+		"Descend",
+		"Leaf",
+		"maximal.json.trace",
+	)
+
+	onlyOnce := false
+
+	message := compareOrRerecordTrace(
+		instance,
+		expectedPth,
+		onlyOnce,
+	)
+	if message != nil {
+		t.Fatal(*message)
+	}
+}
+
 func TestDescendOnAnInstanceOfSomething(
 	t *testing.T,
 ) {

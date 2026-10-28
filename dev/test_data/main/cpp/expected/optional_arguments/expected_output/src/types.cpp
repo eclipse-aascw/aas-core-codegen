@@ -52,6 +52,86 @@ void Item::set_note(
 
 // endregion Item
 
+// region Branch
+
+Branch::Branch(
+  common::optional<
+    std::vector<
+      std::shared_ptr<INode>
+    >
+  > optional_children
+) {
+  optional_children_ = std::move(optional_children);
+}
+
+ModelType Branch::model_type() const {
+  return ModelType::kBranch;
+}
+
+const common::optional<
+  std::vector<
+    std::shared_ptr<INode>
+  >
+>& Branch::optional_children() const {
+  return optional_children_;
+}
+
+common::optional<
+  std::vector<
+    std::shared_ptr<INode>
+  >
+>& Branch::mutable_optional_children() {
+  return optional_children_;
+}
+
+void Branch::set_optional_children(
+  common::optional<
+    std::vector<
+      std::shared_ptr<INode>
+    >
+  > value
+) {
+  optional_children_ = value;
+}
+
+// endregion Branch
+
+// region Leaf
+
+Leaf::Leaf(
+  common::optional<
+    std::shared_ptr<IItem>
+  > optional_item
+) {
+  optional_item_ = std::move(optional_item);
+}
+
+ModelType Leaf::model_type() const {
+  return ModelType::kLeaf;
+}
+
+const common::optional<
+  std::shared_ptr<IItem>
+>& Leaf::optional_item() const {
+  return optional_item_;
+}
+
+common::optional<
+  std::shared_ptr<IItem>
+>& Leaf::mutable_optional_item() {
+  return optional_item_;
+}
+
+void Leaf::set_optional_item(
+  common::optional<
+    std::shared_ptr<IItem>
+  > value
+) {
+  optional_item_ = value;
+}
+
+// endregion Leaf
+
 // region Something
 
 Something::Something(
@@ -189,6 +269,82 @@ bool IsItem(
   switch (that.model_type()) {
     case ModelType::kItem:
       return true;
+    case ModelType::kBranch:
+      return false;
+    case ModelType::kLeaf:
+      return false;
+    case ModelType::kSomething:
+      return false;
+    default:
+      throw std::invalid_argument(
+        common::Concat(
+          "Unexpected model type: ",
+          std::to_string(
+            static_cast<std::uint32_t>(that.model_type())
+          )
+        )
+      );
+  }
+}
+
+bool IsNode(
+  const IClass& that
+) {
+  switch (that.model_type()) {
+    case ModelType::kItem:
+      return false;
+    case ModelType::kBranch:
+      return true;
+    case ModelType::kLeaf:
+      return true;
+    case ModelType::kSomething:
+      return false;
+    default:
+      throw std::invalid_argument(
+        common::Concat(
+          "Unexpected model type: ",
+          std::to_string(
+            static_cast<std::uint32_t>(that.model_type())
+          )
+        )
+      );
+  }
+}
+
+bool IsBranch(
+  const IClass& that
+) {
+  switch (that.model_type()) {
+    case ModelType::kItem:
+      return false;
+    case ModelType::kBranch:
+      return true;
+    case ModelType::kLeaf:
+      return false;
+    case ModelType::kSomething:
+      return false;
+    default:
+      throw std::invalid_argument(
+        common::Concat(
+          "Unexpected model type: ",
+          std::to_string(
+            static_cast<std::uint32_t>(that.model_type())
+          )
+        )
+      );
+  }
+}
+
+bool IsLeaf(
+  const IClass& that
+) {
+  switch (that.model_type()) {
+    case ModelType::kItem:
+      return false;
+    case ModelType::kBranch:
+      return false;
+    case ModelType::kLeaf:
+      return true;
     case ModelType::kSomething:
       return false;
     default:
@@ -208,6 +364,10 @@ bool IsSomething(
 ) {
   switch (that.model_type()) {
     case ModelType::kItem:
+      return false;
+    case ModelType::kBranch:
+      return false;
+    case ModelType::kLeaf:
       return false;
     case ModelType::kSomething:
       return true;

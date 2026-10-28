@@ -71,6 +71,66 @@ namespace dummy.Tests
         }  // public void Test_Item
 
         [Test]
+        public void Test_Branch()
+        {
+            var instance = (
+                Our.Tests.CommonJsonization.LoadMaximalBranch()
+            );
+
+            var enhancer = CreateEnhancer();
+
+            Assert.IsNull(enhancer.Unwrap(instance));
+
+            var wrapped = enhancer.Wrap(instance);
+            Assert.IsNotNull(wrapped);
+
+            var idSet = new HashSet<long>();
+
+            idSet.Add(enhancer.MustUnwrap(wrapped).SomeCustomId);
+            idSet.UnionWith(
+                wrapped
+                    .Descend()
+                    .Select(
+                        (descendant) =>
+                            enhancer.MustUnwrap(descendant).SomeCustomId
+                        )
+            );
+
+            Assert.AreEqual(1, idSet.Min());
+            Assert.AreEqual(idSet.Count, idSet.Max());
+        }  // public void Test_Branch
+
+        [Test]
+        public void Test_Leaf()
+        {
+            var instance = (
+                Our.Tests.CommonJsonization.LoadMaximalLeaf()
+            );
+
+            var enhancer = CreateEnhancer();
+
+            Assert.IsNull(enhancer.Unwrap(instance));
+
+            var wrapped = enhancer.Wrap(instance);
+            Assert.IsNotNull(wrapped);
+
+            var idSet = new HashSet<long>();
+
+            idSet.Add(enhancer.MustUnwrap(wrapped).SomeCustomId);
+            idSet.UnionWith(
+                wrapped
+                    .Descend()
+                    .Select(
+                        (descendant) =>
+                            enhancer.MustUnwrap(descendant).SomeCustomId
+                        )
+            );
+
+            Assert.AreEqual(1, idSet.Min());
+            Assert.AreEqual(idSet.Count, idSet.Max());
+        }  // public void Test_Leaf
+
+        [Test]
         public void Test_Something()
         {
             var instance = (

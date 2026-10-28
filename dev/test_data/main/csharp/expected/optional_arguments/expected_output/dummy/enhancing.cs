@@ -92,6 +92,125 @@ namespace dummy
             }
         }
 
+        public class EnhancedBranch<TEnhancement>
+            : Enhanced<TEnhancement>, Our.IBranch
+            where TEnhancement : class
+        {
+            private readonly Our.IBranch _instance;
+
+            public EnhancedBranch(
+                Our.IBranch instance,
+                TEnhancement enhancement
+            ) : base(enhancement)
+            {
+                _instance = instance;
+            }
+
+            public List<INode>? OptionalChildren
+            {
+                get => _instance.OptionalChildren;
+                set => _instance.OptionalChildren = value;
+            }
+
+            public IEnumerable<Our.INode> OverOptionalChildrenOrEmpty()
+            {
+                return _instance.OverOptionalChildrenOrEmpty();
+            }
+
+            public IEnumerable<Our.IClass> DescendOnce()
+            {
+                return _instance.DescendOnce();
+            }
+
+            public IEnumerable<Our.IClass> Descend()
+            {
+                return _instance.Descend();
+            }
+
+            public void Accept(Our.Visitation.IVisitor visitor)
+            {
+                visitor.VisitBranch(_instance);
+            }
+
+            public void Accept<TContext>(
+                Visitation.IVisitorWithContext<TContext> visitor,
+                TContext context
+            )
+            {
+                visitor.VisitBranch(_instance, context);
+            }
+
+            public T Transform<T>(Visitation.ITransformer<T> transformer)
+            {
+                return transformer.TransformBranch(_instance);
+            }
+
+            public T Transform<TContext, T>(
+                Visitation.ITransformerWithContext<TContext, T> transformer,
+                TContext context
+            )
+            {
+                return transformer.TransformBranch(_instance, context);
+            }
+        }
+
+        public class EnhancedLeaf<TEnhancement>
+            : Enhanced<TEnhancement>, Our.ILeaf
+            where TEnhancement : class
+        {
+            private readonly Our.ILeaf _instance;
+
+            public EnhancedLeaf(
+                Our.ILeaf instance,
+                TEnhancement enhancement
+            ) : base(enhancement)
+            {
+                _instance = instance;
+            }
+
+            public IItem? OptionalItem
+            {
+                get => _instance.OptionalItem;
+                set => _instance.OptionalItem = value;
+            }
+
+            public IEnumerable<Our.IClass> DescendOnce()
+            {
+                return _instance.DescendOnce();
+            }
+
+            public IEnumerable<Our.IClass> Descend()
+            {
+                return _instance.Descend();
+            }
+
+            public void Accept(Our.Visitation.IVisitor visitor)
+            {
+                visitor.VisitLeaf(_instance);
+            }
+
+            public void Accept<TContext>(
+                Visitation.IVisitorWithContext<TContext> visitor,
+                TContext context
+            )
+            {
+                visitor.VisitLeaf(_instance, context);
+            }
+
+            public T Transform<T>(Visitation.ITransformer<T> transformer)
+            {
+                return transformer.TransformLeaf(_instance);
+            }
+
+            public T Transform<TContext, T>(
+                Visitation.ITransformerWithContext<TContext, T> transformer,
+                TContext context
+            )
+            {
+                return transformer.TransformLeaf(_instance, context);
+            }
+        }
+
         public class EnhancedSomething<TEnhancement>
             : Enhanced<TEnhancement>, Our.ISomething
             where TEnhancement : class
@@ -217,6 +336,56 @@ namespace dummy
                     );
             }
 
+            public override Our.IClass TransformBranch(
+                Our.IBranch that
+            )
+            {
+                if (that is Enhanced<TEnhancement>)
+                {
+                    throw new System.ArgumentException(
+                        $"The instance has been already enhanced: {that}"
+                    );
+                }
+
+                if (that.OptionalChildren != null)
+                {
+                    that.OptionalChildren = Wrap_ListOf_INode(that.OptionalChildren);
+                }
+
+                var enhancement = _enhancementFactory(that);
+                return (enhancement == null)
+                    ? that
+                    : new EnhancedBranch<TEnhancement>(
+                        that,
+                        enhancement
+                    );
+            }
+
+            public override Our.IClass TransformLeaf(
+                Our.ILeaf that
+            )
+            {
+                if (that is Enhanced<TEnhancement>)
+                {
+                    throw new System.ArgumentException(
+                        $"The instance has been already enhanced: {that}"
+                    );
+                }
+
+                if (that.OptionalItem != null)
+                {
+                    that.OptionalItem = Wrap(that.OptionalItem);
+                }
+
+                var enhancement = _enhancementFactory(that);
+                return (enhancement == null)
+                    ? that
+                    : new EnhancedLeaf<TEnhancement>(
+                        that,
+                        enhancement
+                    );
+            }
+
             public override Our.IClass TransformSomething(
                 Our.ISomething that
             )
@@ -256,6 +425,21 @@ namespace dummy
                         $"Expected the transformed value to be a {typeof(T).Name}, " +
                         $"but got: {transformed}"
                     );
+            }
+
+            /// <summary>
+            /// Wrap recursively the instances held by <paramref name="that" />.
+            /// </summary>
+            private List<Our.INode> Wrap_ListOf_INode(
+                List<Our.INode> that)
+            {
+                var result = new List<Our.INode>(that.Count);
+                foreach (var item in that)
+                {
+                    result.Add(Wrap(item));
+                }
+
+                return result;
             }
         }
 

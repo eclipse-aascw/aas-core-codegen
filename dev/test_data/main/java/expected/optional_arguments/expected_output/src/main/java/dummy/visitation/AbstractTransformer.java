@@ -25,6 +25,14 @@ public abstract class AbstractTransformer<T> implements ITransformer<T>
     IItem that
   );
 
+  public abstract T transformBranch(
+    IBranch that
+  );
+
+  public abstract T transformLeaf(
+    ILeaf that
+  );
+
   public abstract T transformSomething(
     ISomething that
   );

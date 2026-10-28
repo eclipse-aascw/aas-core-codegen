@@ -375,6 +375,40 @@ namespace dummy
                     };
             }
 
+            /// <summary>
+            /// Extract the <c>modelType</c> property of <paramref name="obj" />.
+            /// </summary>
+            /// <param name="obj">JSON object to be inspected</param>
+            /// <param name="error">Error, if any, during the deserialization</param>
+            private static string ModelTypeFrom(
+                Nodes.JsonObject obj,
+                out Reporting.Error? error)
+            {
+                Nodes.JsonNode? modelTypeNode = obj["modelType"];
+                if (modelTypeNode == null)
+                {
+                    error = new Reporting.Error(
+                        "Expected a model type, but none is present");
+                    return default!;
+                }
+
+                string modelType = StringFrom(modelTypeNode, out error);
+                if (error != null)
+                {
+                    // NOTE (mristin):
+                    // A model type of a wrong type is reported at the property, as the type
+                    // errors of all the other properties are, and as in the other SDKs.
+                    error.PrependSegment(
+                        new Reporting.NameSegment("modelType"));
+                    return default!;
+                }
+                return modelType;
+            }
+
+            private static readonly Deserializer<List<INode>> Parse_ListOf_INode = (
+                AsArrayOf<INode>(
+                    INodeFrom));
+
             private static readonly Deserializer<List<string>> Parse_ListOf_string = (
                 AsArrayOf<string>(
                     StringFrom));
@@ -467,6 +501,190 @@ namespace dummy
                             "Unexpected null, had to be handled before"),
                     theNote);
             }  // internal static ItemFrom
+
+            /// <summary>
+            /// Deserialize an instance of INode by dispatching
+            /// based on <c>modelType</c> property of the <paramref name="node" />.
+            /// </summary>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <param name="error">Error, if any, during the deserialization</param>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            public static Our.INode INodeFrom(
+                Nodes.JsonNode? node,
+                out Reporting.Error? error)
+            {
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
+                if (obj == null)
+                {
+                    error = new Reporting.Error(
+                        $"Expected a JsonObject representing INode, but got {Describe(node)}");
+                    return default!;
+                }
+
+                string modelType = ModelTypeFrom(obj, out error);
+                if (error != null)
+                {
+                    return default!;
+                }
+
+                switch (modelType)
+                {
+                case "Branch":
+                    return BranchFrom(
+                        node, out error);
+                case "Leaf":
+                    return LeafFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for INode: {modelType}");
+                    return default!;
+                }
+            }  // public static Our.INode INodeFrom
+
+            /// <summary>
+            /// Deserialize an instance of Branch from <paramref name="node" />.
+            /// </summary>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <param name="error">Error, if any, during the deserialization</param>
+            internal static Our.Branch BranchFrom(
+                Nodes.JsonNode? node,
+                out Reporting.Error? error)
+            {
+                error = null;
+
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
+                if (obj == null)
+                {
+                    error = new Reporting.Error(
+                        $"Expected a JsonObject representing Branch, but got {Describe(node)}");
+                    return default!;
+                }
+
+                List<INode>? theOptionalChildren = null;
+
+                string? modelType = null;
+
+                foreach (var keyValue in obj)
+                {
+                    switch (keyValue.Key)
+                    {
+                        case "optionalChildren":
+                            theOptionalChildren = Parse_ListOf_INode(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "Branch")
+                            {
+                                // NOTE (mristin):
+                                // A wrong model type is reported at the instance, as an unknown one is,
+                                // and as in the other SDKs, so we return before the property is
+                                // prepended to the path.
+                                error = new Reporting.Error(
+                                    "Expected the model type 'Branch', " +
+                                    $"but got {modelType}");
+                                return default!;
+                            }
+                            break;
+                        default:
+                            error = new Reporting.Error(
+                                $"Unexpected property: {keyValue.Key}");
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
+                    }
+                }
+
+                if (modelType == null)
+                {
+                    error = new Reporting.Error(
+                        "Required property \"modelType\" is missing");
+                    return default!;
+                }
+
+                return new Our.Branch(
+                    theOptionalChildren);
+            }  // internal static BranchFrom
+
+            /// <summary>
+            /// Deserialize an instance of Leaf from <paramref name="node" />.
+            /// </summary>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <param name="error">Error, if any, during the deserialization</param>
+            internal static Our.Leaf LeafFrom(
+                Nodes.JsonNode? node,
+                out Reporting.Error? error)
+            {
+                error = null;
+
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
+                if (obj == null)
+                {
+                    error = new Reporting.Error(
+                        $"Expected a JsonObject representing Leaf, but got {Describe(node)}");
+                    return default!;
+                }
+
+                IItem? theOptionalItem = null;
+
+                string? modelType = null;
+
+                foreach (var keyValue in obj)
+                {
+                    switch (keyValue.Key)
+                    {
+                        case "optionalItem":
+                            theOptionalItem = ItemFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "Leaf")
+                            {
+                                // NOTE (mristin):
+                                // A wrong model type is reported at the instance, as an unknown one is,
+                                // and as in the other SDKs, so we return before the property is
+                                // prepended to the path.
+                                error = new Reporting.Error(
+                                    "Expected the model type 'Leaf', " +
+                                    $"but got {modelType}");
+                                return default!;
+                            }
+                            break;
+                        default:
+                            error = new Reporting.Error(
+                                $"Unexpected property: {keyValue.Key}");
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
+                    }
+                }
+
+                if (modelType == null)
+                {
+                    error = new Reporting.Error(
+                        "Required property \"modelType\" is missing");
+                    return default!;
+                }
+
+                return new Our.Leaf(
+                    theOptionalItem);
+            }  // internal static LeafFrom
 
             /// <summary>
             /// Deserialize an instance of Something from <paramref name="node" />.
@@ -669,6 +887,76 @@ namespace dummy
             }
 
             /// <summary>
+            /// Deserialize an instance of INode from <paramref name="node" />.
+            /// </summary>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <exception cref="Jsonization.Exception">
+            /// Thrown when <paramref name="node" /> is not a valid JSON
+            /// representation of INode.
+            /// </exception>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            public static Our.INode INodeFrom(
+                Nodes.JsonNode node)
+            {
+                Our.INode result = DeserializeImplementation.INodeFrom(
+                    node,
+                    out Reporting.Error? error);
+                if (error != null)
+                {
+                    throw new Jsonization.Exception(
+                        Reporting.GenerateJsonPath(error.PathSegments),
+                        error.Cause);
+                }
+                return result;
+            }
+
+            /// <summary>
+            /// Deserialize an instance of Branch from <paramref name="node" />.
+            /// </summary>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <exception cref="Jsonization.Exception">
+            /// Thrown when <paramref name="node" /> is not a valid JSON
+            /// representation of Branch.
+            /// </exception>
+            public static Our.Branch BranchFrom(
+                Nodes.JsonNode node)
+            {
+                Our.Branch result = DeserializeImplementation.BranchFrom(
+                    node,
+                    out Reporting.Error? error);
+                if (error != null)
+                {
+                    throw new Jsonization.Exception(
+                        Reporting.GenerateJsonPath(error.PathSegments),
+                        error.Cause);
+                }
+                return result;
+            }
+
+            /// <summary>
+            /// Deserialize an instance of Leaf from <paramref name="node" />.
+            /// </summary>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <exception cref="Jsonization.Exception">
+            /// Thrown when <paramref name="node" /> is not a valid JSON
+            /// representation of Leaf.
+            /// </exception>
+            public static Our.Leaf LeafFrom(
+                Nodes.JsonNode node)
+            {
+                Our.Leaf result = DeserializeImplementation.LeafFrom(
+                    node,
+                    out Reporting.Error? error);
+                if (error != null)
+                {
+                    throw new Jsonization.Exception(
+                        Reporting.GenerateJsonPath(error.PathSegments),
+                        error.Cause);
+                }
+                return result;
+            }
+
+            /// <summary>
             /// Deserialize an instance of Something from <paramref name="node" />.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
@@ -827,6 +1115,10 @@ namespace dummy
                 };
             }
 
+            private static readonly Serializer<List<INode>> Serialize_ListOf_INode = (
+                SerializeList<INode>(
+                    TransformIClass));
+
             private static readonly Serializer<List<string>> Serialize_ListOf_string = (
                 SerializeList<string>(
                     ToJsonValue));
@@ -882,6 +1174,48 @@ namespace dummy
                 {
                     SetProperty(result, "note", "Note", that.Note, Serialize_string);
                 }
+
+                return result;
+            }
+
+            public override Nodes.JsonObject TransformBranch(
+                Our.IBranch that
+            )
+            {
+                var result = new Nodes.JsonObject();
+
+                if (that.OptionalChildren != null)
+                {
+                    SetProperty(
+                        result,
+                        "optionalChildren",
+                        "OptionalChildren",
+                        that.OptionalChildren,
+                        Serialize_ListOf_INode);
+                }
+
+                result["modelType"] = "Branch";
+
+                return result;
+            }
+
+            public override Nodes.JsonObject TransformLeaf(
+                Our.ILeaf that
+            )
+            {
+                var result = new Nodes.JsonObject();
+
+                if (that.OptionalItem != null)
+                {
+                    SetProperty(
+                        result,
+                        "optionalItem",
+                        "OptionalItem",
+                        that.OptionalItem,
+                        Serialize_IClass);
+                }
+
+                result["modelType"] = "Leaf";
 
                 return result;
             }

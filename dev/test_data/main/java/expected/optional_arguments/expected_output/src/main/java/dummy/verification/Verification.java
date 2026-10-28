@@ -112,6 +112,50 @@ public class Verification {
   }
 
   /**
+   * Check the non-optional enumeration argument.
+   */
+  public static Boolean kindIsKnown(
+    Kind kind) {
+    return kind == Kind.ALPHA
+    || kind == Kind.BETA;
+  }
+
+  /**
+   * Check the non-optional integer argument.
+   */
+  public static Boolean numberIsPositive(
+    Long number) {
+    return number > 0;
+  }
+
+  /**
+   * Check the non-optional instance argument.
+   */
+  public static Boolean itemIsNamed(
+    IItem item) {
+    return StringHelpers.len(item.getName()) > 0;
+  }
+
+  /**
+   * Check the optional properties narrowed after the type test.
+   */
+  public static Boolean nodeHasNamedItemInTree(
+    INode node) {
+    if (node instanceof IBranch) {
+        return (((IBranch) node).getOptionalChildren().isPresent())
+        && (
+            ((IBranch) node).getOptionalChildren().get().stream().anyMatch(
+                child -> nodeHasNamedItemInTree(child))
+        );
+    }
+    if (node instanceof ILeaf) {
+        return (((ILeaf) node).getOptionalItem().isPresent())
+        && StringHelpers.len(((ILeaf) node).getOptionalItem().get().getName()) > 0;
+    }
+    return false;
+  }
+
+  /**
    * Hash allowed enum values for efficient validation of enums.
    */
   private static class _EnumValueSet {
@@ -210,6 +254,44 @@ public class Verification {
     }
 
     @Override
+    public Stream<Reporting.Error> transformBranch(
+      IBranch that) {
+      Stream<Reporting.Error> errorStream = Stream.empty();
+
+      if (that.getOptionalChildren().isPresent()) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(that.getOptionalChildren().get())
+            .flatMap(Verification::verifyListOf_INode)
+              .map(error -> {
+                error.prependSegment(
+                  new Reporting.NameSegment("optionalChildren"));
+                return error;
+              }));
+      }
+
+      return errorStream;
+    }
+
+    @Override
+    public Stream<Reporting.Error> transformLeaf(
+      ILeaf that) {
+      Stream<Reporting.Error> errorStream = Stream.empty();
+
+      if (that.getOptionalItem().isPresent()) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(that.getOptionalItem().get())
+            .flatMap(Verification::verifyToErrorStream)
+              .map(error -> {
+                error.prependSegment(
+                  new Reporting.NameSegment("optionalItem"));
+                return error;
+              }));
+      }
+
+      return errorStream;
+    }
+
+    @Override
     public Stream<Reporting.Error> transformSomething(
       ISomething that) {
       Stream<Reporting.Error> errorStream = Stream.empty();
@@ -261,6 +343,33 @@ public class Verification {
           Stream.of(new Reporting.Error(
             "Invariant violated:\n" +
             "Text must be short")));
+      }
+
+      if (!(
+        (!that.getOptionalItem().isPresent())
+        || itemIsNamed(that.getOptionalItem().orElse(null)))) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "Narrowed item must be named")));
+      }
+
+      if (!(
+        (!that.getOptionalNumber().isPresent())
+        || numberIsPositive(that.getOptionalNumber().orElse(null)))) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "Narrowed number must be positive")));
+      }
+
+      if (!(
+        (!that.getOptionalKind().isPresent())
+        || kindIsKnown(that.getOptionalKind().orElse(null)))) {
+        errorStream = Stream.<Reporting.Error>concat(errorStream,
+          Stream.of(new Reporting.Error(
+            "Invariant violated:\n" +
+            "Narrowed kind must be known")));
       }
 
       errorStream = Stream.<Reporting.Error>concat(errorStream,
@@ -366,6 +475,23 @@ public class Verification {
     } else {
       return Stream.empty();
     }
+  }
+
+  /**
+   * Verify the items of {@code that} recursively.
+   */
+  private static Stream<Reporting.Error> verifyListOf_INode(
+    List<INode> that) {
+    return Verification.zip(
+      IntStream.iterate(0, i -> i + 1).boxed(),
+      that.stream())
+        .flatMap(itemTuple ->
+          Verification.verifyToErrorStream(itemTuple.getSecond())
+            .map(error -> {
+              error.prependSegment(
+                new Reporting.IndexSegment(itemTuple.getFirst()));
+              return error;
+            }));
   }
 
   private static class _Pair<A, B> {

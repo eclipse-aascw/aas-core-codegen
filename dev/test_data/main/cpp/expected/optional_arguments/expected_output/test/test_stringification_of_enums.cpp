@@ -23,6 +23,34 @@ TEST_CASE("Test ModelType round-trip") {
   );
 
   REQUIRE(
+    our::types::ModelType::kBranch
+    == our::stringification::MustModelTypeFromString(
+      "Branch"
+    )
+  );
+
+  REQUIRE(
+    our::stringification::to_string(
+      our::types::ModelType::kBranch
+    )
+    == "Branch"
+  );
+
+  REQUIRE(
+    our::types::ModelType::kLeaf
+    == our::stringification::MustModelTypeFromString(
+      "Leaf"
+    )
+  );
+
+  REQUIRE(
+    our::stringification::to_string(
+      our::types::ModelType::kLeaf
+    )
+    == "Leaf"
+  );
+
+  REQUIRE(
     our::types::ModelType::kSomething
     == our::stringification::MustModelTypeFromString(
       "Something"

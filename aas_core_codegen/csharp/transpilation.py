@@ -271,6 +271,40 @@ class Transpiler(
         # the generated code, as is the case with the verification module.
         return Stripped(f"((Our.{interface_name}){value})")
 
+    def _is_declared_nullable(self, node: parse_tree.Expression) -> bool:
+        """
+        Check whether the ``node`` has been declared as optional.
+
+        The type inference strips ``Optional`` from the types of the nodes which have
+        been narrowed down by a guard such as ``x is not None``. However, C# keeps
+        the declared type, so that a narrowed integer or floating-point number is
+        still a nullable value type (``long?`` or ``double?``) in C#. The lifted
+        operators work on nullable value types, but we need to explicitly unwrap
+        them with ``.Value`` before passing them to a method.
+        """
+        if isinstance(node, parse_tree.Member):
+            instance_type = self.type_map.get(node.instance, None)
+            if isinstance(
+                instance_type, intermediate_type_inference.OurTypeAnnotation
+            ) and isinstance(
+                instance_type.our_type,
+                (intermediate.ConcreteClass, intermediate.AbstractClass),
+            ):
+                prop = instance_type.our_type.properties_by_name.get(node.name, None)
+                return prop is not None and isinstance(
+                    prop.type_annotation, intermediate.OptionalTypeAnnotation
+                )
+
+            return False
+
+        elif isinstance(node, parse_tree.Name):
+            return isinstance(
+                self._environment.find(node.identifier),
+                intermediate_type_inference.OptionalTypeAnnotation,
+            )
+
+        return False
+
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_member(
         self, node: parse_tree.Member
@@ -329,41 +363,17 @@ class Transpiler(
                 f"the member {node.name!r} in {instance_type}.",
             )
 
-        return Stripped(f"{instance}.{member_name}"), None
+        code = Stripped(f"{instance}.{member_name}")
 
-    def _is_declared_nullable(self, node: parse_tree.Expression) -> bool:
-        """
-        Check whether the ``node`` has been declared as optional.
+        # NOTE:
+        # The C# compiler loses the null check on a property accessed through
+        # a cast, so we explicitly forgive the nullability of a narrowed property.
+        if self._is_declared_nullable(node) and not isinstance(
+            self.type_map[node], intermediate_type_inference.OptionalTypeAnnotation
+        ):
+            return Stripped(f"{code}!"), None
 
-        The type inference strips ``Optional`` from the types of the nodes which have
-        been narrowed down by a guard such as ``x is not None``. However, C# keeps
-        the declared type, so that a narrowed integer or floating-point number is
-        still a nullable value type (``long?`` or ``double?``) in C#. The lifted
-        operators work on nullable value types, but we need to explicitly unwrap
-        them with ``.Value`` before passing them to a method.
-        """
-        if isinstance(node, parse_tree.Member):
-            instance_type = self.type_map.get(node.instance, None)
-            if isinstance(
-                instance_type, intermediate_type_inference.OurTypeAnnotation
-            ) and isinstance(
-                instance_type.our_type,
-                (intermediate.ConcreteClass, intermediate.AbstractClass),
-            ):
-                prop = instance_type.our_type.properties_by_name.get(node.name, None)
-                return prop is not None and isinstance(
-                    prop.type_annotation, intermediate.OptionalTypeAnnotation
-                )
-
-            return False
-
-        elif isinstance(node, parse_tree.Name):
-            return isinstance(
-                self._environment.find(node.identifier),
-                intermediate_type_inference.OptionalTypeAnnotation,
-            )
-
-        return False
+        return code, None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_index(
@@ -822,6 +832,11 @@ new {list_type}
 
         if len(checks) == 1:
             return Stripped(checks[0]), None
+
+        # Apply heuristic for breaking the lines
+        if sum(len(check) for check in checks) > 100:
+            checks_joined = f" ||\n{I}".join(checks)
+            return Stripped(f"(\n{I}{checks_joined})"), None
 
         checks_joined = " || ".join(checks)
         return Stripped(f"({checks_joined})"), None

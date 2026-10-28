@@ -156,7 +156,7 @@ namespace dummy
                 return true;
             }
             HashSet<string> seen = new HashSet<string>();
-            foreach (var text in this.OptionalTexts)
+            foreach (var text in this.OptionalTexts!)
             {
                 if (ignored.Contains(text))
                 {

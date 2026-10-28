@@ -134,6 +134,90 @@ TEST_CASE("Test DescentOnce over an Item") {
   AssertOrRerecordDescentOnce(instance, trace_path);
 }
 
+TEST_CASE("Test Descent over an Branch") {
+  const std::deque<std::filesystem::path> paths(
+    test::common::FindFilesBySuffixRecursively(
+      DetermineXmlDir()
+        / "Expected"
+        / "branch",
+      ".xml"
+    )
+  );
+
+  for (const std::filesystem::path& path : paths) {
+    const std::filesystem::path parent(
+      (
+        DetermineDescentDir()
+          / std::filesystem::relative(path, DetermineXmlDir())
+      ).parent_path()
+    );
+
+    const std::filesystem::path trace_path(
+      parent
+        / (path.filename().string() + ".trace")
+    );
+
+    AssertOrRerecordDescent(path, trace_path);
+  }
+}
+
+TEST_CASE("Test DescentOnce over an Branch") {
+  const std::shared_ptr<
+    our::types::IBranch
+  > instance(
+    test::common::examples::LoadMaxBranch()
+  );
+
+  const std::filesystem::path trace_path(
+    DetermineDescentOnceDir()
+      / "MaxBranch.trace"
+  );
+
+  AssertOrRerecordDescentOnce(instance, trace_path);
+}
+
+TEST_CASE("Test Descent over an Leaf") {
+  const std::deque<std::filesystem::path> paths(
+    test::common::FindFilesBySuffixRecursively(
+      DetermineXmlDir()
+        / "Expected"
+        / "leaf",
+      ".xml"
+    )
+  );
+
+  for (const std::filesystem::path& path : paths) {
+    const std::filesystem::path parent(
+      (
+        DetermineDescentDir()
+          / std::filesystem::relative(path, DetermineXmlDir())
+      ).parent_path()
+    );
+
+    const std::filesystem::path trace_path(
+      parent
+        / (path.filename().string() + ".trace")
+    );
+
+    AssertOrRerecordDescent(path, trace_path);
+  }
+}
+
+TEST_CASE("Test DescentOnce over an Leaf") {
+  const std::shared_ptr<
+    our::types::ILeaf
+  > instance(
+    test::common::examples::LoadMaxLeaf()
+  );
+
+  const std::filesystem::path trace_path(
+    DetermineDescentOnceDir()
+      / "MaxLeaf.trace"
+  );
+
+  AssertOrRerecordDescentOnce(instance, trace_path);
+}
+
 TEST_CASE("Test Descent over an Something") {
   const std::deque<std::filesystem::path> paths(
     test::common::FindFilesBySuffixRecursively(

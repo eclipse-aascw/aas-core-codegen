@@ -100,6 +100,57 @@ common::expected<
 );
 
 /**
+ * Deserialize an instance of types::INode from an XML
+ * read from the stream \p is.
+ *
+ * \param is stream to read XML from
+ * \param options reading options to be tweaked for special cases. The defaults should
+ * work in most cases.
+ * \return the parsed types::INode, or an error if any
+ */
+common::expected<
+  std::shared_ptr<types::INode>,
+  DeserializationError
+> NodeFrom(
+  std::istream& is,
+  const ReadingOptions& options = {}
+);
+
+/**
+ * Deserialize an instance of types::IBranch from an XML
+ * read from the stream \p is.
+ *
+ * \param is stream to read XML from
+ * \param options reading options to be tweaked for special cases. The defaults should
+ * work in most cases.
+ * \return the parsed types::IBranch, or an error if any
+ */
+common::expected<
+  std::shared_ptr<types::IBranch>,
+  DeserializationError
+> BranchFrom(
+  std::istream& is,
+  const ReadingOptions& options = {}
+);
+
+/**
+ * Deserialize an instance of types::ILeaf from an XML
+ * read from the stream \p is.
+ *
+ * \param is stream to read XML from
+ * \param options reading options to be tweaked for special cases. The defaults should
+ * work in most cases.
+ * \return the parsed types::ILeaf, or an error if any
+ */
+common::expected<
+  std::shared_ptr<types::ILeaf>,
+  DeserializationError
+> LeafFrom(
+  std::istream& is,
+  const ReadingOptions& options = {}
+);
+
+/**
  * Deserialize an instance of types::ISomething from an XML
  * read from the stream \p is.
  *

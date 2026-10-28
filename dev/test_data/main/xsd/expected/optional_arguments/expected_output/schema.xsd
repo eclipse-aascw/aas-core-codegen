@@ -1,10 +1,37 @@
 <?xml version="1.0" ?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="https://dummy.com" elementFormDefault="qualified" targetNamespace="https://dummy.com">
+  <xs:group name="branch">
+    <xs:sequence>
+      <xs:group ref="node"/>
+      <xs:element name="optionalChildren" minOccurs="0" maxOccurs="1">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="node_choice" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
   <xs:group name="item">
     <xs:sequence>
       <xs:element name="name" type="xs:string"/>
       <xs:element name="note" type="xs:string" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
+  </xs:group>
+  <xs:group name="leaf">
+    <xs:sequence>
+      <xs:group ref="node"/>
+      <xs:element name="optionalItem" type="item_t" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="node">
+    <xs:sequence/>
+  </xs:group>
+  <xs:group name="node_choice">
+    <xs:choice>
+      <xs:element name="branch" type="branch_t"/>
+      <xs:element name="leaf" type="leaf_t"/>
+    </xs:choice>
   </xs:group>
   <xs:group name="something">
     <xs:sequence>
@@ -29,9 +56,24 @@
       <xs:enumeration value="gamma"/>
     </xs:restriction>
   </xs:simpleType>
+  <xs:complexType name="branch_t">
+    <xs:sequence>
+      <xs:group ref="branch"/>
+    </xs:sequence>
+  </xs:complexType>
   <xs:complexType name="item_t">
     <xs:sequence>
       <xs:group ref="item"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="leaf_t">
+    <xs:sequence>
+      <xs:group ref="leaf"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="node_t">
+    <xs:sequence>
+      <xs:group ref="node"/>
     </xs:sequence>
   </xs:complexType>
   <xs:complexType name="something_t">

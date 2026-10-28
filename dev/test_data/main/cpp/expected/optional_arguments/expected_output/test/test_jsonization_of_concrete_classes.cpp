@@ -184,6 +184,118 @@ TEST_CASE("Test the de-serialization failure on an unexpected Item") {
   }
 }
 
+TEST_CASE("Test the round-trip of an expected Branch") {
+  const std::deque<std::filesystem::path> paths(
+    test::common::FindFilesBySuffixRecursively(
+      DetermineJsonDir()
+        / "Expected"
+        / "Branch",
+      ".json"
+    )
+  );
+
+  for (const std::filesystem::path& path : paths) {
+    AssertRoundTrip<
+      our::types::IBranch
+    >(path, our::jsonization::BranchFrom);
+  }
+}
+
+TEST_CASE("Test the de-serialization failure on an unexpected Branch") {
+  for (
+    const std::filesystem::path& causeDir
+    : test::common::ListSubdirectories(
+      DetermineJsonDir()
+        / "Unexpected"
+        / "Unserializable"
+    )
+  ) {
+    for (
+      const std::filesystem::path& path
+      : test::common::FindFilesBySuffixRecursively(
+        causeDir / "Branch",
+        ".json"
+      )
+    ) {
+      const std::filesystem::path parent(
+        (
+          DetermineErrorDir()
+          / std::filesystem::relative(path, DetermineJsonDir())
+        ).parent_path()
+      );
+
+      const std::filesystem::path error_path(
+        parent
+        / (path.filename().string() + ".error")
+      );
+
+      AssertDeserializationFailure<
+        our::types::IBranch
+      >(
+        path,
+        our::jsonization::BranchFrom,
+        error_path
+      );
+    }
+  }
+}
+
+TEST_CASE("Test the round-trip of an expected Leaf") {
+  const std::deque<std::filesystem::path> paths(
+    test::common::FindFilesBySuffixRecursively(
+      DetermineJsonDir()
+        / "Expected"
+        / "Leaf",
+      ".json"
+    )
+  );
+
+  for (const std::filesystem::path& path : paths) {
+    AssertRoundTrip<
+      our::types::ILeaf
+    >(path, our::jsonization::LeafFrom);
+  }
+}
+
+TEST_CASE("Test the de-serialization failure on an unexpected Leaf") {
+  for (
+    const std::filesystem::path& causeDir
+    : test::common::ListSubdirectories(
+      DetermineJsonDir()
+        / "Unexpected"
+        / "Unserializable"
+    )
+  ) {
+    for (
+      const std::filesystem::path& path
+      : test::common::FindFilesBySuffixRecursively(
+        causeDir / "Leaf",
+        ".json"
+      )
+    ) {
+      const std::filesystem::path parent(
+        (
+          DetermineErrorDir()
+          / std::filesystem::relative(path, DetermineJsonDir())
+        ).parent_path()
+      );
+
+      const std::filesystem::path error_path(
+        parent
+        / (path.filename().string() + ".error")
+      );
+
+      AssertDeserializationFailure<
+        our::types::ILeaf
+      >(
+        path,
+        our::jsonization::LeafFrom,
+        error_path
+      );
+    }
+  }
+}
+
 TEST_CASE("Test the round-trip of an expected Something") {
   const std::deque<std::filesystem::path> paths(
     test::common::FindFilesBySuffixRecursively(

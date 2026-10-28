@@ -21,6 +21,12 @@ namespace dummy
             public void VisitItem(
                 IItem that
             );
+            public void VisitBranch(
+                IBranch that
+            );
+            public void VisitLeaf(
+                ILeaf that
+            );
             public void VisitSomething(
                 ISomething that
             );
@@ -43,6 +49,28 @@ namespace dummy
 
             public virtual void VisitItem(
                 IItem that
+            )
+            {
+                // Just descend through, do nothing with <c>that</c>
+                foreach (var something in that.DescendOnce())
+                {
+                    Visit(something);
+                }
+            }
+
+            public virtual void VisitBranch(
+                IBranch that
+            )
+            {
+                // Just descend through, do nothing with <c>that</c>
+                foreach (var something in that.DescendOnce())
+                {
+                    Visit(something);
+                }
+            }
+
+            public virtual void VisitLeaf(
+                ILeaf that
             )
             {
                 // Just descend through, do nothing with <c>that</c>
@@ -76,6 +104,12 @@ namespace dummy
             public abstract void VisitItem(
                 IItem that
             );
+            public abstract void VisitBranch(
+                IBranch that
+            );
+            public abstract void VisitLeaf(
+                ILeaf that
+            );
             public abstract void VisitSomething(
                 ISomething that
             );
@@ -95,6 +129,14 @@ namespace dummy
             public void Visit(IClass that, TContext context);
             public void VisitItem(
                 IItem that,
+                TContext context
+            );
+            public void VisitBranch(
+                IBranch that,
+                TContext context
+            );
+            public void VisitLeaf(
+                ILeaf that,
                 TContext context
             );
             public void VisitSomething(
@@ -119,6 +161,14 @@ namespace dummy
                 IItem that,
                 TContext context
             );
+            public abstract void VisitBranch(
+                IBranch that,
+                TContext context
+            );
+            public abstract void VisitLeaf(
+                ILeaf that,
+                TContext context
+            );
             public abstract void VisitSomething(
                 ISomething that,
                 TContext context
@@ -141,6 +191,12 @@ namespace dummy
             public T TransformItem(
                 IItem that
             );
+            public T TransformBranch(
+                IBranch that
+            );
+            public T TransformLeaf(
+                ILeaf that
+            );
             public T TransformSomething(
                 ISomething that
             );
@@ -160,6 +216,14 @@ namespace dummy
 
             public abstract T TransformItem(
                 IItem that
+            );
+
+            public abstract T TransformBranch(
+                IBranch that
+            );
+
+            public abstract T TransformLeaf(
+                ILeaf that
             );
 
             public abstract T TransformSomething(
@@ -183,6 +247,14 @@ namespace dummy
             public T Transform(IClass that, TContext context);
             public T TransformItem(
                 IItem that,
+                TContext context
+            );
+            public T TransformBranch(
+                IBranch that,
+                TContext context
+            );
+            public T TransformLeaf(
+                ILeaf that,
                 TContext context
             );
             public T TransformSomething(
@@ -212,6 +284,16 @@ namespace dummy
 
             public abstract T TransformItem(
                 IItem that,
+                TContext context
+            );
+
+            public abstract T TransformBranch(
+                IBranch that,
+                TContext context
+            );
+
+            public abstract T TransformLeaf(
+                ILeaf that,
                 TContext context
             );
 

@@ -80,6 +80,59 @@ std::pair<
 
 std::pair<
   common::optional<
+    std::shared_ptr<types::INode>
+  >,
+  common::optional<DeserializationError>
+> NodeFromElement(
+  xml_common::ReaderMergingText& reader
+);
+
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IBranch>
+  >,
+  common::optional<DeserializationError>
+> BranchFromElement(
+  xml_common::ReaderMergingText& reader
+);
+
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IBranch>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> BranchFromSequence(
+  xml_common::ReaderMergingText& reader
+);
+
+std::pair<
+  common::optional<
+    std::shared_ptr<types::ILeaf>
+  >,
+  common::optional<DeserializationError>
+> LeafFromElement(
+  xml_common::ReaderMergingText& reader
+);
+
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILeaf>::value
+  >::type* = nullptr
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> LeafFromSequence(
+  xml_common::ReaderMergingText& reader
+);
+
+std::pair<
+  common::optional<
     std::shared_ptr<types::ISomething>
   >,
   common::optional<DeserializationError>
@@ -112,6 +165,14 @@ const std::unordered_map<
   {
     "item",
     types::ModelType::kItem
+  },
+  {
+    "branch",
+    types::ModelType::kBranch
+  },
+  {
+    "leaf",
+    types::ModelType::kLeaf
   },
   {
     "something",
@@ -866,6 +927,14 @@ std::pair<
           return ItemFromSequence<
             types::IClass
           >(a_reader);
+        case types::ModelType::kBranch:
+          return BranchFromSequence<
+            types::IClass
+          >(a_reader);
+        case types::ModelType::kLeaf:
+          return LeafFromSequence<
+            types::IClass
+          >(a_reader);
         case types::ModelType::kSomething:
           return SomethingFromSequence<
             types::IClass
@@ -901,6 +970,88 @@ std::pair<
     L"IItem",
     types::ModelType::kItem,
     ItemFromSequence<types::IItem>
+  );
+}
+
+std::pair<
+  common::optional<
+    std::shared_ptr<types::INode>
+  >,
+  common::optional<DeserializationError>
+> NodeFromElement(
+  xml_common::ReaderMergingText& reader
+) {
+  return DeserializeFromElement<
+    std::shared_ptr<types::INode>
+  >(
+    reader,
+    L"INode",
+    [](
+      xml_common::ReaderMergingText& a_reader,
+      types::ModelType a_model_type,
+      const std::string& a_name
+    ) -> std::pair<
+      common::optional<std::shared_ptr<types::INode> >,
+      common::optional<DeserializationError>
+    > {
+      switch (a_model_type) {
+        case types::ModelType::kBranch:
+          return BranchFromSequence<
+            types::INode
+          >(a_reader);
+        case types::ModelType::kLeaf:
+          return LeafFromSequence<
+            types::INode
+          >(a_reader);
+        default:
+          return NoInstanceAndDeserializationErrorWithCause<
+            std::shared_ptr<types::INode>
+          >(
+            common::Concat(
+              L"Impossible to de-serialize an instance "
+              L"of INode from <",
+              common::Utf8ToWstring(a_name),
+              L">"
+            )
+          );
+      }
+    }
+  );
+}
+
+std::pair<
+  common::optional<
+    std::shared_ptr<types::IBranch>
+  >,
+  common::optional<DeserializationError>
+> BranchFromElement(
+  xml_common::ReaderMergingText& reader
+) {
+  return DeserializeSoleFromElement<
+    std::shared_ptr<types::IBranch>
+  >(
+    reader,
+    L"IBranch",
+    types::ModelType::kBranch,
+    BranchFromSequence<types::IBranch>
+  );
+}
+
+std::pair<
+  common::optional<
+    std::shared_ptr<types::ILeaf>
+  >,
+  common::optional<DeserializationError>
+> LeafFromElement(
+  xml_common::ReaderMergingText& reader
+) {
+  return DeserializeSoleFromElement<
+    std::shared_ptr<types::ILeaf>
+  >(
+    reader,
+    L"ILeaf",
+    types::ModelType::kLeaf,
+    LeafFromSequence<types::ILeaf>
   );
 }
 
@@ -1654,6 +1805,14 @@ enum class OfItem : std::uint32_t {
   kNote = 1
 };  // enum class OfItem
 
+enum class OfBranch : std::uint32_t {
+  kOptionalChildren = 0
+};  // enum class OfBranch
+
+enum class OfLeaf : std::uint32_t {
+  kOptionalItem = 0
+};  // enum class OfLeaf
+
 enum class OfSomething : std::uint32_t {
   kItem = 0,
   kOptionalText = 1,
@@ -1676,6 +1835,30 @@ const std::unordered_map<
   {
     "note",
     OfItem::kNote
+  }
+};
+
+const std::size_t kPropertyCountOfBranch = 1;
+
+const std::unordered_map<
+  std::string,
+  OfBranch
+> kMapOfBranch = {
+  {
+    "optionalChildren",
+    OfBranch::kOptionalChildren
+  }
+};
+
+const std::size_t kPropertyCountOfLeaf = 1;
+
+const std::unordered_map<
+  std::string,
+  OfLeaf
+> kMapOfLeaf = {
+  {
+    "optionalItem",
+    OfLeaf::kOptionalItem
   }
 };
 
@@ -1794,6 +1977,153 @@ std::pair<
       new types::Item(
         std::move(*the_name),
         std::move(the_note)
+      )
+    ),
+    common::nullopt
+  );
+}
+
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::IBranch>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> BranchFromSequence(
+  xml_common::ReaderMergingText& reader
+) {
+  // region Initialization
+
+  common::optional<
+    std::vector<
+      std::shared_ptr<types::INode>
+    >
+  > the_optional_children;
+
+  // endregion Initialization
+
+  common::optional<DeserializationError> error(
+    ReadProperties<
+      properties::kPropertyCountOfBranch
+    >(
+      reader,
+      properties::kMapOfBranch,
+      L"IBranch",
+      [&](
+        properties::OfBranch property
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfBranch::kOptionalChildren:
+            return ReadInto(
+              the_optional_children,
+              DeserializeList<
+                std::shared_ptr<types::INode>
+              >(
+                reader,
+                NodeFromElement
+              )
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfBranch",
+              property
+            );
+        }
+      }
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return std::make_pair(
+    common::make_optional<
+      std::shared_ptr<T>
+    >(
+      // NOTE (mristin):
+      // We deliberately do not use std::make_shared here to avoid an unnecessary
+      // upcast.
+      new types::Branch(
+        std::move(the_optional_children)
+      )
+    ),
+    common::nullopt
+  );
+}
+
+template <
+  typename T,
+  typename std::enable_if<
+    std::is_base_of<T, types::ILeaf>::value
+  >::type*
+>
+std::pair<
+  common::optional<std::shared_ptr<T> >,
+  common::optional<DeserializationError>
+> LeafFromSequence(
+  xml_common::ReaderMergingText& reader
+) {
+  // region Initialization
+
+  common::optional<
+    std::shared_ptr<types::IItem>
+  > the_optional_item;
+
+  // endregion Initialization
+
+  common::optional<DeserializationError> error(
+    ReadProperties<
+      properties::kPropertyCountOfLeaf
+    >(
+      reader,
+      properties::kMapOfLeaf,
+      L"ILeaf",
+      [&](
+        properties::OfLeaf property
+      ) -> common::optional<DeserializationError> {
+        switch (property) {
+          case properties::OfLeaf::kOptionalItem:
+            return ReadInto(
+              the_optional_item,
+              ItemFromSequence<
+                types::IItem
+              >(reader)
+            );
+          default:
+            throw UnexpectedPropertyLiteralError(
+              "properties::OfLeaf",
+              property
+            );
+        }
+      }
+    )
+  );
+
+  if (error.has_value()) {
+    return NoInstanceAndDeserializationError<
+      std::shared_ptr<T>
+    >(
+      std::move(*error)
+    );
+  }
+
+  return std::make_pair(
+    common::make_optional<
+      std::shared_ptr<T>
+    >(
+      // NOTE (mristin):
+      // We deliberately do not use std::make_shared here to avoid an unnecessary
+      // upcast.
+      new types::Leaf(
+        std::move(the_optional_item)
       )
     ),
     common::nullopt
@@ -2028,6 +2358,54 @@ common::expected<
     is,
     options,
     ItemFromElement
+  );
+}
+
+common::expected<
+  std::shared_ptr<types::INode>,
+  DeserializationError
+> NodeFrom(
+  std::istream& is,
+  const ReadingOptions& options
+) {
+  return DeserializeFrom<
+    std::shared_ptr<types::INode>
+  >(
+    is,
+    options,
+    NodeFromElement
+  );
+}
+
+common::expected<
+  std::shared_ptr<types::IBranch>,
+  DeserializationError
+> BranchFrom(
+  std::istream& is,
+  const ReadingOptions& options
+) {
+  return DeserializeFrom<
+    std::shared_ptr<types::IBranch>
+  >(
+    is,
+    options,
+    BranchFromElement
+  );
+}
+
+common::expected<
+  std::shared_ptr<types::ILeaf>,
+  DeserializationError
+> LeafFrom(
+  std::istream& is,
+  const ReadingOptions& options
+) {
+  return DeserializeFrom<
+    std::shared_ptr<types::ILeaf>
+  >(
+    is,
+    options,
+    LeafFromElement
   );
 }
 
@@ -2285,6 +2663,86 @@ common::optional<xml_common::SerializationError> WriteProperty(
 }
 
 /**
+ * \brief Write \p list as the XML element of \p property, every item as
+ * an XML element of its own.
+ *
+ * An instance is self-describing -- the name of its XML element is its model
+ * type -- so an item needs no positional tag here. A value encoded as text
+ * does need one, which is why a list of values is written by a function of
+ * its own instead of by this one with the name of the item passed in.
+ *
+ * \param name of the XML element
+ * \param list of the instances
+ * \param writer to write to
+ * \param property which the element stands for, for the path of the error
+ * \param write_item writes an item as an XML element of its own
+ * \return an error, if any
+ */
+template <typename T, typename WriteItemT>
+common::optional<xml_common::SerializationError> WriteListOfInstancesProperty(
+  const char* name,
+  const std::vector<T>& list,
+  xml_common::SelfClosingWriter& writer,
+  iteration::Property property,
+  const WriteItemT& write_item
+) {
+  return WriteProperty(
+    name,
+    list,
+    writer,
+    property,
+    [&write_item](
+      const std::vector<T>& a_list,
+      xml_common::SelfClosingWriter& a_writer
+    ) -> common::optional<xml_common::SerializationError> {
+      for (size_t i = 0; i < a_list.size(); ++i) {
+        common::optional<xml_common::SerializationError> error(
+          write_item(a_list[i], a_writer)
+        );
+
+        if (error.has_value()) {
+          error->path.segments.emplace_front(
+            common::make_unique<iteration::IndexSegment>(i)
+          );
+
+          return error;
+        }
+      }
+
+      return common::nullopt;
+    }
+  );
+}
+
+/**
+ * \brief Write \p list as the XML element of \p property, or nothing at all
+ * if the property has not been given.
+ *
+ * See the overload which takes the list itself for what is written and
+ * for the path of the error.
+ */
+template <typename T, typename WriteItemT>
+common::optional<xml_common::SerializationError> WriteListOfInstancesProperty(
+  const char* name,
+  const common::optional<std::vector<T> >& list,
+  xml_common::SelfClosingWriter& writer,
+  iteration::Property property,
+  const WriteItemT& write_item
+) {
+  if (!list.has_value()) {
+    return common::nullopt;
+  }
+
+  return WriteListOfInstancesProperty(
+    name,
+    *list,
+    writer,
+    property,
+    write_item
+  );
+}
+
+/**
  * \brief Write \p list as the XML element of \p property, every item
  * wrapped in a `<v>` element of its own.
  *
@@ -2416,6 +2874,89 @@ common::optional<xml_common::SerializationError> SerializeItemPtrAsElement(
 );
 
 /**
+ * \brief Serialize \p that instance by dispatching to the appropriate concrete
+ * serialization function.
+ *
+ * \param that instance to be serialized
+ * \param writer to be write to
+ * \return error, if any
+ */
+common::optional<xml_common::SerializationError> SerializeNodeAsElement(
+  const types::INode& that,
+  xml_common::SelfClosingWriter& writer
+);
+
+/** @copybrief SerializeNodeAsElement(const types::INode&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeNodePtrAsElement(
+  const std::shared_ptr<types::INode>& that,
+  xml_common::SelfClosingWriter& writer
+);
+
+/**
+ * \brief Serialize \p that instance as a sequence of XML elements.
+ *
+ * Each XML element corresponds to a property.
+ *
+ * \param that instance to be serialized
+ * \param writer to write to
+ * \return error, if any
+ */
+common::optional<xml_common::SerializationError> SerializeBranchAsSequence(
+  const types::IBranch& that,
+  xml_common::SelfClosingWriter& writer
+);
+
+/**
+ * Serialize \p that instance to an XML element
+ * `<branch>`.
+ *
+ * \param that instance to be serialized
+ * \return an error, if any
+ */
+common::optional<xml_common::SerializationError> SerializeBranchAsElement(
+  const types::IBranch& that,
+  xml_common::SelfClosingWriter& writer
+);
+
+/** @copybrief SerializeBranchAsElement(const types::IBranch&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeBranchPtrAsElement(
+  const std::shared_ptr<types::IBranch>& that,
+  xml_common::SelfClosingWriter& writer
+);
+
+/**
+ * \brief Serialize \p that instance as a sequence of XML elements.
+ *
+ * Each XML element corresponds to a property.
+ *
+ * \param that instance to be serialized
+ * \param writer to write to
+ * \return error, if any
+ */
+common::optional<xml_common::SerializationError> SerializeLeafAsSequence(
+  const types::ILeaf& that,
+  xml_common::SelfClosingWriter& writer
+);
+
+/**
+ * Serialize \p that instance to an XML element
+ * `<leaf>`.
+ *
+ * \param that instance to be serialized
+ * \return an error, if any
+ */
+common::optional<xml_common::SerializationError> SerializeLeafAsElement(
+  const types::ILeaf& that,
+  xml_common::SelfClosingWriter& writer
+);
+
+/** @copybrief SerializeLeafAsElement(const types::ILeaf&, xml_common::SelfClosingWriter& */
+common::optional<xml_common::SerializationError> SerializeLeafPtrAsElement(
+  const std::shared_ptr<types::ILeaf>& that,
+  xml_common::SelfClosingWriter& writer
+);
+
+/**
  * \brief Serialize \p that instance as a sequence of XML elements.
  *
  * Each XML element corresponds to a property.
@@ -2504,6 +3045,142 @@ common::optional<xml_common::SerializationError> SerializeItemPtrAsElement(
   xml_common::SelfClosingWriter& writer
 ) {
   return SerializeItemAsElement(*that, writer);
+}
+
+common::optional<xml_common::SerializationError> SerializeNodeAsElement(
+  const types::INode& that,
+  xml_common::SelfClosingWriter& writer
+) {
+  // NOTE (mristin):
+  // The dynamic casts are necessary due to virtual inheritance. Otherwise,
+  // we would have used static casts.
+
+  switch (that.model_type()) {
+    case types::ModelType::kBranch:
+      return SerializeBranchAsElement(
+        dynamic_cast<
+          const types::IBranch&
+        >(that),
+        writer
+      );
+    case types::ModelType::kLeaf:
+      return SerializeLeafAsElement(
+        dynamic_cast<
+          const types::ILeaf&
+        >(that),
+        writer
+      );
+    default:
+      throw std::invalid_argument(
+        common::Concat(
+          "Invalid model type: ",
+          stringification::to_string(that.model_type())
+        )
+      );
+  };
+}
+
+common::optional<xml_common::SerializationError> SerializeNodePtrAsElement(
+  const std::shared_ptr<types::INode>& that,
+  xml_common::SelfClosingWriter& writer
+) {
+  return SerializeNodeAsElement(*that, writer);
+}
+
+/**
+ * \brief Serialize \p that instance as a sequence of XML elements.
+ *
+ * Each XML element corresponds to a property.
+ *
+ * \param that instance to be serialized
+ * \param writer to write to
+ * \return error, if any
+ */
+common::optional<xml_common::SerializationError> SerializeBranchAsSequence(
+  const types::IBranch& that,
+  xml_common::SelfClosingWriter& writer
+) {
+  common::optional<xml_common::SerializationError> error;
+
+  error = WriteListOfInstancesProperty(
+    "optionalChildren",
+    that.optional_children(),
+    writer,
+    iteration::Property::kOptionalChildren,
+    SerializeNodePtrAsElement
+  );
+  if (error.has_value()) {
+    return error;
+  }
+
+  return common::nullopt;
+}
+
+common::optional<xml_common::SerializationError> SerializeBranchAsElement(
+  const types::IBranch& that,
+  xml_common::SelfClosingWriter& writer
+) {
+  return WriteElement(
+    "branch",
+    that,
+    writer,
+    SerializeBranchAsSequence
+  );
+}
+
+common::optional<xml_common::SerializationError> SerializeBranchPtrAsElement(
+  const std::shared_ptr<types::IBranch>& that,
+  xml_common::SelfClosingWriter& writer
+) {
+  return SerializeBranchAsElement(*that, writer);
+}
+
+/**
+ * \brief Serialize \p that instance as a sequence of XML elements.
+ *
+ * Each XML element corresponds to a property.
+ *
+ * \param that instance to be serialized
+ * \param writer to write to
+ * \return error, if any
+ */
+common::optional<xml_common::SerializationError> SerializeLeafAsSequence(
+  const types::ILeaf& that,
+  xml_common::SelfClosingWriter& writer
+) {
+  common::optional<xml_common::SerializationError> error;
+
+  error = WriteProperty(
+    "optionalItem",
+    that.optional_item(),
+    writer,
+    iteration::Property::kOptionalItem,
+    SerializeItemAsSequence
+  );
+  if (error.has_value()) {
+    return error;
+  }
+
+  return common::nullopt;
+}
+
+common::optional<xml_common::SerializationError> SerializeLeafAsElement(
+  const types::ILeaf& that,
+  xml_common::SelfClosingWriter& writer
+) {
+  return WriteElement(
+    "leaf",
+    that,
+    writer,
+    SerializeLeafAsSequence
+  );
+}
+
+common::optional<xml_common::SerializationError> SerializeLeafPtrAsElement(
+  const std::shared_ptr<types::ILeaf>& that,
+  xml_common::SelfClosingWriter& writer
+) {
+  return SerializeLeafAsElement(*that, writer);
 }
 
 /**
@@ -2622,6 +3299,20 @@ common::optional<xml_common::SerializationError> WriteClass(
       return SerializeItemAsElement(
         dynamic_cast<
           const types::IItem&
+        >(that),
+        writer
+      );
+    case types::ModelType::kBranch:
+      return SerializeBranchAsElement(
+        dynamic_cast<
+          const types::IBranch&
+        >(that),
+        writer
+      );
+    case types::ModelType::kLeaf:
+      return SerializeLeafAsElement(
+        dynamic_cast<
+          const types::ILeaf&
         >(that),
         writer
       );

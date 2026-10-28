@@ -24,6 +24,14 @@ public interface ITransformerWithContext<ContextT, T> {
     IItem that,
     ContextT context
   );
+  T transformBranch(
+    IBranch that,
+    ContextT context
+  );
+  T transformLeaf(
+    ILeaf that,
+    ContextT context
+  );
   T transformSomething(
     ISomething that,
     ContextT context
