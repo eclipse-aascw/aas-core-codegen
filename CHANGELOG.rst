@@ -3,6 +3,14 @@
     Please keep this file at 72 line width so that we can copy-paste
     the release logs directly into commit messages.
 
+0.0.27rc4 (2026-10-28)
+======================
+We pre-release for the Python SDK of V3.2 of the AAS meta-model, which
+we can now generate and test, apart from the missing test data for the
+Part 2 data structures. The generated code uses annotations instead of
+type comments and pylint directives, lints with ruff, is compatible
+with mypy 2.4, and finds the test data in ``dev/test_data/``.
+
 0.0.27rc3 (2026-10-21)
 ======================
 We pre-release with the operations on strings needed for
