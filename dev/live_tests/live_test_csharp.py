@@ -35,11 +35,10 @@ def prepare_solution(case_dir: pathlib.Path, solution_dir: pathlib.Path) -> Stri
         """\
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <Configurations>Debug;Release;DebugSlow</Configurations>
     <Platforms>AnyCPU</Platforms>
-    <LangVersion>8</LangVersion>
   </PropertyGroup>
 </Project>
 """,
@@ -50,13 +49,12 @@ def prepare_solution(case_dir: pathlib.Path, solution_dir: pathlib.Path) -> Stri
         f"""\
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net6.0</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <IsPackable>false</IsPackable>
         <Configurations>Debug;Release;DebugSlow</Configurations>
         <Platforms>AnyCPU</Platforms>
         <Nullable>enable</Nullable>
         <OutputType>Library</OutputType>
-        <LangVersion>8</LangVersion>
     </PropertyGroup>
 
     <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -100,7 +98,7 @@ def prepare_solution(case_dir: pathlib.Path, solution_dir: pathlib.Path) -> Stri
     cmd = [
         "dotnet",
         "sln",
-        f"{solution_name}.sln",
+        f"{solution_name}.slnx",
         "add",
         f"{namespace}/{namespace}.csproj",
         f"{namespace}.Tests/{namespace}.Tests.csproj",

@@ -329,7 +329,7 @@ Each script requires the corresponding language toolchain to be installed and av
 
 *C#*
     The .NET SDK (``dotnet`` command).
-    The script targets ``net6.0``.
+    The script targets ``net10.0`` and needs .NET SDK 10.0 (it creates ``.slnx`` solutions).
 
 *Go*
     The ``go`` toolchain and ``goimports``.
